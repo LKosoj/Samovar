@@ -308,6 +308,7 @@ volatile float current_power_volt = 221.26f;
 volatile float target_power_volt = 220.0f;
 volatile uint16_t current_power_p = 1500;
 uint16_t water_pump_speed = 321;
+bool valve_status = true;
 volatile float WFflowRate = 1.25f;
 volatile uint32_t WFtotalMilliLitres = 456;
 float pressure_value = 3.5f;
@@ -612,16 +613,16 @@ EXPECTED_DEFAULT = (
     '"i2c_pump_remaining_ml":7.0,"i2c_pump_running":1,"heap":123456,'
     '"rssi":-45,"fr_bt":98766,"PrgType":"B","current_power_volt":0,'
     '"target_power_volt":0,"current_power_mode":"0","current_power_p":0,'
-    '"alc":44.88,"stm_alc":19.53,"Status":"run\\nok",'
+    '"valve":1,"alc":44.88,"stm_alc":19.53,"Status":"run\\nok",'
     '"Lstatus":"lua\\\\ok","heaterAlarmLatched":0,"heaterAlarmReason":"","latestMessageSequence":42'
 )
 
 
 EXPECTED_FEATURES = EXPECTED_DEFAULT.replace(
     '"current_power_volt":0,"target_power_volt":0,"current_power_mode":"0",'
-    '"current_power_p":0,"alc":',
+    '"current_power_p":0,"valve":1,"alc":',
     '"current_power_volt":221.3,"target_power_volt":220.0,'
-    '"current_power_mode":"auto","current_power_p":1500,"wp_spd":321,'
+    '"current_power_mode":"auto","current_power_p":1500,"valve":1,"wp_spd":321,'
     '"WFflowRate":1.25,"WFtotalMl":456,"prvl":3.50,"alc":',
 )
 
@@ -713,7 +714,7 @@ def main() -> int:
         "i2c_stepper_cache", "I2CPumpTargetMl", "ESP.", "WiFi.",
         "total_byte", "used_byte", "Samovar_Mode", "SamovarStatusInt",
         "current_power_volt", "target_power_volt", "current_power_mode",
-        "current_power_p", "water_pump_speed", "WFflowRate",
+        "current_power_p", "water_pump_speed", "valve_status", "WFflowRate",
         "WFtotalMilliLitres", "pressure_value", "timePredictor",
         "millis(", "get_liquid_volume(", "stepper_safe_get_",
         "current_program_type(", "get_alcohol(", "get_steam_alcohol(",

@@ -1910,7 +1910,9 @@
       : kind === 'beer' || kind === 'cheese' ? !!data.mixer && v._running
       : v._withdrawing && rate > 0;
     v._mixerOn = !!data.mixer && v._running;
-    v._flowOn = v._heaterOn;
+    // Вода охлаждения: по клапану (valve_status прошивки) или работающему ШИМ-насосу.
+    // У старой прошивки ключа valve нет — тогда, как раньше, по нагреву.
+    v._flowOn = data.valve === undefined ? v._heaterOn : (!!data.valve || num(data.wp_spd) > 0);
     const unit = typeof window.pwr_unit === 'string' ? window.pwr_unit : 'V';
     const volt = num(data.current_power_volt), watt = num(data.current_power_p);
     v._powerUnit = unit === 'P' ? 'Вт' : 'В';

@@ -155,6 +155,24 @@ static_assert(BLYNK_MSG_LIMIT == 0, "BLYNK_MSG_LIMIT из Samovar.h не под�
 #ifdef SAMOVAR_USE_BLYNK
 #include <simple_queue.h>
 SimpleStringQueue msg_q(5, 200);
+static constexpr uint32_t NOTIFY_DELIVERY_TTL_MS = 15UL * 60UL * 1000UL;
+static portMUX_TYPE notificationStateMux = portMUX_INITIALIZER_UNLOCKED;
+static bool notificationTokenInvalid = false;
+static bool notifyQueuePushFailedLogged = false;
+static bool notifyBlynkDisconnectedLogged = false;
+
+static void set_notification_token_invalid(bool invalid) {
+  portENTER_CRITICAL(&notificationStateMux);
+  notificationTokenInvalid = invalid;
+  portEXIT_CRITICAL(&notificationStateMux);
+}
+
+static bool is_notification_token_invalid() {
+  portENTER_CRITICAL(&notificationStateMux);
+  const bool invalid = notificationTokenInvalid;
+  portEXIT_CRITICAL(&notificationStateMux);
+  return invalid;
+}
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -181,6 +199,7 @@ char* timestr = (char*)tst;
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE ipstMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE dsAddressMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE emergencyStopMux = portMUX_INITIALIZER_UNLOCKED;
 // [T29] Защищает SamSetup (копируется присваиванием структуры, ~536 байт - не
@@ -189,6 +208,9 @@ portMUX_TYPE emergencyStopMux = portMUX_INITIALIZER_UNLOCKED;
 // async_tcp (приоритет 5, вытесняет loop() в любой момент). Мьютекс не нужен -
 // копирование короткое, ждать в очереди нечего.
 portMUX_TYPE configMux = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE ntpSnapshotMux = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t ntpSnapshotEpoch = 0;
+static uint32_t ntpSnapshotMillis = 0;
 QueueHandle_t samovar_command_queue = NULL;
 StaticQueue_t samovar_command_queue_buffer;
 uint8_t samovar_command_queue_storage[SAMOVAR_COMMAND_QUEUE_LENGTH * sizeof(SamovarCommandMsg)];
@@ -196,7 +218,6 @@ SemaphoreHandle_t samovar_command_queue_mutex = NULL;
 StaticSemaphore_t samovar_command_queue_mutex_buffer;
 
 bool shouldSaveWiFiConfig = false;
-volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
 
 // Профиль загрузился в деградированном режиме (fail-open: грузимся на дефолтах/частично
 // восстановленных данных, но громко сообщаем об этом). Пишутся один раз в setup(),
@@ -725,13 +746,48 @@ static void refresh_i2c_stepper_cache(I2CStepperDevice& device) {
 // [T6] Вынесенные блоки тела triggerSysTicker() — размещены здесь (а не в общем
 // блоке tick_*-хелперов loop() ниже по файлу), чтобы автогенерация прототипов
 // Arduino видела их определения раньше вызова, без ручных прототипов.
+static void publish_ntp_snapshot(uint32_t epoch) {
+  const uint32_t capturedAtMillis = millis();
+  portENTER_CRITICAL(&ntpSnapshotMux);
+  ntpSnapshotEpoch = epoch;
+  ntpSnapshotMillis = capturedAtMillis;
+  portEXIT_CRITICAL(&ntpSnapshotMux);
+}
+
+static uint32_t ntp_snapshot_epoch_now() {
+  uint32_t epoch;
+  uint32_t capturedAtMillis;
+  portENTER_CRITICAL(&ntpSnapshotMux);
+  epoch = ntpSnapshotEpoch;
+  capturedAtMillis = ntpSnapshotMillis;
+  portEXIT_CRITICAL(&ntpSnapshotMux);
+  if (epoch == 0) return 0;
+  return epoch + ((millis() - capturedAtMillis) / 1000UL);
+}
+
+static void format_ntp_snapshot(uint32_t epoch, String& date, String& clock) {
+  const time_t rawEpoch = static_cast<time_t>(epoch);
+  struct tm calendar;
+  gmtime_r(&rawEpoch, &calendar);
+  char dateBuffer[20];
+  snprintf(dateBuffer, sizeof(dateBuffer), "%02d-%02d %02d:%02d:%02d",
+           static_cast<uint8_t>(calendar.tm_mon + 1), static_cast<uint8_t>(calendar.tm_mday),
+           static_cast<uint8_t>(calendar.tm_hour), static_cast<uint8_t>(calendar.tm_min),
+           static_cast<uint8_t>(calendar.tm_sec));
+  date = dateBuffer;
+  clock = dateBuffer + 6;
+}
+
 static void tick_update_clock_strings() {
-  // [C-1] Формируем строки времени в локалах, под замком только присваиваем глобалам.
-  String localCrt = NTP.getFormattedDate();
+  const uint32_t epoch = ntp_snapshot_epoch_now();
+  if (epoch == 0) return;
+  String localCrt;
+  String localTime;
+  format_ntp_snapshot(epoch, localCrt, localTime);
   String uptime = format_uptime((unsigned long)(millis() / 1000UL));
-  String localStrCrt = NTP.getFormattedTime() + "     " + uptime;
+  String localStrCrt = localTime + "     " + uptime;
   snprintf(tst, sizeof(tst), "%s   %s",
-           NTP.getFormattedTime().c_str(),
+           localTime.c_str(),
            uptime.c_str());
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (locked) {
@@ -1568,7 +1624,7 @@ bool initEmergencyButtonTask() {
 
 //Запускаем таск для получения точного времени из интернет
 void triggerGetClock(void *parameter) {
-  int counter = 0;
+  int counter = 30;
   while (true) {
     // Пропускаем все активности во время OTA обновления (кроме проверки WiFi)
     if (ota_running) {
@@ -1578,34 +1634,9 @@ void triggerGetClock(void *parameter) {
     
     counter++;
     if (counter > 30) {
-      NTP.update();
-      counter = 0;
-    }
-    {
-      static unsigned long wifiReconnectTimer = 0;
-      if (WiFi.status() != WL_CONNECTED) {
-          // попытки переподключиться к WiFi раз в 20 секунд, если не сработала автоматическая попытка переподключиться
-          // Но не во время OTA обновления
-          if (!ota_running && millis() - wifiReconnectTimer >= 20000) {
-            const uint8_t reason = lastWifiDisconnectReason;
-            char reconnectDiagnostic[192];
-            snprintf(
-              reconnectDiagnostic,
-              sizeof(reconnectDiagnostic),
-              "WiFi.reconnect status=%d reason=%u(%s) heap=%u max_alloc=%u min_heap=%u",
-              static_cast<int>(WiFi.status()),
-              static_cast<unsigned>(reason),
-              WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(reason)),
-              static_cast<unsigned>(ESP.getFreeHeap()),
-              static_cast<unsigned>(ESP.getMaxAllocHeap()),
-              static_cast<unsigned>(ESP.getMinFreeHeap())
-            );
-            WriteConsoleLog(reconnectDiagnostic);
-            WiFi.reconnect();
-            wifiReconnectTimer = millis();
-          }
-      } else {
-        wifiReconnectTimer = millis();
+      if (WiFi.status() == WL_CONNECTED) {
+        if (NTP.update()) publish_ntp_snapshot(NTP.getEpochTime());
+        counter = 0;
       }
     }
 
@@ -1615,9 +1646,15 @@ void triggerGetClock(void *parameter) {
 #ifdef SAMOVAR_USE_BLYNK
       {
         BlynkLockGuard blynkLock(pdMS_TO_TICKS(500));
-        if (blynkLock && !Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-          Blynk.connect(BLYNK_TIMEOUT_MS);
-          vTaskDelay(50 / portTICK_PERIOD_MS);
+        if (blynkLock) {
+          if (!Blynk.connected() && !Blynk.isTokenInvalid() &&
+              WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+            Blynk.connect(BLYNK_TIMEOUT_MS);
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+          }
+          const bool tokenInvalid = Blynk.isTokenInvalid();
+          set_notification_token_invalid(tokenInvalid);
+          if (Blynk.connected()) notifyBlynkDisconnectedLogged = false;
         }
       }
 #endif
@@ -1626,60 +1663,96 @@ void triggerGetClock(void *parameter) {
       vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
-    // Обработка сообщений из очереди: отправка во все включенные сервисы одновременно
-    // Пропускаем отправку сообщений во время OTA для освобождения ресурсов
-    if (WiFi.status() == WL_CONNECTED && !ota_running) {
+#ifdef SAMOVAR_USE_BLYNK
+    // Возраст очереди проверяется и без Wi-Fi: временный сетевой сбой не должен
+    // удерживать уведомления бесконечно.
+    {
       char c[200] = {};
+      uint32_t queuedAtMillis = 0;
       bool queueHasMessage = false;
+      bool queuePeekResult = false;
       bool queuePopResult = false;
       const BaseType_t queueTakeResult =
           xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
       if (queueTakeResult == pdTRUE) {
         queueHasMessage = !msg_q.isEmpty();
-        if (queueHasMessage) queuePopResult = msg_q.pop(c);
+        if (queueHasMessage) queuePeekResult = msg_q.peek(c, &queuedAtMillis);
         xSemaphoreGive(xMsgSemaphore);
       }
 
       if (queueTakeResult != pdTRUE) {
-        WriteConsoleLog(F("notify_queue_pop_lock_busy"));
-      } else if (queueHasMessage && !queuePopResult) {
-        WriteConsoleLog(F("notify_queue_pop_failed"));
-      } else if (queuePopResult) {
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-        // Первый символ записи — тип сообщения (см. SendMsg), текст начинается со второго.
-        const char msgLevel = c[0];
-        String qMsg(c + 1);
-        // Blynk и V26: заголовок словами, по нему приложения отличают тревогу от остального.
-        String pushMsg = String(msgLevel == '0' ? "Тревога! " : (msgLevel == '1' ? "Предупреждение! " : "")) + qMsg;
-
-#ifdef SAMOVAR_USE_BLYNK
+        WriteConsoleLog(F("notify_queue_peek_lock_busy"));
+      } else if (queueHasMessage && !queuePeekResult) {
+        WriteConsoleLog(F("notify_queue_peek_failed"));
+      } else if (queuePeekResult) {
+        const bool tokenUnavailable = SamSetup.blynkauth[0] == 0 || is_notification_token_invalid();
+        const bool deliveryExpired = millis() - queuedAtMillis >= NOTIFY_DELIVERY_TTL_MS;
+        bool discardQueue = tokenUnavailable;
         bool blynkDisconnected = false;
         bool blynkLockBusy = false;
-        if (SamSetup.blynkauth[0] != 0) {
+        bool blynkDeliveryAccepted = false;
+        if (!discardQueue && !deliveryExpired && WiFi.status() == WL_CONNECTED && !ota_running) {
+          vTaskDelay(5 / portTICK_PERIOD_MS);
+          // Первый символ записи — тип сообщения (см. SendMsg), текст начинается со второго.
+          const char msgLevel = c[0];
+          String qMsg(c + 1);
+          // Blynk и V26: заголовок словами, по нему приложения отличают тревогу от остального.
+          String pushMsg = String(msgLevel == '0' ? "Тревога! " : (msgLevel == '1' ? "Предупреждение! " : "")) + qMsg;
           BlynkLockGuard blynkLock(pdMS_TO_TICKS(500));
           if (!blynkLock) {
             blynkLockBusy = true;
+          } else if (Blynk.isTokenInvalid()) {
+            set_notification_token_invalid(true);
+            discardQueue = true;
           } else if (Blynk.connected()) {
             Blynk.virtualWrite(V26, pushMsg);
-            // Push в мобильные приложения через сервер Blynk (виджет Notification в проекте).
-            // notify помечен устаревшим в пользу logEvent, но logEvent работает только
-            // в новом облаке Blynk IoT (BLYNK_TEMPLATE_ID); со старым сервером нужен notify.
+            if (!Blynk.connected()) {
+              blynkDisconnected = true;
+            } else {
+              // Push в мобильные приложения через сервер Blynk (виджет Notification в проекте).
+              // notify помечен устаревшим в пользу logEvent, но logEvent работает только
+              // в новом облаке Blynk IoT (BLYNK_TEMPLATE_ID); со старым сервером нужен notify.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-            Blynk.notify(pushMsg);
+              Blynk.notify(pushMsg);
 #pragma GCC diagnostic pop
+              blynkDeliveryAccepted = Blynk.connected();
+              if (!blynkDeliveryAccepted) blynkDisconnected = true;
+            }
           } else {
             blynkDisconnected = true;
           }
         }
-#endif
 
-#ifdef SAMOVAR_USE_BLYNK
-        if (blynkDisconnected) WriteConsoleLog(F("notify_blynk_disconnected"));
+        if (discardQueue || deliveryExpired || blynkDeliveryAccepted) {
+          const BaseType_t queuePopTakeResult =
+              xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
+          if (queuePopTakeResult == pdTRUE) {
+            if (discardQueue) {
+              msg_q.flush();
+              queuePopResult = true;
+            } else {
+              queuePopResult = msg_q.pop(c);
+            }
+            xSemaphoreGive(xMsgSemaphore);
+          }
+          if (queuePopTakeResult != pdTRUE) {
+            WriteConsoleLog(F("notify_queue_pop_lock_busy"));
+          } else if (!queuePopResult) {
+            WriteConsoleLog(F("notify_queue_pop_failed"));
+          } else if (deliveryExpired) {
+            WriteConsoleLog(F("notify_queue_delivery_expired"));
+          }
+        }
+
+        if (blynkDisconnected && !notifyBlynkDisconnectedLogged) {
+          WriteConsoleLog(F("notify_blynk_disconnected"));
+          notifyBlynkDisconnectedLogged = true;
+        }
         if (blynkLockBusy) WriteConsoleLog(F("notify_blynk_lock_busy"));
-#endif
       }
     }
+#endif
     {
       vTaskDelay(500 / portTICK_PERIOD_MS);
       BME_getvalue(false);
@@ -2145,8 +2218,8 @@ void session_begin(const String& sessionDescription) {
   if (resume) {
     currentSessionId = sessionResumeId;
   } else {
-    const uint32_t epoch = NTP.getEpochTime();
-    // NTP.getEpochTime() без синхронизации отдаёт малое неправдоподобное число - тогда
+    const uint32_t epoch = ntp_snapshot_epoch_now();
+    // Нулевой снимок означает, что NTP ещё не синхронизировалось; тогда
     // берём аппаратный ГСЧ ESP32, чтобы sessionId был уникален и без времени.
     currentSessionId = (epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : esp_random();
   }
@@ -2233,8 +2306,9 @@ static void setup_create_semaphores_and_queue() {
 #endif
 }
 
-static void captureWifiDisconnectReason(arduino_event_t *event) {
-  lastWifiDisconnectReason = event->event_info.wifi_sta_disconnected.reason;
+static void captureWifiGotIp(arduino_event_t *event) {
+  (void)event;
+  ipst_set(WiFi.localIP().toString());
 }
 
 static void setup_wifi_stack_defaults() {
@@ -2245,7 +2319,7 @@ static void setup_wifi_stack_defaults() {
   WiFi.setSleep(false);
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
-  WiFi.onEvent(captureWifiDisconnectReason, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  WiFi.onEvent(captureWifiGotIp, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
   Wire.begin(LCD_SDA, LCD_SCL);
   // Явно задаём скорость и таймаут шины: без этого используются значения по
@@ -2403,22 +2477,13 @@ static void setup_configure_head_level_sensor() {
 static void setup_start_ntp() {
   NTP.setTimeOffset(SamSetup.TimeZone * 3600);
   NTP.setUpdateInterval(1800000);//30 min
-  NTP.begin();
-  delay(100);
-  // Принудительная синхронизация при старте с повторными попытками.
-  // Неудача NTP не блокирует загрузку: время догонит triggerGetClock.
+  // Синхронный DNS внутри forceUpdate() способен ждать до 15 секунд без интернета,
+  // поэтому setup только открывает UDP. Первый запрос сразу выполнит GetClockTicker.
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println(F("NTP skipped: WiFi not connected"));
     return;
   }
-  bool synced = false;
-  for (int attempts = 0; attempts < 3 && !synced; attempts++) {
-    synced = NTP.forceUpdate();
-    if (!synced && attempts < 2) delay(500);
-  }
-  if (!synced) {
-    Serial.println(F("NTP sync failed at boot; continuing without network time"));
-  }
+  NTP.begin();
 }
 
 static void setup_finalize_boot_display() {
@@ -2551,7 +2616,7 @@ static void setup_connect_wifi_and_notify() {
   }
 
   Serial.print(F("IP address: "));
-  copyStringSafe(ipst, StIP);
+  if (WiFi.getMode() == WIFI_AP) ipst_set(StIP);
 
   Serial.println(StIP);
 
@@ -2581,6 +2646,7 @@ static void setup_connect_wifi_and_notify() {
     Blynk.config(SamSetup.blynkauth);
 #endif
     Blynk.connect(BLYNK_TIMEOUT_MS);
+    set_notification_token_invalid(Blynk.isTokenInvalid());
 #ifdef __SAMOVAR_DEBUG
     Serial.println(F("Blynk started"));
 #endif
@@ -3385,8 +3451,10 @@ inline void tick_usb_serial_command() {
       if (!overflow) {
         command[length] = '\0';
         if (strcmp(command, "SAMOVAR:IP?") == 0) {
+          char ip[sizeof(ipst)] = {};
+          ipst_copy(ip);
           Serial.print(F("SAMOVAR:IP="));
-          Serial.println(ipst);
+          Serial.println(ip);
         } else if (strcmp(command, "SAMOVAR:CONFIG?") == 0) {
           String configJson;
           JsonStringPrint configSink(configJson);
@@ -3818,6 +3886,7 @@ struct AjaxTelemetrySnapshot {
 #ifdef USE_WATER_PUMP
   uint16_t waterPumpSpeed;
 #endif
+  bool valveOpen;  // клапан воды охлаждения (valve_status): по нему веб и приложения рисуют поток воды
   uint32_t freeHeap;
   int32_t rssi;
   uint32_t freeFsBytes;
@@ -3977,6 +4046,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
 #ifdef USE_WATER_PUMP
   snapshot.waterPumpSpeed = water_pump_speed;
 #endif
+  snapshot.valveOpen = valve_status;
 #ifdef USE_WATERSENSOR
   snapshot.waterFlowRate = WFflowRate;
   snapshot.waterFlowTotalMl = WFtotalMilliLitres;
@@ -4108,6 +4178,7 @@ static void writeAjaxTelemetryFields(
   jsonFieldRaw(out, first, "current_power_p", 0);
 #endif
 
+  jsonFieldBool(out, first, "valve", snapshot.valveOpen);
 #ifdef USE_WATER_PUMP
   jsonFieldRaw(out, first, "wp_spd", snapshot.waterPumpSpeed);
 #endif
@@ -4301,10 +4372,12 @@ void apply_config_runtime() {
   // поэтому лок берём с тем же коротким таймаутом, что и tick_blynk(): не взяли - просто
   // пропускаем эту пару обращений, следующее применение профиля повторит попытку.
   {
+    char ip[sizeof(ipst)] = {};
+    ipst_copy(ip);
     BlynkLockGuard blynkLock(pdMS_TO_TICKS(20));
     if (blynkLock) {
       if (strlen(SamSetup.videourl) > 0) Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
-      Blynk.virtualWrite(V15, ipst);
+      Blynk.virtualWrite(V15, ip);
     }
   }
 #else
@@ -4407,22 +4480,31 @@ static void printRuntimeEventPublishFailure(
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   if (m.length() < 5) return;
-  String MsgPl;
 #ifdef SAMOVAR_USE_BLYNK
-  // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),
-  // дальше сам текст. Заголовок для Blynk добавляет потребитель в triggerGetClock().
-  MsgPl = String((char)('0' + (msg_type == NONE_MSG ? NOTIFY_MSG : msg_type))) + m;
-  const BaseType_t queueTakeResult =
-      xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
-  bool queuePushResult = false;
-  if (queueTakeResult == pdTRUE) {
-    queuePushResult = msg_q.push(MsgPl.c_str());
-    xSemaphoreGive(xMsgSemaphore);
-  }
-  if (queueTakeResult != pdTRUE) {
-    WriteConsoleLog(F("notify_queue_push_lock_busy"));
-  } else if (!queuePushResult) {
-    WriteConsoleLog(F("notify_queue_push_failed"));
+  if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid()) {
+    // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),
+    // дальше сам текст. Заголовок для Blynk добавляет потребитель в triggerGetClock().
+    String MsgPl = String((char)('0' + (msg_type == NONE_MSG ? NOTIFY_MSG : msg_type))) + m;
+    const uint32_t queuedAtMillis = millis();
+    const BaseType_t queueTakeResult =
+        xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
+    bool queuePushResult = false;
+    bool logQueuePushFailed = false;
+    if (queueTakeResult == pdTRUE) {
+      queuePushResult = msg_q.push(MsgPl.c_str(), queuedAtMillis);
+      if (queuePushResult) {
+        notifyQueuePushFailedLogged = false;
+      } else if (!notifyQueuePushFailedLogged) {
+        notifyQueuePushFailedLogged = true;
+        logQueuePushFailed = true;
+      }
+      xSemaphoreGive(xMsgSemaphore);
+    }
+    if (queueTakeResult != pdTRUE) {
+      WriteConsoleLog(F("notify_queue_push_lock_busy"));
+    } else if (logQueuePushFailed) {
+      WriteConsoleLog(F("notify_queue_push_failed"));
+    }
   }
 #endif
 

@@ -6,6 +6,21 @@
 
 extern portMUX_TYPE timerMux;
 extern portMUX_TYPE waterPulseMux;
+extern portMUX_TYPE ipstMux;
+
+inline void ipst_set(const String& value) {
+  char copy[sizeof(ipst)] = {};
+  copyStringSafe(copy, value);
+  portENTER_CRITICAL(&ipstMux);
+  memcpy(ipst, copy, sizeof(ipst));
+  portEXIT_CRITICAL(&ipstMux);
+}
+
+inline void ipst_copy(char (&copy)[sizeof(ipst)]) {
+  portENTER_CRITICAL(&ipstMux);
+  memcpy(copy, ipst, sizeof(ipst));
+  portEXIT_CRITICAL(&ipstMux);
+}
 
 // ПОРЯДОК ЗАХВАТА ЗАМКОВ.
 // Если задаче нужно держать два замка одновременно, брать их можно только

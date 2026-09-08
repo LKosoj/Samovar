@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import extract_braced_block_after, extract_function_body, strip_cpp_comments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,8 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 FAILURE_CODES = (
     "notify_queue_push_lock_busy",
     "notify_queue_push_failed",
+    "notify_queue_peek_lock_busy",
+    "notify_queue_peek_failed",
     "notify_queue_pop_lock_busy",
     "notify_queue_pop_failed",
+    "notify_queue_delivery_expired",
     "notify_blynk_disconnected",
 )
 
@@ -60,7 +63,7 @@ class NotificationCoordinator {
       codes.push_back("notify_queue_push_lock_busy");
       return false;
     }
-    const bool pushed = queue_.push(message.c_str());
+    const bool pushed = queue_.push(message.c_str(), nowMillis_);
     mutex_.unlock();
     if (!pushed) codes.push_back("notify_queue_push_failed");
     return pushed;
@@ -68,40 +71,42 @@ class NotificationCoordinator {
 
   bool consume(DeliveryProbe& probe) {
     char text[200] = {};
+    uint32_t queuedAtMillis = 0;
     bool hadMessage = false;
-    bool popped = false;
+    bool peeked = false;
+    if (!mutex_.try_lock_for(std::chrono::milliseconds(50))) {
+      codes.push_back("notify_queue_peek_lock_busy");
+      return false;
+    }
+    hadMessage = !queue_.isEmpty();
+    if (hadMessage) peeked = queue_.peek(text, &queuedAtMillis);
+    mutex_.unlock();
+
+    if (hadMessage && !peeked) {
+      codes.push_back("notify_queue_peek_failed");
+      return false;
+    }
+    if (!peeked) return false;
+
+    const std::string message(text);
+    if (!probe.blynkConfigured || !probe.blynkConnected) {
+      codes.push_back("notify_blynk_disconnected");
+      return false;
+    }
+    probe.blynkCalls++;
+    if (probe.telegramHook) probe.telegramHook();
+
     if (!mutex_.try_lock_for(std::chrono::milliseconds(50))) {
       codes.push_back("notify_queue_pop_lock_busy");
       return false;
     }
-    hadMessage = !queue_.isEmpty();
-    if (hadMessage) popped = queue_.pop(text);
+    const bool popped = queue_.pop(text);
     mutex_.unlock();
-
-    if (hadMessage && !popped) {
+    if (!popped) {
       codes.push_back("notify_queue_pop_failed");
       return false;
     }
-    if (!popped) return false;
-
-    const std::string message(text);
     poppedMessages.push_back(message);
-    bool telegramFailed = false;
-    bool blynkDisconnected = false;
-    if (probe.telegramConfigured) {
-      probe.telegramCalls++;
-      if (probe.telegramHook) probe.telegramHook();
-      telegramFailed = probe.telegramFails;
-    }
-    if (probe.blynkConfigured) {
-      if (probe.blynkConnected) {
-        probe.blynkCalls++;
-      } else {
-        blynkDisconnected = true;
-      }
-    }
-    if (telegramFailed) codes.push_back("notify_telegram_delivery_failed");
-    if (blynkDisconnected) codes.push_back("notify_blynk_disconnected");
     return true;
   }
 
@@ -110,12 +115,15 @@ class NotificationCoordinator {
     return queue_.getCount();
   }
 
+  void advance(uint32_t elapsedMillis) { nowMillis_ += elapsedMillis; }
+
   std::vector<std::string> codes;
   std::vector<std::string> poppedMessages;
 
  private:
   SimpleStringQueue queue_;
   std::timed_mutex mutex_;
+  uint32_t nowMillis_ = 0;
 };
 
 void test_network_does_not_hold_queue_lock() {
@@ -127,7 +135,6 @@ void test_network_does_not_hold_queue_lock() {
   bool enteredNetwork = false;
   bool releaseNetwork = false;
   DeliveryProbe probe;
-  probe.telegramConfigured = true;
   probe.blynkConfigured = true;
   probe.blynkConnected = true;
   probe.telegramHook = [&]() {
@@ -157,17 +164,18 @@ void test_network_does_not_hold_queue_lock() {
   }
   barrierCv.notify_all();
   consumer.join();
-  check(probe.telegramCalls == 1 && probe.blynkCalls == 1,
-        "one integration skipped the other");
+  check(probe.blynkCalls == 1, "Blynk send was skipped");
   check(coordinator.count() == 1, "B was not retained while A was delivered");
 }
 
 void test_fifo_capacity_and_queue_failures() {
   NotificationCoordinator fifo;
-  DeliveryProbe none;
+  DeliveryProbe connected;
+  connected.blynkConfigured = true;
+  connected.blynkConnected = true;
   check(fifo.push("A") && fifo.push("B") && fifo.push("C"),
         "FIFO setup push failed");
-  check(fifo.consume(none) && fifo.consume(none) && fifo.consume(none),
+  check(fifo.consume(connected) && fifo.consume(connected) && fifo.consume(connected),
         "FIFO consume failed");
   check(fifo.poppedMessages == std::vector<std::string>({"A", "B", "C"}),
         "FIFO order changed");
@@ -183,23 +191,20 @@ void test_fifo_capacity_and_queue_failures() {
 
 }
 
-void test_delivery_failure_is_one_shot() {
-  NotificationCoordinator telegram;
-  check(telegram.push("A"), "Telegram setup push failed");
-  DeliveryProbe telegramFailure;
-  telegramFailure.telegramConfigured = true;
-  telegramFailure.telegramFails = true;
-  telegramFailure.blynkConfigured = true;
-  telegramFailure.blynkConnected = true;
-  check(telegram.consume(telegramFailure), "Telegram failure did not pop once");
-  check(telegramFailure.telegramCalls == 1 && telegramFailure.blynkCalls == 1,
-        "Telegram failure skipped Blynk");
-  check(telegram.codes ==
-            std::vector<std::string>({"notify_telegram_delivery_failed"}),
-        "Telegram failure code mismatch");
-  check(telegram.count() == 0 && !telegram.consume(telegramFailure),
-        "delivery failure requeued the message");
+void test_delivery_failure_is_retained() {
+  NotificationCoordinator coordinator;
+  check(coordinator.push("A"), "notification setup push failed");
+  DeliveryProbe disconnected;
+  disconnected.blynkConfigured = true;
+  check(!coordinator.consume(disconnected), "disconnected Blynk accepted notification");
+  check(coordinator.count() == 1 && coordinator.poppedMessages.empty(),
+        "disconnected Blynk lost notification");
 
+  disconnected.blynkConnected = true;
+  check(coordinator.consume(disconnected), "reconnected Blynk did not consume notification");
+  check(disconnected.blynkCalls == 1 && coordinator.poppedMessages ==
+            std::vector<std::string>({"A"}),
+        "reconnected Blynk did not deliver the retained notification");
 }
 
 }  // namespace
@@ -207,7 +212,7 @@ void test_delivery_failure_is_one_shot() {
 int main() {
   test_network_does_not_hold_queue_lock();
   test_fifo_capacity_and_queue_failures();
-  test_delivery_failure_is_one_shot();
+  test_delivery_failure_is_retained();
   if (failures != 0) return 1;
   std::cout << "notification queue behavioral checks passed\n";
   return 0;
@@ -216,6 +221,7 @@ int main() {
 
 
 PRODUCTION_BLOCK_HARNESS = r'''
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -227,13 +233,17 @@ PRODUCTION_BLOCK_HARNESS = r'''
 #define pdTRUE 1
 #define portTICK_RATE_MS 1
 #define portTICK_PERIOD_MS 1
+#define WL_CONNECTED 3
 
 using BaseType_t = int;
 using TickType_t = int;
 
+enum MESSAGE_TYPE { ALARM_MSG, WARNING_MSG, NOTIFY_MSG, NONE_MSG };
+
 class String {
  public:
   String(const char* value) : value_(value ? value : "") {}
+  String(char value) : value_(1, value) {}
   String(const std::string& value) : value_(value) {}
   const char* c_str() const { return value_.c_str(); }
   bool operator==(const char* value) const {
@@ -254,23 +264,43 @@ class String {
 struct QueueProbe {
   bool empty = true;
   bool pushResult = true;
+  bool peekResult = true;
   bool popResult = true;
   int emptyCalls = 0;
   int pushCalls = 0;
+  int peekCalls = 0;
   int popCalls = 0;
+  int flushCalls = 0;
+  uint32_t queuedAtMillis = 0;
 
   bool isEmpty() {
     emptyCalls++;
     return empty;
   }
-  bool push(const char*) {
+  bool push(const char*, uint32_t queuedAt) {
     pushCalls++;
+    queuedAtMillis = queuedAt;
     return pushResult;
+  }
+  bool peek(char* output, uint32_t* queuedAt) {
+    peekCalls++;
+    if (peekResult) {
+      std::strcpy(output, "2A");
+      if (queuedAt != nullptr) *queuedAt = queuedAtMillis;
+    }
+    return peekResult;
   }
   bool pop(char* output) {
     popCalls++;
-    if (popResult) std::strcpy(output, "A");
+    if (popResult) {
+      std::strcpy(output, "A");
+      empty = true;
+    }
     return popResult;
+  }
+  void flush() {
+    flushCalls++;
+    empty = true;
   }
 };
 
@@ -278,6 +308,9 @@ int blynkCheckCalls = 0;
 int blynkWriteCalls = 0;
 int blynkNotifyCalls = 0;
 bool blynkConnected = true;
+bool disconnectAfterWrite = false;
+bool disconnectAfterNotify = false;
+bool blynkTokenInvalid = false;
 std::vector<std::string> actions;
 
 struct SetupProbe {
@@ -290,13 +323,19 @@ struct BlynkProbe {
     actions.push_back("blynk_check");
     return blynkConnected;
   }
+  bool isTokenInvalid() const { return blynkTokenInvalid; }
   void virtualWrite(int, const String&) {
     blynkWriteCalls++;
     actions.push_back("blynk_write");
+    if (disconnectAfterWrite) blynkConnected = false;
   }
   // Push через сервер Blynk идёт сразу после virtualWrite(V26) под тем же замком;
   // отдельного шага в последовательности действий не даёт.
-  void notify(const String&) { blynkNotifyCalls++; }
+  void notify(const String&) {
+    blynkNotifyCalls++;
+    actions.push_back("blynk_notify");
+    if (disconnectAfterNotify) blynkConnected = false;
+  }
 } Blynk;
 
 // Заглушка RAII-стража замка Blynk (runtime_helpers.h): библиотека Blynk не
@@ -322,13 +361,30 @@ struct BlynkLockGuard {
 QueueProbe msg_q;
 void* xMsgSemaphore = nullptr;
 BaseType_t takeResult = pdTRUE;
+int failOnTakeCall = 0;
 int takeCalls = 0;
 int giveCalls = 0;
 std::vector<std::string> codes;
 int failures = 0;
+uint32_t fakeMillis = 0;
+constexpr uint32_t NOTIFY_DELIVERY_TTL_MS = 15UL * 60UL * 1000UL;
+bool notificationTokenInvalid = false;
+bool notifyQueuePushFailedLogged = false;
+bool notifyBlynkDisconnectedLogged = false;
+bool ota_running = false;
+
+uint32_t millis() { return fakeMillis; }
+bool is_notification_token_invalid() { return notificationTokenInvalid; }
+void set_notification_token_invalid(bool invalid) { notificationTokenInvalid = invalid; }
+
+struct WiFiProbe {
+  int state = WL_CONNECTED;
+  int status() const { return state; }
+} WiFi;
 
 BaseType_t xSemaphoreTake(void*, TickType_t) {
   takeCalls++;
+  if (takeCalls == failOnTakeCall) return 0;
   return takeResult;
 }
 
@@ -346,7 +402,8 @@ void WriteConsoleLog(const char* code) {
 void vTaskDelay(int) {}
 
 void runProducerBlock() {
-  String MsgPl("payload");
+  const String m("payload");
+  const MESSAGE_TYPE msg_type = NONE_MSG;
 @PRODUCER_BLOCK@
 }
 
@@ -357,6 +414,7 @@ void runConsumerBlock() {
 void resetProbe() {
   msg_q = QueueProbe{};
   takeResult = pdTRUE;
+  failOnTakeCall = 0;
   takeCalls = 0;
   giveCalls = 0;
   codes.clear();
@@ -365,8 +423,17 @@ void resetProbe() {
   blynkWriteCalls = 0;
   blynkNotifyCalls = 0;
   blynkConnected = true;
+  disconnectAfterWrite = false;
+  disconnectAfterNotify = false;
   blynkLockAvailable = true;
   blynkLockTakes = 0;
+  blynkTokenInvalid = false;
+  notificationTokenInvalid = false;
+  notifyQueuePushFailedLogged = false;
+  notifyBlynkDisconnectedLogged = false;
+  fakeMillis = 0;
+  ota_running = false;
+  WiFi.state = WL_CONNECTED;
   SamSetup.blynkauth[0] = '\0';
 }
 
@@ -383,20 +450,44 @@ void check(bool condition, const char* message) {
 void checkProducerReleasePaths() {
   resetProbe();
   runProducerBlock();
-  check(takeCalls == 1 && msg_q.pushCalls == 1 && giveCalls == 1 &&
-            codes.empty() && actions == std::vector<std::string>({"give"}),
-        "producer success must give once without diagnostics");
+  check(takeCalls == 0 && msg_q.pushCalls == 0 && giveCalls == 0 && codes.empty(),
+        "unconfigured Blynk must not enqueue notification");
 
   resetProbe();
+  configureIntegrations();
+  fakeMillis = 1234;
+  runProducerBlock();
+  check(takeCalls == 1 && msg_q.pushCalls == 1 && giveCalls == 1 &&
+            msg_q.queuedAtMillis == 1234 && codes.empty() &&
+            actions == std::vector<std::string>({"give"}),
+        "producer success must store enqueue time and give once without diagnostics");
+
+  resetProbe();
+  configureIntegrations();
   msg_q.pushResult = false;
   runProducerBlock();
-  check(msg_q.pushCalls == 1 && giveCalls == 1 &&
-            codes == std::vector<std::string>({"notify_queue_push_failed"}) &&
+  runProducerBlock();
+  msg_q.pushResult = true;
+  runProducerBlock();
+  msg_q.pushResult = false;
+  runProducerBlock();
+  check(msg_q.pushCalls == 4 && giveCalls == 4 &&
+            codes == std::vector<std::string>({
+                "notify_queue_push_failed", "notify_queue_push_failed"}) &&
             actions == std::vector<std::string>({
+                "give", "log:notify_queue_push_failed", "give", "give",
                 "give", "log:notify_queue_push_failed"}),
-        "producer push failure must give before its only diagnostic");
+        "producer push failure must be diagnosed once per full-state transition");
 
   resetProbe();
+  configureIntegrations();
+  notificationTokenInvalid = true;
+  runProducerBlock();
+  check(msg_q.pushCalls == 0 && codes.empty(),
+        "known invalid token must not enqueue or grow the log");
+
+  resetProbe();
+  configureIntegrations();
   takeResult = 0;
   runProducerBlock();
   check(msg_q.pushCalls == 0 && giveCalls == 0 &&
@@ -409,7 +500,7 @@ void checkProducerReleasePaths() {
 void checkConsumerReleasePaths() {
   resetProbe();
   runConsumerBlock();
-  check(msg_q.emptyCalls == 1 && msg_q.popCalls == 0 && giveCalls == 1 &&
+  check(msg_q.emptyCalls == 1 && msg_q.peekCalls == 0 && msg_q.popCalls == 0 && giveCalls == 1 &&
             codes.empty() && actions == std::vector<std::string>({"give"}) &&
             blynkCheckCalls == 0 && blynkWriteCalls == 0,
         "empty consumer path must give once without diagnostics");
@@ -417,29 +508,45 @@ void checkConsumerReleasePaths() {
   resetProbe();
   msg_q.empty = false;
   runConsumerBlock();
-  check(msg_q.popCalls == 1 && giveCalls == 1 && codes.empty(),
-        "successful consumer pop must give once");
+  check(msg_q.peekCalls == 1 && msg_q.flushCalls == 1 && msg_q.popCalls == 0 && codes.empty(),
+        "unconfigured Blynk must clear stale notifications without diagnostics");
 
   resetProbe();
   configureIntegrations();
   msg_q.empty = false;
-  msg_q.popResult = false;
+  notificationTokenInvalid = true;
   runConsumerBlock();
-  check(msg_q.popCalls == 1 && giveCalls == 1 &&
-            codes == std::vector<std::string>({"notify_queue_pop_failed"}) &&
+  check(msg_q.flushCalls == 1 && msg_q.popCalls == 0 && codes.empty(),
+        "known invalid token must clear the queue without diagnostics");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  blynkTokenInvalid = true;
+  runConsumerBlock();
+  check(notificationTokenInvalid && msg_q.flushCalls == 1 && codes.empty(),
+        "library TOKEN_INVALID must be cached and clear the queue");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  msg_q.peekResult = false;
+  runConsumerBlock();
+  check(msg_q.peekCalls == 1 && msg_q.popCalls == 0 && giveCalls == 1 &&
+            codes == std::vector<std::string>({"notify_queue_peek_failed"}) &&
             actions == std::vector<std::string>({
-                "give", "log:notify_queue_pop_failed"}) &&
+                "give", "log:notify_queue_peek_failed"}) &&
             blynkCheckCalls == 0 && blynkWriteCalls == 0,
-        "consumer pop failure must give before its only diagnostic");
+        "consumer peek failure must give before its only diagnostic");
 
   resetProbe();
   configureIntegrations();
   takeResult = 0;
   runConsumerBlock();
-  check(msg_q.emptyCalls == 0 && msg_q.popCalls == 0 && giveCalls == 0 &&
-            codes == std::vector<std::string>({"notify_queue_pop_lock_busy"}) &&
+  check(msg_q.emptyCalls == 0 && msg_q.peekCalls == 0 && msg_q.popCalls == 0 && giveCalls == 0 &&
+            codes == std::vector<std::string>({"notify_queue_peek_lock_busy"}) &&
             actions == std::vector<std::string>({
-                "log:notify_queue_pop_lock_busy"}) &&
+                "log:notify_queue_peek_lock_busy"}) &&
             blynkCheckCalls == 0 && blynkWriteCalls == 0,
         "consumer take failure must not give and must emit only lock_busy");
 }
@@ -450,9 +557,10 @@ void checkIntegrationPaths() {
   msg_q.empty = false;
   runConsumerBlock();
   check(blynkNotifyCalls == blynkWriteCalls, "blynk_notify_follows_v26_write");
-  check(blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
+  check(blynkCheckCalls == 3 && blynkWriteCalls == 1 && msg_q.popCalls == 1 && giveCalls == 2 &&
             codes.empty() && actions == std::vector<std::string>({
-                "give", "blynk_lock", "blynk_check", "blynk_write"}),
+                "give", "blynk_lock", "blynk_check", "blynk_write", "blynk_check",
+                "blynk_notify", "blynk_check", "give"}),
         "successful Blynk delivery must not emit diagnostics");
 
   resetProbe();
@@ -460,12 +568,33 @@ void checkIntegrationPaths() {
   msg_q.empty = false;
   blynkConnected = false;
   runConsumerBlock();
-  check(blynkCheckCalls == 1 && blynkWriteCalls == 0 &&
+  runConsumerBlock();
+  check(blynkCheckCalls == 2 && blynkWriteCalls == 0 &&
+            msg_q.popCalls == 0 &&
             codes == std::vector<std::string>({"notify_blynk_disconnected"}) &&
             actions == std::vector<std::string>({
                 "give", "blynk_lock", "blynk_check",
-                "log:notify_blynk_disconnected"}),
-        "Blynk disconnect must be diagnosed");
+                "log:notify_blynk_disconnected", "give", "blynk_lock", "blynk_check"}),
+        "unchanged Blynk disconnect must be diagnosed only once");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  fakeMillis = NOTIFY_DELIVERY_TTL_MS;
+  runConsumerBlock();
+  runConsumerBlock();
+  check(blynkWriteCalls == 0 && msg_q.popCalls == 1 &&
+            codes == std::vector<std::string>({"notify_queue_delivery_expired"}),
+        "expired notification must be removed with exactly one diagnostic");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  WiFi.state = 0;
+  fakeMillis = NOTIFY_DELIVERY_TTL_MS - 1;
+  runConsumerBlock();
+  check(blynkWriteCalls == 0 && msg_q.popCalls == 0 && codes.empty(),
+        "temporary offline state before TTL must retain notification");
 
   // Замок Blynk держит loop(): доставка пропускается, но такт не блокируется и
   // пользователь узнаёт об этом из журнала (notify_blynk_lock_busy).
@@ -475,12 +604,45 @@ void checkIntegrationPaths() {
   blynkLockAvailable = false;
   runConsumerBlock();
   check(blynkLockTakes == 1 && blynkCheckCalls == 0 &&
-            blynkWriteCalls == 0 &&
+            blynkWriteCalls == 0 && msg_q.popCalls == 0 &&
             codes == std::vector<std::string>({"notify_blynk_lock_busy"}) &&
             actions == std::vector<std::string>({
                 "give", "blynk_lock_busy",
                 "log:notify_blynk_lock_busy"}),
         "busy Blynk lock must skip delivery and log it once");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  disconnectAfterWrite = true;
+  runConsumerBlock();
+  check(blynkWriteCalls == 1 && blynkNotifyCalls == 0 && msg_q.popCalls == 0 &&
+            codes == std::vector<std::string>({"notify_blynk_disconnected"}),
+        "disconnect after V26 must retain notification");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  disconnectAfterNotify = true;
+  runConsumerBlock();
+  check(blynkWriteCalls == 1 && blynkNotifyCalls == 1 && msg_q.popCalls == 0 &&
+            codes == std::vector<std::string>({"notify_blynk_disconnected"}),
+        "disconnect after notify must retain notification");
+
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  failOnTakeCall = 2;
+  runConsumerBlock();
+  check(blynkWriteCalls == 1 && blynkNotifyCalls == 1 && msg_q.popCalls == 0 &&
+            codes == std::vector<std::string>({"notify_queue_pop_lock_busy"}),
+        "second message lock failure must retain accepted notification");
+
+  failOnTakeCall = 0;
+  runConsumerBlock();
+  check(blynkWriteCalls == 2 && blynkNotifyCalls == 2 && msg_q.popCalls == 1 &&
+            codes == std::vector<std::string>({"notify_queue_pop_lock_busy"}),
+        "retained notification must be retried after accepted send");
 }
 
 int main() {
@@ -509,28 +671,34 @@ def require_order(body: str, tokens: tuple[str, ...], name: str, errors: list[st
         offset = found + len(token)
 
 
-def check_source_contract() -> list[str]:
+def check_source_contract(source: str | None = None) -> list[str]:
     errors: list[str] = []
-    source = strip_cpp_comments((ROOT / "Samovar.ino").read_text(encoding="utf-8"))
+    if source is None:
+        source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+    source = strip_cpp_comments(source)
     queue_source = strip_cpp_comments(
         (ROOT / "libraries/simple_queue/simple_queue.h").read_text(encoding="utf-8")
     )
     try:
         send_body = extract_function_body(source, "void SendMsg(")
         clock_body = extract_function_body(source, "void triggerGetClock(")
+        setup_body = extract_function_body(source, "static void setup_connect_wifi_and_notify()")
         log_body = extract_function_body(source, "void WriteConsoleLog(")
     except ValueError as error:
         return [str(error)]
 
     require("SimpleStringQueue msg_q(5, 200);" in source,
             "queue capacity/item size changed", errors)
-    require("bool push(const char* item)" in queue_source and
+    require("bool push(const char* item, uint32_t queuedAt)" in queue_source and
+            "bool peek(char* item, uint32_t* queuedAt) const" in queue_source and
             "bool pop(char* item)" in queue_source,
             "vendor queue result API changed", errors)
     require(send_body.count("msg_q.push(") == 1,
             "SendMsg must perform exactly one push", errors)
     require(clock_body.count("msg_q.isEmpty()") == 1,
             "consumer must make one locked empty check", errors)
+    require(clock_body.count("msg_q.peek(") == 1,
+            "consumer must peek exactly one FIFO head", errors)
     require(clock_body.count("msg_q.pop(") == 1,
             "consumer must perform at most one pop", errors)
     require("queuePushResult = msg_q.push(" in send_body,
@@ -540,16 +708,17 @@ def check_source_contract() -> list[str]:
 
     require_order(
         send_body,
-        ("xSemaphoreTake(", "msg_q.push(",
+        ("const uint32_t queuedAtMillis = millis();", "xSemaphoreTake(",
+         "msg_q.push(MsgPl.c_str(), queuedAtMillis)",
          "xSemaphoreGive(", "WriteConsoleLog("),
         "SendMsg",
         errors,
     )
     require_order(
         clock_body,
-        ("xSemaphoreTake(", "msg_q.isEmpty()", "msg_q.pop(",
-         "xSemaphoreGive(", "String qMsg",
-         "Blynk.virtualWrite(", "WriteConsoleLog("),
+        ("xSemaphoreTake(", "msg_q.isEmpty()", "msg_q.peek(c, &queuedAtMillis)",
+         "xSemaphoreGive(", "deliveryExpired", "String qMsg", "Blynk.virtualWrite(",
+         "Blynk.notify(", "blynkDeliveryAccepted", "msg_q.pop(c)"),
         "triggerGetClock notification block",
         errors,
     )
@@ -571,6 +740,30 @@ def check_source_contract() -> list[str]:
     require(enqueue_guard in send_body and
             send_body.find(enqueue_guard) < send_body.find("msg_q.push("),
             "Blynk enqueue guard changed", errors)
+    enqueue_condition = "if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid())"
+    require(enqueue_condition in send_body and
+            send_body.find(enqueue_condition) < send_body.find("msg_q.push("),
+            "empty or known-invalid Blynk token must not enqueue notification", errors)
+    require("millis() - queuedAtMillis >= NOTIFY_DELIVERY_TTL_MS" in clock_body,
+            "notification delivery TTL is missing or not rollover-safe", errors)
+    require("msg_q.flush();" in clock_body and "discardQueue = tokenUnavailable" in clock_body,
+            "empty or invalid token must clear retained notifications", errors)
+    require("notifyQueuePushFailedLogged" in send_body,
+            "queue-full diagnostic state suppression is missing", errors)
+    require("blynkDisconnected && !notifyBlynkDisconnectedLogged" in clock_body,
+            "disconnect diagnostic state suppression is missing", errors)
+    require("if (Blynk.connected()) notifyBlynkDisconnectedLogged = false;" in clock_body,
+            "disconnect diagnostic is not reset after reconnection", errors)
+    require("!Blynk.isTokenInvalid()" in clock_body and
+            "set_notification_token_invalid(tokenInvalid);" in clock_body,
+            "periodic Blynk connect does not cache/stop on TOKEN_INVALID", errors)
+    require_order(
+        setup_body,
+        ("Blynk.connect(BLYNK_TIMEOUT_MS);",
+         "set_notification_token_invalid(Blynk.isTokenInvalid());"),
+        "setup Blynk invalid-token state",
+        errors,
+    )
     require("String pushMsg = String(msgLevel == '0' ? \"Тревога! \"" in clock_body,
             "Blynk/V26 alarm prefix changed (apps detect alarms by it)", errors)
     require("#ifdef USE_MQTT" not in send_body and "MqttSendMsg(" not in send_body,
@@ -581,7 +774,7 @@ def check_source_contract() -> list[str]:
             "SamSetup.blynkauth[0] != 0" in clock_body,
             "Blynk configured/disconnected check missing", errors)
     require("msg_q.push(" not in clock_body and "msg_q.pop(" not in send_body,
-            "queue retry/requeue path added", errors)
+            "queue consumer/producer ownership changed", errors)
     require("SendMsg(" not in log_body and "msg_q." not in log_body and
             "xMsgSemaphore" not in log_body,
             "WriteConsoleLog recurses into notification queue", errors)
@@ -592,18 +785,21 @@ def check_source_contract() -> list[str]:
     return errors
 
 
-def build_production_block_harness() -> str:
-    source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+def build_production_block_harness(source: str | None = None) -> str:
+    if source is None:
+        source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
     send_body = extract_function_body(source, "void SendMsg(")
-    clock_body = extract_function_body(source, "void triggerGetClock(")
+    clock_body = extract_function_body(source, "void triggerGetClock(", strip_comments=False)
 
-    producer_start = send_body.find("const BaseType_t queueTakeResult =")
+    producer_start = send_body.find(
+        "if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid())"
+    )
     producer_end = send_body.find("#endif", producer_start)
     if producer_start < 0 or producer_end < 0:
         raise ValueError("SendMsg queue block not found")
     producer_block = send_body[producer_start:producer_end]
-    consumer_block = extract_function_body(
-        clock_body, "if (WiFi.status() == WL_CONNECTED && !ota_running)"
+    consumer_block, _ = extract_braced_block_after(
+        clock_body, "// Возраст очереди проверяется и без Wi-Fi"
     )
     return (PRODUCTION_BLOCK_HARNESS
             .replace("@PRODUCER_BLOCK@", producer_block)
@@ -644,12 +840,12 @@ def compile_and_run_harness(
     return []
 
 
-def run_harness() -> list[str]:
+def run_harness(source: str | None = None) -> list[str]:
     compiler = shutil.which("g++")
     if compiler is None:
         return ["g++ is required for the notification queue behavioral gate"]
     try:
-        production_harness = build_production_block_harness()
+        production_harness = build_production_block_harness(source)
     except ValueError as error:
         return [str(error)]
     with tempfile.TemporaryDirectory(prefix="samovar-notification-queue-") as directory:
@@ -679,7 +875,63 @@ def run_harness() -> list[str]:
 
 def main() -> int:
     errors = check_source_contract()
+    source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+    send_start = source.find("void SendMsg(")
+    unguarded = source[:send_start] + source[send_start:].replace(
+        "if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid())", "if (true)", 1
+    )
+    if "empty or known-invalid Blynk token must not enqueue notification" not in check_source_contract(unguarded):
+        errors.append("empty/invalid Blynk token enqueue mutation survived")
+
+    no_disconnect_reset = source.replace(
+        "if (Blynk.connected()) notifyBlynkDisconnectedLogged = false;", "", 1
+    )
+    if "disconnect diagnostic is not reset after reconnection" not in check_source_contract(
+        no_disconnect_reset
+    ):
+        errors.append("disconnect diagnostic reset mutation survived")
+
+    no_invalid_cache = source.replace(
+        "set_notification_token_invalid(tokenInvalid);", "", 1
+    )
+    if "periodic Blynk connect does not cache/stop on TOKEN_INVALID" not in check_source_contract(
+        no_invalid_cache
+    ):
+        errors.append("invalid-token cache mutation survived")
     errors.extend(run_harness())
+
+    for label, mutant, expected_failure in (
+        (
+            "TTL boundary",
+            source.replace(
+                "millis() - queuedAtMillis >= NOTIFY_DELIVERY_TTL_MS",
+                "millis() - queuedAtMillis > NOTIFY_DELIVERY_TTL_MS",
+                1,
+            ),
+            "expired notification must be removed with exactly one diagnostic",
+        ),
+        (
+            "disconnect diagnostic suppression",
+            source.replace(
+                "blynkDisconnected && !notifyBlynkDisconnectedLogged",
+                "blynkDisconnected",
+                1,
+            ),
+            "unchanged Blynk disconnect must be diagnosed only once",
+        ),
+        (
+            "queue-full diagnostic suppression",
+            source.replace(
+                "} else if (!notifyQueuePushFailedLogged) {",
+                "} else {",
+                1,
+            ),
+            "producer push failure must be diagnosed once per full-state transition",
+        ),
+    ):
+        mutation_output = "\n".join(run_harness(mutant))
+        if expected_failure not in mutation_output:
+            errors.append(f"{label} mutation survived or failed for the wrong reason")
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)

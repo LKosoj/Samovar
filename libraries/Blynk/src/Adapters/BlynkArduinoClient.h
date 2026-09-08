@@ -15,10 +15,38 @@
 #include <Blynk/BlynkDebug.h>
 #include <Client.h>
 
+#if defined(ESP32)
+#include <WiFi.h>
+#include <lwip/sockets.h>
+#endif
+
 #if defined(ESP8266) && !defined(BLYNK_NO_YIELD)
     #define YIELD_FIX() BLYNK_RUN_YIELD();
 #else
     #define YIELD_FIX()
+#endif
+
+template <typename Client>
+static inline void blynk_client_set_timeout(Client* client) {
+    client->setTimeout(BLYNK_TIMEOUT_MS);
+}
+
+template <typename Client>
+static inline size_t blynk_client_write(Client* client, const uint8_t* buffer, size_t length) {
+    return client->write(buffer, length);
+}
+
+#if defined(ESP32)
+static inline void blynk_client_set_timeout(WiFiClient* client) {
+    client->setTimeout(BLYNK_TIMEOUT_MS / 1000UL);
+}
+
+static inline size_t blynk_client_write(WiFiClient* client, const uint8_t* buffer, size_t length) {
+    const int socket = client->fd();
+    if (socket < 0) return 0;
+    const int written = send(socket, buffer, length, MSG_DONTWAIT);
+    return written > 0 ? static_cast<size_t>(written) : 0;
+}
 #endif
 
 template <typename Client>
@@ -37,7 +65,7 @@ public:
 
     void setClient(Client* c) {
         client = c;
-        client->setTimeout(BLYNK_TIMEOUT_MS);
+        blynk_client_set_timeout(client);
     }
 
     void begin(IPAddress a, uint16_t p) {
@@ -85,7 +113,7 @@ public:
         size_t sent = 0;
         int retry = 0;
         while (sent < len && ++retry < 10) {
-            size_t w = client->write((const uint8_t*)buf+sent, len-sent);
+            size_t w = blynk_client_write(client, (const uint8_t*)buf+sent, len-sent);
             if (w != 0 && w != -1) {
                 sent += w;
             } else {
@@ -106,7 +134,7 @@ public:
 #else
     size_t write(const void* buf, size_t len) {
         YIELD_FIX();
-        size_t res = client->write((const uint8_t*)buf, len);
+        size_t res = blynk_client_write(client, (const uint8_t*)buf, len);
         YIELD_FIX();
         return res;
     }

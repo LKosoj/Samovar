@@ -21,7 +21,7 @@
             <rect class="metal" x="212" y="40" width="16" height="22" rx="3"/>
             <g transform="translate(96 34)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Пар</text><text class="tag" x="8" y="14" fill="var(--steam)"><tspan data-tele="SteamTemp" data-fmt="2"></tspan>°</text></g>
             <line x1="186" y1="46" x2="212" y2="46" stroke="var(--border-dashed)" stroke-width="1.5"/>
-            <g transform="translate(96 140)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Вода</text><text class="tag" x="8" y="14" fill="var(--water)"><tspan data-tele="WaterTemp" data-fmt="1"></tspan>°</text></g>
+            <g transform="translate(300 96)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Вода</text><text class="tag" x="8" y="14" fill="var(--water)"><tspan data-tele="WaterTemp" data-fmt="1"></tspan>°</text></g>
             <!-- Царга -->
             <rect class="metal" x="202" y="128" width="36" height="244" rx="4"/>
             <rect x="206" y="132" width="28" height="236" fill="url(#pack)"/>
@@ -47,7 +47,7 @@
             <path class="feed" data-on="_withdrawing" d="M182 122 H96 V372"/>
             <circle class="metal" cx="96" cy="400" r="24"/>
             <g class="rotor" data-on="_pumpOn"><circle cx="96" cy="386" r="4"/><circle cx="108" cy="407" r="4"/><circle cx="84" cy="407" r="4"/></g>
-            <g transform="translate(10 388)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">Отбор</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="ActualVolumePerHour"></tspan> л/ч</text></g>
+            <g transform="translate(10 388)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">Отбор</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="ActualVolumePerHour" data-fmt="2"></tspan> л/ч</text></g>
             <path class="pipe" d="M96 424 V452"/>
             <g class="drops" data-on="_pumpOn"><circle class="drop" cx="96" cy="458" r="3"/><circle class="drop" cx="96" cy="458" r="2.2"/></g>
             <!-- Банки сервопривода: активная подсвечена медью -->

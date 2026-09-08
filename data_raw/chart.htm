@@ -30,7 +30,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
           document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
-          document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
+          document.getElementById('ActualVolumePerHour').innerHTML = Number(myObj.ActualVolumePerHour).toFixed(2);
           document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
           if (myObj.PrgType){
             if (myObj.PrgType === "P") myObj.PrgType = "Пауза"

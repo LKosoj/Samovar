@@ -358,7 +358,6 @@ char* welcomeStr3 = (char*)welcomeStrArr3;
 char* welcomeStr4 = (char*)welcomeStrArr4;
 
 extern char* timestr;
-char* ipstr = (char*)ipst;
 char startval_text_val[20];
 char* startval_text = (char*)startval_text_val;
 char* power_text_ptr = (char*)"ON";

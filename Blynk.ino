@@ -175,6 +175,7 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   jsonFieldBool(out, first, "bps", s.boilingPrecisionSensorConfigured);
   jsonFieldBool(out, first, "wauto", s.bkWaterAuto);
   jsonFieldFloat(out, first, "wsp", s.bkSteamSetpoint, 1);
+  jsonFieldBool(out, first, "valve", s.valveOpen);
 #ifdef USE_WATER_PUMP
   jsonFieldRaw(out, first, "wpwm", s.waterPumpSpeed);
 #endif
@@ -381,6 +382,7 @@ static bool s_blynkPushResendAll = true;
 static portMUX_TYPE s_blynkLogLineMux = portMUX_INITIALIZER_UNLOCKED;
 static char s_pendingV34Line[288];
 static volatile bool s_pendingV34Ready = false;
+static uint32_t s_pendingV34Revision = 0;
 
 // Честный худший случай V35 (T2-review-1.md, [Blynk.ino:370,400-424]): sessionId uint32_t
 // (10) + "," (1) + resume "0"/"1" (1) + "," (1) + chipId uint32_t (10) + "," (1)
@@ -393,6 +395,7 @@ static volatile bool s_pendingV34Ready = false;
 static portMUX_TYPE s_blynkSessionMux = portMUX_INITIALIZER_UNLOCKED;
 static char s_pendingV35Line[320];
 static volatile bool s_pendingV35Ready = false;
+static uint32_t s_pendingV35Revision = 0;
 
 // Вызывается из Samovar.ino (SysTicker, tick_publish_log_line) - некрупная, без
 // библиотечных вызовов Blynk и без BlynkLockGuard. Буфер посчитан на честный худший
@@ -408,22 +411,33 @@ void blynk_stage_log_line(const String& line) {
   }
   portENTER_CRITICAL(&s_blynkLogLineMux);
   strlcpy(s_pendingV34Line, line.c_str(), sizeof(s_pendingV34Line));
+  s_pendingV34Revision++;
   s_pendingV34Ready = true;
   portEXIT_CRITICAL(&s_blynkLogLineMux);
 }
 
-// Вызывается только из blynk_push_tick() (loop(), уже под BlynkLockGuard из tick_blynk()).
-static void blynk_push_pending_log_line() {
+// Вызывается только из blynk_push_tick() до отправки V35: после этого SysTicker может
+// положить новый V34, который должен остаться до следующего тика вместе с новым V35.
+static bool blynk_snapshot_pending_log_line(char (&line)[sizeof(s_pendingV34Line)], uint32_t& revision) {
   bool ready;
-  char line[sizeof(s_pendingV34Line)];
   portENTER_CRITICAL(&s_blynkLogLineMux);
   ready = s_pendingV34Ready;
   if (ready) {
     strlcpy(line, s_pendingV34Line, sizeof(line));
-    s_pendingV34Ready = false;
+    revision = s_pendingV34Revision;
   }
   portEXIT_CRITICAL(&s_blynkLogLineMux);
-  if (ready) Blynk.virtualWrite(V34, line);
+  return ready;
+}
+
+// Вызывается только из blynk_push_tick() (loop(), уже под BlynkLockGuard из tick_blynk()).
+static void blynk_push_pending_log_line(const char* line, uint32_t revision, bool ready) {
+  if (!ready || !Blynk.connected()) return;
+  Blynk.virtualWrite(V34, line);
+  if (!Blynk.connected()) return;
+  portENTER_CRITICAL(&s_blynkLogLineMux);
+  if (s_pendingV34Ready && s_pendingV34Revision == revision) s_pendingV34Ready = false;
+  portEXIT_CRITICAL(&s_blynkLogLineMux);
 }
 
 // Вызывается из Samovar.ino (session_begin()) - НЕ берёт BlynkLockGuard: session_begin()
@@ -440,6 +454,7 @@ void blynk_stage_session_start(const String& line) {
   if ((size_t)line.length() <= capacity) {
     portENTER_CRITICAL(&s_blynkSessionMux);
     strlcpy(s_pendingV35Line, line.c_str(), sizeof(s_pendingV35Line));
+    s_pendingV35Revision++;
     s_pendingV35Ready = true;
     portEXIT_CRITICAL(&s_blynkSessionMux);
     return;
@@ -454,27 +469,40 @@ void blynk_stage_session_start(const String& line) {
   String truncated = line.substring(0, cut);
   portENTER_CRITICAL(&s_blynkSessionMux);
   strlcpy(s_pendingV35Line, truncated.c_str(), sizeof(s_pendingV35Line));
+  s_pendingV35Revision++;
   s_pendingV35Ready = true;
   portEXIT_CRITICAL(&s_blynkSessionMux);
 }
 
-// Вызывается только из blynk_push_tick(). Перед самой отправкой V35 форсирует немедленный
+// Вызывается только из blynk_push_tick(). Возвращает false, если V35 остался pending: V34
+// в таком тике нельзя отправлять раньше начала сессии. Перед самой отправкой V35 форсирует немедленный
 // полный resend медленных пинов (blynk_push_slow(true)) -V24 (программа) сервер должен
 // получить не позже V35, иначе новая сессия в БД временно останется без программы.
-static void blynk_push_pending_session_start() {
+static bool blynk_push_pending_session_start() {
   bool ready;
   char line[sizeof(s_pendingV35Line)];
+  uint32_t revision = 0;
   portENTER_CRITICAL(&s_blynkSessionMux);
   ready = s_pendingV35Ready;
   if (ready) {
     strlcpy(line, s_pendingV35Line, sizeof(line));
-    s_pendingV35Ready = false;
+    revision = s_pendingV35Revision;
   }
   portEXIT_CRITICAL(&s_blynkSessionMux);
-  if (ready) {
-    blynk_push_slow(true);
-    Blynk.virtualWrite(V35, line);
+  if (!ready) return true;
+  if (!Blynk.connected()) return false;
+  blynk_push_slow(true);
+  if (!Blynk.connected()) return false;
+  Blynk.virtualWrite(V35, line);
+  if (!Blynk.connected()) return false;
+  bool sentCurrent = false;
+  portENTER_CRITICAL(&s_blynkSessionMux);
+  if (s_pendingV35Ready && s_pendingV35Revision == revision) {
+    s_pendingV35Ready = false;
+    sentCurrent = true;
   }
+  portEXIT_CRITICAL(&s_blynkSessionMux);
+  return sentCurrent;
 }
 
 BLYNK_CONNECTED() {
@@ -579,7 +607,9 @@ static void blynk_push_slow(bool force) {
   if (blynk_changed(lastPower, (int)PowerOn, force)) Blynk.virtualWrite(V4, (int)PowerOn);
   if (blynk_changed(lastPause, (int)PauseOn, force)) Blynk.virtualWrite(V13, (int)PauseOn);
   // V5 (давление) убран - дублируется в V34 (25-е поле), см. blynk_stage_log_line ниже.
-  if (blynk_changed(lastIp, String(ipst), force)) Blynk.virtualWrite(V15, ipst);
+  char ip[sizeof(ipst)] = {};
+  ipst_copy(ip);
+  if (blynk_changed(lastIp, String(ip), force)) Blynk.virtualWrite(V15, ip);
   if (blynk_changed(lastMode, (int)Samovar_Mode, force)) Blynk.virtualWrite(V20, Samovar_Mode);
   if (force) Blynk.virtualWrite(V19, SAMOVAR_VERSION);
 #ifdef SAMOVAR_USE_POWER
@@ -596,16 +626,23 @@ static void blynk_push_slow(bool force) {
 void blynk_push_tick() {
   // V35 раньше V34: если оба накопились к одному тику, сервер должен узнать о сессии
   // до первой строки её лога, иначе он отбросит строку как «сессия неизвестна».
-  blynk_push_pending_session_start();  // V35, см. session_begin() (Samovar.ino)
-  blynk_push_pending_log_line();       // V34, если накопилась активным процессом (SysTicker)
-
-  // V34 в простое - раз в 5 с, напрямую отсюда (уже loop(), уже под BlynkLockGuard):
-  // буферизация здесь не нужна, в отличие от активной ветки (SysTicker, другое ядро).
   static unsigned long idleV34At = 0;
   const unsigned long nowIdle = millis();
-  if (startval == SAMOVAR_STARTVAL_IDLE && nowIdle - idleV34At >= 5000UL) {
+  const bool idleV34Ready = startval == SAMOVAR_STARTVAL_IDLE && nowIdle - idleV34At >= 5000UL;
+  String idleV34Line;
+  if (idleV34Ready) idleV34Line = build_idle_v34_line();
+
+  char pendingV34Line[sizeof(s_pendingV34Line)];
+  uint32_t pendingV34Revision = 0;
+  const bool pendingV34Ready = blynk_snapshot_pending_log_line(pendingV34Line, pendingV34Revision);
+  const bool canPushV34 = blynk_push_pending_session_start();  // V35, см. session_begin() (Samovar.ino)
+  if (canPushV34) blynk_push_pending_log_line(pendingV34Line, pendingV34Revision, pendingV34Ready);
+
+  // Строка в простое зафиксирована выше до V35 gate: новая сессия, staged после
+  // snapshot, не меняет смысл V34, выбранного для этого тика.
+  if (canPushV34 && idleV34Ready) {
     idleV34At = nowIdle;
-    Blynk.virtualWrite(V34, build_idle_v34_line());
+    Blynk.virtualWrite(V34, idleV34Line);
   }
 
   static unsigned long cycleStart = 0;

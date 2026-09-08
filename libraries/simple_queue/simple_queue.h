@@ -100,6 +100,7 @@ public:
 class SimpleStringQueue {
 private:
     char** buffer;
+    uint32_t* queuedAtMillis;
     uint8_t capacity;
     size_t stringSize;
     uint8_t head;
@@ -109,9 +110,14 @@ private:
 
 public:
     SimpleStringQueue(uint8_t queueCapacity, size_t stringSize) : 
-        capacity(queueCapacity), stringSize(stringSize), head(0), tail(0), count(0), initialized(false) {
+        buffer(nullptr), queuedAtMillis(nullptr), capacity(queueCapacity), stringSize(stringSize),
+        head(0), tail(0), count(0), initialized(false) {
         buffer = new char*[capacity];
         if (buffer != nullptr) {
+            for (uint8_t i = 0; i < capacity; i++) buffer[i] = nullptr;
+        }
+        queuedAtMillis = new uint32_t[capacity];
+        if (buffer != nullptr && queuedAtMillis != nullptr) {
             for (uint8_t i = 0; i < capacity; i++) {
                 buffer[i] = new char[stringSize];
                 if (buffer[i] == nullptr) {
@@ -132,14 +138,16 @@ public:
             }
             delete[] buffer;
         }
+        delete[] queuedAtMillis;
     }
 
     bool isInitialized() const { return initialized; }
-    bool push(const char* item) {
+    bool push(const char* item, uint32_t queuedAt) {
         if (!initialized || count >= capacity) return false;
         
         strncpy(buffer[tail], item, stringSize - 1);
         buffer[tail][stringSize - 1] = '\0';
+        queuedAtMillis[tail] = queuedAt;
         tail = (tail + 1) % capacity;
         count++;
         return true;
@@ -154,9 +162,23 @@ public:
         return true;
     }
 
+    bool peek(char* item, uint32_t* queuedAt) const {
+        if (!initialized || count == 0) return false;
+
+        strncpy(item, buffer[head], stringSize);
+        if (queuedAt != nullptr) *queuedAt = queuedAtMillis[head];
+        return true;
+    }
+
     bool isEmpty() const { return count == 0; }
     bool isFull() const { return count >= capacity; }
     uint8_t getCount() const { return count; }
+
+    void flush() {
+        head = 0;
+        tail = 0;
+        count = 0;
+    }
 };
 
 #endif

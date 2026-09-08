@@ -23,11 +23,11 @@
 #include <WiFi.h>
 
 class BlynkWifi
-    : public BlynkProtocol<BlynkArduinoClient>
+    : public BlynkProtocol<BlynkArduinoClientGen<WiFiClient>>
 {
-    typedef BlynkProtocol<BlynkArduinoClient> Base;
+    typedef BlynkProtocol<BlynkArduinoClientGen<WiFiClient>> Base;
 public:
-    BlynkWifi(BlynkArduinoClient& transp)
+    BlynkWifi(BlynkArduinoClientGen<WiFiClient>& transp)
         : Base(transp)
     {}
 
@@ -91,7 +91,7 @@ public:
 };
 
 static WiFiClient _blynkWifiClient;
-static BlynkArduinoClient _blynkTransport(_blynkWifiClient);
+static BlynkArduinoClientGen<WiFiClient> _blynkTransport(_blynkWifiClient);
 BlynkWifi Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>

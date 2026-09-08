@@ -218,7 +218,12 @@ struct FakeSerial : Print {
   void feed(const char* value) { input += value; }
 } Serial;
 
-char ipst[16] = "192.168.1.37";
+char ipst[16] = "stale-ip";
+char ipstSnapshot[16] = "192.168.1.37";
+
+void ipst_copy(char (&copy)[sizeof(ipst)]) {
+  std::memcpy(copy, ipstSnapshot, sizeof(ipst));
+}
 
 @HEADER@
 
@@ -443,6 +448,7 @@ def main() -> int:
     mutations = (
         ("usb command recognition", "usb", 'strcmp(command, "SAMOVAR:CONFIG?") == 0', "false"),
         ("newline framing", "usb", "incoming == '\\n'", "incoming == '\\r'"),
+        ("IP snapshot", "usb", "ipst_copy(ip);", "std::memcpy(ip, ipst, sizeof(ip));"),
         (
             "single serial buffer write", "usb",
             "Serial.write(\n                reinterpret_cast<const uint8_t*>(configJson.c_str()), configJson.length());",
@@ -462,6 +468,10 @@ def main() -> int:
         mutated_usb = usb_body.replace(old, new) if target == "usb" else usb_body
         mutated_header = HEADER_SOURCE.replace(old, new) if target == "header" else HEADER_SOURCE
         result = compile_and_run(mutated_usb, mutated_header, "sem_s3", "mutant")
+        if label == "IP snapshot":
+            if result.returncode == 0 or "IP response" not in result.stderr:
+                errors.append("mutation was not rejected by the IP response assertion")
+            continue
         try:
             parsed = parse_config(result, "mutant")
             rejected = bool(check_matrix("sem_s3", parsed) or check_ui_config("sem_s3", parsed))

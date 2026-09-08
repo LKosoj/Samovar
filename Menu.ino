@@ -148,7 +148,9 @@ const char* get_timestr(){
 }
 
 const char* get_ipstr(){
-  return ipstr;
+  static char ip[sizeof(ipst)] = {};
+  ipst_copy(ip);
+  return ip;
 }
 
 const char* get_calibrate_text(){

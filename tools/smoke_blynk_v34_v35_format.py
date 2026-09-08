@@ -167,7 +167,7 @@ if samovar:
             "const bool resume = sessionResumeAvailable && (millis() / 1000UL < SESSION_RESUME_WINDOW_S);",
             "sessionResumeAvailable = false;",
             "currentSessionId = sessionResumeId;",
-            "const uint32_t epoch = NTP.getEpochTime();",
+            "const uint32_t epoch = ntp_snapshot_epoch_now();",
             "(epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : esp_random();",
             "blynk_stage_session_start(line);",
         ],

@@ -197,7 +197,7 @@
           document.getElementById('pressureLabel').innerHTML = pressureLabel;
           document.getElementById('pressureValue').innerHTML = pressureValue;
           document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
-          document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
+          document.getElementById('ActualVolumePerHour').innerHTML = Number(myObj.ActualVolumePerHour).toFixed(2);
           document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
           document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
           document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
