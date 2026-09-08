@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Проверяет единственного владельца Wi-Fi reconnect и GOT_IP callback."""
+"""Проверяет интервалы Wi-Fi reconnect и сетевые callback-функции."""
 import subprocess
 import sys
 import tempfile
@@ -10,14 +10,20 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTO_RECONNECT = "WiFi.setAutoReconnect(true);"
-MANUAL_RECONNECT = "WiFi.reconnect();"
 GOT_IP_REGISTRATION = "WiFi.onEvent(captureWifiGotIp, ARDUINO_EVENT_WIFI_STA_GOT_IP);"
+DISCONNECT_REGISTRATION = (
+    "WiFi.onEvent(captureWifiDisconnectReason, "
+    "ARDUINO_EVENT_WIFI_STA_DISCONNECTED);"
+)
 GOT_IP_SIGNATURE = "static void captureWifiGotIp(arduino_event_t *event)"
+DISCONNECT_SIGNATURE = "static void captureWifiDisconnectReason(arduino_event_t *event)"
+RECONNECT_SIGNATURE = "static void tick_wifi_reconnect()"
 IPST_SET_SIGNATURE = "inline void ipst_set(const String& value)"
 IPST_COPY_SIGNATURE = "inline void ipst_copy(char (&copy)[sizeof(ipst)])"
-DISCONNECT_ORPHANS = (
-    "lastWifiDisconnectReason",
-    "captureWifiDisconnectReason",
+RECONNECT_CONSTANTS = (
+    "static constexpr uint32_t WIFI_STATUS_CHECK_INTERVAL_MS = 1000UL;",
+    "static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;",
+    "static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;",
 )
 
 
@@ -31,28 +37,48 @@ def policy_errors(source: str) -> list[str]:
     trigger_body = extract_function_body(source, "void triggerGetClock(void *parameter)")
     try:
         got_ip_body = extract_function_body(source, GOT_IP_SIGNATURE)
+        disconnect_body = extract_function_body(source, DISCONNECT_SIGNATURE)
+        reconnect_body = extract_function_body(source, RECONNECT_SIGNATURE)
         ipst_set_body = extract_function_body(helpers, IPST_SET_SIGNATURE)
         ipst_copy_body = extract_function_body(helpers, IPST_COPY_SIGNATURE)
         blynk_slow_body = extract_function_body(blynk, "static void blynk_push_slow(bool force)")
         usb_body = extract_function_body(source, "inline void tick_usb_serial_command()")
         config_body = extract_function_body(source, "void apply_config_runtime()")
-    except ValueError:
-        return ["GOT_IP/ipst helper is missing"]
+    except ValueError as error:
+        return [f"required WiFi helper is missing: {error}"]
 
     if AUTO_RECONNECT not in setup_body:
         errors.append("auto-reconnect WiFi core is not enabled")
-    if MANUAL_RECONNECT in trigger_body:
-        errors.append("GetClockTicker still manually restarts WiFi")
-    for token in DISCONNECT_ORPHANS:
-        if token in source:
-            errors.append(f"manual reconnect diagnostic orphan remains: {token}")
+    for constant in RECONNECT_CONSTANTS:
+        if constant not in source:
+            errors.append(f"WiFi reconnect timing changed or missing: {constant}")
+    if trigger_body.count("tick_wifi_reconnect();") != 3:
+        errors.append("GetClockTicker must check WiFi during OTA, after sensors and each one-second wait")
     if setup_body.count(GOT_IP_REGISTRATION) != 1:
         errors.append("GOT_IP callback must be registered exactly once")
+    if setup_body.count(DISCONNECT_REGISTRATION) != 1:
+        errors.append("disconnect callback must be registered exactly once")
     if "ipst_set(WiFi.localIP().toString());" not in got_ip_body:
         errors.append("GOT_IP callback does not update ipst from WiFi.localIP")
     for forbidden in ("Blynk", "WriteConsoleLog", "WiFi.reconnect"):
         if forbidden in got_ip_body:
             errors.append(f"GOT_IP callback performs forbidden work: {forbidden}")
+        if forbidden in disconnect_body:
+            errors.append(f"disconnect callback performs forbidden work: {forbidden}")
+    if "lastWifiDisconnectReason = event->event_info.wifi_sta_disconnected.reason;" not in disconnect_body:
+        errors.append("disconnect callback does not retain the reason")
+    for token in (
+        "WiFi.status()",
+        "WIFI_STATUS_CHECK_INTERVAL_MS",
+        "WIFI_DISCONNECT_CONFIRM_MS",
+        "WIFI_RECONNECT_INTERVAL_MS",
+        "WiFi.reconnect()",
+        "lastWifiDisconnectReason",
+        "ota_running",
+        "wifiAP",
+    ):
+        if token not in reconnect_body:
+            errors.append(f"WiFi reconnect state machine misses {token}")
     if "portMUX_TYPE ipstMux = portMUX_INITIALIZER_UNLOCKED;" not in source or \
             "extern portMUX_TYPE ipstMux;" not in helpers:
         errors.append("ipst mutex is missing")
@@ -81,6 +107,152 @@ def policy_errors(source: str) -> list[str]:
             "Serial.println(ipst)" in source or "return ipstr;" in menu or "char* ipstr" in samovar_header:
         errors.append("raw ipst reader remains")
     return errors
+
+
+def build_reconnect_harness(reconnect_body: str, disconnect_body: str) -> str:
+    return f'''#include <cstdint>
+#include <cstdio>
+#include <iostream>
+#include <string>
+#include <vector>
+
+using std::uint8_t;
+using std::uint32_t;
+
+#define F(value) value
+
+enum wl_status_t {{ WL_IDLE_STATUS = 0, WL_CONNECTED = 3 }};
+enum wifi_err_reason_t {{ WIFI_REASON_UNSPECIFIED = 1, WIFI_REASON_AUTH_EXPIRE = 2 }};
+
+class String {{
+ public:
+  String() = default;
+  String(const char* value) : value_(value) {{}}
+  const char* c_str() const {{ return value_.c_str(); }}
+
+ private:
+  std::string value_;
+}};
+
+struct FakeIP {{
+  String toString() const {{ return String("192.168.1.77"); }}
+}};
+
+struct FakeWiFi {{
+  wl_status_t state = WL_CONNECTED;
+  int reconnectCalls = 0;
+  bool reconnectAccepted = true;
+
+  wl_status_t status() const {{ return state; }}
+  bool reconnect() {{ reconnectCalls++; return reconnectAccepted; }}
+  FakeIP localIP() const {{ return FakeIP{{}}; }}
+  const char* disconnectReasonName(wifi_err_reason_t reason) const {{
+    return reason == WIFI_REASON_AUTH_EXPIRE ? "AUTH_EXPIRE" : "UNSPECIFIED";
+  }}
+}} WiFi;
+
+struct WifiStaDisconnected {{ uint8_t reason; }};
+struct ArduinoEventInfo {{ WifiStaDisconnected wifi_sta_disconnected; }};
+struct arduino_event_t {{ ArduinoEventInfo event_info; }};
+
+static constexpr uint32_t WIFI_STATUS_CHECK_INTERVAL_MS = 1000UL;
+static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;
+static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;
+volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
+bool ota_running = false;
+bool wifiAP = false;
+uint32_t currentMillis = 0;
+std::vector<std::string> logs;
+int failures = 0;
+
+uint32_t millis() {{ return currentMillis; }}
+void WriteConsoleLog(String message) {{ logs.emplace_back(message.c_str()); }}
+
+static void captureWifiDisconnectReason(arduino_event_t *event) {{
+{disconnect_body}
+}}
+
+static void tick_wifi_reconnect() {{
+{reconnect_body}
+}}
+
+void check(bool condition, const char* message) {{
+  if (!condition) {{
+    std::cerr << "FAIL: " << message << '\\n';
+    failures++;
+  }}
+}}
+
+void tickAt(uint32_t at) {{
+  currentMillis = at;
+  tick_wifi_reconnect();
+}}
+
+bool hasLog(const char* part) {{
+  for (const std::string& entry : logs) {{
+    if (entry.find(part) != std::string::npos) return true;
+  }}
+  return false;
+}}
+
+int countLogs(const char* part) {{
+  int count = 0;
+  for (const std::string& entry : logs) {{
+    if (entry.find(part) != std::string::npos) count++;
+  }}
+  return count;
+}}
+
+int main() {{
+  tickAt(1000);
+  arduino_event_t event{{{{WIFI_REASON_AUTH_EXPIRE}}}};
+  captureWifiDisconnectReason(&event);
+  WiFi.state = WL_IDLE_STATUS;
+  for (uint32_t at = 2000; at <= 6000; at += 1000) tickAt(at);
+  check(WiFi.reconnectCalls == 0, "short or unconfirmed outage triggered reconnect");
+
+  tickAt(6500);
+  check(WiFi.reconnectCalls == 0, "sub-second check changed reconnect state");
+  tickAt(7000);
+  check(WiFi.reconnectCalls == 1, "confirmed five-second outage did not reconnect once");
+  check(hasLog("WiFi disconnected status=0 reason=2(AUTH_EXPIRE)"),
+        "confirmed outage diagnostic is missing");
+  check(hasLog("WiFi.reconnect attempt=1 accepted=1"),
+        "first reconnect result is missing");
+
+  for (uint32_t at = 8000; at <= 16000; at += 1000) tickAt(at);
+  check(WiFi.reconnectCalls == 1, "reconnect repeated before ten seconds elapsed");
+  tickAt(17000);
+  check(WiFi.reconnectCalls == 2, "ten-second reconnect retry is missing");
+
+  WiFi.state = WL_CONNECTED;
+  tickAt(18000);
+  check(hasLog("WiFi restored ip=192.168.1.77 outage_ms=16000"),
+        "recovery diagnostic or outage duration is missing");
+
+  WiFi.reconnectAccepted = false;
+  WiFi.state = WL_IDLE_STATUS;
+  for (uint32_t at = 19000; at <= 24000; at += 1000) tickAt(at);
+  check(WiFi.reconnectCalls == 3, "second independent outage did not restart the state machine");
+  check(countLogs("WiFi.reconnect attempt=1") == 2,
+        "new outage did not reset the attempt number");
+  check(hasLog("WiFi.reconnect attempt=1 accepted=0"),
+        "rejected reconnect result is missing");
+
+  WiFi.reconnectAccepted = true;
+  WiFi.state = WL_CONNECTED;
+  tickAt(25000);
+  ota_running = true;
+  WiFi.state = WL_IDLE_STATUS;
+  for (uint32_t at = 26000; at <= 40000; at += 1000) tickAt(at);
+  check(WiFi.reconnectCalls == 3, "OTA outage triggered reconnect");
+  ota_running = false;
+  for (uint32_t at = 41000; at <= 46000; at += 1000) tickAt(at);
+  check(WiFi.reconnectCalls == 4, "outage after OTA was not confirmed from a fresh timer");
+
+  return failures == 0 ? 0 : 1;
+}}
+'''
 
 
 def build_harness(ipst_set_body: str, ipst_copy_body: str, callback_body: str) -> str:
@@ -204,8 +376,16 @@ def main() -> int:
     ipst_set_body = extract_function_body(helpers, IPST_SET_SIGNATURE)
     ipst_copy_body = extract_function_body(helpers, IPST_COPY_SIGNATURE)
     callback_body = extract_function_body(source, GOT_IP_SIGNATURE)
+    disconnect_body = extract_function_body(source, DISCONNECT_SIGNATURE)
+    reconnect_body = extract_function_body(source, RECONNECT_SIGNATURE)
     returncode, _ = compile_and_run(
         build_harness(ipst_set_body, ipst_copy_body, callback_body), True
+    )
+    if returncode != 0:
+        return 1
+
+    returncode, _ = compile_and_run(
+        build_reconnect_harness(reconnect_body, disconnect_body), True
     )
     if returncode != 0:
         return 1
@@ -215,14 +395,28 @@ def main() -> int:
             source.replace(AUTO_RECONNECT, "WiFi.setAutoReconnect(false);", 1),
             "auto-reconnect WiFi core is not enabled",
         ),
-        (
-            source.replace("counter++;", "counter++;\n    WiFi.reconnect();", 1),
-            "GetClockTicker still manually restarts WiFi",
-        ),
     )
     for mutant, expected_error in policy_mutants:
         if expected_error not in policy_errors(mutant):
             print(f"FAIL: WiFi policy mutation survived: {expected_error}", file=sys.stderr)
+            return 1
+
+    reconnect_mutants = (
+        reconnect_body.replace(
+            "WIFI_DISCONNECT_CONFIRM_MS", "WIFI_STATUS_CHECK_INTERVAL_MS", 1
+        ),
+        reconnect_body.replace(
+            "WIFI_RECONNECT_INTERVAL_MS", "WIFI_DISCONNECT_CONFIRM_MS", 1
+        ),
+        reconnect_body.replace("WiFi.reconnect()", "true", 1),
+        reconnect_body.replace("status == WL_CONNECTED", "false", 1),
+    )
+    for mutant in reconnect_mutants:
+        returncode, output = compile_and_run(
+            build_reconnect_harness(mutant, disconnect_body), False
+        )
+        if returncode == 0 or "FAIL:" not in output:
+            print("FAIL: WiFi reconnect behavior mutation survived", file=sys.stderr)
             return 1
 
     broken_callback = callback_body.replace(
@@ -247,7 +441,7 @@ def main() -> int:
         print("FAIL: ipst_set mutation survived or failed for the wrong reason", file=sys.stderr)
         return 1
 
-    print("WiFi reconnect and GOT_IP mutations were rejected as expected")
+    print("WiFi reconnect timing, recovery and GOT_IP mutations were rejected as expected")
     return 0
 
 

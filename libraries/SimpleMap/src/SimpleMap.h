@@ -262,6 +262,9 @@ void SimpleMap<T, U>::put(T key, U obj) {
         isCached    = true;
         lastNodeGot = newNode;
     }
+    else {
+        delete newNode;
+    }
 }
 
 template<typename T, typename U>

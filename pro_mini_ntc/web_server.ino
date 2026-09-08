@@ -7,7 +7,9 @@ void handleSaveNTCToEEPROM(AsyncWebServerRequest *request);
 void handleExportNTCText(AsyncWebServerRequest *request);
 void handleImportNTCText(AsyncWebServerRequest *request);
 void handleGetTemps(AsyncWebServerRequest *request);
+void applyNTCText(String text);
 
+// cppcheck-suppress unusedFunction
 void setupWebServer() {
 #ifdef ENABLE_WEB_SERVER
     // Главная страница
@@ -453,29 +455,7 @@ server.on("/setup_alc", HTTP_GET, [](AsyncWebServerRequest *request) {
 
     server.on("/applyNTCText", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (request->hasParam("plain", true)) {
-            String text = request->getParam("plain", true)->value();
-            text.replace("\n", "");
-            text.replace("\r", "");
-            
-            int index = 0;
-            int startPos = 0;
-            int endPos = text.indexOf(',');
-            
-            while (endPos != -1 && index < 151) {
-                String numStr = text.substring(startPos, endPos);
-                numStr.trim();
-                m_adc[index++] = numStr.toInt();
-                startPos = endPos + 1;
-                endPos = text.indexOf(',', startPos);
-            }
-            
-            if (index < 151 && startPos < text.length()) {
-                String numStr = text.substring(startPos);
-                numStr.trim();
-                m_adc[index] = numStr.toInt();
-            }
-            
-            m_adc_text = text;
+            applyNTCText(request->getParam("plain", true)->value());
             request->send(200, "text/plain", "Характеристика применена в память");
         } else {
             request->send(400, "text/plain", "Ошибка: отсутствуют данные");
@@ -533,6 +513,7 @@ const char* getSensorName(int8_t num) {
 }
 
 // Функция получения данных датчиков в формате JSON
+// cppcheck-suppress unusedFunction
 String getSensorDataJSON() {
     DynamicJsonDocument doc(512);
     JsonArray temps = doc.createNestedArray("temps");
@@ -557,6 +538,7 @@ String getSensorDataJSON() {
 }
 
 // Обработчик расчета кривой термистора
+// cppcheck-suppress unusedFunction
 void handleCalculateCurve(AsyncWebServerRequest *request) {
     if (request->hasParam("R25", true)) setup_R25 = request->getParam("R25", true)->value().toFloat();
     if (request->hasParam("R100", true)) setup_R100 = request->getParam("R100", true)->value().toFloat();
@@ -575,9 +557,7 @@ void handleCalculateCurve(AsyncWebServerRequest *request) {
         float Rp = 1/(1/Rt + 1/(setup_R10*1000));
         uint16_t ADS = round(((setup_U33/(setup_R62*1000+Rp))*Rp)/setup_Uref * 32768);
         
-        if (i + 25 >= 0 && i + 25 < 151) {
-            m_adc[i + 25] = ADS;
-        }
+        m_adc[i + 25] = ADS;
         
         if (i > -25) m_adc_text += ", ";
         m_adc_text += String(ADS);
@@ -587,6 +567,7 @@ void handleCalculateCurve(AsyncWebServerRequest *request) {
 }
 
 // Сохранение настроек термистора в EEPROM
+// cppcheck-suppress unusedFunction
 void handleSaveNTCToEEPROM(AsyncWebServerRequest *request) {
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.put(m_adc_EAdr, m_adc);
@@ -604,6 +585,7 @@ void handleSaveNTCToEEPROM(AsyncWebServerRequest *request) {
 }
 
 // Экспорт текстовой характеристики термистора
+// cppcheck-suppress unusedFunction
 void handleExportNTCText(AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", m_adc_text);
     response->addHeader("Content-Disposition", "attachment; filename=ntc_curve.txt");
@@ -611,38 +593,43 @@ void handleExportNTCText(AsyncWebServerRequest *request) {
 }
 
 // Импорт текстовой характеристики термистора
+// cppcheck-suppress unusedFunction
 void handleImportNTCText(AsyncWebServerRequest *request) {
     if (request->hasParam("plain", true)) {
-        String text = request->getParam("plain", true)->value();
-        text.replace("\n", "");
-        text.replace("\r", "");
-        
-        int index = 0;
-        int startPos = 0;
-        int endPos = text.indexOf(',');
-        
-        while (endPos != -1 && index < 151) {
-            String numStr = text.substring(startPos, endPos);
-            numStr.trim();
-            m_adc[index++] = numStr.toInt();
-            startPos = endPos + 1;
-            endPos = text.indexOf(',', startPos);
-        }
-        
-        if (index < 151 && startPos < text.length()) {
-            String numStr = text.substring(startPos);
-            numStr.trim();
-            m_adc[index] = numStr.toInt();
-        }
-        
-        m_adc_text = text;
+        applyNTCText(request->getParam("plain", true)->value());
         request->send(200, "text/plain", "Данные успешно импортированы");
     } else {
         request->send(400, "text/plain", "Ошибка: отсутствуют данные");
     }
 }
 
+void applyNTCText(String text) {
+    text.replace("\n", "");
+    text.replace("\r", "");
+
+    int valueIndex = 0;
+    int startPos = 0;
+    int endPos = text.indexOf(',');
+
+    while (endPos != -1 && valueIndex < 151) {
+        String numStr = text.substring(startPos, endPos);
+        numStr.trim();
+        m_adc[valueIndex++] = numStr.toInt();
+        startPos = endPos + 1;
+        endPos = text.indexOf(',', startPos);
+    }
+
+    if (valueIndex < 151 && startPos < text.length()) {
+        String numStr = text.substring(startPos);
+        numStr.trim();
+        m_adc[valueIndex] = numStr.toInt();
+    }
+
+    m_adc_text = text;
+}
+
 // Получение текущих температур
+// cppcheck-suppress unusedFunction
 void handleGetTemps(AsyncWebServerRequest *request) {
     String temps = "";
     temps += "Т пара: " + String(Temp[1], 2) + "°C<br>";

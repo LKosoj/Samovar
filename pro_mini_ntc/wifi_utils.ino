@@ -1,3 +1,4 @@
+// cppcheck-suppress unusedFunction
 void writeEEPROM(int addr, String data, byte limit) { // Функция для сохранения данных в EEPROM
   for (int i = 0; i < data.length() && i < limit; i++) {
     EEPROM.write(addr + i, data[i]);
@@ -5,6 +6,7 @@ void writeEEPROM(int addr, String data, byte limit) { // Функция для �
   EEPROM.write(addr + data.length(), 0); // Записываем нулевой байт в конце 
 }
 
+// cppcheck-suppress unusedFunction
 String readEEPROM(int addr, byte limit) { // Функция для чтения данных из EEPROM с пределом длины
   String data;
   char ch;
@@ -18,6 +20,7 @@ String readEEPROM(int addr, byte limit) { // Функция для чтения 
 }
 
 // Старт точки доступа
+// cppcheck-suppress unusedFunction
 void startHotspot() {
   #ifdef ENABLE_WIFI  
   hotspotMode = true;
@@ -26,6 +29,7 @@ void startHotspot() {
   #endif // WIFI
 }
 
+// cppcheck-suppress unusedFunction
  void ConnectWIFI(String SSID, String Pass){
   #ifdef ENABLE_WIFI  
    WiFi.setSleep(false);
@@ -43,6 +47,7 @@ void startHotspot() {
   #endif // WIFI
   }
 
+// cppcheck-suppress unusedFunction
 void WiFiSetup(String savedSSID, String savedPass){
   #ifdef ENABLE_WIFI  
  hotspotMode = false;
@@ -55,6 +60,7 @@ void WiFiSetup(String savedSSID, String savedPass){
  if (WiFi.status() != WL_CONNECTED) ConnectWIFI(savedSSID, savedPass);
  #endif // WIFI
 }
+// cppcheck-suppress unusedFunction
 void hotspotSetup(){
   #ifdef ENABLE_WIFI  
  //Serial.println("Starting hotspot...");  // Отладочный вывод
@@ -70,6 +76,7 @@ void hotspotSetup(){
 }
 
 // Инициализация Wifi
+// cppcheck-suppress unusedFunction
 void initWiFi() {
   #ifdef ENABLE_WIFI  
    EEPROM.begin(EEPROM_SIZE);

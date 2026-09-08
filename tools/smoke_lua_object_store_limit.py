@@ -20,6 +20,8 @@ has()/size()/put()/clear() не мокаются).
    редактирование через веб) хранилище НЕ трогает: rectificat.lua держит там
    total_volume/tank_filled, dist.lua - sg/gb, и это состояние прогона нельзя
    терять при простом релоаде.
+5. Заблокированный SimpleMap освобождает заранее созданный узел, когда отклоняет
+   добавление нового ключа.
 """
 import subprocess
 import sys
@@ -66,6 +68,19 @@ class String {
 static String operator+(const char* lhs, const String& rhs) { return String(lhs) + rhs; }
 
 #include "SimpleMap.h"
+
+class TrackedValue {
+ public:
+  TrackedValue() { liveCount++; }
+  explicit TrackedValue(int) { liveCount++; }
+  TrackedValue(const TrackedValue&) { liveCount++; }
+  ~TrackedValue() { liveCount--; }
+  TrackedValue& operator=(const TrackedValue&) = default;
+
+  static int liveCount;
+};
+
+int TrackedValue::liveCount = 0;
 
 struct lua_State;  // opaque - тело lua_wrapper_set_object трогает его только
                     // через lua_to_string_arg/lua_reject_state_mutation ниже,
@@ -232,11 +247,23 @@ static void test_same_script_reload_keeps_store() {
         "reloading the SAME mode script must keep object-store state (rectificat.lua/dist.lua rely on this)");
 }
 
+static void test_locked_new_key_does_not_leak_node() {
+  check(TrackedValue::liveCount == 0, "tracked-value fixture must start empty");
+  {
+    SimpleMap<String, TrackedValue> map(compareStrings);
+    map.lock();
+    map.put(String("new-key"), TrackedValue(7));
+    check(map.size() == 0, "a locked map must reject a new key");
+  }
+  check(TrackedValue::liveCount == 0, "a locked map must release the rejected node");
+}
+
 int main() {
   test_new_key_over_limit_is_rejected();
   test_updating_existing_key_at_limit_succeeds();
   test_mode_script_change_clears_store();
   test_same_script_reload_keeps_store();
+  test_locked_new_key_does_not_leak_node();
   return failures == 0 ? 0 : 1;
 }
 '''

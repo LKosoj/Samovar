@@ -1623,11 +1623,17 @@ bool initEmergencyButtonTask() {
 #endif
 
 //Запускаем таск для получения точного времени из интернет
+static constexpr uint32_t WIFI_STATUS_CHECK_INTERVAL_MS = 1000UL;
+static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;
+static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;
+static volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
+
 void triggerGetClock(void *parameter) {
   int counter = 30;
   while (true) {
     // Пропускаем все активности во время OTA обновления (кроме проверки WiFi)
     if (ota_running) {
+      tick_wifi_reconnect();
       vTaskDelay(200 / portTICK_PERIOD_MS);  // Увеличиваем задержку во время OTA
       continue;
     }
@@ -1762,7 +1768,11 @@ void triggerGetClock(void *parameter) {
       vTaskDelay(400 / portTICK_PERIOD_MS);
       pressure_sensor_get();
 #endif
-      vTaskDelay(3000 / portTICK_PERIOD_MS);
+      tick_wifi_reconnect();
+      for (uint8_t wifiCheck = 0; wifiCheck < 3; wifiCheck++) {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        tick_wifi_reconnect();
+      }
     }
   }
 }
@@ -2095,6 +2105,61 @@ static bool pendingStateSnapshotAlarm = false;
 // значение живёт в файловой области, а не как локальная переменная setup().
 static bool wifiAP = false;
 
+static void tick_wifi_reconnect() {
+  static uint32_t lastCheckAt = 0;
+  static uint32_t disconnectedSince = 0;
+  static uint32_t lastReconnectAt = 0;
+  static uint32_t reconnectAttempts = 0;
+  static bool disconnectConfirmed = false;
+
+  const uint32_t now = millis();
+  if (now - lastCheckAt < WIFI_STATUS_CHECK_INTERVAL_MS) return;
+  lastCheckAt = now;
+
+  const wl_status_t status = WiFi.status();
+  if (ota_running || wifiAP || status == WL_CONNECTED) {
+    if (!ota_running && !wifiAP && status == WL_CONNECTED && disconnectConfirmed) {
+      const String ip = WiFi.localIP().toString();
+      char diagnostic[128];
+      snprintf(diagnostic, sizeof(diagnostic),
+               "WiFi restored ip=%s outage_ms=%u",
+               ip.c_str(), static_cast<unsigned>(now - disconnectedSince));
+      WriteConsoleLog(diagnostic);
+    }
+    disconnectedSince = 0;
+    lastReconnectAt = 0;
+    reconnectAttempts = 0;
+    disconnectConfirmed = false;
+    return;
+  }
+
+  if (disconnectedSince == 0) disconnectedSince = now;
+  if (now - disconnectedSince < WIFI_DISCONNECT_CONFIRM_MS) return;
+
+  if (!disconnectConfirmed) {
+    const uint8_t reason = lastWifiDisconnectReason;
+    char diagnostic[128];
+    snprintf(diagnostic, sizeof(diagnostic),
+             "WiFi disconnected status=%d reason=%u(%s)",
+             static_cast<int>(status), static_cast<unsigned>(reason),
+             WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(reason)));
+    WriteConsoleLog(diagnostic);
+    disconnectConfirmed = true;
+  }
+
+  if (lastReconnectAt != 0 &&
+      now - lastReconnectAt < WIFI_RECONNECT_INTERVAL_MS) return;
+
+  reconnectAttempts++;
+  const bool accepted = WiFi.reconnect();
+  lastReconnectAt = now;
+  char diagnostic[96];
+  snprintf(diagnostic, sizeof(diagnostic),
+           "WiFi.reconnect attempt=%u accepted=%u",
+           static_cast<unsigned>(reconnectAttempts), accepted ? 1U : 0U);
+  WriteConsoleLog(diagnostic);
+}
+
 // Возможность резюме сессии (V35): выставляются в restore_state_snapshot() при загрузке,
 // но РЕШЕНИЕ (успеть ли в SESSION_RESUME_WINDOW_S) принимается позже, в session_begin() -
 // именно в момент реального старта процесса, а не в момент восстановления снимка, потому
@@ -2311,6 +2376,10 @@ static void captureWifiGotIp(arduino_event_t *event) {
   ipst_set(WiFi.localIP().toString());
 }
 
+static void captureWifiDisconnectReason(arduino_event_t *event) {
+  lastWifiDisconnectReason = event->event_info.wifi_sta_disconnected.reason;
+}
+
 static void setup_wifi_stack_defaults() {
   // НЕ используем WiFi.disconnect(true) здесь, так как это может очистить сохраненные креденшалы
   // Вместо этого просто отключаемся без очистки сохраненных данных
@@ -2320,6 +2389,7 @@ static void setup_wifi_stack_defaults() {
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
   WiFi.onEvent(captureWifiGotIp, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  WiFi.onEvent(captureWifiDisconnectReason, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
   Wire.begin(LCD_SDA, LCD_SCL);
   // Явно задаём скорость и таймаут шины: без этого используются значения по
