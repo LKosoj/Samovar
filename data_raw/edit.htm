@@ -6,40 +6,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root, :root[data-theme="light"] {
-  --accent: #3498db;
-  --accent-hover: #3498db97;
-  --bg-page: #e8eef3;
-  --bg-panel: #f1f1f1;
-  --bg-tree: #fafafa;
-  --text-main: #333;
-  --text-strong: #111;
+  --accent: #a3561a;
+  --accent-hover: #8a4814;
+  --bg-page: #f3efe9;
+  --bg-panel: #fbf9f6;
+  --bg-tree: #f3efe9;
+  --text-main: #4a433c;
+  --text-strong: #1d1a17;
   --text-on-accent: #fff;
-  --bar-text: #111;
-  --status-text: #555;
-  --input-bg: #fff;
-  --input-text: #111;
-  --menu-bg: #fff;
-  --menu-text: #222;
-  --menu-hover: #f0f0f0;
-  --border: #ccc;
-  --danger: #b00020;
-  --ok: #2f7d4a;
-  --radius: 0.4em;
+  --bar-text: #1d1a17;
+  --status-text: #6b6259;
+  --input-bg: #fffdfa;
+  --input-text: #1d1a17;
+  --menu-bg: #fbf9f6;
+  --menu-text: #1d1a17;
+  --menu-hover: #ece6dd;
+  --border: #7d7369;
+  --danger: #b3261e;
+  --ok: #1f6b3f;
+  --radius: 8px;
 }
 :root[data-theme="dark"] {
-  --bg-page: #1a2733;
-  --bg-panel: #21303d;
-  --bg-tree: #1a2733;
-  --text-main: #cfd8e3;
-  --text-strong: #f3f6f9;
-  --bar-text: #eee;
-  --status-text: #cfd8e3;
-  --input-bg: #fff;
-  --input-text: #111;
-  --menu-bg: #21303d;
-  --menu-text: #f3f6f9;
-  --menu-hover: rgba(52, 152, 219, 0.22);
-  --border: #4a5b6c;
+  --bg-page: #16130f;
+  --bg-panel: #1f1b16;
+  --bg-tree: #16130f;
+  --text-main: #d9d0c5;
+  --text-strong: #f1ebe3;
+  --bar-text: #f1ebe3;
+  --status-text: #a89d90;
+  --input-bg: #16130f;
+  --input-text: #f1ebe3;
+  --menu-bg: #1f1b16;
+  --menu-text: #f1ebe3;
+  --menu-hover: #2a241d;
+  --border: #9b9084;
+  --danger: #ff8a80;
+  --ok: #6fcf97;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -82,9 +84,9 @@ body {
   font: inherit;
   cursor: pointer;
 }
-#uploader button:hover, #uploader .file-btn:hover { background: var(--accent-hover); color: var(--text-strong); }
+#uploader button:hover, #uploader .file-btn:hover { background: var(--accent-hover); }
 #uploader button:focus-visible, #uploader .file-btn:focus-within, #uploader input:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 #btn-save[data-dirty="1"] { background: var(--ok); }
@@ -113,8 +115,8 @@ body {
   min-height: 1.2em;
   color: var(--status-text);
 }
-#status.err { color: #ff8a80; font-weight: 600; }
-#status.ok { color: #7ee787; }
+#status.err { color: var(--danger); font-weight: 600; }
+#status.ok { color: var(--ok); }
 #tree {
   grid-area: tree;
   overflow: auto;
@@ -142,8 +144,8 @@ body {
   border-radius: 0.3em;
   cursor: pointer;
 }
-.tvu li:hover { background: rgba(52, 152, 219, 0.18); }
-.tvu li.is-active { background: rgba(52, 152, 219, 0.32); color: var(--text-strong); }
+.tvu li:hover { background: var(--menu-hover); }
+.tvu li.is-active { background: rgba(184, 100, 31, 0.18); color: var(--text-strong); }
 .tvu .name { flex: 1 1 auto; overflow-wrap: anywhere; }
 .tvu .size { flex: 0 0 auto; font-size: 11px; opacity: 0.65; }
 .cm {
@@ -253,6 +255,32 @@ function fileExt(path) {
   return m ? m[1].toLowerCase() : "";
 }
 
+function contentExt(path) {
+  if (fileExt(path) === "gz") path = path.slice(0, -3);
+  return fileExt(path);
+}
+
+function isGzipFile(path) {
+  return fileExt(path) === "gz";
+}
+
+async function decompressGzip(data) {
+  if (typeof DecompressionStream !== "function") {
+    throw new Error("Браузер не поддерживает распаковку gzip");
+  }
+  var stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("gzip"));
+  var bytes = await new Response(stream).arrayBuffer();
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
+async function compressGzip(text) {
+  if (typeof CompressionStream !== "function") {
+    throw new Error("Браузер не поддерживает упаковку gzip");
+  }
+  var stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+  return await new Response(stream).arrayBuffer();
+}
+
 function formatSize(n) {
   n = Number(n) || 0;
   if (n < 1024) return n + " Б";
@@ -293,20 +321,25 @@ QueuedRequester.prototype = {
     this.xmlhttp.onreadystatechange = function () {
       if (that.xmlhttp.readyState != 4) return;
       ge("loader").style.display = "none";
-      req.callback(that.xmlhttp.status, that.xmlhttp.responseText);
-      if (that.queue.length === 0) that.running = false;
-      if (that.running) that._request(that.queue.shift());
+      var callbackResult = req.callback(that.xmlhttp.status,
+        req.responseType ? that.xmlhttp.response : that.xmlhttp.responseText);
+      Promise.resolve(callbackResult).then(function () {
+        if (that.queue.length === 0) that.running = false;
+        if (that.running) that._request(that.queue.shift());
+      });
     };
     if (req.method === "GET") {
       this.xmlhttp.open(req.method, req.url + p, true);
+      if (req.responseType) this.xmlhttp.responseType = req.responseType;
       this.xmlhttp.send();
     } else {
       this.xmlhttp.open(req.method, req.url, true);
       this.xmlhttp.send(p);
     }
   },
-  add: function (method, url, params, callback) {
-    this.queue.push({ url: url, method: method, params: params, callback: callback });
+  add: function (method, url, params, callback, responseType) {
+    this.queue.push({ url: url, method: method, params: params, callback: callback,
+      responseType: responseType || "" });
     if (!this.running) this._request(this.queue.shift());
   }
 };
@@ -314,7 +347,7 @@ QueuedRequester.prototype = {
 var requests = new QueuedRequester();
 
 function isTextFile(path) {
-  switch (fileExt(path)) {
+  switch (contentExt(path)) {
     case "txt": case "htm": case "html": case "js": case "css": case "xml":
     case "json": case "conf": case "ini": case "h": case "c": case "cpp":
     case "php": case "hex": case "ino": case "pde": case "lua": case "csv":
@@ -505,7 +538,7 @@ function createTree(element, editor) {
 
 function createEditor(element, file, lang, theme) {
   function getLangFromFilename(filename) {
-    var ext = fileExt(filename);
+    var ext = contentExt(filename);
     if (ext === "htm") return "html";
     if (ext === "js") return "javascript";
     if (ext === "h" || ext === "c" || ext === "cpp" || ext === "ino" || ext === "pde") return "c_cpp";
@@ -530,7 +563,16 @@ function createEditor(element, file, lang, theme) {
     dirty = !!on;
     ge("btn-save").dataset.dirty = dirty ? "1" : "0";
   }
-  function httpPost(filename, data, mime) {
+  async function httpPost(filename, data, mime) {
+    if (isGzipFile(filename)) {
+      try {
+        data = await compressGzip(data);
+        mime = "application/gzip";
+      } catch (error) {
+        setStatus("Не удалось упаковать gzip: " + error.message, "err");
+        return;
+      }
+    }
     var formData = new FormData();
     formData.append("data", new Blob([data], { type: mime }), filename);
     requests.add("POST", "/edit", formData, function (status, responseText) {
@@ -543,15 +585,27 @@ function createEditor(element, file, lang, theme) {
     });
   }
   function httpGet(theUrl) {
-    requests.add("GET", "/edit", { edit: theUrl }, function (status, responseText) {
+    var gzip = isGzipFile(theUrl);
+    requests.add("GET", "/edit", { edit: theUrl }, async function (status, response) {
       ge("preview").style.display = "none";
       ge("editor").style.display = "block";
+      var responseText = typeof response === "string"
+        ? response
+        : new TextDecoder().decode(response || new ArrayBuffer(0));
+      if (status == 200 && gzip) {
+        try {
+          responseText = await decompressGzip(response);
+        } catch (error) {
+          status = 500;
+          responseText = "Не удалось распаковать gzip: " + error.message;
+        }
+      }
       editor.setValue(status == 200 ? responseText : "");
       editor.clearSelection();
       setDirty(false);
       if (status != 200) setStatus(describeHttpError(status, responseText), "err");
       else setStatus("");
-    });
+    }, gzip ? "arraybuffer" : "");
   }
   if (lang !== "plain") editor.getSession().setMode("ace/mode/" + lang);
   editor.setTheme("ace/theme/" + theme);

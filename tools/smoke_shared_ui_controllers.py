@@ -29,9 +29,9 @@ MODE_PAGES = {
 }
 ALL_PAGES = (*MODE_PAGES, "chart.htm")
 FROZEN_HASHES = {
-    # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
-    "edit.htm": "30acf0170c85dba7f02d522658867795536c9ef5543183f2fad3fd60c4bbdb42",
-    "edit.htm.gz": "77ed6074a230eecb2dfb558e543368f12f20b08d1996d851e5d256546d2d831b",
+    # 08.09.2026: edit.htm — общая палитра и браузерное редактирование gzip.
+    "edit.htm": "71fd22ba823dd5fd34f98646dca5dcf794afdf1b32fd1a7086b958f8d36cbd52",
+    "edit.htm.gz": "e625a3cc6a5de371e623add21e2b0cbccc765c67296941567d1b0850132c8650",
 }
 
 

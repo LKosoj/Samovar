@@ -4,6 +4,7 @@
 """
 import base64
 import functools
+import gzip
 import hashlib
 import http.server
 import json
@@ -36,9 +37,12 @@ BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const aceMock = __ACE_MOCK__;
   const aceIntegrity = __ACE_INTEGRITY__;
+  const gzipFixturePath = __GZIP_FIXTURE_PATH__;
   const errors = [];
   const passed = [];
   const editLog = [];
+  let uploadedGzip = null;
+  const uploadedBodies = [];
   let scenario = "setup";
 
   await page.route(/\/edit\.htm$/, async route => {
@@ -81,12 +85,20 @@ BROWSER_TEST = r'''async page => {
         contentType: "application/json",
         body: JSON.stringify([
           { type: "file", name: "/index.htm", size: 1200 },
+          { type: "file", name: "/index.htm.gz", size: 96 },
           { type: "file", name: "/app.js", size: 4096 },
           { type: "file", name: "/logo.png", size: 800 }
         ])
       });
     }
     if (req.method() === "GET" && editMatch) {
+      if (decodeURIComponent(editMatch[1]) === "/index.htm.gz") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          path: gzipFixturePath
+        });
+      }
       return route.fulfill({
         status: 200,
         contentType: "text/plain",
@@ -95,6 +107,19 @@ BROWSER_TEST = r'''async page => {
     }
     if (req.method() === "GET" && /(?:\?|&)download=/.test(search)) {
       return route.fulfill({ status: 200, body: "download" });
+    }
+    if (req.method() === "POST") {
+      const body = req.postDataBuffer();
+      function findBytes(bytes, needle, from) {
+        for (let i = from || 0; i <= bytes.length - needle.length; i++) {
+          if (needle.every((value, offset) => bytes[i + offset] === value)) return i;
+        }
+        return -1;
+      }
+      const start = findBytes(body, [13, 10, 13, 10], 0) + 4;
+      const end = findBytes(body, [13, 10, 45, 45], start);
+      uploadedGzip = body.subarray(start, end);
+      uploadedBodies.push(uploadedGzip);
     }
     return route.fulfill({ status: 200, contentType: "text/plain", body: req.method() + " ok" });
   });
@@ -137,8 +162,41 @@ BROWSER_TEST = r'''async page => {
   }
 
   await checkLayout("desktop", 1440, 900);
+  const lightColors = await page.evaluate(() => ({
+    page: getComputedStyle(document.body).backgroundColor,
+    button: getComputedStyle(document.getElementById("btn-save")).backgroundColor
+  }));
+  if (lightColors.page !== "rgb(243, 239, 233)" || lightColors.button !== "rgb(163, 86, 26)") {
+    throw new Error("editor light palette does not match the main UI: " + JSON.stringify(lightColors));
+  }
+  await page.locator("#themeToggle").click();
+  const darkPage = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  if (darkPage !== "rgb(22, 19, 15)") {
+    throw new Error("editor dark palette does not match the main UI: " + darkPage);
+  }
+  await page.locator("#themeToggle").click();
+  passed.push("shared palette");
   const listed = await page.locator("#tree li").count();
-  if (listed !== 3) throw new Error("file list count=" + listed);
+  if (listed !== 4) throw new Error("file list count=" + listed);
+
+  await page.locator("#tree li").filter({ hasText: "index.htm.gz" }).click();
+  await page.waitForFunction(() => window.samovarAce &&
+    window.samovarAce.getValue() === "<h1>gzip source</h1>\n");
+  await page.evaluate(() => window.samovarAce.setValue("<h1>gzip changed</h1>\n"));
+  await page.locator("#btn-save").click();
+  for (let i = 0; i < 40 && !uploadedGzip; i++) await page.waitForTimeout(50);
+  if (!uploadedGzip || uploadedGzip[0] !== 0x1f || uploadedGzip[1] !== 0x8b) {
+    throw new Error("saved .gz payload is not gzip");
+  }
+  const savedText = await page.evaluate(async bytes => {
+    const stream = new Blob([new Uint8Array(bytes)]).stream()
+      .pipeThrough(new DecompressionStream("gzip"));
+    return await new Response(stream).text();
+  }, Array.from(uploadedGzip));
+  if (savedText !== "<h1>gzip changed</h1>\n") {
+    throw new Error("saved gzip text mismatch: " + savedText);
+  }
+  passed.push("gzip round trip");
 
   await page.locator("#tree li").filter({ hasText: "app.js" }).click();
   await page.waitForFunction(() => {
@@ -157,6 +215,10 @@ BROWSER_TEST = r'''async page => {
   }
   const afterSave = editLog.filter(item => item.method === "POST").length;
   if (afterSave <= beforeSave) throw new Error("Save did not POST /edit");
+  const plainBody = uploadedBodies[uploadedBodies.length - 1];
+  if (plainBody[0] === 0x1f && plainBody[1] === 0x8b) {
+    throw new Error("plain app.js was unexpectedly saved as gzip");
+  }
   passed.push("save");
 
   await page.locator("#upload-path").fill("/foo.lua");
@@ -193,6 +255,8 @@ def main():
   try:
     work = Path("/tmp/samovar-edit-pw")
     work.mkdir(parents=True, exist_ok=True)
+    gzip_fixture = work / "index.htm.gz"
+    gzip_fixture.write_bytes(gzip.compress(b"<h1>gzip source</h1>\n", mtime=0))
     open_args = ["open"]
     if hasattr(os, "geteuid") and os.geteuid() == 0:
       config = work / "playwright.json"
@@ -210,6 +274,7 @@ def main():
       BROWSER_TEST
       .replace("__BASE_URL__", json.dumps(base_url))
       .replace("__ACE_MOCK__", json.dumps(ACE_MOCK))
+      .replace("__GZIP_FIXTURE_PATH__", json.dumps(str(gzip_fixture)))
       .replace(
         "__ACE_INTEGRITY__",
         json.dumps(
