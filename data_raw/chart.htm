@@ -83,6 +83,16 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       });
       initChart(data);
     }
+    function loadChartCsv () {
+      if (!chart) return;
+      chart.loadCsv('data.csv').catch(function (err) {
+        if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true, retryChartLoad);
+      });
+    }
+    function reloadChartWhenVisible () {
+      if (document.hidden) return;
+      loadChartCsv();
+    }
     function initChart (data) {
       var chartBlock = document.getElementById('chartdiv');
       if (typeof SamovarChart !== 'function') {
@@ -100,18 +110,13 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
             ProgNum: !data.programNumberVisible
           }
         });
-        chart.loadCsv('data.csv').catch(function (err) {
-          if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true, retryChartLoad);
-        });
+        loadChartCsv();
       } catch (err) {
         chartBlock.textContent = 'График недоступен: ' + err;
       }
     }
     function retryChartLoad () {
-      if (!chart) return;
-      chart.loadCsv('data.csv').catch(function (err) {
-        if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true, retryChartLoad);
-      });
+      loadChartCsv();
     }
     function setPowerButtons (powerOn) {
       document.getElementById('power_on').style.display = powerOn ? 'none' : '';
@@ -130,6 +135,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
         }
       });
     });
+    document.addEventListener('visibilitychange', reloadChartWhenVisible);
   </script>
 </head>
 

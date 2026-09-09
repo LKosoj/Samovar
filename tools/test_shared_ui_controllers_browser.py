@@ -777,6 +777,28 @@ BROWSER_TEST = r'''async page => {
     JSON.stringify(chartBehavior.appends) === JSON.stringify(['12:01:00', '12:01:15']),
     'chart refresh/throttle mismatch: ' + JSON.stringify(chartBehavior));
 
+  const visibilityReloads = await page.evaluate(() => {
+    const loads = [];
+    const nativeLoad = chart.loadCsv;
+    chart.loadCsv = function (url) {
+      loads.push(url);
+      return Promise.resolve(true);
+    };
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    delete document.hidden;
+    chart.loadCsv = nativeLoad;
+    return loads;
+  });
+  expect(JSON.stringify(visibilityReloads) === JSON.stringify(['data.csv', 'data.csv']),
+    'chart visibility reload mismatch: ' + JSON.stringify(visibilityReloads));
+
   const csvErrorPage = await page.context().newPage();
   track(csvErrorPage, 'chart-csv-error');
   await csvErrorPage.addInitScript(() => {

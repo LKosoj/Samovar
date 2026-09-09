@@ -71,9 +71,17 @@ if chart_htm:
 
     try:
         init_body = extract_function_body(chart_htm, "function initChart (data)")
-        for token in ["chartBlock.textContent", "try {", "catch (err)", "chart.loadCsv('data.csv').catch"]:
+        for token in ["chartBlock.textContent", "try {", "catch (err)", "loadChartCsv()"]:
             if token not in init_body:
                 errors.append(f"data_raw/chart.htm initChart() does not fail explicitly without blocking polling: {token}")
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    try:
+        load_body = extract_function_body(chart_htm, "function loadChartCsv ()")
+        for token in ["chart.loadCsv('data.csv').catch", "retryChartLoad"]:
+            if token not in load_body:
+                errors.append(f"data_raw/chart.htm CSV loading does not report errors: {token}")
     except ValueError as exc:
         errors.append(str(exc))
 
@@ -91,6 +99,18 @@ if chart_htm:
             errors.append("data_raw/chart.htm refresh_chart() reloads full data.csv")
         if "chart.setAutoRefresh" not in refresh_body:
             errors.append("data_raw/chart.htm refresh_chart() does not toggle local auto refresh")
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    try:
+        visibility_body = extract_function_body(chart_htm, "function reloadChartWhenVisible ()")
+        for token in ["document.hidden", "loadChartCsv()"]:
+            if token not in visibility_body:
+                errors.append(
+                    "data_raw/chart.htm visibility restore does not reload CSV: " + token
+                )
+        if "document.addEventListener('visibilitychange', reloadChartWhenVisible)" not in chart_htm:
+            errors.append("data_raw/chart.htm does not listen for tab visibility changes")
     except ValueError as exc:
         errors.append(str(exc))
 
