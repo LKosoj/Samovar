@@ -8,6 +8,7 @@ tools/ngrok
 .vscode/launch.json
 user_config_override.h
 doc/*.*
+/docs/
 .theia/launch.json
 user_config_override.h
 pgpt.py
