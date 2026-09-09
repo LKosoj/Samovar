@@ -55,6 +55,27 @@
 #include "user_config_override.h"
 #endif
 
+#ifdef USE_MQTT
+#ifndef MQTT_SERVER
+#error USE_MQTT requires MQTT_SERVER
+#endif
+#ifndef MQTT_PORT
+#error USE_MQTT requires MQTT_PORT
+#endif
+#ifndef MQTT_USER
+#error USE_MQTT requires MQTT_USER
+#endif
+#ifndef MQTT_PASSWORD
+#error USE_MQTT requires MQTT_PASSWORD
+#endif
+#ifndef MQTT_TOPIC
+#error USE_MQTT requires MQTT_TOPIC
+#endif
+static_assert(sizeof(MQTT_SERVER) > 1, "MQTT_SERVER must not be empty");
+static_assert(MQTT_PORT > 0 && MQTT_PORT <= 65535, "MQTT_PORT must be in range 1..65535");
+static_assert(sizeof(MQTT_TOPIC) > 1, "MQTT_TOPIC must not be empty");
+#endif
+
 //Порядок удерживает tools/smoke_use_lua_define_order.py.
 #ifdef SAMOVAR_BUILD_LUA
 #define USE_LUA
@@ -147,7 +168,7 @@
 #endif
 // Буфер исходящей команды (BlynkApi.h: char mem[BLYNK_MAX_SENDBYTES] в virtualWrite).
 // Заводские 128 байт молча обрезали программу в V24. Худший случай V24: 20 строк
-// сыра с крайними значениями полей = 927 байт; V27 JSON режима <= 357.
+// сыра с крайними значениями полей = 927 байт; V27 JSON режима <= 400.
 #ifndef BLYNK_MAX_SENDBYTES
 #define BLYNK_MAX_SENDBYTES 1024
 #endif
@@ -589,9 +610,6 @@ struct SetupEEPROM {
   bool NbkUseStreamServo;                                      //Переключать поток НБК сервоприводом
   float CheesePhSlope;                                         //Коэффициент наклона калибровки pH
   float CheesePhOffset;                                        //Смещение калибровки pH
-  uint8_t CheesePhSmoothPercent;                               //Сила сглаживания pH, %
-  uint16_t CheeseDoserSpeed;                                   //Скорость сырного дозатора, шаг/с
-  uint16_t CheeseDoserSteps;                                   //Количество шагов одной порции
 };
 
 struct ImpurityDetector {

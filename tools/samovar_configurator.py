@@ -145,6 +145,22 @@ BOOL_SPECS = (
     BoolSpec("COLUMN_WETTING", "Смачивание насадки перед ректификацией", "Ректификация"),
 )
 
+MQTT_VALUE_SPECS = (
+    ValueSpec("MQTT_SERVER", "Сервер MQTT", "Сеть", "text"),
+    ValueSpec("MQTT_PORT", "Порт MQTT", "Сеть", "number"),
+    ValueSpec("MQTT_USER", "Пользователь MQTT", "Сеть", "text"),
+    ValueSpec("MQTT_PASSWORD", "Пароль MQTT", "Сеть", "text"),
+    ValueSpec("MQTT_TOPIC", "Топик MQTT", "Сеть", "text"),
+)
+
+MQTT_DEFAULTS = {
+    "MQTT_SERVER": "",
+    "MQTT_PORT": "1883",
+    "MQTT_USER": "",
+    "MQTT_PASSWORD": "",
+    "MQTT_TOPIC": "samovar/state",
+}
+
 OPTIONAL_SPECS = (
     OptionalSpec("USE_WATER_VALVE", "Управление клапаном воды", "Насосы", "token"),
     OptionalSpec("USE_EXPANDER", "Адрес расширителя PCF8575", "Оборудование", "number"),
@@ -453,6 +469,16 @@ class SamovarConfig:
 
         state["wifi_ssid"] = self._read_override_string(override, "SAMOVAR_WIFI_SSID")
         state["wifi_password"] = self._read_override_string(override, "SAMOVAR_WIFI_PASSWORD")
+        use_mqtt = override.find("USE_MQTT")
+        state["USE_MQTT"] = use_mqtt is not None and use_mqtt.enabled
+        for spec in MQTT_VALUE_SPECS:
+            line = override.find(spec.macro)
+            if line is None or not line.enabled:
+                state[spec.macro] = MQTT_DEFAULTS[spec.macro]
+            elif spec.kind == "number":
+                state[spec.macro] = numeric_value_for_ui(line.value)
+            else:
+                state[spec.macro] = cpp_string_decode(line.value)
         return state
 
     def descriptions(self) -> Dict[str, str]:
@@ -572,6 +598,36 @@ class SamovarConfig:
         self._validate_wifi(ssid, password)
         self._set_override_string(override, "SAMOVAR_WIFI_SSID", ssid)
         self._set_override_string(override, "SAMOVAR_WIFI_PASSWORD", password)
+
+        use_mqtt = bool(state["USE_MQTT"])
+        mqtt_server = str(state["MQTT_SERVER"]).strip()
+        mqtt_port = str(state["MQTT_PORT"]).strip()
+        mqtt_user = str(state["MQTT_USER"])
+        mqtt_password = str(state["MQTT_PASSWORD"])
+        mqtt_topic = str(state["MQTT_TOPIC"]).strip()
+        if use_mqtt:
+            validate_value(mqtt_server, "text", "Сервер MQTT")
+            validate_value(mqtt_topic, "text", "Топик MQTT")
+            if not mqtt_port.isdigit() or not 1 <= int(mqtt_port) <= 65535:
+                raise ConfigError("Поле «Порт MQTT» должно быть целым числом от 1 до 65535")
+        for label, value in (("Пользователь MQTT", mqtt_user), ("Пароль MQTT", mqtt_password)):
+            if "\n" in value or "\r" in value:
+                raise ConfigError("Поле «{}» должно занимать одну строку".format(label))
+
+        mqtt_enabled_line = override.find("USE_MQTT")
+        if mqtt_enabled_line is None:
+            override.insert_before_final_endif([("#define " if use_mqtt else "//#define ") + "USE_MQTT"])
+        else:
+            override.set_macro("USE_MQTT", use_mqtt, mqtt_enabled_line.value)
+        self._set_override_string(override, "MQTT_SERVER", mqtt_server)
+        mqtt_port_line = override.find("MQTT_PORT")
+        if mqtt_port_line is None:
+            override.insert_before_final_endif(["#define MQTT_PORT " + mqtt_port])
+        else:
+            override.set_macro("MQTT_PORT", True, mqtt_port)
+        self._set_override_string(override, "MQTT_USER", mqtt_user)
+        self._set_override_string(override, "MQTT_PASSWORD", mqtt_password)
+        self._set_override_string(override, "MQTT_TOPIC", mqtt_topic)
 
         atomic_write(self.ini_path, ini_text)
         atomic_write(self.override_path, override.render())
@@ -2152,6 +2208,7 @@ class ConfiguratorWindow:
         self.action_lines = []
         self.partial_line = ""
         self.install_hint_shown = False
+        self.mqtt_field_widgets = []
         self.esptool_repaired = None
         self.action_started = 0.0
         self.tick_id = None
@@ -2300,6 +2357,24 @@ class ConfiguratorWindow:
         ).grid(row=0, column=1, padx=(8, 0))
         section_rows["Сеть"] += 1
 
+        self.mqtt_enabled_var = tk.BooleanVar()
+        self.bool_vars["USE_MQTT"] = self.mqtt_enabled_var
+        row = section_rows["Сеть"]
+        ttk.Checkbutton(
+            section_frames["Сеть"], text="Использовать MQTT", variable=self.mqtt_enabled_var
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+        section_rows["Сеть"] += 1
+        for spec in MQTT_VALUE_SPECS:
+            variable = tk.StringVar()
+            self.value_vars[spec.macro] = variable
+            widgets = self._add_entry(
+                section_frames, section_rows, spec.section, spec.label, variable
+            )
+            if spec.macro == "MQTT_PASSWORD":
+                widgets[1].configure(show="•")
+            self.mqtt_field_widgets.extend(widgets)
+        self.mqtt_enabled_var.trace_add("write", lambda *_: self._update_mqtt_visibility())
+
         row = section_rows["Оборудование"]
         ttk.Label(
             section_frames["Оборудование"],
@@ -2423,7 +2498,7 @@ class ConfiguratorWindow:
     def _register_tooltip(self, key, *widgets) -> None:
         self.tooltip_widgets.setdefault(key, []).extend(widgets)
 
-    def _add_entry(self, frames, rows, section, label, variable, tooltip_key=None) -> None:
+    def _add_entry(self, frames, rows, section, label, variable, tooltip_key=None):
         row = rows[section]
         label_widget = self.ttk.Label(frames[section], text=label)
         label_widget.grid(row=row, column=0, sticky="w", pady=3)
@@ -2435,6 +2510,7 @@ class ConfiguratorWindow:
         if tooltip_key:
             self._register_tooltip(tooltip_key, label_widget, entry)
         rows[section] += 1
+        return label_widget, entry
 
     def _add_combo(self, frames, rows, section, label, variable, values, tooltip_key=None) -> None:
         row = rows[section]
@@ -2452,6 +2528,13 @@ class ConfiguratorWindow:
 
     def _toggle_password(self) -> None:
         self.password_entry.configure(show="" if self.show_password_var.get() else "•")
+
+    def _update_mqtt_visibility(self) -> None:
+        for widget in self.mqtt_field_widgets:
+            if self.mqtt_enabled_var.get():
+                widget.grid()
+            else:
+                widget.grid_remove()
 
     # ------------------------------------------------------------------ загрузка и состояние
     def _load(self) -> None:
@@ -2473,6 +2556,7 @@ class ConfiguratorWindow:
             variable.set(str(state[key]))
         self.ssid_var.set(str(state["wifi_ssid"]))
         self.password_var.set(str(state["wifi_password"]))
+        self._update_mqtt_visibility()
         self._apply_tooltips()
         self._mark_saved()
         for variable in self._tracked_variables():

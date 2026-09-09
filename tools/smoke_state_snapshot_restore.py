@@ -101,6 +101,8 @@ class String {
   String(long value) : value_(std::to_string(value)) {}
   String(float value) : value_(format_float(value)) {}
   String(double value) : value_(format_float(value)) {}
+  String(float value, unsigned char decimals) : value_(format_float(value, decimals)) {}
+  String(double value, unsigned char decimals) : value_(format_float(value, decimals)) {}
 
   size_t length() const { return value_.length(); }
   const char* c_str() const { return value_.c_str(); }
@@ -151,9 +153,9 @@ class String {
   }
 
  private:
-  static std::string format_float(double value) {
+  static std::string format_float(double value, int decimals = 2) {
     char buffer[48] = {0};
-    std::snprintf(buffer, sizeof(buffer), "%.2f", value);
+    std::snprintf(buffer, sizeof(buffer), "%.*f", decimals, value);
     return buffer;
   }
 
@@ -417,6 +419,17 @@ static void seed_rect_program() {
   program[2].Temp = 93.0f;
   program[2].Power = 230.0f;
   ProgramLen = 3;
+}
+
+static void seed_cheese_default() {
+  for (uint8_t i = 0; i < PROGRAM_MAX; i++) program[i] = {};
+  program[0].WType = 'H';
+  program[0].Temp = 63.0f;
+  program[0].Time = 90.0f;
+  program[0].Param = 1.0f;
+  program[0].capacity_num = 1;
+  program[0].TempSensor = 0;
+  ProgramLen = 1;
 }
 
 static void tick_snapshot(int times) {
@@ -712,7 +725,43 @@ int main() {
   check(!sessionResumeAvailable,
         "T2: нагрев был включён, но программа НЕ восстановилась - резюме недоступно");
 
-  // 16. [T2] Файл прежнего формата (без ключа SI=) обязан читаться успешно,
+  // 16. Для Сыра дефолт допустим только при отсутствии текста в снимке. Валидный
+  // новый формат восстанавливается, а старый/битый очищает рабочую программу,
+  // сохраняет исходный снимок и объясняет это без подстановки дефолта.
+  reset_world();
+  Samovar_Mode = SAMOVAR_CHEESE_MODE;
+  seed_cheese_default();
+  SPIFFS.data = "M=7;P=1;L=0;H=0\n";
+  SPIFFS.present = true;
+  restore_state_snapshot();
+  check(ProgramLen == 1 && program[0].WType == 'H',
+        "отсутствующий текст снимка Сыр должен оставить загруженный дефолт");
+
+  reset_world();
+  Samovar_Mode = SAMOVAR_CHEESE_MODE;
+  seed_cheese_default();
+  SPIFFS.data = "M=7;P=1;L=1;H=0\nW;0;15;1;0^0^0^0;0\n";
+  SPIFFS.present = true;
+  restore_state_snapshot();
+  check(ProgramLen == 1 && program[0].WType == 'W' && nearly_equal(program[0].Time, 15.0f),
+        "валидная программа Сыр из снимка должна восстановиться");
+
+  reset_world();
+  Samovar_Mode = SAMOVAR_CHEESE_MODE;
+  seed_cheese_default();
+  SPIFFS.data = "M=7;P=1;L=1;H=0\nA;30;30;0;0^0^0^0;0\n";
+  SPIFFS.present = true;
+  restore_state_snapshot();
+  check(ProgramLen == 0, "старый или битый снимок Сыр обязан очистить рабочую программу");
+  check(contains_text(pendingStateSnapshotNotice, "очищена") &&
+        contains_text(pendingStateSnapshotNotice, "не установлена") &&
+        !contains_text(pendingStateSnapshotNotice, "установлена программа по умолчанию"),
+        "отказ сырного снимка должен явно запретить подстановку дефолта");
+  writeSnapshotCalls = 0;
+  tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
+  check(writeSnapshotCalls == 0, "битый снимок Сыр нельзя автоматически перезаписывать пустой программой");
+
+  // 17. [T2] Файл прежнего формата (без ключа SI=) обязан читаться успешно,
   // а sessionId - молча остаться нулевым.
   reset_world();
   seed_rect_program();
@@ -844,6 +893,11 @@ def static_checks() -> list[str]:
     for token in ("PowerOn = true", "set_power", "start_heating"):
         if token in restore_body:
             errors.append(f"restore_state_snapshot трогает нагрев: {token}")
+    cheese_clear = restore_body.find("Samovar_Mode == SAMOVAR_CHEESE_MODE")
+    if cheese_clear == -1 or "program_clear();" not in restore_body[cheese_clear:]:
+        errors.append("битый снимок Сыр не очищает рабочую программу")
+    if "state_snapshot_mark_saved();" not in restore_body[cheese_clear:]:
+        errors.append("битый снимок Сыр может автоматически перезаписать исходный файл")
     return errors
 
 

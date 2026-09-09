@@ -4,38 +4,61 @@
   <script type="application/json" id="samovar_lua_btn_list"></script>
   <script src="app.js"></script>
   <style>
-    .cheese-row { display: flex; align-items: center; gap: 8px; color: #17212b; }
-    .cheese-row input, .cheese-row select, .cheese-row .program-row-action { box-sizing: border-box; min-width: 0; margin-left: 0 !important; }
-    .cheese-row .cheese-row-number { flex: 0 0 2em; width: auto !important; margin-left: 0 !important; }
-    .cheese-row .cheese-type { flex: 2 1 9em; width: auto; }
-    .cheese-row .cheese-temperature, .cheese-row .cheese-time, .cheese-row .cheese-parameter { flex: 1 1 4em; width: auto; }
-    .cheese-row .cheese-device { flex: 1.5 1 7em; width: auto; }
-    .cheese-row .cheese-sensor { flex: 1.3 1 6em; width: auto; }
-    .cheese-row .program-row-action { flex: 0 0 20px; }
+    /* Строка этапа - сетка: №, тип, четыре поля с подписями, мешалка, «+», «−».
+       В разметке мешалка стоит между третьим и четвёртым полем - в сетку она
+       ставится последней через order. Скрытые поля оставляют пустую ячейку
+       (visibility), чтобы колонки у всех строк совпадали, как в таблицах других
+       режимов; общий [hidden] {display:none !important} здесь перебивается.
+       Отступы 12px из общих правил .prgline не нужны - ширину задаёт сетка. */
+    .cheese-row { display: grid; grid-template-columns: 2em minmax(8em, 1.2fr) repeat(4, minmax(5.5em, 1fr)) minmax(26em, 3fr) auto auto; align-items: end; gap: 6px 8px; margin-bottom: 8px !important; }
+    .cheese-row input, .cheese-row select, .cheese-row label, .cheese-row .program-row-action { margin-left: 0 !important; }
+    .cheese-row input, .cheese-row select { box-sizing: border-box; width: 100%; min-width: 0; }
+    .cheese-row .cheese-row-number { width: auto !important; padding-bottom: .45em; }
+    .cheese-row .program-row-action { align-self: center; grid-row: 1; }
+    .cheese-row .cheese-add { grid-column: -3; }
+    .cheese-row .cheese-remove { grid-column: -2; }
+    .cheese-field, .cheese-mixer label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .cheese-field label, .cheese-mixer label { font-size: .78em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cheese-row .cheese-field[hidden] { display: flex !important; visibility: hidden; }
+    .cheese-mixer { order: 1; display: grid; grid-template-columns: minmax(5.5em, 1.2fr) minmax(3.5em, 1fr) minmax(6.5em, 1.3fr) minmax(3.5em, 1fr) minmax(3.5em, 1fr); gap: 6px 8px; min-width: 0; }
     .cheese-help { line-height: 1.45; }
-    .cheese-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-    @media (max-width: 900px) {
-      .cheese-row { flex-wrap: wrap; }
-      .cheese-row .cheese-type, .cheese-row .cheese-temperature, .cheese-row .cheese-time,
-      .cheese-row .cheese-sensor, .cheese-row .cheese-parameter { flex: 1 1 30%; }
-      .cheese-row .cheese-device { flex: 1 1 60%; }
+    /* Планшет: мешалка второй линией под полями этапа. */
+    @media (max-width: 1100px) {
+      .cheese-row { grid-template-columns: 2em minmax(8em, 1.2fr) repeat(4, minmax(5.5em, 1fr)) auto auto; }
+      .cheese-row .cheese-mixer { grid-column: 2 / -3; }
+    }
+    /* Телефон: тип этапа во всю ширину, поля парами, мешалка в три колонки.
+       Скрытые поля здесь не занимают место, а соседнее поле сдвигается влево. */
+    @media (max-width: 640px) {
+      .cheese-row { grid-template-columns: 2em repeat(2, minmax(0, 1fr)) auto auto; }
+      .cheese-row .cheese-type { grid-column: 2 / -3; }
+      .cheese-row .cheese-field[hidden] { display: none !important; }
+      .cheese-row .cheese-field:has(.cheese-value1), .cheese-row .cheese-field:has(.cheese-value3) { grid-column: 2; }
+      .cheese-row .cheese-field:has(.cheese-value2), .cheese-row .cheese-field:has(.cheese-value4) { grid-column: 3 / -1; }
+      .cheese-row:has(.cheese-field[hidden] .cheese-value1) .cheese-field:has(.cheese-value2),
+      .cheese-row:has(.cheese-field[hidden] .cheese-value3) .cheese-field:has(.cheese-value4) { grid-column: 2; }
+      .cheese-row:has(.cheese-field[hidden] .cheese-value1) .cheese-field:has(.cheese-value3) { grid-column: 3 / -1; }
+      .cheese-row .cheese-mixer { grid-column: 2 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
   </style>
   <script>
     var CHEESE_PROGRAM_MAX_ROWS = 20;
     var CHEESE_PROGRAM_FIELDS = 6;
-    var PROGRAM_BACKUP_VERSION = 1;
+    // TYPE;VALUE1;VALUE2;VALUE3;MIXER;VALUE4
     var HeaterPowerOn = false;
-    var STAGE_COLORS = {M:'#FFFF00',P:'#FFA500',C:'#00BFFF',W:'#98FB98',A:'#FF3838',L:'#3498DB',Z:'#DACEFF',f:'#DACEFF',z:'#DACEFF',d:'#DACEFF',s:'#DACEFF',p:'#DACEFF',v:'#DACEFF',r:'#DACEFF',n:'#DACEFF',S:'#DACEFF',R:'#98FB98'};
-    var STAGE_RULES = {
-      M:{temperature:true,device:true,sensor:true}, P:{temperature:true,time:true,device:true,sensor:true},
-      C:{temperature:true,device:true,sensor:true}, W:{}, A:{temperature:true,sensor:true}, L:{},
-      Z:{temperature:true,time:true,device:true,sensor:true}, f:{temperature:true,time:true,device:true,sensor:true},
-      z:{temperature:true,time:true,device:true,sensor:true}, d:{temperature:true,time:true,device:true,sensor:true},
-      s:{temperature:true,time:true,device:true,sensor:true}, p:{temperature:true,time:true,device:true,sensor:true},
-      v:{temperature:true,time:true,device:true,sensor:true}, r:{temperature:true,time:true,device:true,sensor:true},
-      n:{temperature:true,time:true,device:true,sensor:true,parameter:true}, S:{time:true}, R:{}
+    var acceptedCheeseProgram = '';
+    var CHEESE_TYPES = {
+      H:{name:'Нагрев', labels:['Цель, °C','Тайм-аут, мин','Скорость, °C/мин','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['30','60','1','0']},
+      P:{name:'Выдержка', labels:['Цель, °C','Выдержка, мин','Общий тайм-аут, мин','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['30','30','60','0']},
+      C:{name:'Охлаждение', labels:['Цель, °C','Тайм-аут, мин','','Датчик'], visible:[1,1,0,1], mixer:true, defaults:['20','60','0','0']},
+      M:{name:'Перемешивание', labels:['','Длительность, мин','',''], visible:[0,1,0,0], mixer:true, defaults:['0','10','0','0']},
+      D:{name:'Дозирование', labels:['Объём, мл','Тайм-аут, мин','Скорость, мл/мин','Способ'], visible:[1,1,1,1], mixer:true, defaults:['10','30','10','2']},
+      N:{name:'Ожидание pH', labels:['Температура, °C','Тайм-аут, мин','Целевой pH','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['30','120','5.2','0']},
+      W:{name:'Ручное действие', labels:['','Тайм-аут, мин','Действие',''], visible:[0,1,1,0], mixer:true, defaults:['0','30','1','0']},
+      S:{name:'Слив', labels:['','Тайм-аут, мин','',''], visible:[0,1,0,0], mixer:false, defaults:['0','30','0','0']},
+      L:{name:'Lua', labels:['','Тайм-аут, мин','',''], visible:[0,1,0,0], mixer:false, defaults:['0','30','0','0']}
     };
+    var SENSOR_NAMES = ['Куб','Вода','Царга','Пар','ТСА'];
 
     function programError(message) {
       SamovarApp.showRequestError(message);
@@ -43,53 +66,115 @@
       return false;
     }
 
-    function parseDevice(text) {
-      var values = String(text).split('^').map(Number);
-      if (values.length !== 4 || values.some(function(value) { return !Number.isInteger(value); })) return null;
-      return values;
+    function positive(value, max) { return Number.isFinite(value) && value > 0 && value <= max; }
+    function integer(value, min, max) { return Number.isInteger(value) && value >= min && value <= max; }
+
+    function mixerValues(row) {
+      var speed = Number(row.mixerSpeed.value);
+      if (Number(row.mixerDevice.value) === 2) speed = Math.abs(speed) * Number(row.mixerDirection.value);
+      return [Number(row.mixerDevice.value), speed,
+        Number(row.mixerOn.value), Number(row.mixerOff.value)];
     }
 
-    function validateCheeseRow(values) {
-      var type = values[0];
-      var rule = STAGE_RULES[type];
-      var temperature = Number(values[1]);
-      var time = Number(values[2]);
-      var device = parseDevice(values[3]);
-      var sensor = Number(values[4]);
-      var parameter = Number(values[5]);
-      if (!rule || !Number.isFinite(temperature) || !Number.isFinite(time) || !device ||
-          !Number.isInteger(sensor) || sensor < 0 || sensor > 4 || !Number.isFinite(parameter)) return false;
-      if (temperature < 0 || temperature > 150 || time < 0 || time > 1440) return false;
-      if (rule.temperature === true ? temperature <= 0 : temperature !== 0) return false;
-      if (rule.time === true ? time <= 0 : time !== 0) return false;
-      if (rule.sensor !== true && sensor !== 0) return false;
-      var noDevice = device.every(function(value) { return value === 0; });
-      var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[1] >= -1 && device[1] <= 1 &&
-        device[2] > 0 && device[2] <= 65535 && device[3] >= 0 && device[3] <= 65535;
-      if (rule.device === true ? !(noDevice || scheduledDevice) : !noDevice) return false;
-      if (type === 'n' && (time <= 0 || parameter <= 0 || parameter > 14)) return false;
-      if (type !== 'n' && parameter !== 0) return false;
-      return true;
+    function mixerText(row) { return mixerValues(row).join('^'); }
+
+    function validateMixer(row, allowed) {
+      var values = mixerValues(row);
+      var device = values[0], speed = values[1], on = values[2], off = values[3];
+      if (!allowed) return device === 0 && speed === 0 && on === 0 && off === 0;
+      if (device === 0) return speed === 0 && on === 0 && off === 0;
+      if (device !== 1 && device !== 2) return false;
+      if (device === 1 && speed !== 0) return false;
+      if (device === 2 && (!integer(speed, -65535, 65535) || speed === 0)) return false;
+      if (!integer(on, 0, 65535) || !integer(off, 0, 65535)) return false;
+      return on === 0 ? off === 0 : true;
     }
 
     function rowValues(row) {
-      return [row.type.value, row.temperature.value, row.time.value, row.device.value, row.sensor.value, row.parameter.value];
+      return [row.type.value, row.value1.value, row.value2.value,
+        row.type.value === 'W' || (row.type.value === 'D' && row.value4.value === '1')
+          ? row.actionCode.value : row.value3.value,
+        mixerText(row), row.value4.value];
     }
 
-    function applyRowRules(row) {
-      var rule = STAGE_RULES[row.type.value] || {};
-      row.temperature.disabled = rule.temperature !== true;
-      row.time.disabled = rule.time !== true;
-      row.device.disabled = rule.device !== true;
-      row.sensor.disabled = rule.sensor !== true;
-      row.parameter.disabled = rule.parameter !== true;
-      row.parameter.setAttribute('aria-label', rule.parameter === true ? 'Целевой pH' : 'Параметр не используется');
-      row.style.backgroundColor = STAGE_COLORS[row.type.value] || '#DACEFF';
-      if (row.temperature.disabled) row.temperature.value = '0';
-      if (row.time.disabled) row.time.value = '0';
-      if (row.device.disabled) row.device.value = '0^0^0^0';
-      if (row.sensor.disabled) row.sensor.value = '0';
-      if (row.parameter.disabled) row.parameter.value = '0';
+    function validateCheeseRow(values) {
+      var type = values[0], rule = CHEESE_TYPES[type];
+      var one = Number(values[1]), two = Number(values[2]), three = Number(values[3]);
+      var mixerParts = String(values[4]).split('^'), four = Number(values[5]);
+      if (!rule || mixerParts.length !== 4 || mixerParts.some(function(value) { return value.trim() === ''; })) return false;
+      var mixer = mixerParts.map(Number);
+      if (mixer.some(function(value) { return !Number.isInteger(value); }) ||
+          !Number.isFinite(one) || !Number.isFinite(two) || !Number.isFinite(three) || !Number.isFinite(four)) return false;
+      var fakeRow = {mixerDevice:{value:mixer[0]}, mixerSpeed:{value:Math.abs(mixer[1])},
+        mixerDirection:{value:mixer[1] < 0 ? '-1' : '1'}, mixerOn:{value:mixer[2]}, mixerOff:{value:mixer[3]}};
+      if (!validateMixer(fakeRow, rule.mixer)) return false;
+      if ((rule.visible[0] ? !positive(one, 150) : one !== 0) ||
+          (rule.visible[1] ? !positive(two, 1440) : two !== 0) ||
+          (!rule.visible[2] && three !== 0) || (!rule.visible[3] && four !== 0)) return false;
+      if (type === 'H' && !positive(three, 150)) return false;
+      if (type === 'P' && (!positive(three, 1440) || three < two)) return false;
+      if (type === 'D' && !(positive(three, 65535) || integer(three, 1, 8)) ||
+          (type === 'D' && !integer(four, 1, 2))) return false;
+      if (type === 'D' && four === 1 && !integer(three, 1, 8)) return false;
+      if (type === 'D' && four === 2 && !positive(three, 65535)) return false;
+      if (type === 'N' && !positive(three, 14)) return false;
+      if (type === 'W' && !integer(three, 1, 8)) return false;
+      if ((type === 'H' || type === 'P' || type === 'C' || type === 'N') && !integer(four, 0, 4)) return false;
+      return true;
+    }
+
+    function setField(row, index, label, visible) {
+      var field = row.fields[index];
+      field.hidden = !visible;
+      field.querySelector('label').textContent = label;
+      if (!visible) field.querySelector('input, select').value = '0';
+    }
+
+    function setValue4Options(row) {
+      var type = row.type.value;
+      var options = type === 'D' ? [['1','Вручную'],['2','Локальный шаговый двигатель']]
+        : SENSOR_NAMES.map(function(name, index) { return [String(index), name]; });
+      var previous = row.value4.value;
+      row.value4.textContent = '';
+      options.forEach(function(option) {
+        var node = document.createElement('option');
+        node.value = option[0]; node.textContent = option[1]; row.value4.appendChild(node);
+      });
+      row.value4.value = options.some(function(option) { return option[0] === previous; }) ? previous : options[0][0];
+    }
+
+    function updateDosingField(row) {
+      var manual = row.value4.value === '1';
+      row.fields[2].querySelector('label').textContent = manual ? 'Компонент' : 'Скорость, мл/мин';
+      row.value3.hidden = manual;
+      row.actionCode.hidden = !manual;
+      row.value3.min = '0.01';
+      row.value3.max = '65535';
+      row.value3.step = '0.1';
+      if (manual && !integer(Number(row.actionCode.value), 1, 8)) row.actionCode.value = '1';
+      if (!manual && !positive(Number(row.value3.value), 65535)) row.value3.value = '10';
+    }
+
+    function applyRowRules(row, reset) {
+      var rule = CHEESE_TYPES[row.type.value];
+      if (!rule) return;
+      setValue4Options(row);
+      if (reset) {
+        row.value1.value = rule.defaults[0]; row.value2.value = rule.defaults[1];
+        row.value3.value = rule.defaults[2]; row.value4.value = rule.defaults[3];
+        row.actionCode.value = rule.defaults[2];
+        row.mixerDevice.value = rule.mixer ? '0' : '0';
+        row.mixerSpeed.value = '0'; row.mixerDirection.value = '1'; row.mixerOn.value = '0'; row.mixerOff.value = '0';
+      }
+      for (var index = 0; index < 4; index++) setField(row, index, rule.labels[index], !!rule.visible[index]);
+      row.value3.hidden = row.type.value === 'W';
+      row.actionCode.hidden = row.type.value !== 'W';
+      if (row.type.value === 'W' && !integer(Number(row.actionCode.value), 1, 8)) row.actionCode.value = '1';
+      row.mixer.hidden = !rule.mixer;
+      if (!rule.mixer) {
+        row.mixerDevice.value = '0'; row.mixerSpeed.value = '0'; row.mixerDirection.value = '1'; row.mixerOn.value = '0'; row.mixerOff.value = '0';
+      }
+      if (row.type.value === 'D') updateDosingField(row);
     }
 
     function setCheeseRowNumbers() {
@@ -107,27 +192,32 @@
       var row = document.getElementById('cheeseRowTemplate').content.firstElementChild.cloneNode(true);
       row.number = row.querySelector('.cheese-row-number');
       row.type = row.querySelector('.cheese-type');
-      row.temperature = row.querySelector('.cheese-temperature');
-      row.time = row.querySelector('.cheese-time');
-      row.device = row.querySelector('.cheese-device');
-      row.sensor = row.querySelector('.cheese-sensor');
-      row.parameter = row.querySelector('.cheese-parameter');
+      row.fields = row.querySelectorAll('.cheese-field');
+      row.value1 = row.querySelector('.cheese-value1');
+      row.value2 = row.querySelector('.cheese-value2');
+      row.value3 = row.querySelector('.cheese-value3');
+      row.actionCode = row.querySelector('.cheese-action-code');
+      row.value4 = row.querySelector('.cheese-value4');
+      row.mixer = row.querySelector('.cheese-mixer');
+      row.mixerDevice = row.querySelector('.cheese-mixer-device');
+      row.mixerSpeed = row.querySelector('.cheese-mixer-speed');
+      row.mixerDirection = row.querySelector('.cheese-mixer-direction');
+      row.mixerOn = row.querySelector('.cheese-mixer-on');
+      row.mixerOff = row.querySelector('.cheese-mixer-off');
       var plus = row.querySelector('.cheese-add');
       var minus = row.querySelector('.cheese-remove');
-      row.device.readOnly = true;
-      row.device.addEventListener('focus', function() {
-        SamovarApp.openDeviceScheduleModal(row.device);
-      });
-      var initial = values || ['M', '30', '0', '0^0^0^0', '0', '0'];
+      var initial = values || ['H', '30', '60', '1', '0^0^0^0', '0'];
       row.type.value = initial[0];
-      row.temperature.value = initial[1];
-      row.time.value = initial[2];
-      row.device.value = initial[3];
-      row.sensor.value = initial[4];
-      row.parameter.value = initial[5];
-      row.type.addEventListener('change', function() { applyRowRules(row); });
+      row.value1.value = initial[1]; row.value2.value = initial[2]; row.value3.value = initial[3];
+      row.actionCode.value = initial[3]; row.value4.value = initial[5];
+      var mixer = String(initial[4]).split('^');
+      row.mixerDevice.value = mixer[0]; row.mixerSpeed.value = Math.abs(Number(mixer[1]));
+      row.mixerDirection.value = Number(mixer[1]) < 0 ? '-1' : '1';
+      row.mixerOn.value = mixer[2]; row.mixerOff.value = mixer[3];
+      row.type.addEventListener('change', function() { applyRowRules(row, true); });
+      row.value4.addEventListener('change', function() { if (row.type.value === 'D') updateDosingField(row); });
       plus.addEventListener('click', function() {
-        addCheeseRow(['W', '0', '0', '0^0^0^0', '0', '0'], row);
+        addCheeseRow(null, row);
       });
       minus.addEventListener('click', function() {
         if (rows.children.length > 1) {
@@ -137,7 +227,7 @@
       });
       if (afterRow) afterRow.after(row);
       else rows.appendChild(row);
-      applyRowRules(row);
+      applyRowRules(row, false);
       setCheeseRowNumbers();
       return row;
     }
@@ -167,21 +257,21 @@
     }
 
     function renderProgram(program) {
+      var parsed = parseCheeseProgram(program);
       var rows = document.getElementById('programRows');
       rows.textContent = '';
-      var parsed = parseCheeseProgram(program);
-      (parsed.length ? parsed : [['M','30','0','0^0^0^0','0','0']]).forEach(function(values) {
+      (parsed.length ? parsed : [['H','30','60','1','0^0^0^0','0']]).forEach(function(values) {
         addCheeseRow(values);
       });
     }
 
     async function set_program() {
       try {
-        var description = document.getElementById('Descr').value;
-        if (SamovarApp.descriptionByteLength(description) > 250) return programError('Описание длиннее 250 байт.');
-        document.getElementById('WProgram').value = serializeCheeseRows();
+        var program = serializeCheeseRows();
+        document.getElementById('WProgram').value = program;
         var result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) return programError(result.err || 'Программа не сохранена.');
+        acceptedCheeseProgram = program;
         SamovarApp.notify('Сырная программа сохранена.', 2);
         return true;
       } catch (error) {
@@ -192,11 +282,8 @@
     function SaveProgramToFile() {
       try {
         var program = serializeCheeseRows();
-        var description = document.getElementById('Descr').value;
-        if (SamovarApp.descriptionByteLength(description) > 250) return programError('Описание длиннее 250 байт.');
-        var text = JSON.stringify({version:PROGRAM_BACKUP_VERSION, program:program, description:description}, null, 2);
         var link = document.createElement('a');
-        link.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(text);
+        link.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(program);
         link.download = 'cheese-program.txt';
         document.body.appendChild(link); link.click(); link.remove();
       } catch (error) { programError(error.message || error); }
@@ -206,20 +293,10 @@
       var reader = new FileReader();
       reader.onload = function() {
         try {
-          var text = String(reader.result || '');
-          var program = text;
-          if (/^\s*\{/.test(text)) {
-            var backup;
-            try { backup = JSON.parse(text); } catch (error) { return programError('Повреждён JSON программы.'); }
-            if (!backup || backup.version !== PROGRAM_BACKUP_VERSION || typeof backup.program !== 'string' || typeof backup.description !== 'string') {
-              return programError('Неподдерживаемый формат файла программы.');
-            }
-            if (SamovarApp.descriptionByteLength(backup.description) > 250) return programError('Описание длиннее 250 байт.');
-            program = backup.program;
-            document.getElementById('Descr').value = backup.description;
-          }
-          document.getElementById('WProgram').value = program;
+          var program = String(reader.result || '');
+          parseCheeseProgram(program);
           renderProgram(program);
+          document.getElementById('WProgram').value = program;
           SamovarApp.clearRequestError();
         } catch (error) { programError(error.message || error); }
       };
@@ -236,21 +313,42 @@
       document.getElementById('TankTemp').textContent = Number(data.TankTemp || 0).toFixed(2);
       document.getElementById('ACPTemp').textContent = Number(data.ACPTemp || 0).toFixed(2);
       document.getElementById('Status').textContent = data.Status || '';
-      document.getElementById('stageType').textContent = data.PrgType || '—';
+      var acceptedRows = acceptedCheeseRows();
+      var current = currentCheeseRow(data, acceptedRows);
+      document.getElementById('stageType').textContent = current ? CHEESE_TYPES[current[0]].name : '—';
       document.getElementById('stageProgress').textContent = Number(data.WthdrwlProgress || 0).toFixed(0) + '\u0025';
       document.getElementById('cheesePh').textContent = data.CheesePhValid ? Number(data.CheesePh).toFixed(2) : 'нет данных';
+      var hasTemperature = current && ['H','P','C','N'].indexOf(current[0]) >= 0;
+      document.getElementById('stageTarget').textContent = hasTemperature ? current[1] : '—';
+      document.getElementById('stageCurrent').textContent = hasTemperature ? currentSensorTemperature(current, data) : '—';
+      document.getElementById('stageWorkTime').textContent = secondsText(data.CheeseWorkSeconds);
+      document.getElementById('stageTimeout').textContent = secondsText(data.CheeseTimeoutRemainingSeconds);
+      document.getElementById('stageWorkTimeCard').textContent = secondsText(data.CheeseWorkSeconds);
+      document.getElementById('stageTimeoutCard').textContent = secondsText(data.CheeseTimeoutRemainingSeconds);
+      document.getElementById('stageNumber').textContent = current ? (Number(data.ProgramNum) + ' из ' + acceptedRows.length) : '—';
+      document.getElementById('stageLineOf').textContent = document.getElementById('stageNumber').textContent;
+      document.getElementById('stageLineName').textContent = current ? CHEESE_TYPES[current[0]].name : '—';
+      document.getElementById('stageNext').textContent = nextCheeseName(data, acceptedRows);
+      document.getElementById('start').value = manualConfirmationRequired(current) ? 'Подтвердить' : 'Следующий этап';
       HeaterPowerOn = Number(data.PowerOn) === 1;
       document.getElementById('power').value = HeaterPowerOn ? 'Остановить сыроварение' : 'Начать сыроварение';
     }
 
     function applyCheeseBootstrap(data) {
-      if (typeof data.program !== 'string' || typeof data.description !== 'string' ||
-          typeof data.luaButtonList !== 'string' || typeof data.version !== 'string') {
-        throw new Error('неверный формат программы, описания или Lua-кнопок.');
+      if (typeof data.program !== 'string' || typeof data.luaButtonList !== 'string' || typeof data.version !== 'string') {
+        throw new Error('неверный формат программы или Lua-кнопок.');
+      }
+      var coolingSchemes = {
+        pump: 'насос',
+        'two-valves': 'два клапана',
+        unavailable: 'недоступно'
+      };
+      if (!Object.prototype.hasOwnProperty.call(coolingSchemes, data.cheeseCoolingScheme)) {
+        throw new Error('неверная схема охлаждения.');
       }
       parseCheeseProgram(data.program);
+      acceptedCheeseProgram = data.program;
       document.getElementById('WProgram').value = data.program;
-      document.getElementById('Descr').value = data.description;
       document.getElementById('samovar_lua_btn_list').textContent = JSON.stringify(data.luaButtonList);
       document.getElementById('SteamTemp').parentElement.style.color = data.steamColor;
       document.getElementById('PipeTemp').parentElement.style.color = data.pipeColor;
@@ -258,7 +356,38 @@
       document.getElementById('TankTemp').parentElement.style.color = data.tankColor;
       document.getElementById('ACPTemp').parentElement.style.color = data.acpColor;
       document.getElementById('version').textContent = data.version;
+      document.getElementById('cheeseCoolingScheme').textContent = coolingSchemes[data.cheeseCoolingScheme];
       renderProgram(data.program);
+    }
+
+    function acceptedCheeseRows() {
+      return parseCheeseProgram(acceptedCheeseProgram);
+    }
+
+    function currentCheeseRow(data, rows) {
+      var index = Number(data.ProgramNum) - 1;
+      return index >= 0 && index < rows.length ? rows[index] : null;
+    }
+
+    function currentSensorTemperature(row, data) {
+      return Number(data[['TankTemp','WaterTemp','PipeTemp','SteamTemp','ACPTemp'][Number(row[5])]] || 0).toFixed(2);
+    }
+
+    function secondsText(value) {
+      var seconds = Number(value);
+      if (!Number.isFinite(seconds) || seconds < 0) return '—';
+      var minutes = Math.floor(seconds / 60), rest = Math.floor(seconds % 60);
+      return minutes + ' мин ' + rest + ' с';
+    }
+
+    function manualConfirmationRequired(row) {
+      return row && (row[0] === 'W' || row[0] === 'S' || (row[0] === 'D' && row[5] === '1'));
+    }
+
+    function nextCheeseName(data, rows) {
+      var index = Number(data.ProgramNum);
+      if (!Number.isInteger(index) || index < 0 || index >= rows.length) return '—';
+      return CHEESE_TYPES[rows[index][0]].name;
     }
 
     window.onload = async function() {
@@ -286,11 +415,12 @@
     <div id="request_error" class="message_0" role="alert" aria-live="assertive" style="display:none"></div>
     <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
       <div class="stage">
-        <h1><span id="Status"></span> <small>этап <span data-tele="_lineOf"></span></small></h1>
+        <h1><span id="Status"></span> <small>этап <span id="stageNumber">—</span></small></h1>
         <div><div class="progress"><i data-width="_progress"></i></div></div>
         <div class="meta">
           <span>Этап <b id="stageType">—</b></span>
           <span>pH <b id="cheesePh">нет данных</b></span>
+          <span>Охлаждение <b id="cheeseCoolingScheme">—</b></span>
           <span>Прогресс <b id="stageProgress">0&#37;</b></span>
         </div>
       </div>
@@ -301,9 +431,9 @@
             <h2>Действия</h2>
             <div class="actions">
               <input type="button" id="power" class="button" value="Начать сыроварение" onclick="if(HeaterPowerOn &amp;&amp; !confirm('Остановить сыроварение?')) return false; SamovarApp.sendCommand('power=' + (HeaterPowerOn ? '0' : '1'))">
-              <input type="button" id="start" class="button primary" value="Следующий этап" onclick="if(confirm('Перейти к следующему этапу?')) SamovarApp.sendCommand('start=1')">
+              <input type="button" id="start" class="button primary" value="Следующий этап" onclick="if(confirm(this.value + '?')) SamovarApp.sendCommand('start=1')">
               <div class="btn-row">
-                <input type="button" id="chart" class="button secondary" value="График" onclick="location.href='/chart.htm'">
+                <input type="button" id="chart" class="button secondary" value="График" onclick="if (SamovarApp.confirmLeave()) location.href='/chart.htm'">
               </div>
             </div>
           </section>
@@ -312,9 +442,10 @@
             <h2>Ключевое</h2>
             <div class="key-row">
               <div class="key-item"><div class="k">Котёл</div><div class="v"><span data-tele="TankTemp" data-fmt="2"></span><u>°C</u></div></div>
-              <div class="key-item"><div class="k">Уставка этапа</div><div class="v"><span data-tele="_lineTemp"></span><u>°C</u></div></div>
-              <div class="key-item"><div class="k">Время этапа</div><div class="v"><span data-tele="_lineTime"></span></div></div>
-              <div class="key-item"><div class="k">Мешалка</div><div class="v text" data-tele="_mixerOn"></div></div>
+              <div class="key-item"><div class="k">Уставка этапа</div><div class="v"><span id="stageTarget">—</span><u>°C</u></div></div>
+              <div class="key-item"><div class="k">Текущая температура</div><div class="v"><span id="stageCurrent">—</span><u>°C</u></div></div>
+              <div class="key-item"><div class="k">Рабочее время</div><div class="v"><span id="stageWorkTime">—</span></div></div>
+              <div class="key-item"><div class="k">Тайм-аут</div><div class="v"><span id="stageTimeout">—</span></div></div>
             </div>
           </section>
 
@@ -333,15 +464,15 @@
 
         <div class="col col-right">
           <section class="card sec-program">
-            <h2>Текущий этап · <span data-tele="_lineOf"></span></h2>
+            <h2>Текущий этап · <span id="stageLineOf">—</span></h2>
             <div class="line-card">
-              <div class="line-head"><span class="line-type" data-tele="_lineName"></span></div>
+              <div class="line-head"><span class="line-type" id="stageLineName">—</span></div>
               <div class="progress"><i data-width="_progress"></i></div>
               <div class="kv" style="margin-top: 8px;">
-                <div><div class="k">Температура</div><div class="v"><span data-tele="_lineTemp"></span><u>°C</u></div></div>
-                <div><div class="k">Время</div><div class="v"><span data-tele="_lineTime"></span></div></div>
+                <div><div class="k">Рабочее время</div><div class="v"><span id="stageWorkTimeCard">—</span></div></div>
+                <div><div class="k">Тайм-аут</div><div class="v"><span id="stageTimeoutCard">—</span></div></div>
               </div>
-              <div class="next"><span class="k">Следующий</span><span data-tele="_next"></span></div>
+              <div class="next"><span class="k">Следующий</span><span id="stageNext">—</span></div>
             </div>
           </section>
 
@@ -352,36 +483,35 @@
     </div>
 
     <div id="Prog" class="tabcontent panel" aria-hidden="true">
-      <details class="spoiler"><summary>Описание сырной программы</summary><div class="spoiler-content cheese-help">
-        Поле «Устройство» открывает редактор мешалки и насоса. Для набора кислотности задайте целевой pH и обязательный срок.
-      </div></details>
-      <div class="prgline" id="cheeseProgramHeader" aria-hidden="true"><label class="prglabel">№</label><label>Тип программы</label><label>Темп.</label><label>Время</label><label>Устройство</label><label>Датчик темп.</label><label>pH</label></div>
       <div class="prg" id="programRows"></div>
       <div class="btn-cell" style="margin: 1em auto;">
         <button type="button" class="button" id="setprogram" onclick="set_program()">Сохранить программу</button>
         <button type="button" class="button" onclick="SaveProgramToFile()">Экспорт</button>
         <label class="button" for="programFile">Импорт</label>
-        <input id="programFile" class="cheese-file" type="file" accept=".txt,.json,text/plain,application/json" onchange="if(this.files[0]) loadFile(this.files[0])">
+        <input id="programFile" type="file" accept=".txt,text/plain" onchange="if(this.files[0]) loadFile(this.files[0])">
       </div>
-      <label for="Descr">Описание</label>
-      <textarea id="Descr" name="Descr" maxlength="250" rows="3"></textarea>
       <textarea id="WProgram" name="WProgram" hidden></textarea>
       <template id="cheeseRowTemplate">
         <div class="prgline cheese-row">
           <label class="prglabel cheese-row-number"></label>
           <select class="cheese-type" aria-label="Тип этапа">
-            <option value="M">M — нагрев</option><option value="P">P — выдержка</option><option value="C">C — охлаждение</option><option value="W">W — ожидание</option><option value="A">A — автотюнинг</option><option value="L">L — Lua</option><option value="Z">Z — культура</option><option value="f">f — фермент</option><option value="z">z — закваска</option><option value="d">d — ингредиент</option><option value="s">s — стуфатура</option><option value="p">p — пастеризация</option><option value="v">v — вымешивание</option><option value="r">r — резка</option><option value="n">n — кислотность</option><option value="S">S — слив</option><option value="R">R — переворот</option>
+            <option value="H">Нагрев</option><option value="P">Выдержка</option><option value="C">Охлаждение</option><option value="M">Перемешивание</option><option value="D">Дозирование</option><option value="N">Ожидание pH</option><option value="W">Ручное действие</option><option value="S">Слив</option><option value="L">Lua</option>
           </select>
-          <input class="cheese-temperature" type="number" min="0" max="150" step="0.1" value="30" aria-label="Температура, °C">
-          <input class="cheese-time" type="number" min="0" max="1440" step="0.1" value="0" aria-label="Время, минуты">
-          <input class="cheese-device" type="text" value="0^0^0^0" aria-label="Расписание устройства">
-          <select class="cheese-sensor" aria-label="Датчик температуры"><option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option></select>
-          <input class="cheese-parameter" type="number" min="0" max="14" step="0.01" value="0" aria-label="Параметр">
+          <div class="cheese-field"><label></label><input class="cheese-value1" type="number" min="0" max="150" step="0.1"></div>
+          <div class="cheese-field"><label></label><input class="cheese-value2" type="number" min="0" max="1440" step="0.1"></div>
+          <div class="cheese-field"><label></label><input class="cheese-value3" type="number" min="0" max="65535" step="0.1"><select class="cheese-action-code" hidden><option value="1">Внести закваску</option><option value="2">Внести фермент</option><option value="3">Внести добавку</option><option value="4">Разрезать сгусток</option><option value="5">Переложить в формы</option><option value="6">Начать или изменить прессование</option><option value="7">Перевернуть сыр</option><option value="8">Другое действие</option></select></div>
+          <div class="cheese-mixer">
+            <label>Мешалка<select class="cheese-mixer-device"><option value="0">NONE</option><option value="1">RELAY</option><option value="2">I2C</option></select></label>
+            <label>RPM<input class="cheese-mixer-speed" type="number" min="0" max="65535" step="1" value="0"></label>
+            <label>Направление<select class="cheese-mixer-direction"><option value="1">Прямое</option><option value="-1">Обратное</option></select></label>
+            <label>Работа, с<input class="cheese-mixer-on" type="number" min="0" max="65535" step="1" value="0"></label>
+            <label>Пауза, с<input class="cheese-mixer-off" type="number" min="0" max="65535" step="1" value="0"></label>
+          </div>
+          <div class="cheese-field"><label></label><select class="cheese-value4"><option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option></select></div>
           <button type="button" class="program-row-action cheese-add" title="Добавить строку"><img src="plus.png" alt=""></button>
           <button type="button" class="program-row-action cheese-remove" title="Удалить строку"><img src="minus.png" alt=""></button>
         </div>
       </template>
-<!--#include device_schedule_modal.htm-->
     </div>
 
     <div id="Other" class="tabcontent panel" aria-hidden="true">

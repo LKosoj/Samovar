@@ -54,7 +54,7 @@ BROWSER_TEST = r'''async page => {
       i2cPumpVisible:!!i,
       cheesePhSlope:i ? -0.006543 : -0.00321,
       cheesePhOffset:i ? 18.25 : 14.75,
-      cheesePhSmoothPercent:i ? 63 : 27
+      cheeseCoolingScheme:i ? "two-valves" : "pump"
     })});
   });
   await page.route("**/data.csv", route => route.fulfill({status:200, contentType:"text/csv", body:""}));
@@ -119,8 +119,8 @@ BROWSER_TEST = r'''async page => {
     await page.waitForFunction(() => document.getElementById("phCurrent").textContent === "6.75");
     own = requests.slice(before);
     expect(own.indexOf("/ajax") > own.indexOf("/ui-bootstrap"), "pH ajax order");
-    const ph = await page.evaluate(() => [document.getElementById("CheesePhSlope").value, document.getElementById("CheesePhOffset").value, document.getElementById("CheesePhSmoothPercent").value]);
-    expect(JSON.stringify(ph) === JSON.stringify(i ? ["-0.006543","18.25","63"] : ["-0.00321","14.75","27"]), "pH values " + i);
+    const ph = await page.evaluate(() => [document.getElementById("CheesePhSlope").value, document.getElementById("CheesePhOffset").value]);
+    expect(JSON.stringify(ph) === JSON.stringify(i ? ["-0.006543","18.25"] : ["-0.00321","14.75"]), "pH values " + i);
   }
 
   plan = {index:0, diameter:4};

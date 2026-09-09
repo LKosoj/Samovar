@@ -429,7 +429,7 @@
       <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Затирание" aria-pressed="true">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно" aria-pressed="false">
-      <input id='i2cStepperTab' type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
+      <input id='i2cStepperTab' type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
       <input id='i2cPumpTab' type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: none;" aria-pressed="false">
 <!--#include ui_header_close.htm-->
 
@@ -454,11 +454,11 @@
               <div class="btn-row stack">
                 <!-- [Пиво 02.09 C2] Пауза/продолжить - как index.htm -->
                 <input id='pause' type='button' name='pause' class="button" value='Пауза' onclick='SamovarApp.sendCommand("pause=1");'>
-                <input id='start' type='button' name='start' class="button primary" value='Следующая программа' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
+                <input id='start' type='button' name='start' class="button primary" value='Далее' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
               </div>
               <div class="btn-row">
-                <input id='chart' type='button' name='chart' class="button secondary" value='График' onclick='javascript:location.href="chart.htm"'>
-                <input id='setup' type='button' name='setup' class="button secondary" value='Настройки' onclick='javascript:location.href="setup.htm"'>
+                <input id='chart' type='button' name='chart' class="button secondary" value='График' onclick='if (SamovarApp.confirmLeave()) location.href="chart.htm"'>
+                <input id='setup' type='button' name='setup' class="button secondary" value='Настройки' onclick='if (SamovarApp.confirmLeave()) location.href="setup.htm"'>
               </div>
             </div>
           </section>
@@ -602,7 +602,7 @@
       </div>
 
       <div class="btn-cell" style="margin: 0 auto; margin-top: 20px !important;">
-        <input id='loadprogram' type='button' name='loadprogram' value='Загрузить рецепт из XML' onclick='javascript:location.href="brewxml.htm"' class="button">
+        <input id='loadprogram' type='button' name='loadprogram' value='Загрузить рецепт из XML' onclick='if (SamovarApp.confirmLeave()) location.href="brewxml.htm"' class="button">
       </div>
       
 <!--#include device_schedule_modal.htm-->

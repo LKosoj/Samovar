@@ -33,7 +33,7 @@ BROWSER_TEST = r'''async page => {
     pwmValue:index ? 400 : 300, nbkDp:index ? 1.5 : 0.7, columnDiameter:2, columnHeight:1.5, packDensity:80,
     heaterResistance:10, mainsVoltage:220, heaterMaxPower:4840, stepperMaxSpeed:1000, stepperStepsPerMl:100,
     i2cStepperStepsPerMl:100, calibrationRunning:false, calibrationPump:'local', cheesePhSlope:1, cheesePhOffset:0,
-    cheesePhSmoothPercent:20
+    cheeseCoolingScheme:'pump'
   });
   page.on('console', message => {
     if (['warning', 'error'].includes(message.type()) || message.text().includes('UI update error')) consoleProblems.push(message.text());

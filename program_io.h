@@ -491,59 +491,76 @@ inline bool program_validate_cheese_row_semantics(
     long sensor,
     float param,
     const char*& errorMessage) {
+  // Сыр: TYPE;VALUE1;VALUE2;VALUE3;MIXER;VALUE4.
+  //
+  // Контракт WProgram для каждой строки:
+  // H: Temp=цель °C, Time=тайм-аут мин, Param=скорость нагрева °C/мин,
+  //    TempSensor=датчик температуры.
+  // P: Temp=цель °C, Time=выдержка мин, Param=общий тайм-аут мин (не меньше
+  //    выдержки), TempSensor=датчик температуры.
+  // C: Temp=цель °C, Time=тайм-аут мин, Param=0, TempSensor=датчик температуры.
+  // M: Temp=0, Time=длительность мин, Param=0, TempSensor=0.
+  // D: Temp=объём мл, Time=тайм-аут мин, Param=код компонента (ручное) либо
+  //    скорость мл/мин (локальное), TempSensor=1 (ручное) или 2 (локальное).
+  // N: Temp=температура °C, Time=тайм-аут мин, Param=целевой pH,
+  //    TempSensor=датчик температуры.
+  // W: Temp=0, Time=тайм-аут мин, Param=код ручного действия, TempSensor=0.
+  // S/L: Temp=0, Time=тайм-аут мин, Param=0, TempSensor=0.
+  // Во всех строках MIXER переводится одинаково: capacity_num=устройство,
+  // Speed=RPM и направление, Volume=ON сек, Power=OFF сек.
   const bool noDevice = devType == 0 && speed == 0 && onTime == 0 && offTime == 0;
-  const bool validDeviceSchedule = devType >= 1 && devType <= 3 &&
-      speed >= -1 && speed <= 1 && onTime > 0;
-  if (!noDevice && !validDeviceSchedule) {
-    errorMessage = "Ошибка программы: устройство должно быть 0^0^0^0 или маской 1..3 с ненулевым расписанием";
-    return false;
-  }
-  if (type != 'n' && param != 0.0f) {
-    errorMessage = "Ошибка программы: параметр допустим только для типа n";
+  const bool validSchedule = (onTime == 0 && offTime == 0) || onTime > 0;
+  const bool validRelayMixer = devType == 1 && speed == 0 && validSchedule;
+  const bool validI2cMixer = devType == 2 && speed >= INT16_MIN && speed <= INT16_MAX &&
+      speed != 0 && validSchedule;
+  if (!noDevice && !validRelayMixer && !validI2cMixer) {
+    errorMessage = "Ошибка программы: мешалка должна быть 0^0^0^0, реле 1^0 или I2C 2 с ненулевым RPM";
     return false;
   }
   switch (type) {
-    case 'M':
-    case 'C':
-      if (temp > 0.0f && timeMin == 0.0f) return true;
-      errorMessage = "Ошибка программы: для типа M/C Temp больше 0 и Time=0";
+    case 'H':
+      if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
+          param > 0.0f && sensor >= 0 && sensor <= 4) return true;
+      errorMessage = "Ошибка программы: для H нужны Temp, Time, скорость нагрева и датчик";
       return false;
     case 'P':
-    case 'Z':
-    case 'f':
-    case 'z':
-    case 'd':
-    case 's':
-    case 'p':
-    case 'v':
-    case 'r':
-      if (temp > 0.0f && timeMin > 0.0f) return true;
-      errorMessage = "Ошибка программы: для температурного этапа Temp и Time должны быть больше 0";
+      if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
+          param >= timeMin && sensor >= 0 && sensor <= 4) return true;
+      errorMessage = "Ошибка программы: для P нужен датчик и Param не меньше Time";
       return false;
-    case 'n':
-      if (temp > 0.0f && timeMin > 0.0f && param > 0.0f && param <= 14.0f) return true;
-      errorMessage = "Ошибка программы: для типа n нужны Temp>0, Time>0 и pH в диапазоне (0,14]";
+    case 'C':
+      if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
+          param == 0.0f && sensor >= 0 && sensor <= 4) return true;
+      errorMessage = "Ошибка программы: для C нужны Temp, Time, датчик и Param=0";
+      return false;
+    case 'M':
+      if (temp == 0.0f && timeMin > 0.0f && param == 0.0f && sensor == 0 && !noDevice) return true;
+      errorMessage = "Ошибка программы: для M нужны Time, мешалка и нулевые Temp/Param/датчик";
+      return false;
+    case 'D':
+      if (temp > 0.0f && timeMin > 0.0f && param > 0.0f &&
+          (sensor == 1 || sensor == 2) &&
+          (sensor == 2 || param == (float)(uint8_t)param) &&
+          (sensor == 2 || param <= 8.0f)) return true;
+      errorMessage = "Ошибка программы: для D нужны объём, Time, способ и код 1..8 либо скорость";
+      return false;
+    case 'N':
+      if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
+          param > 0.0f && param <= 14.0f && sensor >= 0 && sensor <= 4) return true;
+      errorMessage = "Ошибка программы: для N нужны Temp, Time, pH 0..14 и датчик";
       return false;
     case 'W':
-    case 'R':
-      if (temp == 0.0f && timeMin == 0.0f && noDevice && sensor == 0) return true;
-      errorMessage = "Ошибка программы: для типа W/R нужны нулевые безопасные параметры";
+      if (temp == 0.0f && timeMin > 0.0f && param >= 1.0f && param <= 8.0f &&
+          param == (float)(uint8_t)param && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для W нужны Time, код действия 1..8 и TempSensor=0";
       return false;
     case 'S':
-      if (temp == 0.0f && timeMin > 0.0f && noDevice && sensor == 0) return true;
-      errorMessage = "Ошибка программы: для типа S нужны Temp=0, Time>0 и выключенные устройства";
+      if (temp == 0.0f && timeMin > 0.0f && param == 0.0f && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для S нужны безопасные выходы, Time и нулевые поля";
       return false;
     case 'L':
-#ifdef USE_LUA
-      if (temp == 0.0f && timeMin == 0.0f && noDevice && sensor == 0) return true;
-      errorMessage = "Ошибка программы: для типа L нужны нулевые параметры";
-#else
-      errorMessage = "Ошибка программы: тип L требует USE_LUA";
-#endif
-      return false;
-    case 'A':
-      if (temp > 0.0f && timeMin == 0.0f && noDevice) return true;
-      errorMessage = "Ошибка программы: для типа A Temp больше 0, Time=0 и устройство=0^0^0^0";
+      if (temp == 0.0f && timeMin > 0.0f && param == 0.0f && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для L нужны безопасные выходы, Time и нулевые поля";
       return false;
     default:
       errorMessage = "Ошибка программы: неизвестный тип cheese";
@@ -556,9 +573,9 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   char* tokType = strtok_r(line, ";", &saveTok);
   char* tokTemp = strtok_r(nullptr, ";", &saveTok);
   char* tokTime = strtok_r(nullptr, ";", &saveTok);
+  char* tokParam = strtok_r(nullptr, ";", &saveTok);
   char* tokDevice = strtok_r(nullptr, ";", &saveTok);
   char* tokSensor = strtok_r(nullptr, ";", &saveTok);
-  char* tokParam = strtok_r(nullptr, ";", &saveTok);
   char* tokExtra = strtok_r(nullptr, ";", &saveTok);
 
   ProgramType parsedType = PROGRAM_TYPE_NONE;
@@ -568,10 +585,10 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   long sensor = 0;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
             tokTemp && tokTime && tokDevice && tokSensor && tokParam && !tokExtra &&
-            parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, PROGRAM_TEMP_MAX, temp).ok() &&
+            parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, (float)UINT16_MAX, temp).ok() &&
             parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
             parse_bounded_long(tokSensor, 0, 4, sensor).ok() &&
-            parse_bounded_float(tokParam, 0.0f, 14.0f, param).ok();
+            parse_bounded_float(tokParam, 0.0f, PROGRAM_TIME_MAX, param).ok();
 
   long devType = 0;
   long speed = 0;
@@ -778,11 +795,11 @@ inline void program_append_beer_row(String& out, const WProgram& row) {
 inline void program_append_cheese_row(String& out, const WProgram& row) {
   append_program_type(out, row.WType);
   out += ";";
-  out += (String)row.Temp + ";";
-  out += (String)row.Time + ";";
+  out += String(row.Temp, 6) + ";";
+  out += String(row.Time, 6) + ";";
+  out += String(row.Param, 6) + ";";
   out += (String)row.capacity_num + "^" + (int)row.Speed + "^" + row.Volume + "^" + (int)row.Power + ";";
-  out += (String)row.TempSensor + ";";
-  out += (String)row.Param + "\n";
+  out += (String)row.TempSensor + "\n";
 }
 
 inline void program_append_nbk_row(String& out, const WProgram& row) {
@@ -919,16 +936,16 @@ inline const ProgramParseSpec& cheese_program_parse_spec() {
     PROGRAM_FIELD_TYPE,
     PROGRAM_FIELD_TEMP,
     PROGRAM_FIELD_TIME,
+    PROGRAM_FIELD_PARAM,
     PROGRAM_FIELD_BEER_DEVICE,
     PROGRAM_FIELD_TEMP_SENSOR,
-    PROGRAM_FIELD_PARAM,
   };
   static const ProgramParseSpec spec = {
     "Ошибка программы: слишком длинная строка (cheese)",
     "Ошибка программы: неверный формат строки cheese",
     "Ошибка программы: слишком много строк cheese",
     nullptr,
-    "MPCWALZfzdspvrnSR",
+    "HPCMDNWSL",
     fields,
     static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
     PROGRAM_END,

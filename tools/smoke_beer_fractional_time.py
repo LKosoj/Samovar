@@ -9,6 +9,7 @@
 проверяя фактическое значение Time после раунд-трипа, а не факт наличия строк
 в исходнике.
 """
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,8 @@ class String {
   String(long value) : value_(std::to_string(value)) {}
   String(float value) : value_(format_float(value)) {}
   String(double value) : value_(format_float(value)) {}
+  String(float value, unsigned int decimalPlaces) : value_(format_float(value, decimalPlaces)) {}
+  String(double value, unsigned int decimalPlaces) : value_(format_float(value, decimalPlaces)) {}
 
   size_t length() const { return value_.length(); }
   const char* c_str() const { return value_.c_str(); }
@@ -89,8 +92,12 @@ class String {
 
  private:
   static std::string format_float(double value) {
+    return format_float(value, 2);
+  }
+
+  static std::string format_float(double value, unsigned int decimalPlaces) {
     char buffer[48] = {0};
-    std::snprintf(buffer, sizeof(buffer), "%.2f", value);
+    std::snprintf(buffer, sizeof(buffer), "%.*f", static_cast<int>(decimalPlaces), value);
     return buffer;
   }
 
@@ -152,25 +159,33 @@ void check(bool condition, const char* message) {
   }
 }
 
-// [P2 п.12] Дробная выдержка строки 'P' (12.5 мин) не должна усекаться до
-// целых минут при сохранении/перезагрузке программы.
+// [P2 п.12] Дробная выдержка строки 'P' не должна усекаться до целых минут
+// при сохранении/перезагрузке программы. Два независимых значения не дают
+// пройти проверку с хардкодом одного результата.
 void test_fractional_pause_time_survives_round_trip() {
-  ProgramDraft draft{};
-  ProgramParseResult applied = program_parse_lines(String("P;60;12.5;1^20^3^4;1\n"), beer_program_parse_spec());
-  check(applied.ok(), "valid beer program with fractional Time was rejected");
-  check(ProgramLen == 1, "unexpected program length after parse");
+  struct FractionalCase { const char* text; float time; const char* serializedTime; };
+  const FractionalCase cases[] = {
+    {"P;60;12.5;1^20^3^4;1\n", 12.5f, "12.50"},
+    {"P;61;7.25;1^20^3^4;1\n", 7.25f, "7.25"},
+  };
+  for (const FractionalCase& test : cases) {
+    ProgramDraft draft{};
+    ProgramParseResult applied = program_parse_lines(String(test.text), beer_program_parse_spec());
+    check(applied.ok(), "valid beer program with fractional Time was rejected");
+    check(ProgramLen == 1, "unexpected program length after parse");
 
-  String serialized = program_serialize_rows(0, PROGRAM_END, program_append_beer_row);
-  check(serialized.c_str()[0] != '\0', "serialized beer program is empty");
-  const std::string serializedStr(serialized.c_str());
-  check(serializedStr.find("12.50") != std::string::npos,
-        "РЕГРЕСС: сериализация не сохранила дробную часть Time (ожидали \"12.50\" в выводе)");
+    String serialized = program_serialize_rows(0, PROGRAM_END, program_append_beer_row);
+    check(serialized.c_str()[0] != '\0', "serialized beer program is empty");
+    const std::string serializedStr(serialized.c_str());
+    check(serializedStr.find(test.serializedTime) != std::string::npos,
+          "РЕГРЕСС: сериализация не сохранила дробную часть Time");
 
-  ProgramParseResult reparsed = program_parse_lines(serialized, beer_program_parse_spec(), draft);
-  check(reparsed.ok(), "serialized fractional beer program could not be reparsed");
-  check(draft.len == 1, "round-trip length mismatch");
-  check(fabsf(draft.rows[0].Time - 12.5f) < 0.01f,
-        "РЕГРЕСС: Time потерял дробную часть после раунд-трипа (усечение до int)");
+    ProgramParseResult reparsed = program_parse_lines(serialized, beer_program_parse_spec(), draft);
+    check(reparsed.ok(), "serialized fractional beer program could not be reparsed");
+    check(draft.len == 1, "round-trip length mismatch");
+    check(fabsf(draft.rows[0].Time - test.time) < 0.01f,
+          "РЕГРЕСС: Time потерял дробную часть после раунд-трипа (усечение до int)");
+  }
 }
 
 // Контроль: целое (нулевое) значение Time на непаузной строке 'M' не должно
@@ -201,47 +216,72 @@ int main() {
 '''
 
 
+def compile_and_run(temp: Path, harness: Path, binary_name: str) -> subprocess.CompletedProcess[str]:
+    binary = temp / binary_name
+    compile_result = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(temp),
+            "-I",
+            str(ROOT),
+            str(harness),
+            "-o",
+            str(binary),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if compile_result.returncode != 0:
+        raise RuntimeError(compile_result.stdout + compile_result.stderr)
+    return subprocess.run([str(binary)], capture_output=True, text=True, check=False)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="samovar-beer-fractional-time-") as temp_dir:
         temp = Path(temp_dir)
         (temp / "Arduino.h").write_text(ARDUINO_STUB, encoding="utf-8")
         harness = temp / "beer_fractional_time_test.cpp"
         harness.write_text(HARNESS, encoding="utf-8")
-        binary = temp / "beer_fractional_time_test"
-
-        compile_result = subprocess.run(
-            [
-                "g++",
-                "-std=c++11",
-                "-Wall",
-                "-Wextra",
-                "-Werror",
-                "-I",
-                str(temp),
-                "-I",
-                str(ROOT),
-                str(harness),
-                "-o",
-                str(binary),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if compile_result.returncode != 0:
-            sys.stderr.write(compile_result.stdout)
-            sys.stderr.write(compile_result.stderr)
-            return compile_result.returncode
-
-        run_result = subprocess.run(
-            [str(binary)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        copied_program_io = temp / "program_io.h"
+        shutil.copy2(ROOT / "program_io.h", copied_program_io)
+        try:
+            run_result = compile_and_run(temp, harness, "beer_fractional_time_test")
+        except RuntimeError as error:
+            sys.stderr.write(str(error))
+            return 1
         sys.stdout.write(run_result.stdout)
         sys.stderr.write(run_result.stderr)
-        return run_result.returncode
+        if run_result.returncode != 0:
+            return run_result.returncode
+
+        source = copied_program_io.read_text(encoding="utf-8")
+        old = "out += (String)row.Time + \";\";"
+        mutant = source.replace(old, "out += (String)(int)row.Time + \";\";", 1)
+        if mutant == source:
+            print("fractional Time mutation anchor is missing", file=sys.stderr)
+            return 1
+        copied_program_io.write_text(mutant, encoding="utf-8")
+        try:
+            mutant_result = compile_and_run(temp, harness, "beer_fractional_time_mutant")
+        except RuntimeError as error:
+            sys.stderr.write("fractional Time mutation did not compile\n" + str(error))
+            return 1
+        if mutant_result.returncode == 0:
+            print("fractional Time truncation mutation was accepted", file=sys.stderr)
+            return 1
+        mutation_output = mutant_result.stdout + mutant_result.stderr
+        if "Time потерял дробную часть" not in mutation_output:
+            sys.stderr.write("fractional Time mutation missed the round-trip assertion\n")
+            sys.stderr.write(mutation_output)
+            return 1
+        print("fractional Time truncation mutation was rejected as expected")
+    return 0
 
 
 if __name__ == "__main__":

@@ -9,7 +9,6 @@
     function applyPhCalibrationBootstrap(data) {
       document.getElementById('CheesePhSlope').value = String(data.cheesePhSlope);
       document.getElementById('CheesePhOffset').value = String(data.cheesePhOffset);
-      document.getElementById('CheesePhSmoothPercent').value = String(data.cheesePhSmoothPercent);
     }
 
     function phError(message) {
@@ -56,9 +55,8 @@
     async function savePhCalibration() {
       var slope = Number(document.getElementById('CheesePhSlope').value);
       var offset = Number(document.getElementById('CheesePhOffset').value);
-      var smoothing = Number(document.getElementById('CheesePhSmoothPercent').value);
-      if (!Number.isFinite(slope) || !Number.isFinite(offset) || !Number.isInteger(smoothing) || smoothing < 0 || smoothing > 99) {
-        return phError('Проверьте коэффициенты и сглаживание от 0 до 99 процентов.');
+      if (!Number.isFinite(slope) || !Number.isFinite(offset)) {
+        return phError('Проверьте коэффициенты.');
       }
       var button = document.getElementById('savePh');
       button.disabled = true;
@@ -118,9 +116,6 @@
       </div>
       <div class="container_row">
         <label class="text" for="CheesePhOffset">Смещение d:</label><input id="CheesePhOffset" name="CheesePhOffset" type="number" step="0.000001" value="">
-      </div>
-      <div class="container_row">
-        <label class="text" for="CheesePhSmoothPercent">Сглаживание, &#37;:</label><input id="CheesePhSmoothPercent" name="CheesePhSmoothPercent" type="number" min="0" max="99" step="1" value="">
       </div>
       <button type="button" class="button" id="savePh" onclick="savePhCalibration()">Сохранить калибровку</button>
       <p id="phStatus" role="status" aria-live="polite"></p>

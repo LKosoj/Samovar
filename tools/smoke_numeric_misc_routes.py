@@ -176,7 +176,7 @@ expected_hashes = {
     # 05.09.2026: добавлен отдельный строгий формат программы Cheese с шестым
     # полем Param и направлением устройства только -1..1; разбор по-прежнему
     # идёт в draft до атомарного commit.
-    "program_io.h": "20876fa1cd2dcb37e2873edcd700bf730140d18199b4ac3bdaa728055529f711",
+    "program_io.h": "2941a5d039d4f9a86084dd3846a595208dae4ce02e836ae95e1e832409cdbce5",
     "program_types.h": "78a37ac7beda0a3bf50b0ad2e6682075d038a5c15f99e808c665404e22b9ed2b",
 }
 for name, expected in expected_hashes.items():

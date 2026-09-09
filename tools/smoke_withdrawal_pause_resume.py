@@ -120,6 +120,15 @@ struct SetupEEPROM {
 // Порог предупреждения больше не зависит от плотности насадки: пока фон не набран,
 // берётся дефолт, дальше - измеренный шум тренда.
 static const float DETECTOR_DEFAULT_WARNING_TREND = 0.04f;
+static const float DETECTOR_HYSTERESIS_FRAC = 0.15f;
+static const float DETECTOR_VAR_LOW = 0.01f;
+static const float DETECTOR_VAR_HIGH = 0.36f;
+static const float DETECTOR_VAR_MAX_FACTOR = 2.0f;
+static const float DETECTOR_RATE_HIGH_LPH = 0.5f;
+static const float DETECTOR_RATE_HIGH_FACTOR = 1.3f;
+static const float DETECTOR_RATE_LOW_LPH = 0.2f;
+static const float DETECTOR_RATE_LOW_FACTOR = 0.85f;
+static const float DETECTOR_TAILS_FACTOR = 1.2f;
 static float detector_bg_threshold = 0.0f;
 
 struct ImpurityDetector {

@@ -55,9 +55,6 @@ current_defaults = {
     "SecondI2CPumpRate": "0.0",
     "BeerBrewOrder": "0",
     "BKPower": "45.0",
-    "CheesePhSmoothPercent": "90",
-    "CheeseDoserSpeed": "200",
-    "CheeseDoserSteps": "160",
     "NbkTn": "98.5",
     "NbkSteamT": "81.00",
     "NbkUseStreamServo": False,
@@ -65,6 +62,8 @@ current_defaults = {
 }
 
 missing = sorted(parser.fields - settings.keys())
+allowed_extra_settings = {"LogPeriod", "tgchatid", "tgtoken", "useautopowerdown"}
+extra = sorted(settings.keys() - parser.fields - allowed_extra_settings)
 allowed_empty = {"blynkauth", "videourl"}
 empty = sorted(
     name
@@ -74,6 +73,8 @@ empty = sorted(
 
 if missing:
     raise AssertionError("В начальных настройках отсутствуют поля: " + ", ".join(missing))
+if extra:
+    raise AssertionError("В начальных настройках остались удалённые поля: " + ", ".join(extra))
 if empty:
     raise AssertionError("В начальных настройках не заполнены поля: " + ", ".join(empty))
 invalid_selects = sorted(
@@ -101,17 +102,23 @@ if wrong_defaults:
 
 # Проверяем, что удаление реального поля ловится содержательной ошибкой.
 mutant = dict(settings)
-mutant.pop("CheesePhSmoothPercent")
+mutant.pop("MainsVoltage")
 mutant_missing = sorted(parser.fields - mutant.keys())
-assert mutant_missing == ["CheesePhSmoothPercent"], (
-    "Проверка полноты не обнаружила удалённое поле CheesePhSmoothPercent"
+assert mutant_missing == ["MainsVoltage"], (
+    "Проверка полноты не обнаружила удалённое поле MainsVoltage"
 )
 mutant = dict(settings)
-mutant["CheesePhSmoothPercent"] = "0"
+mutant["MainsVoltage"] = "0"
 assert find_wrong_defaults(mutant) == [
-    "CheesePhSmoothPercent='0', ожидалось '90'"
+    "MainsVoltage='0', ожидалось '230.0'"
 ], (
-    "Проверка значений не обнаружила подмену CheesePhSmoothPercent"
+    "Проверка значений не обнаружила подмену MainsVoltage"
+)
+mutant = dict(settings)
+mutant["CheeseDoserSpeed"] = "200"
+mutant_extra = sorted(mutant.keys() - parser.fields - allowed_extra_settings)
+assert mutant_extra == ["CheeseDoserSpeed"], (
+    "Проверка лишних полей не обнаружила CheeseDoserSpeed"
 )
 
 print("Default settings cover every current setup field")

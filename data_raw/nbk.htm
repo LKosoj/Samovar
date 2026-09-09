@@ -278,7 +278,7 @@
       <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Режим НБК" aria-pressed="true">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно" aria-pressed="false">
-      <input id='i2cStepperTab' type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" hidden>
+      <input id='i2cStepperTab' type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/i2cstepper.htm';" value="I2CStepper" hidden>
       <input id='i2cPumpTab' type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" hidden aria-pressed="false">
 <!--#include ui_header_close.htm-->
 
@@ -299,10 +299,10 @@
             <h2>Действия</h2>
             <div class="actions">
               <input id='power' type='button' name='power' value='Включить нагрев' onclick='return setNBKCommand();' class="button">
-              <input id='start' type='button' name='start' class="button primary" value='Следующая программа' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
+              <input id='start' type='button' name='start' class="button primary" value='Далее' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
               <div class="btn-row">
-                <input id='chart' type='button' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button secondary">
-                <input id='setup' type='button' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button secondary">
+                <input id='chart' type='button' name='chart' value='График' onclick='if (SamovarApp.confirmLeave()) location.href="chart.htm"' class="button secondary">
+                <input id='setup' type='button' name='setup' value='Настройки' onclick='if (SamovarApp.confirmLeave()) location.href="setup.htm"' class="button secondary">
               </div>
             </div>
           </section>

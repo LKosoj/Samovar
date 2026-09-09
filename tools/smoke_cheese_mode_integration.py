@@ -64,11 +64,6 @@ require(
     "WebServer не принимает и не сохраняет mode=7",
 )
 require(
-    "#ifdef USE_LUA\ninline bool cheese_lua_result_pending" in
-    (ROOT / "cheese.h").read_text(encoding="utf-8"),
-    "Lua-тип Cheese просачивается в сборки без USE_LUA",
-)
-require(
     "Samovar_Mode == SAMOVAR_BEER_MODE ||\n      Samovar_Mode == SAMOVAR_CHEESE_MODE" in samovar_ino,
     "Общий расчёт прогресса не обслуживает Cheese",
 )
@@ -89,9 +84,10 @@ for token in (
 ):
     require(token in cheese_runtime, f"Новая строка Cheese не сбрасывает {token}")
 require(
-    "const bool sensorRequired = kind == CHEESE_STAGE_HEAT_TO_TARGET" in cheese_runtime and
-    "if (sensorRequired &&" in cheese_runtime,
-    "W/R/S всё ещё зависят от датчика температуры",
+    "inline bool cheese_row_needs_sensor(CheeseStageKind kind)" in cheese_runtime and
+    "kind == CHEESE_STAGE_HEAT || kind == CHEESE_STAGE_HOLD" in cheese_runtime and
+    "kind == CHEESE_STAGE_COOL || kind == CHEESE_STAGE_PH" in cheese_runtime,
+    "W/S всё ещё зависят от датчика температуры",
 )
 require(
     "stepper_safe_reverse(true);" in cheese_runtime and

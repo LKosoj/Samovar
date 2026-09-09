@@ -29,7 +29,8 @@ from smoke_helpers import extract_braced_block_after, extract_function_body, req
 ROOT = Path(__file__).resolve().parents[1]
 
 APPLY_CORRECTION_SIGNATURE = "inline bool apply_detector_speed_correction(float baseSpeedRate) {"
-AUTOSPEED_OFF_TOKEN = "if (!SamSetup.useautospeed || !SamSetup.useDetector) {"
+AUTOSPEED_OFF_TOKEN = "if (!SamSetup.useDetector) {"
+AUTOSPEED_ONLY_TOKEN = "if (!SamSetup.useautospeed && impurityDetector.correctionFactor != 1.0f) {"
 STATUS_RESET_TOKEN = "if (SamovarStatusInt != SAMOVAR_STATUS_RECT_WITHDRAWAL) {"
 
 HARNESS_TEMPLATE = r'''
@@ -47,6 +48,9 @@ struct ImpurityDetector {
   float correctionFactor = 1.0f;
 };
 static ImpurityDetector impurityDetector;
+
+enum DetectorIdleReason : uint8_t { DETECTOR_IDLE_ACTIVE = 0, DETECTOR_IDLE_OFF };
+static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_ACTIVE;
 
 static volatile float CurrentBaseSpeedRate = 0.0f;
 
@@ -77,6 +81,7 @@ static bool apply_detector_speed_correction(float baseSpeedRate) {
 static bool reachedTailAutospeedOff = false;
 static void autospeed_off_tick() {
 @AUTOSPEED_OFF_BRANCH@
+@AUTOSPEED_ONLY_BRANCH@
   reachedTailAutospeedOff = true;
 }
 
@@ -121,7 +126,8 @@ static void test_autospeed_off_resets_pump_speed() {
   check(!reachedTailAutospeedOff, "выключение детектора: должен быть ранний return");
 }
 
-// Сценарий 2: другая базовая скорость (вдвое больше) - результат обязан быть
+// Сценарий 2 (useDetector=true, useautospeed=false): детектор продолжает работать
+// (ранний return не нужен), но накопленная коррекция снимается с насоса.: другая базовая скорость (вдвое больше) - результат обязан быть
 // пропорционален CurrentBaseSpeedRate, а не хардкоженным значением из сценария 1.
 static void test_autospeed_off_resets_pump_speed_proportionally() {
   reset_fixture(0.5f, 120.0f);
@@ -134,6 +140,7 @@ static void test_autospeed_off_resets_pump_speed_proportionally() {
   check(setPumpSpeedCallCount == 1, "выключение автоскорости: set_pump_speed должен быть вызван ровно один раз");
   check(lastPumpSpeedArg == 120.0f,
         "скорость не восстановлена: насосу должна быть передана полная CurrentBaseSpeedRate (120.0)");
+  check(reachedTailAutospeedOff, "выключение только автоскорости: детектор должен продолжать работу (без раннего return)");
 }
 
 // Сценарий 3: ветка сброса по статусу (не RECT_WITHDRAWAL) - вызов безвреден
@@ -201,9 +208,11 @@ def extract_branch(detector_source: str, token: str) -> str:
 def build_harness(detector_source: str) -> str:
     apply_body = extract_function_body(detector_source, APPLY_CORRECTION_SIGNATURE)
     autospeed_off_branch = extract_branch(detector_source, AUTOSPEED_OFF_TOKEN)
+    autospeed_only_branch = extract_branch(detector_source, AUTOSPEED_ONLY_TOKEN)
     status_reset_branch = extract_branch(detector_source, STATUS_RESET_TOKEN)
     harness = HARNESS_TEMPLATE.replace("@APPLY_BODY@", apply_body)
     harness = harness.replace("@AUTOSPEED_OFF_BRANCH@", autospeed_off_branch)
+    harness = harness.replace("@AUTOSPEED_ONLY_BRANCH@", autospeed_only_branch)
     harness = harness.replace("@STATUS_RESET_BRANCH@", status_reset_branch)
     return harness
 
@@ -250,6 +259,16 @@ def check_detector_source(detector_source: str) -> list[str]:
             "correctionFactor = 1.0f;",
             "apply_detector_speed_correction(CurrentBaseSpeedRate);",
             "return;",
+        ],
+        errors,
+    )
+    require_ordered_tokens(
+        "process_impurity_detector: выключение автоскорости при накопленной коррекции возвращает базовую скорость",
+        process_body,
+        [
+            AUTOSPEED_ONLY_TOKEN,
+            "correctionFactor = 1.0f;",
+            "apply_detector_speed_correction(CurrentBaseSpeedRate);",
         ],
         errors,
     )

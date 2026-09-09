@@ -48,11 +48,12 @@
     'columnHeight', 'packDensity', 'heaterResistance', 'mainsVoltage', 'heaterMaxPower',
     'stepperMaxSpeed', 'stepperStepsPerMl', 'i2cStepperStepsPerMl',
     'calibrationRunning', 'calibrationPump', 'cheesePhSlope', 'cheesePhOffset',
-    'cheesePhSmoothPercent'
+    'cheeseCoolingScheme'
   ];
   const UI_BOOTSTRAP_STRING_KEYS = [
     'version', 'powerUnit', 'program', 'description', 'luaButtonList',
-    'steamColor', 'pipeColor', 'waterColor', 'tankColor', 'acpColor'
+    'steamColor', 'pipeColor', 'waterColor', 'tankColor', 'acpColor',
+    'cheeseCoolingScheme'
   ];
   const UI_BOOTSTRAP_BOOLEAN_KEYS = [
     'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
@@ -60,7 +61,7 @@
   ];
   const UI_BOOTSTRAP_INTEGER_KEYS = [
     'mode', 'pwmValue', 'packDensity', 'stepperMaxSpeed', 'stepperStepsPerMl',
-    'i2cStepperStepsPerMl', 'cheesePhSmoothPercent'
+    'i2cStepperStepsPerMl'
   ];
   const UI_BOOTSTRAP_NUMBER_KEYS = [
     'pwmLow', 'nbkDp', 'columnDiameter', 'columnHeight', 'heaterResistance',
@@ -113,6 +114,26 @@
     const element = byId(id);
     if (!element) throw new Error('I2C pump UI contract: missing #' + id);
     return element;
+  }
+
+  // Текст состояния детектора примесей, пока он НЕ реагирует (impurity_detector.h,
+  // DetectorIdleReason). Пустая строка = детектор активен, показывать статус 0/1/2.
+  function detectorIdleText(idle, prgType, waitLeftSec, waitSpan) {
+    if (prgType === 'H') return '👁 Головы: наблюдение';
+    switch (idle) {
+      case 2: return '👁 Головы: наблюдение';
+      case 3: return '⏳ Пауза после старта строки';
+      case 4: return '⏳ Пауза после ручного продолжения';
+      case 5: {
+        const left = Number.isFinite(waitLeftSec) && waitLeftSec > 0 ? ', осталось ' + Math.ceil(waitLeftSec / 60) + ' мин' : '';
+        const span = Number.isFinite(waitSpan) && waitSpan > 0 ? ', размах ' + waitSpan.toFixed(2) + ' °C' : '';
+        return '⏳ Жду стабилизации пара' + span + left;
+      }
+      case 6: return '⏳ Набираю историю';
+      case 7: return '⏸ Пауза';
+      case 1: return '— не активен';
+      default: return '';
+    }
   }
 
   function cssVar(name) {
@@ -284,6 +305,13 @@
     return { error: '', lines: lines, hints: hints };
   }
 
+  // Текст тела ответа для показа человеку: HTML-страницу ошибки веб-сервера
+  // (404 и т.п.) не показываем - остаётся только код HTTP.
+  function plainBodyText(text) {
+    const trimmed = String(text || '').trim();
+    return /^<(!doctype|html|head|body)\b/i.test(trimmed) ? '' : trimmed;
+  }
+
   function requestErrorElement() {
     let element = byId('request_error');
     if (element) return element;
@@ -301,11 +329,24 @@
     return element;
   }
 
-  function showRequestError(message) {
+  function showRequestError(message, level) {
     requestErrorRevision++;
     const element = requestErrorElement();
+    element.className = messageClass(level === undefined ? 0 : level);
     element.textContent = String(message || 'Неверные данные запроса.');
+    // Крестик: раньше плашка гасла только после следующей удачной операции.
+    if (typeof element.appendChild === 'function') {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'message-dismiss request-error-close';
+      close.setAttribute('aria-label', 'Скрыть сообщение');
+      close.textContent = '✕';
+      close.onclick = clearRequestError;
+      element.appendChild(close);
+    }
     element.style.display = 'block';
+    // Плашка стоит первой в форме: на прокрученной вкладке она за верхним краем экрана.
+    if (typeof element.scrollIntoView === 'function') element.scrollIntoView({ block: 'nearest' });
   }
 
   function clearRequestError() {
@@ -470,7 +511,7 @@
           if (code && detail !== code && operationErrorText(code) === code) detail += ' (' + code + ')';
         }
       } else {
-        detail = operationErrorText((await resp.text()).trim());
+        detail = operationErrorText(plainBodyText(await resp.text()));
       }
     } catch (err) {
       if (err && err.name === 'AbortError') throw err;
@@ -580,6 +621,7 @@
     if (tab && tab.classList.contains('tabcontent')) {
       tab.style.display = 'block';
       tab.setAttribute('aria-hidden', 'false');
+      scheduleProgramHeaderAlign();
     }
     let activeLink = evt && evt.currentTarget;
     if (!activeLink) {
@@ -761,6 +803,19 @@
       escapeHtml(entry.msg) + '</div>';
   }
 
+  // Закрытие истории по Esc и по клику/касанию вне окна: кнопка ☰ на планшете
+  // бывает накрыта самим окном или лентой сообщений, и другого выхода не было.
+  function onHistoryKeydown(event) {
+    if (event.key === 'Escape' || event.key === 'Esc') showHistory();
+  }
+
+  function onHistoryPointerdown(event) {
+    const box = byId('historyBox');
+    const trigger = document.querySelector('.history-trigger');
+    if ((box && box.contains(event.target)) || (trigger && trigger.contains(event.target))) return;
+    showHistory();
+  }
+
   function showHistory() {
     const box = byId('historyBox');
     const list = byId('historyList');
@@ -770,6 +825,8 @@
       box.style.display = 'none';
       historyShown = false;
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('keydown', onHistoryKeydown);
+      document.removeEventListener('pointerdown', onHistoryPointerdown);
       return;
     }
     list.innerHTML = getHistory().map(renderHistoryEntry).join('');
@@ -777,6 +834,8 @@
     box.scrollTop = box.scrollHeight;
     historyShown = true;
     if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    document.addEventListener('keydown', onHistoryKeydown);
+    document.addEventListener('pointerdown', onHistoryPointerdown);
   }
 
   function clearHistory() {
@@ -793,21 +852,17 @@
 
   function renderMessage(entry, index) {
     const content = escapeHtml(entry.time) + '  ' + escapeHtml(entry.msg);
-    if (index === messages.length - 1) {
-      // Раньше вся строка была кнопкой-самоудалением - случайный тычок в аварийное
-      // сообщение (например, при захлёбе, который живёт только в тексте, без latch)
-      // гасил его вместе с сиреной незаметно для пользователя. Теперь удаляет только
-      // отдельный крестик, а removeLastMessage() дополнительно спрашивает подтверждение
-      // для аварийных сообщений.
-      return '<div align="left" class="' + escapeHtml(entry.cssClass) +
-        '" style="display: flex; justify-content: space-between; align-items: center; gap: 0.5em;">' +
-        '<span>' + content + '</span>' +
-        '<button type="button" class="message-dismiss" aria-label="Скрыть последнее сообщение" ' +
-        'style="flex: 0 0 auto; background: transparent; border: 0; color: inherit; font: inherit; ' +
-        'font-size: 1.2em; line-height: 1; cursor: pointer; padding: 0 0.3em;" ' +
-        'onclick="SamovarApp.removeLastMessage()">✕</button></div>';
-    }
-    return '<div align="left" class="' + escapeHtml(entry.cssClass) + '">' + content + '</div>';
+    // Раньше вся строка была кнопкой-самоудалением - случайный тычок в аварийное
+    // сообщение (например, при захлёбе, который живёт только в тексте, без latch)
+    // гасил его вместе с сиреной незаметно для пользователя. Удаляет только отдельный
+    // крестик; у аварийных сообщений removeMessage() дополнительно спрашивает подтверждение.
+    const last = index === messages.length - 1;
+    const handler = last ? 'SamovarApp.removeLastMessage()' : 'SamovarApp.removeMessage(' + index + ')';
+    return '<div align="left" class="' + escapeHtml(entry.cssClass) +
+      '" style="display: flex; justify-content: space-between; align-items: center; gap: 0.5em;">' +
+      '<span>' + content + '</span>' +
+      '<button type="button" class="message-dismiss" aria-label="Скрыть сообщение" ' +
+      'onclick="' + handler + '">✕</button></div>';
   }
 
   function pushMessage(msg, level) {
@@ -828,16 +883,25 @@
     pushMessage(msg, level === undefined ? 1 : level);
   }
 
+  // message_0 - аварийный уровень (level 0). Для аппаратной защёлки нагрева
+  // и обрыва связи сирена живёт отдельно от тоста: спрашиваем подтверждение,
+  // чтобы случайный тычок не прятал аварию молча.
+  function confirmMessageRemoval(entry) {
+    return entry.cssClass !== 'message_0' ||
+      confirm('Скрыть аварийное сообщение «' + entry.msg + '»?');
+  }
+
+  function removeMessage(index) {
+    if (index < 0 || index >= messages.length) return;
+    if (!confirmMessageRemoval(messages[index])) return;
+    messages.splice(index, 1);
+    if (onLastMessageRemoved) onLastMessageRemoved(messages.length);
+    showMessages();
+  }
+
   function removeLastMessage() {
     if (messages.length === 0) return;
-    const last = messages[messages.length - 1];
-    // message_0 - аварийный уровень (level 0). Для аппаратной защёлки нагрева
-    // и обрыва связи сирена живёт отдельно от тоста: спрашиваем подтверждение,
-    // чтобы случайный тычок не прятал аварию молча.
-    if (last.cssClass === 'message_0' &&
-        !confirm('Скрыть аварийное сообщение «' + last.msg + '»?')) {
-      return;
-    }
+    if (!confirmMessageRemoval(messages[messages.length - 1])) return;
     messages.pop();
     if (onLastMessageRemoved) onLastMessageRemoved(messages.length);
     showMessages();
@@ -1349,7 +1413,7 @@
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: commandBody
       });
-      const body = (await resp.text()).trim();
+      const body = plainBodyText(await resp.text());
       // Отказы приходят конвертом, где токен лежит в error; успех - по-прежнему текстом.
       // Читаем тело один раз и достаём из той формы, в которой оно пришло, две разные
       // вещи: token - чтобы распознать штатный отказ раньше общей HTTP-ошибки, detail -
@@ -1440,10 +1504,10 @@
     for (let index = 0; index < UI_BOOTSTRAP_NUMBER_KEYS.length; index++) {
       if (!Number.isFinite(data[UI_BOOTSTRAP_NUMBER_KEYS[index]])) return false;
     }
-    if (data.mode < 0 || data.mode > 7 ||
-        data.cheesePhSmoothPercent < 0 || data.cheesePhSmoothPercent > 100) return false;
+    if (data.mode < 0 || data.mode > 7) return false;
     if (['allinone', 'herms', 'rims'].indexOf(data.beerBrewOrder) === -1 ||
-        ['local', 'i2c'].indexOf(data.calibrationPump) === -1) return false;
+        ['local', 'i2c'].indexOf(data.calibrationPump) === -1 ||
+        ['pump', 'two-valves', 'unavailable'].indexOf(data.cheeseCoolingScheme) === -1) return false;
     return true;
   }
 
@@ -1685,6 +1749,7 @@
       result.queued = false;
       result.state = 'succeeded';
       clearRequestError();
+      markProgramSaved();
       return result;
     } catch (err) {
       const message = String(err && err.message ? err.message : err);
@@ -1724,6 +1789,7 @@
       if (!result.queued) throw new Error('Сервер не подтвердил постановку очистки в очередь.');
       await waitForOperation(result.operationId);
       clearRequestError();
+      markProgramSaved();
       notify('Программа очищена.', 2);
       return true;
     } catch (err) {
@@ -1925,9 +1991,14 @@
     v._pressureAlt = v._cubePressure !== null ? v._cubePressure : num(data.start_pressure);
     v._alcCube = num(data.alc);
     const ds = Number(data.DetectorStatus);
-    v._detectorText = !data.useautospeed ? 'выкл'
+    const detIdle = Number(data.DetectorIdle);
+    v._detectorText = !data.useDetector ? 'выкл'
       : data.PrgType === 'H' ? 'наблюдение'
-      : ds === 0 ? '● стабильно' : ds === 1 ? '▲ коррекция' : ds === 2 ? '■ проскок' : '—';
+      : detIdle === 5 ? '⏳ ждёт пар'
+      : detIdle === 3 || detIdle === 4 || detIdle === 6 ? '⏳ ожидание'
+      : detIdle === 7 ? '⏸ пауза'
+      : detIdle === 1 ? '—'
+      : ds === 0 ? '● стабильно' : ds === 1 ? (data.useautospeed ? '▲ снижаю скорость' : '▲ рост') : ds === 2 ? '■ проскок' : '—';
     v._alcSteam = num(data.stm_alc);
 
     const lines = programLines();
@@ -2005,6 +2076,264 @@
 
   onTelemetry(renderScheme);
 
+  // Шапка таблицы программы (все режимы). Поля строки на десктопе стоят подряд с
+  // фиксированной шириной, а ячейки шапки раньше раскладывались процентами или
+  // неразрывными пробелами и уезжали от своих колонок. Выравниваем шапку по первой
+  // строке данных: каждой ячейке шапки - отступ и ширина соответствующего поля.
+  // На телефоне (поля переносятся в две колонки) inline-стили снимаются.
+  const PROGRAM_HEADER_SELECTOR = '#hdr, #cheeseProgramHeader';
+
+  function programRowCells(row) {
+    return Array.prototype.filter.call(row.children, function (el) {
+      if (el.tagName === 'BUTTON' || el.type === 'hidden' || el.offsetWidth === 0) return false;
+      return !(el.tagName === 'SPAN' && el.textContent.trim() === '');
+    });
+  }
+
+  function programHeaderLabelText(cell) {
+    const label = cell.tagName === 'LABEL' ? cell : (cell.querySelector('label') || cell);
+    const copy = label.cloneNode(true);
+    copy.querySelectorAll('.tooltiptext').forEach(function (t) { t.remove(); });
+    return copy.textContent.trim();
+  }
+
+  // Телефон: шапка скрыта, у каждого поля своя подпись, строка - сетка «подпись-поле»
+  // по две пары в линию. Всё, что вставлено/переопределено, снимается в clearProgramRowMobile().
+  function applyProgramRowMobile(row, labels) {
+    row.setAttribute('data-prg-mob', '1');
+    // Пробельный текст между элементами (в nbk.htm - &nbsp;) в сетке становится
+    // отдельной ячейкой; убираем его и возвращаем в clearProgramRowMobile.
+    row._prgText = [];
+    Array.prototype.slice.call(row.childNodes).forEach(function (n) {
+      if (n.nodeType === 3 && !n.textContent.replace(/[\s\u00a0]/g, '')) {
+        row._prgText.push([n, n.nextSibling]);
+        n.remove();
+      }
+    });
+    row.style.display = 'grid';
+    row.style.gridTemplateColumns = 'max-content minmax(0, 1fr) max-content minmax(0, 1fr)';
+    row.style.gap = '4px 6px';
+    row.style.alignItems = 'center';
+    const sources = programRowCells(row);
+    Array.prototype.forEach.call(row.children, function (el) {
+      if (el.tagName === 'BUTTON' || sources.indexOf(el) !== -1) return;
+      el.setAttribute('data-prg-hidden', '1');
+      el.style.display = 'none';
+    });
+    Array.prototype.forEach.call(row.children, function (el) {
+      if (el.tagName === 'LABEL' || el.style.marginLeft === '') return;
+      el.setAttribute('data-prg-ml', el.style.marginLeft);
+      el.style.setProperty('margin-left', '0', 'important');
+    });
+    sources.forEach(function (el, i) {
+      if (el.tagName === 'INPUT' || el.tagName === 'SELECT') el.style.width = '100%';
+      // Метка без подписи (например, «№») занимает пару «подпись + поле», иначе
+      // все следующие элементы сдвигаются на одну колонку сетки.
+      if (el.tagName === 'LABEL' || !labels[i]) { el.style.gridColumn = 'span 2'; return; }
+      const tag = document.createElement('span');
+      tag.className = 'prg-col-label';
+      tag.textContent = labels[i];
+      row.insertBefore(tag, el);
+    });
+  }
+
+  function clearProgramRowMobile(row) {
+    if (!row.hasAttribute('data-prg-mob')) return;
+    row.removeAttribute('data-prg-mob');
+    (row._prgText || []).forEach(function (t) { row.insertBefore(t[0], t[1]); });
+    row._prgText = null;
+    ['display', 'grid-template-columns', 'gap', 'align-items'].forEach(function (k) { row.style.removeProperty(k); });
+    row.querySelectorAll('.prg-col-label').forEach(function (t) { t.remove(); });
+    row.querySelectorAll('[data-prg-hidden]').forEach(function (el) {
+      el.removeAttribute('data-prg-hidden');
+      el.style.removeProperty('display');
+    });
+    Array.prototype.forEach.call(row.children, function (el) {
+      if (el.tagName === 'INPUT' || el.tagName === 'SELECT') el.style.removeProperty('width');
+      el.style.removeProperty('grid-column');
+      if (el.hasAttribute('data-prg-ml')) {
+        el.style.setProperty('margin-left', el.getAttribute('data-prg-ml'), 'important');
+        el.removeAttribute('data-prg-ml');
+      }
+    });
+  }
+
+  function programRows(header) {
+    return Array.prototype.filter.call(header.parentNode.querySelectorAll('.prgline'), function (el) {
+      return !el.matches(PROGRAM_HEADER_SELECTOR);
+    });
+  }
+
+  function alignProgramHeader(header) {
+    const cells = [];
+    Array.prototype.slice.call(header.childNodes).forEach(function (node) {
+      if (node.nodeType !== 1) { header.removeChild(node); return; }
+      if (node.tagName === 'SPAN' && node.textContent.trim() === '') { header.removeChild(node); return; }
+      cells.push(node);
+    });
+    const rows = programRows(header);
+    const row = rows[0];
+    // Вкладка «Программа» закрыта - мерить нечего; довыравняем при её открытии (openTab).
+    if (row && row.getClientRects().length === 0) return;
+
+    // Режим - по факту: сначала снимаем телефонную раскладку и смотрим, уложились ли
+    // поля первой строки в одну линию при обычных стилях.
+    rows.forEach(clearProgramRowMobile);
+    header.style.removeProperty('display');
+    const sources = row ? programRowCells(row) : [];
+    let wrapped = false;
+    if (sources.length > 1) {
+      // Сравниваем центры по вертикали: строчная подпись «№» и поле в одной линии
+      // отличаются по top на несколько пикселей, перенос - на высоту поля.
+      const rects = sources.map(function (el) { return el.getBoundingClientRect(); });
+      const tallest = Math.max.apply(null, rects.map(function (r) { return r.height; }));
+      const cy0 = rects[0].top + rects[0].height / 2;
+      wrapped = rects.some(function (r) { return Math.abs(r.top + r.height / 2 - cy0) > tallest * 0.6; });
+    }
+
+    if (wrapped) {
+      const labels = cells.map(programHeaderLabelText);
+      header.style.display = 'none';
+      rows.forEach(function (r) { applyProgramRowMobile(r, labels); });
+      return;
+    }
+    if (!row) {
+      ['flex-wrap', 'align-items'].forEach(function (k) { header.style.removeProperty(k); });
+      cells.forEach(function (cell) { cell.removeAttribute('style'); });
+      return;
+    }
+    const rowLeft = row.getBoundingClientRect().left;
+    header.style.display = 'flex';
+    header.style.flexWrap = 'nowrap';
+    header.style.alignItems = 'center';
+    let prevRight = 0;
+    cells.forEach(function (cell, i) {
+      const src = sources[i];
+      if (!src) { cell.removeAttribute('style'); return; }
+      const r = src.getBoundingClientRect();
+      cell.style.setProperty('margin-left', (r.left - rowLeft - prevRight) + 'px', 'important');
+      cell.style.setProperty('width', r.width + 'px', 'important');
+      cell.style.flex = '0 0 auto';
+      cell.style.boxSizing = 'border-box';
+      cell.style.display = 'flex';
+      cell.style.justifyContent = 'center';
+      cell.style.textAlign = 'center';
+      cell.style.whiteSpace = 'normal';
+      cell.style.lineHeight = '1.1';
+      prevRight = r.right - rowLeft;
+    });
+  }
+
+  function alignProgramHeaders() {
+    document.querySelectorAll(PROGRAM_HEADER_SELECTOR).forEach(alignProgramHeader);
+  }
+
+  let programHeaderAlignPending = false;
+  function scheduleProgramHeaderAlign() {
+    if (programHeaderAlignPending) return;
+    programHeaderAlignPending = true;
+    window.requestAnimationFrame(function () {
+      programHeaderAlignPending = false;
+      alignProgramHeaders();
+    });
+  }
+
+  // typeof-проверка: smoke-тесты гоняют app.js в Node (vm) без DOM-наблюдателя.
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(function (mutations) {
+      for (let i = 0; i < mutations.length; i++) {
+        const added = mutations[i].addedNodes;
+        for (let j = 0; j < added.length; j++) {
+          const node = added[j];
+          if (node.nodeType === 1 && (node.classList.contains('prgline') || node.matches(PROGRAM_HEADER_SELECTOR))) {
+            scheduleProgramHeaderAlign();
+            return;
+          }
+        }
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
+    window.addEventListener('resize', scheduleProgramHeaderAlign);
+    window.addEventListener('load', scheduleProgramHeaderAlign);
+  }
+
+  // Реальная высота шапки .top (ряд вкладок переносится на вторую строку, и
+  // фиксированные 56px в --top-h не совпадают). Всплывающие блоки берут --top-real.
+  function trackHeaderHeight() {
+    const top = document.querySelector('.top');
+    if (!top) return;
+    function apply() {
+      document.documentElement.style.setProperty('--top-real', Math.round(top.getBoundingClientRect().height) + 'px');
+    }
+    apply();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(apply).observe(top);
+    window.addEventListener('resize', apply);
+  }
+
+  // Подсветка текущего раздела в навигации второстепенных страниц (расчёт, график, настройки).
+  function markCurrentNavLink() {
+    const path = location.pathname.replace(/^\/+/, '');
+    document.querySelectorAll('.page-nav .nav-link').forEach(function (link) {
+      const href = (link.getAttribute('href') || '').replace(/^\/+/, '');
+      if (href && href === path) link.setAttribute('aria-current', 'page');
+    });
+  }
+
+  // На телефоне карточка «Действия» - фиксированная панель внизу, но лежит внутри
+  // вкладки «Режим»: при переходе на «Программа» кнопка выключения нагрева пропадала.
+  // Выносим панель из вкладки на узком экране и возвращаем на место на широком.
+  function relocateActionsPanel() {
+    if (typeof matchMedia !== 'function') return;
+    const panel = document.querySelector('.sec-actions');
+    const form = panel && panel.closest('form');
+    if (!panel || !form) return;
+    const placeholder = document.createComment('sec-actions');
+    const mq = matchMedia('(max-width: 640px)');
+    function apply() {
+      if (mq.matches && panel.parentNode !== form) {
+        panel.parentNode.insertBefore(placeholder, panel);
+        form.appendChild(panel);
+      } else if (!mq.matches && placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(panel, placeholder);
+        placeholder.parentNode.removeChild(placeholder);
+      }
+    }
+    apply();
+    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', apply);
+  }
+
+  // Несохранённые правки таблицы программы: вкладки «График», «Настройки», «Расчёт»
+  // в шапке ведут на другие страницы, и правки терялись молча. Ссылки спрашивают
+  // confirmLeave() - как confirmLeaveIfDirty() в setup.htm.
+  let programDirty = false;
+  function trackProgramDirty() {
+    const prog = byId('Prog');
+    if (!prog) return;
+    prog.addEventListener('input', function () { programDirty = true; });
+    prog.addEventListener('change', function () { programDirty = true; });
+  }
+
+  function markProgramSaved() {
+    programDirty = false;
+  }
+
+  function confirmLeave() {
+    return !programDirty || confirm('Программа изменена, но не установлена. Уйти без сохранения?');
+  }
+
+  function setupPageChrome() {
+    trackHeaderHeight();
+    markCurrentNavLink();
+    relocateActionsPanel();
+    trackProgramDirty();
+  }
+
+  // Тесты грузят app.js в Node без DOM и location - тогда оформление страницы не нужно.
+  if (typeof window !== 'undefined' && typeof location !== 'undefined' &&
+      typeof document.querySelector === 'function') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupPageChrome);
+    else setupPageChrome();
+  }
+
   function init(options) {
     const initOptions = options || {};
     initConnection(initOptions);
@@ -2038,9 +2367,11 @@
     clearRequestError: clearRequestError,
     clearRequestErrorIfUnchanged: clearRequestErrorIfUnchanged,
     cssVar: cssVar,
+    detectorIdleText: detectorIdleText,
     currentRequestErrorRevision: currentRequestErrorRevision,
     descriptionByteLength: descriptionByteLength,
     deviceScheduleMaxSeconds: 65535,
+    alignProgramHeaders: alignProgramHeaders,
     enhanceTooltips: enhanceTooltips,
     escapeHtml: escapeHtml,
     fetchJson: fetchJson,
@@ -2060,6 +2391,9 @@
     renderI2cPumpStatus: renderI2cPumpStatus,
     renderTelemetryCommon: renderTelemetryCommon,
     removeLastMessage: removeLastMessage,
+    removeMessage: removeMessage,
+    markProgramSaved: markProgramSaved,
+    confirmLeave: confirmLeave,
     reportUiError: reportUiError,
     readNumericInput: readNumericInput,
     responseErrorText: responseErrorText,

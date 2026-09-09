@@ -1490,11 +1490,11 @@ Samovar v. <span id='version'></span>
 <input id='clearprogram' type='button' value='Очистить программу' onclick='SamovarApp.clearProgram();' class="button">
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button">
 </div>
-<div class="messages_box" style="display: none;" id="messagesBox">
-  <button type="button" class="messages-clear" style="position: absolute; top: 0; right: 0.5em; cursor: pointer" onclick='SamovarApp.clearMessages()' aria-controls="messages">
-    [x] очистить
-  </button>
+<div class="messages_box toasts" style="display: none;" id="messagesBox">
   <div class="messages_array" id="messages"></div>
+  <div class="messages-bar">
+    <button type="button" class="messages-clear" onclick='SamovarApp.clearMessages()' aria-controls="messages">Скрыть все</button>
+  </div>
 </div>
 </div>
 </form>

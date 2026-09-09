@@ -134,12 +134,12 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          SamovarApp.notify("set_program ERROR! " + (result.err || 'программа не установлена'), 0);
+          SamovarApp.notify("Программа не установлена: " + (result.err || 'запрос не принят'), 0);
           return;
         }
         SamovarApp.notify("Программа сохранена.", 2);
       } catch (e) {
-        SamovarApp.notify("set_program ERROR! " + e, 0);
+        SamovarApp.notify("Программа не установлена: " + e, 0);
       }
     };
 
@@ -205,7 +205,7 @@
 
           // Обновление детектора примесей
           const detBlock = document.getElementById('detector_block');
-          if (myObj.useautospeed) {
+          if (myObj.useDetector) {
             detBlock.style.display = 'flex';
             const detTrend = document.getElementById('detector_trend');
             const detStatus = document.getElementById('detector_status_text');
@@ -216,16 +216,23 @@
             // На головах детектор только наблюдает: тренд считается и пишется в лог,
             // но скоростью не управляет (см. impurity_detector.h). Отдельная подпись
             // нужна, чтобы "Стабильно" не читалось как "детектор следит за проскоком".
-            if (myObj.PrgType === 'H') {
-              detStatus.innerHTML = '👁 Головы: наблюдение';
+            // DetectorIdle (impurity_detector.h, DetectorIdleReason): почему детектор
+            // не реагирует. Пока он ждёт, «Стабильно» показывать нельзя — оператор
+            // должен видеть, что за проскоком никто не следит.
+            const idle = Number(myObj.DetectorIdle);
+            const waitLeft = Number(myObj.DetectorWaitLeft);
+            const waitSpan = Number(myObj.DetectorWaitSpan);
+            const idleText = SamovarApp.detectorIdleText(idle, myObj.PrgType, waitLeft, waitSpan);
+            if (idleText) {
+              detStatus.innerHTML = idleText;
               detStatus.style.color = SamovarApp.cssVar('--detector-ok-text');
               detBlock.style.backgroundColor = SamovarApp.cssVar('--detector-ok-bg');
             } else if (myObj.DetectorStatus == 0) {
-              detStatus.innerHTML = '✅ Стабильно';
+              detStatus.innerHTML = '✅ Стабильно, слежу';
               detStatus.style.color = SamovarApp.cssVar('--detector-ok-text');
               detBlock.style.backgroundColor = SamovarApp.cssVar('--detector-ok-bg');
             } else if (myObj.DetectorStatus == 1) {
-              detStatus.innerHTML = '⚠️ Коррекция';
+              detStatus.innerHTML = myObj.useautospeed ? '⚠️ Рост температуры: снижаю скорость' : '⚠️ Рост температуры';
               detStatus.style.color = SamovarApp.cssVar('--detector-warn-text');
               detBlock.style.backgroundColor = SamovarApp.cssVar('--detector-warn-bg');
             } else if (myObj.DetectorStatus == 2) {
@@ -271,7 +278,7 @@
           WithdrawalActive = myObj.WthdrwlStatus > 0;
           RectStatusInt = Number.isFinite(myObj.SamovarStatusInt) ? myObj.SamovarStatusInt : null;
           if (WithdrawalActive) {
-            document.getElementById('start').value = "Следующая программа"
+            document.getElementById('start').value = "Далее"
           } else {
             document.getElementById('start').value = "Начать отбор"
           }
@@ -583,7 +590,8 @@
       <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Ректификация" aria-pressed="true">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно" aria-pressed="false">
-      <input id='i2cStepperTab' type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
+      <input type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/program.htm';" value="Расчёт" title="Расчёт программы отбора по объёму и крепости сырья">
+      <input id='i2cStepperTab' type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
       <input id='i2cPumpTab' type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: none;" aria-pressed="false">
 <!--#include ui_header_close.htm-->
 
@@ -615,8 +623,8 @@
               </div>
               <input id='reset' type='button' name='reset' value='Сбросить процесс' onclick='if (!confirm("Сбросить процесс?")) return false; SamovarApp.sendCommand("reset=1"); return false;' class="button secondary">
               <div class="btn-row">
-                <input id='chart' type='button' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button secondary">
-                <input id='setup' type='button' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button secondary">
+                <input id='chart' type='button' name='chart' value='График' onclick='if (SamovarApp.confirmLeave()) location.href="chart.htm"' class="button secondary">
+                <input id='setup' type='button' name='setup' value='Настройки' onclick='if (SamovarApp.confirmLeave()) location.href="setup.htm"' class="button secondary">
               </div>
             </div>
           </section>
@@ -710,7 +718,10 @@
     </div>
 
     <div id="Prog" class="tabcontent panel" aria-hidden="true">
-      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:<span id="progStaleBadge" style="display: none; margin-left: 0.5em; font-size: 0.75em; font-weight: normal;">⟳ Данные обновились, покажем после того, как вы закончите правку</span></div>
+      <div class="text" style="margin-top: 1em; margin-bottom: 1em; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5em 1em;">
+        <span>Программа отбора:<span id="progStaleBadge" style="display: none; margin-left: 0.5em; font-size: 0.75em; font-weight: normal;">⟳ Данные обновились, покажем после того, как вы закончите правку</span></span>
+        <input id='calcprogram' type='button' value='Рассчитать программу' onclick='if (SamovarApp.confirmLeave()) location.href="program.htm"' class="button" style="margin: 0;">
+      </div>
 
       <div class="prg" id="prg"></div>
       <div style="display: flex; flex-direction: row; justify-content: right; color: var(--text-muted); font-size: 1.4em; font-weight: bold;">
@@ -793,7 +804,6 @@
       </div>
 
       <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
-        <input id='return' type='button' name='program' value='Расчитать программу' onclick='javascript:location.href="program.htm"' class="button">
         <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
         <input id='clearprogram' type='button' value='Очистить программу' onclick='SamovarApp.clearProgram();' class="button">
       </div>

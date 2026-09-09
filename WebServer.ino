@@ -1274,6 +1274,16 @@ static const char* ui_bootstrap_beer_brew_order(uint8_t order) {
   return "allinone";
 }
 
+static const char* ui_bootstrap_cheese_cooling_scheme() {
+#if defined(USE_WATER_PUMP)
+  return "pump";
+#elif defined(USE_WATER_VALVE)
+  return "two-valves";
+#else
+  return "unavailable";
+#endif
+}
+
 static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snapshot) {
   bool first = true;
   if (out.print('{') != 1 ||
@@ -1320,9 +1330,11 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
       !ui_bootstrap_write_string(out, first, "calibrationPump",
                                   snapshot.i2cCalibration ? "i2c" : "local",
                                   snapshot.i2cCalibration ? 3 : 5) ||
+      !ui_bootstrap_write_string(out, first, "cheeseCoolingScheme",
+                                  ui_bootstrap_cheese_cooling_scheme(),
+                                  strlen(ui_bootstrap_cheese_cooling_scheme())) ||
       !ui_bootstrap_write_float(out, first, "cheesePhSlope", snapshot.setup.CheesePhSlope, 9) ||
       !ui_bootstrap_write_float(out, first, "cheesePhOffset", snapshot.setup.CheesePhOffset, 9) ||
-      !ui_bootstrap_write_long(out, first, "cheesePhSmoothPercent", snapshot.setup.CheesePhSmoothPercent) ||
       out.print('}') != 1) return false;
   return true;
 }
@@ -1395,8 +1407,6 @@ static const GetU16Field kGetU16Fields[] = {
     {"WaterDelay", &SetupEEPROM::WaterDelay},
     {"TankDelay", &SetupEEPROM::TankDelay},
     {"ACPDelay", &SetupEEPROM::ACPDelay},
-    {"CheeseDoserSpeed", &SetupEEPROM::CheeseDoserSpeed},
-    {"CheeseDoserSteps", &SetupEEPROM::CheeseDoserSteps},
 };
 
 static const GetU8Field kGetU8Fields[] = {
@@ -1404,7 +1414,6 @@ static const GetU8Field kGetU8Fields[] = {
     {"DistTimeF", &SetupEEPROM::DistTimeF},
     {"autospeed", &SetupEEPROM::autospeed},
     {"PackDens", &SetupEEPROM::PackDens},
-    {"CheesePhSmoothPercent", &SetupEEPROM::CheesePhSmoothPercent},
 };
 
 static const GetCheckboxField kGetCheckboxFields[] = {
@@ -1855,8 +1864,6 @@ static const SaveU16Field kSaveU16Fields[] = {
     // validate_rect_program_startable() блокирует лишь СТАРТ, а не сохранение формы.
     {"StepperStepMl", &SetupEEPROM::StepperStepMl, 1, 65535},
     {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C, 0, 65535},
-    {"CheeseDoserSpeed", &SetupEEPROM::CheeseDoserSpeed, 1, 65535},
-    {"CheeseDoserSteps", &SetupEEPROM::CheeseDoserSteps, 1, 65535},
 };
 
 static const SaveFloatField kSaveFloatFields[] = {
@@ -1912,7 +1919,6 @@ static const SaveU8Field kSaveU8Fields[] = {
     {"TimeZone", &SetupEEPROM::TimeZone, 0, 23},
     {"PackDens", &SetupEEPROM::PackDens, 0, 100},
     {"BeerBrewOrder", &SetupEEPROM::BeerBrewOrder, 0, 2},
-    {"CheesePhSmoothPercent", &SetupEEPROM::CheesePhSmoothPercent, 0, 99},
 };
 
 static const SaveCheckboxField kSaveCheckboxFields[] = {

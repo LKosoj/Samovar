@@ -74,7 +74,7 @@
         if (errors.length > 0) {
           SamovarApp.showRequestError('Настройки загружены в форму, но есть ошибки: ' + errors.join('; '));
         } else {
-          SamovarApp.showRequestError('Настройки загружены в форму, нажмите «Сохранить», чтобы применить.');
+          SamovarApp.showRequestError('Настройки загружены в форму, нажмите «Сохранить», чтобы применить.', 2);
         }
       };
       reader.onerror = function() {
@@ -172,9 +172,6 @@
       { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
       { name: 'StepperStepMlI2C', integer: true, min: 0, max: 65535 },
       { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
-      { name: 'CheesePhSmoothPercent', integer: true, min: 0, max: 99 },
-      { name: 'CheeseDoserSpeed', integer: true, min: 1, max: 65535 },
-      { name: 'CheeseDoserSteps', integer: true, min: 1, max: 65535 },
       { name: 'Kp', min: 0, max: 100000 },
       { name: 'Ki', min: 0, max: 100000 },
       { name: 'Kd', min: 0, max: 100000 },
@@ -308,6 +305,16 @@
           packDensDisplay.value = this.value;
         });
       }
+      // Подчинённые настройки детектора видны только при включённом детекторе
+      var useDetectorBox = document.getElementById('useDetector');
+      var detectorSpeedOptions = document.getElementById('detectorSpeedOptions');
+      if (useDetectorBox && detectorSpeedOptions) {
+        var syncDetectorOptions = function() {
+          detectorSpeedOptions.style.display = useDetectorBox.checked ? '' : 'none';
+        };
+        useDetectorBox.addEventListener('change', syncDetectorOptions);
+        syncDetectorOptions();
+      }
       SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
       SamovarApp.enhanceTooltips();
     };
@@ -394,16 +401,18 @@
       <div>
 
         <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
-          <h2>При выходе за уставки температур пара и царги при отборе тела</h2>
-          <h2>
-            <input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
-            <label for='useautospeed' class="tooltip">Использовать корректировку скорости насоса<span class="tooltiptext">для снижения скорости отбора при повышении температуры по пару</span></label>
-          </h2>
-          <h2><label for="autospeed">Шаг корректировки скорости:</label> <input id="autospeed" name='autospeed' type='text' inputmode='numeric' value='%autospeed%'> &#37; (0 = по умолчанию 5, максимум 20)</h2>
+          <h2>Детектор проскока примесей (ректификация)</h2>
           <h2>
             <input id='useDetector' type='checkbox' name='useDetector' value='useDetector' %UASDetectorChecked%>
-            <label for='useDetector' class="tooltip">Использовать детектор<span class="tooltiptext">детектор примесей на всех строках программы (головы, тело, предзахлеб, хвосты); по умолчанию выключено, действует только в ректификации</span></label>
+            <label for='useDetector' class="tooltip">Использовать детектор<span class="tooltiptext">главный выключатель: без него детектор не работает совсем. Следит за трендом температуры на всех строках программы (на головах только наблюдает), при критическом росте ставит отбор на паузу и сам возобновляет</span></label>
           </h2>
+          <div id='detectorSpeedOptions' style="padding-left: 2em;">
+            <h2>
+              <input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
+              <label for='useautospeed' class="tooltip">Снижать скорость отбора при росте температуры<span class="tooltiptext">действует только вместе с детектором: при росте тренда выше порога детектор плавно снижает скорость насоса и возвращает её, когда тренд успокоится</span></label>
+            </h2>
+            <h2><label for="autospeed">Шаг снижения скорости:</label> <input id="autospeed" name='autospeed' type='text' inputmode='numeric' value='%autospeed%'> &#37; (0 = по умолчанию 5, максимум 20)</h2>
+          </div>
         </div>
 
         <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -573,9 +582,6 @@
     <div id="Cheese" class="tabcontent" aria-hidden="true">
       <h2>Настройки сыроварения:</h2>
       <p><strong>Подключение для режима «Сыр»:</strong> PH-4502C занимает <code>LUA_PIN</code>, а сливной клапан — реле №4. Оператор должен физически подключить либо PH-4502C, либо MPX5010DP к общему аналоговому входу и либо клапан, либо разгонный ТЭН к реле №4. В остальных режимах MPX5010DP, Lua и разгонный ТЭН остаются доступны.</p>
-      <h2><label for="CheesePhSmoothPercent" class="tooltip">Сглаживание pH:<span class="tooltiptext">Доля предыдущего измерения в новом значении. Чем больше процент, тем спокойнее показания.</span></label> <input id="CheesePhSmoothPercent" name="CheesePhSmoothPercent" type="text" inputmode="numeric" value="%CheesePhSmoothPercent%"> &#37; (0–99)</h2>
-      <h2><label for="CheeseDoserSpeed" class="tooltip">Скорость дозатора:<span class="tooltiptext">Скорость локального шагового двигателя при выдаче одной порции.</span></label> <input id="CheeseDoserSpeed" name="CheeseDoserSpeed" type="text" inputmode="numeric" value="%CheeseDoserSpeed%"> шаг/с</h2>
-      <h2><label for="CheeseDoserSteps" class="tooltip">Размер порции:<span class="tooltiptext">Сколько шагов локальный двигатель выполняет один раз на дозирующем этапе.</span></label> <input id="CheeseDoserSteps" name="CheeseDoserSteps" type="text" inputmode="numeric" value="%CheeseDoserSteps%"> шагов</h2>
       <div class="btn-cell" style="margin: 0 auto;">
         <input type="button" value="Калибровка pH" onclick="if (confirmLeaveIfDirty()) location.href='calibrate_ph.htm'" class="button">
       </div>

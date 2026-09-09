@@ -137,6 +137,14 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #include "i2c_stepper_params.h"
 #include "logic.h"
 
+#ifdef USE_MQTT
+#include "SamovarMqtt.h"
+static String build_mqtt_log_line();
+static bool mqtt_publish_due(
+    uint32_t now, bool idle, uint32_t lastAttemptAt, uint32_t lastBlynkAt);
+static void tick_mqtt();
+#endif
+
 #ifdef USE_UPDATE_OTA
 #include <ArduinoOTA.h>
 #endif
@@ -2252,6 +2260,12 @@ static void restore_state_snapshot() {
       programParseFailureReason = format_program_parse_error(result);
       Serial.print(F("state snapshot program ignored: "));
       Serial.println(programParseFailureReason);
+      if (Samovar_Mode == SAMOVAR_CHEESE_MODE) {
+        program_clear();
+        // Битый или старый сырный текст нельзя заменять дефолтом и нельзя
+        // автоматически перезаписывать: пользователь должен увидеть причину.
+        state_snapshot_mark_saved();
+      }
     }
   }
 
@@ -2288,7 +2302,9 @@ static void restore_state_snapshot() {
       notice += F(".");
     }
   } else {
-    notice = F("Программа из снимка не восстановлена, установлена программа по умолчанию.");
+    notice = Samovar_Mode == SAMOVAR_CHEESE_MODE
+        ? F("Программа Сыр из снимка не восстановлена и очищена. Программа по умолчанию не установлена.")
+        : F("Программа из снимка не восстановлена, установлена программа по умолчанию.");
   }
   if (programLost) {
     notice += F(" Причина: ");
@@ -3091,6 +3107,12 @@ void setup() {
 
   setup_configure_head_level_sensor();
 
+#ifdef USE_MQTT
+  if (!wifiAP && !init_mqtt()) {
+    Serial.println(F("MQTT disabled: client startup failed"));
+  }
+#endif
+
   // UDP-сокет NTP должен существовать до triggerGetClock: задача тоже зовёт NTP.update().
   setup_start_ntp();
 
@@ -3281,6 +3303,68 @@ static void tick_blynk() {
   }
 #endif
 }
+
+#ifdef USE_MQTT
+static constexpr uint32_t MQTT_ACTIVE_PERIOD_MS = 4000;
+static constexpr uint32_t MQTT_IDLE_PERIOD_MS = 5000;
+static constexpr uint32_t MQTT_BLYNK_GAP_MS = 2000;
+
+static String build_mqtt_log_line() {
+  const bool active = startval != SAMOVAR_STARTVAL_IDLE;
+  String line;
+  line.reserve(192);
+  line += "1,";
+  line += Crt;
+  line += ",";
+  line += String((int)Samovar_Mode);
+  line += ",";
+  line += String((int)SamovarStatusInt);
+  line += ",";
+  line += active ? ProgramNum + 1 : 0;
+  line += ",";
+  if (active) append_program_type(line, current_program_type());
+  line += ",";
+  line += format_float(SteamSensor.avgTemp, 3);
+  line += ",";
+  line += format_float(PipeSensor.avgTemp, 3);
+  line += ",";
+  line += format_float(WaterSensor.avgTemp, 3);
+  line += ",";
+  line += format_float(TankSensor.avgTemp, 3);
+  line += ",";
+  line += format_float(ACPSensor.avgTemp, 3);
+  line += ",";
+  line += format_float(bme_pressure, 2);
+  line += ",";
+  line += format_float(pressure_value, 2);
+  line += ",";
+  line += String(current_power_p);
+  line += ",";
+  line += format_float(ActualVolumePerHour, 3);
+  return line;
+}
+
+static bool mqtt_publish_due(
+    uint32_t now, bool idle, uint32_t lastAttemptAt, uint32_t lastBlynkAt) {
+  const uint32_t period = idle ? MQTT_IDLE_PERIOD_MS : MQTT_ACTIVE_PERIOD_MS;
+  if (now - lastAttemptAt < period) return false;
+  if (lastBlynkAt != 0 && now - lastBlynkAt < MQTT_BLYNK_GAP_MS) return false;
+  return true;
+}
+
+static void tick_mqtt() {
+  static uint32_t lastAttemptAt = 0;
+  const uint32_t now = millis();
+  const bool idle = startval == SAMOVAR_STARTVAL_IDLE;
+  uint32_t lastBlynkAt = 0;
+#ifdef SAMOVAR_USE_BLYNK
+  lastBlynkAt = blynkLastLargePublishAt;
+#endif
+  if (!mqtt_publish_due(now, idle, lastAttemptAt, lastBlynkAt)) return;
+  lastAttemptAt = now;
+  mqtt_publish_log_line(build_mqtt_log_line());
+}
+#endif
 
 static void tick_alarm_button() {
 #ifdef ALARM_BTN_PIN
@@ -3633,6 +3717,10 @@ void loop() {
   tick_ota();
 
   tick_blynk();
+
+#ifdef USE_MQTT
+  tick_mqtt();
+#endif
 
   // Обработка кнопок и энкодера
   tick_alarm_button();
@@ -4006,7 +4094,11 @@ struct AjaxTelemetrySnapshot {
   float tankTemp;
   float acpTemp;
   float cheesePh;
+  uint32_t cheeseWorkSeconds;
+  uint32_t cheeseTimeoutRemainingSeconds;
   float detectorTrend;
+  float detectorWaitSpan;      // размах окна при ожидании стабилизации пара, °C
+  uint16_t detectorWaitLeftSec; // сколько секунд осталось держать стабильность пара
   float actualVolumePerHour;
   float steamBodyTemp;
   float pipeBodyTemp;
@@ -4057,6 +4149,7 @@ struct AjaxTelemetrySnapshot {
   uint16_t stepperStepMl;
   uint16_t i2cPumpSpeed;
   uint8_t detectorStatus;
+  uint8_t detectorIdle;        // DetectorIdleReason: почему детектор не реагирует
   uint8_t distRowPredictionReason;
   uint8_t distProcessPredictionReason;
   uint8_t boilingEvidence;
@@ -4064,6 +4157,7 @@ struct AjaxTelemetrySnapshot {
   uint8_t programIndex;
   uint8_t beerBrewOrder;
   bool useAutoSpeed;
+  bool useDetector;
   bool powerOn;
   bool pauseOn;
   bool beerPaused;  // [Пиво 02.09 C2] Ручная пауза пива (зеркалит beerManualPause) для /ajax
@@ -4121,13 +4215,19 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.cheesePh = cheese_ph_value();
   snapshot.cheesePhValid = cheese_ph_valid();
   snapshot.cheesePhRawValid = cheese_ph_raw_valid();
+  snapshot.cheeseWorkSeconds = cheese_work_seconds();
+  snapshot.cheeseTimeoutRemainingSeconds = cheese_timeout_remaining_seconds();
   snapshot.detectorTrend = impurityDetector.currentTrend;
   snapshot.detectorStatus = impurityDetector.detectorStatus;
+  snapshot.detectorIdle = detector_idle_reason_code();
+  snapshot.detectorWaitSpan = detector_steam_wait_span();
+  snapshot.detectorWaitLeftSec = detector_steam_wait_left_sec();
   snapshot.boilingDetected = boiling_evidence != BOILING_EVIDENCE_NONE;
   snapshot.boilingEvidence = boiling_evidence;
   snapshot.boilingPrecisionSensorConfigured =
       sensor_configured(SteamSensor) || sensor_configured(PipeSensor);
   snapshot.useAutoSpeed = SamSetup.useautospeed;
+  snapshot.useDetector = SamSetup.useDetector;
   snapshot.beerBrewOrder = SamSetup.BeerBrewOrder;
   snapshot.volumeAll = get_liquid_volume();
   snapshot.actualVolumePerHour = ActualVolumePerHour;
@@ -4249,12 +4349,18 @@ static void writeAjaxTelemetryFields(
   jsonFieldBool(out, first, "CheesePhRawValid", snapshot.cheesePhRawValid);
   jsonFieldFloat(out, first, "CheesePh", snapshot.cheesePh, 3);
   jsonFieldBool(out, first, "CheesePhValid", snapshot.cheesePhValid);
+  jsonFieldRaw(out, first, "CheeseWorkSeconds", snapshot.cheeseWorkSeconds);
+  jsonFieldRaw(out, first, "CheeseTimeoutRemainingSeconds", snapshot.cheeseTimeoutRemainingSeconds);
   jsonFieldFloat(out, first, "DetectorTrend", snapshot.detectorTrend, 3);
   jsonFieldRaw(out, first, "DetectorStatus", snapshot.detectorStatus);
+  jsonFieldRaw(out, first, "DetectorIdle", snapshot.detectorIdle);
+  jsonFieldFloat(out, first, "DetectorWaitSpan", snapshot.detectorWaitSpan, 3);
+  jsonFieldRaw(out, first, "DetectorWaitLeft", snapshot.detectorWaitLeftSec);
   jsonFieldBool(out, first, "BoilingDetected", snapshot.boilingDetected);
   jsonFieldRaw(out, first, "BoilingEvidence", snapshot.boilingEvidence);
   jsonFieldBool(out, first, "BoilingPrecisionSensorConfigured", snapshot.boilingPrecisionSensorConfigured);
   jsonFieldBool(out, first, "useautospeed", snapshot.useAutoSpeed);
+  jsonFieldBool(out, first, "useDetector", snapshot.useDetector);
   jsonAddKey(out, first, "version");
   out.print('"');
   out.print(SAMOVAR_VERSION);

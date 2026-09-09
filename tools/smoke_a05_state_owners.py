@@ -241,6 +241,7 @@ struct SetupFixture {
   bool UseBBuzzer;
   uint16_t StepperStepMl;
   uint8_t BeerBrewOrder;
+  bool useDetector;
 };
 
 struct SensorFixture {
@@ -274,7 +275,7 @@ struct TimePredictorFixture {
 volatile float bme_temp = 1.25f;
 volatile float bme_pressure = 760.0f;
 volatile float start_pressure = 755.5f;
-SetupFixture SamSetup{true, true, 800, 0};
+SetupFixture SamSetup{true, true, 800, 0, true};
 SensorFixture SteamSensor{78.125f, 77.0f};
 SensorFixture PipeSensor{77.25f, 76.0f};
 SensorFixture WaterSensor{20.5f, 0.0f};
@@ -346,6 +347,8 @@ static int fakeCheesePhRaw = 2048;
 static float fakeCheesePh = 5.25f;
 static bool fakeCheesePhValid = true;
 static bool fakeCheesePhRawValid = true;
+static uint32_t fakeCheeseWorkSeconds = 75;
+static uint32_t fakeCheeseTimeoutRemainingSeconds = 1725;
 char latched_emergency_stop_reason[192] = "";
 
 struct ESPFixture {
@@ -368,6 +371,11 @@ uint32_t millis() {
 }
 
 bool sensor_configured(const SensorFixture&) { return true; }
+// Состояние детектора примесей (impurity_detector.h): снимок читает его через
+// функции-доступы, а не через статики файла детектора.
+uint8_t detector_idle_reason_code() { return 5; }
+float detector_steam_wait_span() { return 0.125f; }
+uint16_t detector_steam_wait_left_sec() { return 321; }
 
 int cheese_ph_raw() {
   sourceGetterCalls++;
@@ -387,6 +395,16 @@ bool cheese_ph_valid() {
 bool cheese_ph_raw_valid() {
   sourceGetterCalls++;
   return fakeCheesePhRawValid;
+}
+
+uint32_t cheese_work_seconds() {
+  sourceGetterCalls++;
+  return fakeCheeseWorkSeconds;
+}
+
+uint32_t cheese_timeout_remaining_seconds() {
+  sourceGetterCalls++;
+  return fakeCheeseTimeoutRemainingSeconds;
 }
 
 String format_uptime(unsigned long seconds) {
@@ -514,6 +532,8 @@ static void mutateSources() {
   fakeCheesePh = 7.0f;
   fakeCheesePhValid = false;
   fakeCheesePhRawValid = false;
+  fakeCheeseWorkSeconds = 0;
+  fakeCheeseTimeoutRemainingSeconds = 0;
 }
 
 int main() {
@@ -597,9 +617,11 @@ EXPECTED_DEFAULT = (
     '"crnt_tm":"clock\\"x","stm":"01:02:03","SteamTemp":78.125,'
     '"PipeTemp":77.250,"WaterTemp":20.500,"TankTemp":89.750,'
     '"ACPTemp":30.000,"CheesePhRaw":2048,"CheesePhRawValid":1,"CheesePh":5.250,"CheesePhValid":1,'
+    '"CheeseWorkSeconds":75,"CheeseTimeoutRemainingSeconds":1725,'
     '"DetectorTrend":0.125,"DetectorStatus":2,'
+    '"DetectorIdle":5,"DetectorWaitSpan":0.125,"DetectorWaitLeft":321,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
-    '"useautospeed":1,"version":"6.27",'
+    '"useautospeed":1,"useDetector":1,"version":"6.27",'
     '"boot_degraded":0,"boot_degraded_reason":"","VolumeAll":42,'
     '"ActualVolumePerHour":1.234,"PowerOn":1,"PauseOn":0,"BeerManualPause":0,'
     '"BeerBrewOrder":"allinone",'
@@ -743,6 +765,7 @@ def main() -> int:
         "RuntimeEventDescriptor runtimeEvents",
         "float currentSpeed", "uint8_t eventCount",
         "bool heaterAlarmLatched", "String heaterAlarmReason", "uint32_t latestMessageSequence",
+        "uint32_t cheeseWorkSeconds", "uint32_t cheeseTimeoutRemainingSeconds",
     )
     for token in required_snapshot_members:
         if token not in snapshot:

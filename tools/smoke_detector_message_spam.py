@@ -59,6 +59,7 @@ struct ImpurityDetector {
 static ImpurityDetector impurityDetector;
 static float CurrentBaseSpeedRate = 0;
 static unsigned long correctionIntervalFixture = 25000;
+static const float DETECTOR_CORRECTION_FLOOR = 0.7f;
 
 // ---- Моки внешних примитивов ----
 static float correctionStepFixture = 0.05f;
@@ -191,9 +192,9 @@ def check_detector_switch(detector_source: str, web_source: str) -> list[str]:
         errors.append("WebServer.ino: поддержка прежнего имени useDetectorOnHeads снята намеренно")
 
     body = strip_cpp_comments(extract_function_body(detector_source, PROCESS_SIGNATURE))
-    if "!SamSetup.useautospeed || !SamSetup.useDetector" not in body:
+    if "if (!SamSetup.useDetector) {" not in body:
         errors.append(
-            "process_impurity_detector: общий ранний выход должен смотреть и на useautospeed, и на useDetector"
+            "process_impurity_detector: общий ранний выход должен быть по useDetector (единственный выключатель)"
         )
     mentions = body.count("SamSetup.useDetector")
     if mentions != 1:

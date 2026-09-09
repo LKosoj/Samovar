@@ -116,9 +116,21 @@ def check_static(source: str) -> tuple[str, str, str]:
             '"luaButtonList"', '"steamColor"', '"steamVisible"',
             '"i2cStepperVisible"', '"beerBrewOrder"', '"nbkDp"',
             '"stepperStepsPerMl"', '"calibrationRunning"', '"cheesePhSlope"',
-            '"heaterMaxPower"',
+            '"cheeseCoolingScheme"', '"heaterMaxPower"',
         ):
             require(field in writer, f"/ui-bootstrap не отдаёт обязательное поле {field}")
+        cooling = extract_or_error(
+            source, "static const char* ui_bootstrap_cheese_cooling_scheme() {"
+        )
+        require(
+            '#if defined(USE_WATER_PUMP)' in cooling and
+            '#elif defined(USE_WATER_VALVE)' in cooling and
+            '#else' in cooling and
+            'return "pump";' in cooling and
+            'return "two-valves";' in cooling and
+            'return "unavailable";' in cooling,
+            "/ui-bootstrap должен выбирать схему охлаждения только по compile-time флагам",
+        )
         require("strlen(SAMOVAR_VERSION)" not in writer_scope,
                 "/ui-bootstrap обращается к flash-версии как к RAM-строке")
         require("if (!isfinite(value)) return false;" in writer_scope,
@@ -186,7 +198,7 @@ struct SetupEEPROM {
   char SteamColor[20]; char PipeColor[20]; char WaterColor[20]; char TankColor[20]; char ACPColor[20];
   uint8_t BeerBrewOrder; float NbkDP; float ColDiam; float ColHeight; uint8_t PackDens;
   float HeaterResistant; float MainsVoltage; uint16_t StepperStepMl; uint16_t StepperStepMlI2C;
-  float CheesePhSlope; float CheesePhOffset; uint8_t CheesePhSmoothPercent;
+  float CheesePhSlope; float CheesePhOffset;
 };
 struct UiBootstrapSnapshot {
   SAMOVAR_MODE mode; SetupEEPROM setup; String program; String description; String luaButtonList; String version; String powerUnit;
@@ -216,7 +228,7 @@ static UiBootstrapSnapshot make_snapshot(SAMOVAR_MODE mode, const char* program,
   snapshot.setup.ColDiam = mode == SAMOVAR_NBK_MODE ? 3.0f : 1.5f;
   snapshot.setup.ColHeight = 1.7f; snapshot.setup.PackDens = 80; snapshot.setup.HeaterResistant = 12.3f;
   snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = 123; snapshot.setup.StepperStepMlI2C = 456;
-  snapshot.setup.CheesePhSlope = 2.5f; snapshot.setup.CheesePhOffset = -1.0f; snapshot.setup.CheesePhSmoothPercent = 45;
+  snapshot.setup.CheesePhSlope = 2.5f; snapshot.setup.CheesePhOffset = -1.0f;
   snapshot.steamVisible = true; snapshot.pipeVisible = false; snapshot.waterVisible = true; snapshot.tankVisible = false;
   snapshot.pressureVisible = true; snapshot.programNumberVisible = true; snapshot.i2cStepperVisible = i2c; snapshot.i2cPumpVisible = i2c;
   snapshot.calibrationRunning = i2c; snapshot.i2cCalibration = i2c; snapshot.pwmValue = i2c ? 77 : 11; snapshot.pwmLow = i2c ? 20.0f : 10.0f; snapshot.heaterMaxPower = 1234.0f;
@@ -288,6 +300,33 @@ def check_writer_behavior(writer_scope: str) -> None:
             "признак I2C насоса не сохранил два разных состояния")
     require(isinstance(rect["nbkDp"], (int, float)), "nbkDp должен быть числом")
     require(isinstance(nbk["calibrationRunning"], bool), "calibrationRunning должен быть bool")
+    require(rect["cheeseCoolingScheme"] == "unavailable" and
+            nbk["cheeseCoolingScheme"] == "unavailable",
+            "сборка без охлаждения должна отдавать unavailable")
+    for define, expected in (("USE_WATER_PUMP", "pump"), ("USE_WATER_VALVE=1", "two-valves")):
+        with tempfile.TemporaryDirectory(prefix="samovar-ui-bootstrap-cooling-") as tmp:
+            source_path = Path(tmp) / "ui_bootstrap.cpp"
+            binary_path = Path(tmp) / "ui_bootstrap"
+            source_path.write_text(build_writer_harness(writer_scope, json_escape), encoding="utf-8")
+            result = subprocess.run(
+                ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", f"-D{define}",
+                 str(source_path), "-o", str(binary_path)],
+                capture_output=True, text=True,
+            )
+            if result.returncode:
+                errors.append(f"ui-bootstrap writer harness ({expected}) не компилируется:\n" + result.stderr)
+                continue
+            result = subprocess.run([str(binary_path)], capture_output=True, text=True)
+            if result.returncode:
+                errors.append(f"ui-bootstrap writer harness ({expected}) завершился с ошибкой:\n" + result.stdout + result.stderr)
+                continue
+            try:
+                payloads = [json.loads(line) for line in result.stdout.splitlines() if line]
+            except json.JSONDecodeError as exc:
+                errors.append(f"writer ({expected}) выдал невалидный JSON: {exc}")
+                continue
+            require(len(payloads) == 2 and all(payload["cheeseCoolingScheme"] == expected for payload in payloads),
+                    f"сборка {expected} не отдала схему охлаждения {expected}")
     require(rect["description"] == 'desc\\n"<x>', "description не прошёл JSON escaping round-trip")
     require(rect["luaButtonList"] == '["Lua"]', "luaButtonList не прошёл JSON escaping round-trip")
     require(rect["version"] == "7.00", "flash-версия не сериализуется как строка")
@@ -322,6 +361,11 @@ def check_mutation_contracts(source: str) -> None:
                 "if (mode_switch_in_progress()) {\n"
                 "      send_no_store_response(request, 200, \"text/plain\", \"BUSY\");", 1),
             "/ui-bootstrap должен вернуть 503 для барьеров и сбоя snapshot/JSON",
+        ),
+        (
+            "cheese cooling scheme",
+            lambda text: text.replace('return "two-valves";', 'return "pump";', 1),
+            "/ui-bootstrap должен выбирать схему охлаждения только по compile-time флагам",
         ),
     )
     script = Path(__file__).read_text(encoding="utf-8")

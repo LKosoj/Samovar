@@ -42,6 +42,9 @@ struct ImpurityDetector {
 static ImpurityDetector impurityDetector;
 static bool reachedTail = false;
 
+enum DetectorIdleReason : uint8_t { DETECTOR_IDLE_ACTIVE = 0, DETECTOR_IDLE_HEADS = 2 };
+static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_ACTIVE;
+
 // ---- Реальный код под тестом (фрагмент impurity_detector.h) ----
 static void detector_heads_tick(ProgramType currentType) {
 @HEADS_BRANCH@
@@ -205,21 +208,22 @@ def check_detector_source(detector_source: str) -> list[str]:
 
 def check_web_interface() -> list[str]:
     errors: list[str] = []
-    for relative in ("data_raw/index.htm",):
+    checks = {
+        "data_raw/app.js": (
+            "подпись наблюдения на головах задаётся в detectorIdleText",
+            ["function detectorIdleText(", "prgType === 'H'", "Головы: наблюдение"],
+        ),
+        "data_raw/index.htm": (
+            "подпись причины простоя (в том числе голов) стоит перед разбором статуса детектора",
+            ["SamovarApp.detectorIdleText(", "myObj.DetectorStatus == 0"],
+        ),
+    }
+    for relative, (title, tokens) in checks.items():
         path = ROOT / relative
         if not path.exists():
             errors.append(f"{relative}: файл не найден")
             continue
-        require_ordered_tokens(
-            f"{relative}: подпись наблюдения на головах стоит перед разбором статуса детектора",
-            path.read_text(encoding="utf-8"),
-            [
-                "myObj.PrgType === 'H'",
-                "Головы: наблюдение",
-                "myObj.DetectorStatus == 0",
-            ],
-            errors,
-        )
+        require_ordered_tokens(f"{relative}: {title}", path.read_text(encoding="utf-8"), tokens, errors)
     return errors
 
 

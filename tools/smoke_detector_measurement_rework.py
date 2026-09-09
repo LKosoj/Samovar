@@ -53,11 +53,18 @@ static const float DETECTOR_DEFAULT_WARNING_TREND = 0.04f;
 static const float DETECTOR_MIN_WARNING_TREND = 0.02f;
 static const float DETECTOR_MAX_WARNING_TREND = 0.15f;
 static const uint8_t DETECTOR_CRITICAL_CONFIRM = 2;
+static const float DETECTOR_BG_MAX_MEAN_TREND = DETECTOR_MIN_WARNING_TREND;
 
 static double detector_bg_sum = 0.0;
 static double detector_bg_sumsq = 0.0;
 static uint16_t detector_bg_count = 0;
 static float detector_bg_threshold = 0.0f;
+
+static void detector_bg_restart() {
+  detector_bg_sum = 0.0;
+  detector_bg_sumsq = 0.0;
+  detector_bg_count = 0;
+}
 
 // ---- Реальный код под тестом ----
 @TREND_FUNCTION@
@@ -235,17 +242,19 @@ static void test_background_constant_trend_is_not_nan() {
         "ровный фон 0.015 должен упереться в минимальный порог");
 }
 
-// (б6) Штатный медленный дрейф вверх (тело всегда ползёт) должен войти в порог,
-// иначе детектор сработает на нормальном ходе перегона. Фон между +0.02 и +0.04:
-// среднее 0.03 плюс 4 сигмы разброса (0.04) = 0.07.
-static void test_background_includes_positive_drift() {
+// (б6) Подъём во время замера фона (средний тренд выше DETECTOR_BG_MAX_MEAN_TREND)
+// не должен «съедаться» порогом: замер отбрасывается и начинается заново,
+// действует дефолтный порог. Фон между +0.02 и +0.04: среднее 0.03 > 0.02.
+static void test_background_refuses_positive_drift() {
   reset_background();
   for (uint16_t i = 0; i < DETECTOR_BG_SAMPLES; i++) {
     impurityDetector.currentTrend = (i % 2 == 0) ? 0.02f : 0.04f;
     detector_update_background();
   }
-  check(std::fabs(detector_base_warning_threshold() - 0.07f) < 0.002f,
-        "штатный дрейф вверх должен подниматься в порог (ожидалось 0.07)");
+  check(detector_bg_threshold == 0.0f, "замер фона на подъёме должен быть отброшен (порог не набран)");
+  check(detector_bg_count == 0, "после отброшенного замера накопление фона должно начаться заново");
+  check(std::fabs(detector_base_warning_threshold() - DETECTOR_DEFAULT_WARNING_TREND) < 1e-6f,
+        "пока фон отброшен, действует дефолтный порог 0.04");
 }
 
 // (б5) Неполное окно истории фон не набирает: наклон на 5 точках слишком шумный.
@@ -313,7 +322,7 @@ int main() {
   test_background_clamped_high();
   test_background_negative_mean_does_not_lower_threshold();
   test_background_needs_full_window();
-  test_background_includes_positive_drift();
+  test_background_refuses_positive_drift();
   test_background_constant_trend_is_not_nan();
   test_single_spike_does_not_confirm();
   test_sustained_excess_confirms();

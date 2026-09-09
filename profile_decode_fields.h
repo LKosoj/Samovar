@@ -24,12 +24,16 @@ static bool decode_setup_payload_fields(
 #define SAMOVAR_DECODE_TERM_V3ONLY(kind, name)
 #define SAMOVAR_DECODE_TERM_V4ONLY(kind, name)
 #define SAMOVAR_DECODE_TERM_UPTO4(kind, name) (ReadUpTo4Fields ? SAMOVAR_TRASH_##kind(name) : true) &&
+#define SAMOVAR_DECODE_TERM_UPTO5(kind, name)
+#define SAMOVAR_DECODE_TERM_UPTO6(kind, name)
 #define SAMOVAR_DECODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_DECODE_TERM_##scope(kind, name)
   const bool decodedFields =
       SAMOVAR_PROFILE_FIELDS(SAMOVAR_DECODE_FIELD)
       true;
 #undef SAMOVAR_DECODE_FIELD
 #undef SAMOVAR_DECODE_TERM_UPTO4
+#undef SAMOVAR_DECODE_TERM_UPTO5
+#undef SAMOVAR_DECODE_TERM_UPTO6
 #undef SAMOVAR_DECODE_TERM_V4ONLY
 #undef SAMOVAR_DECODE_TERM_V3ONLY
 #undef SAMOVAR_DECODE_TERM_V2ONLY
@@ -49,7 +53,7 @@ static bool decode_setup_payload_fields(
 }
 
 // Последовательные проходы читают общий блок, затем хвосты V2, V3 и V4 на одном
-// курсоре. Поэтому scope-блоки обязаны идти строго ALL, V2ONLY, V3ONLY, V4ONLY;
+// курсоре. Поэтому scope-блоки обязаны идти строго ALL, V2ONLY, V3ONLY, V4ONLY, UPTO6, UPTO5;
 // порядок защищён tools/smoke_profile_store.py.
 template <size_t PayloadSize>
 static bool decode_setup_payload_v2only_fields(
@@ -63,6 +67,8 @@ static bool decode_setup_payload_v2only_fields(
 #define SAMOVAR_GET_BYTES_CHAR(name) reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.name), sizeof(decoded.name))
 #define SAMOVAR_V2ONLY_TERM_ALL(kind, name)
 #define SAMOVAR_V2ONLY_TERM_UPTO4(kind, name)
+#define SAMOVAR_V2ONLY_TERM_UPTO5(kind, name)
+#define SAMOVAR_V2ONLY_TERM_UPTO6(kind, name)
 #define SAMOVAR_V2ONLY_TERM_V2ONLY(kind, name) SAMOVAR_GET_##kind(name) &&
 #define SAMOVAR_V2ONLY_TERM_V3ONLY(kind, name)
 #define SAMOVAR_V2ONLY_TERM_V4ONLY(kind, name)
@@ -75,6 +81,8 @@ static bool decode_setup_payload_v2only_fields(
 #undef SAMOVAR_V2ONLY_TERM_V3ONLY
 #undef SAMOVAR_V2ONLY_TERM_V2ONLY
 #undef SAMOVAR_V2ONLY_TERM_UPTO4
+#undef SAMOVAR_V2ONLY_TERM_UPTO5
+#undef SAMOVAR_V2ONLY_TERM_UPTO6
 #undef SAMOVAR_V2ONLY_TERM_ALL
 #undef SAMOVAR_GET_BYTES_CHAR
 #undef SAMOVAR_GET_BYTES_U8
@@ -97,6 +105,8 @@ static bool decode_setup_payload_v3only_fields(
 #define SAMOVAR_GET_BYTES_CHAR(name) reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.name), sizeof(decoded.name))
 #define SAMOVAR_V3ONLY_TERM_ALL(kind, name)
 #define SAMOVAR_V3ONLY_TERM_UPTO4(kind, name)
+#define SAMOVAR_V3ONLY_TERM_UPTO5(kind, name)
+#define SAMOVAR_V3ONLY_TERM_UPTO6(kind, name)
 #define SAMOVAR_V3ONLY_TERM_V2ONLY(kind, name)
 #define SAMOVAR_V3ONLY_TERM_V3ONLY(kind, name) SAMOVAR_GET_##kind(name) &&
 #define SAMOVAR_V3ONLY_TERM_V4ONLY(kind, name)
@@ -109,6 +119,8 @@ static bool decode_setup_payload_v3only_fields(
 #undef SAMOVAR_V3ONLY_TERM_V3ONLY
 #undef SAMOVAR_V3ONLY_TERM_V2ONLY
 #undef SAMOVAR_V3ONLY_TERM_UPTO4
+#undef SAMOVAR_V3ONLY_TERM_UPTO5
+#undef SAMOVAR_V3ONLY_TERM_UPTO6
 #undef SAMOVAR_V3ONLY_TERM_ALL
 #undef SAMOVAR_GET_BYTES_CHAR
 #undef SAMOVAR_GET_BYTES_U8
@@ -119,18 +131,25 @@ static bool decode_setup_payload_v3only_fields(
   return decodedFields;
 }
 
-template <size_t PayloadSize>
+template <bool ReadUpTo5Fields, bool ReadUpTo6Fields, size_t PayloadSize>
 static bool decode_setup_payload_v4only_fields(
     CanonicalProfileReader<PayloadSize>& reader,
     SetupEEPROM& decoded) {
+  uint16_t trash_CheeseDoserSpeed = 0;
+  uint16_t trash_CheeseDoserSteps = 0;
+  uint8_t trash_CheesePhSmoothPercent = 0;
 #define SAMOVAR_GET_U8(name) reader.get_u8(decoded.name)
 #define SAMOVAR_GET_BOOL(name) reader.get_bool(decoded.name)
 #define SAMOVAR_GET_U16(name) reader.get_u16(decoded.name)
 #define SAMOVAR_GET_FLOAT(name) reader.get_float(decoded.name)
 #define SAMOVAR_GET_BYTES_U8(name) reader.get_bytes(decoded.name, sizeof(decoded.name))
 #define SAMOVAR_GET_BYTES_CHAR(name) reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.name), sizeof(decoded.name))
+#define SAMOVAR_TRASH_U16(name) reader.get_u16(trash_##name)
+#define SAMOVAR_TRASH_U8(name) reader.get_u8(trash_##name)
 #define SAMOVAR_V4ONLY_TERM_ALL(kind, name)
 #define SAMOVAR_V4ONLY_TERM_UPTO4(kind, name)
+#define SAMOVAR_V4ONLY_TERM_UPTO5(kind, name) (ReadUpTo5Fields ? SAMOVAR_TRASH_##kind(name) : true) &&
+#define SAMOVAR_V4ONLY_TERM_UPTO6(kind, name) (ReadUpTo6Fields ? SAMOVAR_TRASH_##kind(name) : true) &&
 #define SAMOVAR_V4ONLY_TERM_V2ONLY(kind, name)
 #define SAMOVAR_V4ONLY_TERM_V3ONLY(kind, name)
 #define SAMOVAR_V4ONLY_TERM_V4ONLY(kind, name) SAMOVAR_GET_##kind(name) &&
@@ -143,8 +162,12 @@ static bool decode_setup_payload_v4only_fields(
 #undef SAMOVAR_V4ONLY_TERM_V3ONLY
 #undef SAMOVAR_V4ONLY_TERM_V2ONLY
 #undef SAMOVAR_V4ONLY_TERM_UPTO4
+#undef SAMOVAR_V4ONLY_TERM_UPTO5
+#undef SAMOVAR_V4ONLY_TERM_UPTO6
 #undef SAMOVAR_V4ONLY_TERM_ALL
 #undef SAMOVAR_GET_BYTES_CHAR
+#undef SAMOVAR_TRASH_U16
+#undef SAMOVAR_TRASH_U8
 #undef SAMOVAR_GET_BYTES_U8
 #undef SAMOVAR_GET_FLOAT
 #undef SAMOVAR_GET_U16

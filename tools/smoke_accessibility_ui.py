@@ -75,7 +75,9 @@ KEY_LISTENER_REGISTRATION = re.compile(
 )
 UNLOCK_AUDIO_LISTENER = "document.addEventListener('keydown', unlockAudio, { once: true });"
 PAGE_LOCK_LISTENER = "document.addEventListener('keydown', onLockedPageInput, true);"
-ALLOWED_KEY_LISTENERS = (UNLOCK_AUDIO_LISTENER, PAGE_LOCK_LISTENER)
+# Esc закрывает окно истории (app.js showHistory): слушатель живёт только пока окно открыто.
+HISTORY_ESC_LISTENER = "document.addEventListener('keydown', onHistoryKeydown);"
+ALLOWED_KEY_LISTENERS = (UNLOCK_AUDIO_LISTENER, PAGE_LOCK_LISTENER, HISTORY_ESC_LISTENER)
 
 
 def canonical_gzip(content: bytes) -> bytes:

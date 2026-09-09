@@ -18,12 +18,15 @@
 //             для перекрёстной проверки smoke-тестом.
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
-//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY или UPTO4.
+//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, UPTO4, UPTO5 или UPTO6.
 //             V2ONLY/V3ONLY/V4ONLY образуют последовательные хвосты канонического
 //             формата (поле появляется начиная с этой версии и остаётся во всех
 //             следующих). UPTO4 — обратный случай: поле было в форматах 1-4,
 //             в 5-м и далее из канонического блоба физически убрано (но при
 //             чтении старых форматов позиция всё равно должна быть пройдена).
+//             UPTO5 аналогично описывает поля, которые были в V4/V5, но удалены
+//             из текущего V6 без резервного места в SetupEEPROM.
+//             UPTO6 описывает поле, которое было в V4-V6 и удалено из V7.
 //
 // BKPower — единственное поле с дефолтом, зависящим от компиляции
 // (SAMOVAR_USE_SEM_AVR меняет рабочую мощность БК). Вынесено в именованную
@@ -116,6 +119,6 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(BOOL, NbkUseStreamServo, 1, candidate.NbkUseStreamServo = false, V3ONLY) \
   X(FLOAT, CheesePhSlope, 4, candidate.CheesePhSlope = 1.0f, V4ONLY) \
   X(FLOAT, CheesePhOffset, 4, candidate.CheesePhOffset = 1.0f, V4ONLY) \
-  X(U8, CheesePhSmoothPercent, 1, candidate.CheesePhSmoothPercent = 90, V4ONLY) \
-  X(U16, CheeseDoserSpeed, 2, candidate.CheeseDoserSpeed = 200, V4ONLY) \
-  X(U16, CheeseDoserSteps, 2, candidate.CheeseDoserSteps = 160, V4ONLY)
+  X(U8, CheesePhSmoothPercent, 1, /* retired in V7 */, UPTO6) \
+  X(U16, CheeseDoserSpeed, 2, /* retired in V6 */, UPTO5) \
+  X(U16, CheeseDoserSteps, 2, /* retired in V6 */, UPTO5)

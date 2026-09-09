@@ -183,6 +183,92 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(model.ini_path.read_bytes(), before_ini)
         self.assertEqual(model.override_path.read_bytes(), before_override)
 
+    def test_mqtt_settings_live_only_in_user_override(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        self.assertFalse(state["USE_MQTT"])
+
+        state.update({
+            "USE_MQTT": True,
+            "MQTT_SERVER": "192.168.1.20",
+            "MQTT_PORT": "1884",
+            "MQTT_USER": "ha",
+            "MQTT_PASSWORD": "secret",
+            "MQTT_TOPIC": "house/samovar/state",
+        })
+        model.save(state)
+
+        ini = model.ini_path.read_text(encoding="utf-8")
+        for token in ("USE_MQTT", "MQTT_SERVER", "MQTT_PORT", "MQTT_USER", "MQTT_PASSWORD", "MQTT_TOPIC", "secret"):
+            self.assertNotIn(token, ini)
+        override = configurator.HeaderDocument(model.override_path.read_text(encoding="utf-8"))
+        self.assertTrue(override.find("USE_MQTT").enabled)
+        self.assertEqual(override.find("MQTT_SERVER").value, '"192.168.1.20"')
+        self.assertEqual(override.find("MQTT_PORT").value, "1884")
+        self.assertEqual(override.find("MQTT_USER").value, '"ha"')
+        self.assertEqual(override.find("MQTT_PASSWORD").value, '"secret"')
+        self.assertEqual(override.find("MQTT_TOPIC").value, '"house/samovar/state"')
+
+        loaded = model.load()
+        for key in ("USE_MQTT", "MQTT_SERVER", "MQTT_PORT", "MQTT_USER", "MQTT_PASSWORD", "MQTT_TOPIC"):
+            self.assertEqual(loaded[key], state[key])
+
+    def test_enabled_mqtt_requires_valid_connection_settings(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({
+            "USE_MQTT": True,
+            "MQTT_SERVER": "",
+            "MQTT_PORT": "1883",
+            "MQTT_USER": "",
+            "MQTT_PASSWORD": "",
+            "MQTT_TOPIC": "samovar/state",
+        })
+        before_ini = model.ini_path.read_bytes()
+        before_override = model.override_path.read_bytes()
+        with self.assertRaisesRegex(configurator.ConfigError, "Сервер MQTT"):
+            model.save(state)
+        self.assertEqual(model.ini_path.read_bytes(), before_ini)
+        self.assertEqual(model.override_path.read_bytes(), before_override)
+
+        state["MQTT_SERVER"] = "broker.local"
+        state["MQTT_PORT"] = "70000"
+        with self.assertRaisesRegex(configurator.ConfigError, "Порт MQTT"):
+            model.save(state)
+        state["MQTT_PORT"] = "1883"
+        state["MQTT_TOPIC"] = ""
+        with self.assertRaisesRegex(configurator.ConfigError, "Топик MQTT"):
+            model.save(state)
+
+    def test_mqtt_fields_follow_enabled_checkbox_visibility(self) -> None:
+        class Variable:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class Widget:
+            def __init__(self):
+                self.visible = None
+
+            def grid(self):
+                self.visible = True
+
+            def grid_remove(self):
+                self.visible = False
+
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.mqtt_enabled_var = Variable(False)
+        window.mqtt_field_widgets = [Widget(), Widget(), Widget()]
+        window._update_mqtt_visibility()
+        self.assertEqual([widget.visible for widget in window.mqtt_field_widgets], [False, False, False])
+        window.mqtt_enabled_var.value = True
+        window._update_mqtt_visibility()
+        self.assertEqual([widget.visible for widget in window.mqtt_field_widgets], [True, True, True])
+
     def test_device_config_schema_accepts_v1_and_rejects_invalid_responses(self) -> None:
         payload = self.device_config_payload()
         parsed = configurator.parse_device_config(payload)
@@ -252,9 +338,12 @@ class ConfiguratorModelTests(unittest.TestCase):
                 *configurator.VALUE_SPECS,
                 *configurator.OPTIONAL_SPECS,
                 *configurator.CHOICE_VALUE_SPECS,
+                *configurator.MQTT_VALUE_SPECS,
             )
         }
         window.bool_vars = {spec.macro: Variable(state[spec.macro]) for spec in configurator.BOOL_SPECS}
+        window.mqtt_enabled_var = Variable(state["USE_MQTT"])
+        window.bool_vars["USE_MQTT"] = window.mqtt_enabled_var
         window.optional_enabled_vars = {
             spec.macro: Variable(state[spec.macro + ".enabled"])
             for spec in configurator.OPTIONAL_SPECS

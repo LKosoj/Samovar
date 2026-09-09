@@ -170,6 +170,15 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   }
   jsonFieldRaw(out, first, "det", s.detectorStatus);
   jsonFieldFloat(out, first, "dtr", s.detectorTrend, 3);
+  // Причина простоя детектора (DetectorIdleReason) и настройки-выключатели: приложения
+  // и сайт показывают то же, что index.htm (detectorIdleText в app.js).
+  jsonFieldRaw(out, first, "di", s.detectorIdle);
+  if (s.detectorIdle == DETECTOR_IDLE_STEAM_WAIT) {
+    jsonFieldRaw(out, first, "dwl", s.detectorWaitLeftSec);
+    jsonFieldFloat(out, first, "dws", s.detectorWaitSpan, 2);
+  }
+  jsonFieldBool(out, first, "ud", s.useDetector);
+  jsonFieldBool(out, first, "ua", s.useAutoSpeed);
   jsonFieldBool(out, first, "boil", s.boilingDetected);
   jsonFieldRaw(out, first, "bev", s.boilingEvidence);
   jsonFieldBool(out, first, "bps", s.boilingPrecisionSensorConfigured);
@@ -407,6 +416,9 @@ static portMUX_TYPE s_blynkLogLineMux = portMUX_INITIALIZER_UNLOCKED;
 static char s_pendingV34Line[288];
 static volatile bool s_pendingV34Ready = false;
 static uint32_t s_pendingV34Revision = 0;
+#ifdef USE_MQTT
+volatile uint32_t blynkLastLargePublishAt = 0;
+#endif
 
 // Честный худший случай V35 (T2-review-1.md, [Blynk.ino:370,400-424]): sessionId uint32_t
 // (10) + "," (1) + resume "0"/"1" (1) + "," (1) + chipId uint32_t (10) + "," (1)
@@ -458,6 +470,9 @@ static bool blynk_snapshot_pending_log_line(char (&line)[sizeof(s_pendingV34Line
 static void blynk_push_pending_log_line(const char* line, uint32_t revision, bool ready) {
   if (!ready || !Blynk.connected()) return;
   Blynk.virtualWrite(V34, line);
+#ifdef USE_MQTT
+  blynkLastLargePublishAt = millis();
+#endif
   if (!Blynk.connected()) return;
   portENTER_CRITICAL(&s_blynkLogLineMux);
   if (s_pendingV34Ready && s_pendingV34Revision == revision) s_pendingV34Ready = false;
@@ -750,6 +765,9 @@ void blynk_push_tick() {
   if (canPushV34 && idleV34Ready) {
     idleV34At = nowIdle;
     Blynk.virtualWrite(V34, idleV34Line);
+#ifdef USE_MQTT
+    blynkLastLargePublishAt = millis();
+#endif
   }
 
   static unsigned long cycleStart = 0;

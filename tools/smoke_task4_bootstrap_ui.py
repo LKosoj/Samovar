@@ -44,7 +44,7 @@ def validate(pages: dict[str, str]) -> list[str]:
             "fetch('/calibrate?'", "fetch('/save'",
         ),
         "calibrate_ph.htm": (
-            "data.cheesePhSlope", "data.cheesePhOffset", "data.cheesePhSmoothPercent",
+            "data.cheesePhSlope", "data.cheesePhOffset",
             "fetch('/save'", "SamovarApp.startTelemetryPage(renderCalibrationTelemetry",
         ),
     }
@@ -74,6 +74,8 @@ def validate(pages: dict[str, str]) -> list[str]:
         errors.append("program.htm: the existing 1.5 diameter fallback changed")
 
     calibrate_ph = pages["calibrate_ph.htm"]
+    if "CheesePhSmoothPercent" in calibrate_ph:
+        errors.append("calibrate_ph.htm: retired pH smoothing field remains")
     if calibrate_ph.find("await SamovarApp.loadUiBootstrap") > calibrate_ph.find(
         "SamovarApp.startTelemetryPage(renderCalibrationTelemetry"
     ):

@@ -54,8 +54,7 @@ UI_BOOTSTRAP_FIXTURE = {
     "calibrationRunning": False,
     "calibrationPump": "local",
     "cheesePhSlope": 1,
-    "cheesePhOffset": 0,
-    "cheesePhSmoothPercent": 20,
+    "cheesePhOffset": 0, "cheeseCoolingScheme": "pump",
 }
 
 BROWSER_TEST = r'''async page => {

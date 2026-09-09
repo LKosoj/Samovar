@@ -68,7 +68,23 @@ ProgramParseResult prepare_default_program_for_mode(
       defaultProgram = DEFAULT_PROGRAM_HBH45;
       break;
     case SAMOVAR_CHEESE_MODE:
-      defaultProgram = "M;32;0;0^0^0^0;0;0\nP;32;30;0^0^0^0;0;0\nR;0;0;0^0^0^0;0;0\n";
+      defaultProgram =
+          "H;63;90;1.0;1^0^0^0;0\n"
+          "P;63;30;45;1^0^0^0;0\n"
+          "C;34;45;0;1^0^0^0;0\n"
+          "W;0;15;1;0^0^0^0;0\n"
+          "P;34;15;25;1^0^0^0;0\n"
+          "W;0;15;2;0^0^0^0;0\n"
+          "M;0;1;0;1^0^30^0;0\n"
+          "P;34;30;45;0^0^0^0;0\n"
+          "W;0;15;4;0^0^0^0;0\n"
+          "P;34;5;10;0^0^0^0;0\n"
+          "M;0;10;0;1^0^0^0;0\n"
+          "S;0;15;0;0^0^0^0;0\n"
+          "W;0;15;3;0^0^0^0;0\n"
+          "M;0;15;0;1^0^0^0;0\n"
+          "W;0;30;5;0^0^0^0;0\n"
+          "W;0;360;6;0^0^0^0;0\n";
       break;
     default:
       return program_parse_result(

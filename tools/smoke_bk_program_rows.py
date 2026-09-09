@@ -71,6 +71,8 @@ class String {
   String(long value) : value_(std::to_string(value)) {}
   String(float value) : value_(format_float(value)) {}
   String(double value) : value_(format_float(value)) {}
+  String(float value, unsigned int decimalPlaces) : value_(format_float(value, decimalPlaces)) {}
+  String(double value, unsigned int decimalPlaces) : value_(format_float(value, decimalPlaces)) {}
 
   size_t length() const { return value_.length(); }
   const char* c_str() const { return value_.c_str(); }
@@ -92,8 +94,12 @@ class String {
 
  private:
   static std::string format_float(double value) {
+    return format_float(value, 2);
+  }
+
+  static std::string format_float(double value, unsigned int decimalPlaces) {
     char buffer[48] = {0};
-    std::snprintf(buffer, sizeof(buffer), "%.2f", value);
+    std::snprintf(buffer, sizeof(buffer), "%.*f", static_cast<int>(decimalPlaces), value);
     return buffer;
   }
 

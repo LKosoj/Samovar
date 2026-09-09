@@ -57,12 +57,70 @@ static const float DETECTOR_MAX_WARNING_TREND = 0.15f;
 // Сколько замеров фона набрать (60 * 4 с = 4 минуты) и сколько сигм заложить в порог
 static const uint16_t DETECTOR_BG_SAMPLES = 60;
 static const float DETECTOR_BG_SIGMA_K = 4.0f;
+// Фон засчитывается только на спокойном участке: если средний тренд за время замера
+// выше этого значения, колонна уже идёт вверх (квантованная «лесенка» подъёма даёт
+// большой разброс тренда, и порог по нему ослабил бы детектор). Замер отбрасывается
+// и начинается заново, до набора действует дефолтный порог.
+static const float DETECTOR_BG_MAX_MEAN_TREND = DETECTOR_MIN_WARNING_TREND;
 
 // Сколько замеров подряд тренд должен держаться выше критического порога, чтобы отбор
 // был остановлен. Критическая ветка — единственная, которая ничем не фильтровалась:
 // одиночный щелчок кванта датчика посреди окна даёт наклон 0.094 °C/мин и этого хватало
 // для паузы отбора при плотности насадки от 85%.
 static const uint8_t DETECTOR_CRITICAL_CONFIRM = 2;
+
+// Минимум точек истории для ЛЮБОЙ реакции (снижение скорости, восстановление,
+// подтверждение критики). Ветка предупреждения раньше срабатывала уже на 5 точках
+// (20 с) сразу после грейс-периода — тренд по полупустому окну шумный.
+static const uint8_t DETECTOR_MIN_HISTORY_REACT = 15;
+
+// Грейс-периоды: после старта строки / авто-возобновления и после ручного продолжения
+static const uint32_t DETECTOR_GRACE_MS = 30000UL;
+static const uint32_t DETECTOR_MANUAL_OVERRIDE_MS = 60000UL;
+
+// Критический порог = порог предупреждения * множитель; гистерезис — доля порога,
+// на которую пороги снижения (выше) и восстановления (ниже) отстоят от него.
+static const float DETECTOR_CRITICAL_MULT = 2.5f;
+static const float DETECTOR_HYSTERESIS_FRAC = 0.15f;
+
+// Снижение скорости: нижний предел коэффициента, интервалы между шагами (базовый,
+// при тренде выше 60 % критического, выше 80 %), интервал и доля шага восстановления.
+static const float DETECTOR_CORRECTION_FLOOR = 0.7f;
+static const uint32_t DETECTOR_CORRECTION_INTERVAL_MS = 25000UL;
+static const uint32_t DETECTOR_CORRECTION_INTERVAL_FAST_MS = 10000UL;
+static const uint32_t DETECTOR_CORRECTION_INTERVAL_URGENT_MS = 5000UL;
+static const float DETECTOR_CORRECTION_FAST_RATIO = 0.6f;
+static const float DETECTOR_CORRECTION_URGENT_RATIO = 0.8f;
+static const uint32_t DETECTOR_RECOVERY_INTERVAL_MS = 30000UL;
+static const float DETECTOR_RECOVERY_STEP_FRAC = 0.4f; // восстановление медленнее реакции
+
+// Адаптивные поправки порога: по дисперсии (от var 0.01 = СКО 0.1 °C до var 0.36 =
+// СКО 0.6 °C порог растёт линейно до x2), по скорости отбора и по фазе хвостов.
+static const float DETECTOR_VAR_LOW = 0.01f;
+static const float DETECTOR_VAR_HIGH = 0.36f;
+static const float DETECTOR_VAR_MAX_FACTOR = 2.0f;
+static const float DETECTOR_RATE_HIGH_LPH = 0.5f;
+static const float DETECTOR_RATE_HIGH_FACTOR = 1.3f;
+static const float DETECTOR_RATE_LOW_LPH = 0.2f;
+static const float DETECTOR_RATE_LOW_FACTOR = 0.85f;
+static const float DETECTOR_TAILS_FACTOR = 1.2f;
+
+// Поправка температуры кипения на атмосферное давление, °C на 1 мм рт. ст.
+// (та же, что в sensorinit.h для UsePreccureCorrect).
+static const float DETECTOR_PRESSURE_TEMP_COEF = 0.037f;
+
+// Почему детектор сейчас не реагирует (для телеметрии и интерфейса)
+enum DetectorIdleReason : uint8_t {
+  DETECTOR_IDLE_ACTIVE = 0,      // следит и реагирует
+  DETECTOR_IDLE_OFF,             // выключен в настройках / не тот режим или статус
+  DETECTOR_IDLE_HEADS,           // головы: только наблюдение
+  DETECTOR_IDLE_GRACE,           // грейс-период после старта строки / возобновления
+  DETECTOR_IDLE_MANUAL,          // окно после ручного продолжения
+  DETECTOR_IDLE_STEAM_WAIT,      // первая строка тела: ждёт стабилизации пара
+  DETECTOR_IDLE_FILLING,         // окно истории ещё не набрано
+  DETECTOR_IDLE_PAUSE,           // пауза (своя, по датчику или ручная)
+};
+static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_OFF;
 
 static const float HEAT_LOSS_MIN_DELTA_T = 15.0f;
 
@@ -80,6 +138,8 @@ static uint32_t detector_last_ds_counter = 0;
 
 // Замер фонового шума тренда на спокойном участке строки: сумма, сумма квадратов,
 // счётчик. detector_bg_threshold = 0 означает «фон ещё не набран, порог берём дефолтный».
+// detector_bg_restart() обнуляет только накопители (порог остаётся прежним до нового
+// набора) — так фон перемеряется после каждого возврата скорости к базовой.
 static double detector_bg_sum = 0.0;
 static double detector_bg_sumsq = 0.0;
 static uint16_t detector_bg_count = 0;
@@ -117,12 +177,16 @@ inline bool body_temp_autoset_allowed() {
 
 // Сброс накопителя усреднения и замера фона. Оба привязаны к истории: если история
 // очищена, усреднять и калиброваться надо заново.
-inline void detector_reset_sampling() {
-  detector_avg_sum = 0.0;
-  detector_avg_count = 0;
+inline void detector_bg_restart() {
   detector_bg_sum = 0.0;
   detector_bg_sumsq = 0.0;
   detector_bg_count = 0;
+}
+
+inline void detector_reset_sampling() {
+  detector_avg_sum = 0.0;
+  detector_avg_count = 0;
+  detector_bg_restart();
   detector_bg_threshold = 0.0f;
 }
 
@@ -185,7 +249,7 @@ void reset_impurity_detector() {
 
 // Вызывается при старте новой строки программы
 void detector_on_program_start() {
-  detector_grace_until = millis() + 30000UL; // общий грейс-период
+  detector_grace_until = millis() + DETECTOR_GRACE_MS; // общий грейс-период
   detector_manual_override_until = 0;
   detector_steam_stable_since = 0;
   detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
@@ -196,14 +260,14 @@ void detector_on_program_start() {
 // Вызывается при ручном продолжении отбора
 void detector_on_manual_resume() {
   reset_impurity_detector();
-  detector_manual_override_until = millis() + 60000UL;
+  detector_manual_override_until = millis() + DETECTOR_MANUAL_OVERRIDE_MS;
   detector_grace_until = detector_manual_override_until;
 }
 
 // Вызывается при авто-продолжении после детекторной паузы
 void detector_on_auto_resume() {
   reset_impurity_detector();
-  detector_grace_until = millis() + 30000UL;
+  detector_grace_until = millis() + DETECTOR_GRACE_MS;
   detector_manual_override_until = 0;
 }
 
@@ -364,10 +428,13 @@ bool detector_sample_tick(float detectorTemp, uint32_t now) {
 }
 
 /**
- * Замер фонового шума тренда. Пока детектор спокоен, копим среднее и разброс
- * собственных показаний тренда, а по набору статистики выставляем порог
- * предупреждения = средний фон + DETECTOR_BG_SIGMA_K сигм. Это заменяет ручной
- * ввод плотности насадки: разброс учитывает и шум датчика, и то, как дышит колонна.
+ * Замер фонового шума тренда. Пока детектор спокоен, копим разброс собственных
+ * показаний тренда, а по набору статистики выставляем порог предупреждения =
+ * DETECTOR_BG_SIGMA_K сигм разброса. Это заменяет ручной ввод плотности насадки:
+ * разброс учитывает и шум датчика, и то, как дышит колонна.
+ * Среднее в порог НЕ входит, а замер на подъёме (средний тренд выше
+ * DETECTOR_BG_MAX_MEAN_TREND) отбрасывается: иначе начало проскока «съело» бы порог
+ * и детектор ослаб бы именно тогда, когда нужен.
  */
 void detector_update_background() {
   if (detector_bg_count >= DETECTOR_BG_SAMPLES) return; // фон уже набран
@@ -380,12 +447,14 @@ void detector_update_background() {
   if (detector_bg_count < DETECTOR_BG_SAMPLES) return;
 
   const double mean = detector_bg_sum / detector_bg_count;
+  if (mean > static_cast<double>(DETECTOR_BG_MAX_MEAN_TREND)) {
+    detector_bg_restart(); // участок не спокойный - меряем заново
+    return;
+  }
   double variance = detector_bg_sumsq / detector_bg_count - mean * mean;
   if (variance < 0.0) variance = 0.0;
-  // Падающая температура не должна занижать порог, поэтому средний фон снизу режем нулём.
-  const double base = (mean > 0.0 ? mean : 0.0) + DETECTOR_BG_SIGMA_K * sqrt(variance);
 
-  float threshold = static_cast<float>(base);
+  float threshold = static_cast<float>(DETECTOR_BG_SIGMA_K * sqrt(variance));
   if (threshold < DETECTOR_MIN_WARNING_TREND) threshold = DETECTOR_MIN_WARNING_TREND;
   if (threshold > DETECTOR_MAX_WARNING_TREND) threshold = DETECTOR_MAX_WARNING_TREND;
   detector_bg_threshold = threshold;
@@ -403,10 +472,11 @@ float get_adaptive_threshold(float baseThreshold, float variance, float volumePe
   // Если дисперсия высокая, увеличиваем порог пропорционально
   // variance > 0.01 соответствует stdDev > 0.1°C (0.1^2 = 0.01)
   // variance > 0.36 соответствует stdDev > 0.6°C (0.6^2 = 0.36)
-  if (variance > 0.01f) {
-    // Линейная аппроксимация: при variance = 0.01 -> фактор 1.0, при variance = 0.36 -> фактор 2.0
-    float varianceFactor = 1.0f + (variance - 0.01f) * (1.0f / 0.35f); // (2.0-1.0)/(0.36-0.01)
-    if (varianceFactor > 2.0f) varianceFactor = 2.0f; // Максимум удвоение
+  if (variance > DETECTOR_VAR_LOW) {
+    // Линейная аппроксимация: при DETECTOR_VAR_LOW -> фактор 1.0, при DETECTOR_VAR_HIGH -> DETECTOR_VAR_MAX_FACTOR
+    float varianceFactor = 1.0f + (variance - DETECTOR_VAR_LOW) *
+                                      ((DETECTOR_VAR_MAX_FACTOR - 1.0f) / (DETECTOR_VAR_HIGH - DETECTOR_VAR_LOW));
+    if (varianceFactor > DETECTOR_VAR_MAX_FACTOR) varianceFactor = DETECTOR_VAR_MAX_FACTOR;
     adaptiveThreshold *= varianceFactor;
   }
 
@@ -414,12 +484,10 @@ float get_adaptive_threshold(float baseThreshold, float variance, float volumePe
   // При высокой скорости отбора (> 0.5 л/ч) порог должен быть выше
   // При низкой скорости (< 0.1 л/ч) порог может быть ниже
   if (volumePerHour > 0.1f) {
-    if (volumePerHour > 0.5f) {
-      // Высокая скорость - увеличиваем порог на 30%
-      adaptiveThreshold *= 1.3f;
-    } else if (volumePerHour < 0.2f) {
-      // Низкая скорость - уменьшаем порог на 15%
-      adaptiveThreshold *= 0.85f;
+    if (volumePerHour > DETECTOR_RATE_HIGH_LPH) {
+      adaptiveThreshold *= DETECTOR_RATE_HIGH_FACTOR;
+    } else if (volumePerHour < DETECTOR_RATE_LOW_LPH) {
+      adaptiveThreshold *= DETECTOR_RATE_LOW_FACTOR;
     }
   }
 
@@ -429,7 +497,7 @@ float get_adaptive_threshold(float baseThreshold, float variance, float volumePe
   // Головы ('H') сюда не попадают - на них детектор только наблюдает
   // (см. process_impurity_detector)
   if (processPhase == 'T') {
-    adaptiveThreshold *= 1.2f; // Хвосты - менее чувствительный (больше примесей ожидается)
+    adaptiveThreshold *= DETECTOR_TAILS_FACTOR; // Хвосты - менее чувствительный (больше примесей ожидается)
   }
   // "B" (тело) и "C" (предзахлеб) - без изменений
 
@@ -528,7 +596,7 @@ inline float detector_warning_threshold() {
  */
 inline float detector_current_recovery_threshold() {
   const float warningThreshold = detector_warning_threshold();
-  return warningThreshold - warningThreshold * 0.15f;
+  return warningThreshold - warningThreshold * DETECTOR_HYSTERESIS_FRAC;
 }
 
 inline bool detector_trend_settled() {
@@ -567,10 +635,13 @@ inline bool apply_detector_speed_correction(float baseSpeedRate) {
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
-  // [L-20/M-30] Если авто-коррекция или сам детектор выключены — сбрасываем всё и выходим.
-  // useDetector действует на все типы строк (H/B/C/T), а не только на головы.
-  if (!SamSetup.useautospeed || !SamSetup.useDetector) {
+  // [L-20/M-30] Детектор выключен в настройках — сбрасываем всё и выходим.
+  // useDetector — единственный выключатель детектора (на всех типах строк H/B/C/T);
+  // useautospeed лишь разрешает ему снижать скорость отбора (ветки коррекции и
+  // восстановления ниже), паузу по критическому тренду детектор ставит и без него.
+  if (!SamSetup.useDetector) {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_OFF;
     // [T05] Применяем сброшенный correctionFactor к скорости насоса, иначе накопленная
     // ранее коррекция навсегда останется в скорости после выключения детектора/автоскорости.
     // Только по факту сброса: process_impurity_detector() зовётся из loop() (~200 раз в
@@ -583,10 +654,17 @@ void process_impurity_detector() {
     return;
   }
 
+  // Корректировку скорости выключили при накопленной коррекции — вернуть базовую скорость.
+  if (!SamSetup.useautospeed && impurityDetector.correctionFactor != 1.0f) {
+    impurityDetector.correctionFactor = 1.0f;
+    apply_detector_speed_correction(CurrentBaseSpeedRate);
+  }
+
   // Паузы в ходе активного цикла (статус 15 = program_Wait, статус 40 = PauseOn):
   // сохраняем correctionFactor, только снимаем статус детектора
   if (SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED) {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_PAUSE;
     // correctionFactor НЕ трогаем — накопленная коррекция сохраняется на время паузы
     // [П3-4] Во время паузы, поставленной САМИМ детектором, тренд продолжаем обновлять —
     // иначе withdrawal() никогда не увидит "тренд устоялся" (значение замороженное
@@ -606,6 +684,7 @@ void process_impurity_detector() {
   // Любой другой статус, кроме активного отбора (10) — сброс
   if (SamovarStatusInt != SAMOVAR_STATUS_RECT_WITHDRAWAL) {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_OFF;
     // [T05] см. пояснение выше: применяем сброс correctionFactor к скорости насоса -
     // один раз, по факту сброса, а не на каждом обороте loop().
     if (impurityDetector.correctionFactor != 1.0f) {
@@ -618,6 +697,7 @@ void process_impurity_detector() {
   // Детектор работает только в режиме ректификации
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_OFF;
     return;
   }
 
@@ -628,6 +708,7 @@ void process_impurity_detector() {
   // Во время паузы отбор должен быть полностью остановлен и не возобновляться детектором
   if (currentType == 'P') {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_PAUSE;
     // Не меняем correctionFactor, чтобы сохранить состояние на момент паузы
     return;
   }
@@ -636,6 +717,7 @@ void process_impurity_detector() {
   if (program_Wait && !copy_program_wait_type(currentWaitType)) {
     SendMsg("Детектор: тип автоматической паузы занят. Проверка пропущена.", WARNING_MSG);
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_PAUSE;
     return;
   }
 
@@ -643,12 +725,14 @@ void process_impurity_detector() {
   // При такой паузе детектор был сброшен при её установке, и должен оставаться неактивным
   if (program_Wait && (currentWaitType == PROGRAM_WAIT_PIPE || currentWaitType == PROGRAM_WAIT_STEAM)) {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_PAUSE;
     return;
   }
 
   unsigned long now = millis();
   if (detector_manual_override_until > 0 && (int32_t)(now - detector_manual_override_until) < 0) {
     impurityDetector.detectorStatus = 0;
+    detector_idle_reason = DETECTOR_IDLE_MANUAL;
     return;
   }
 
@@ -699,13 +783,20 @@ void process_impurity_detector() {
     // строки программы и выбора датчика, а не истории.
     detector_reset_history();
     // Короткий грейс-период: дать буферу заполниться свежими данными (30 сек)
-    unsigned long detector_new_grace_until = now + 30000UL;
+    unsigned long detector_new_grace_until = now + DETECTOR_GRACE_MS;
     if (detector_grace_until == 0 || (int32_t)(detector_grace_until - detector_new_grace_until) < 0) {
       detector_grace_until = detector_new_grace_until;
     }
   }
 
   float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
+
+  // Поправка на атмосферное давление. Если она включена в настройках, avgTemp уже
+  // приведена к 760 мм рт. ст. в DS_getvalue(); иначе приводим здесь сами, чтобы
+  // ход погоды (~0.037 °C на мм рт. ст.) не читался детектором как рост температуры.
+  if (!SamSetup.UsePreccureCorrect && bme_pressure > 0) {
+    detectorTemp += (760.0f - bme_pressure) * DETECTOR_PRESSURE_TEMP_COEF;
+  }
 
   // Сбор данных: показания усредняются, точка ложится в историю раз в интервал
   const bool trendUpdated = detector_sample_tick(detectorTemp, now);
@@ -720,6 +811,7 @@ void process_impurity_detector() {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
     impurityDetector.criticalConfirm = 0;
+    detector_idle_reason = DETECTOR_IDLE_HEADS;
     return;
   }
 
@@ -729,6 +821,7 @@ void process_impurity_detector() {
   if (detector_grace_until > 0 && (int32_t)(now - detector_grace_until) < 0) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.criticalConfirm = 0;
+    detector_idle_reason = DETECTOR_IDLE_GRACE;
     return;
   }
 
@@ -740,9 +833,19 @@ void process_impurity_detector() {
   if (is_first_body_program_after_heads(currentProgram, currentType)) {
     if (!is_steam_stable()) {
       impurityDetector.detectorStatus = 0;
+      detector_idle_reason = DETECTOR_IDLE_STEAM_WAIT;
       return;
     }
   }
+
+  // Окно истории ещё не набрано до минимума — тренд по нему шумный, не реагируем.
+  if (impurityDetector.historySize < DETECTOR_MIN_HISTORY_REACT) {
+    impurityDetector.detectorStatus = 0;
+    impurityDetector.criticalConfirm = 0;
+    detector_idle_reason = DETECTOR_IDLE_FILLING;
+    return;
+  }
+  detector_idle_reason = DETECTOR_IDLE_ACTIVE;
 
   // Замер фона: пока детектор спокоен и никто не вмешивался в скорость, копим
   // статистику собственного шума тренда. Из неё берётся базовый порог — вместо
@@ -756,10 +859,10 @@ void process_impurity_detector() {
   // Порог предупреждения с адаптивными поправками (дисперсия, скорость отбора, фаза)
   float warningThreshold = detector_warning_threshold();
 
-  float criticalThreshold = warningThreshold * 2.5f;
+  float criticalThreshold = warningThreshold * DETECTOR_CRITICAL_MULT;
 
-  // Гистерезис для предотвращения частых переключений (15% от адаптивного порога)
-  float hysteresis = warningThreshold * 0.15f;
+  // Гистерезис для предотвращения частых переключений (доля адаптивного порога)
+  float hysteresis = warningThreshold * DETECTOR_HYSTERESIS_FRAC;
   float correctionThreshold = warningThreshold + hysteresis;  // Порог для снижения скорости
   float recoveryThreshold = warningThreshold - hysteresis;    // Порог для восстановления скорости
 
@@ -829,24 +932,25 @@ void process_impurity_detector() {
         return; // Выходим, чтобы не применять снижение скорости в этом цикле
       }
 
+      // Без корректировки скорости детектор только сообщает о росте (статус 1)
+      // и ждёт критического порога для паузы.
+      if (!SamSetup.useautospeed) return;
+
       // Обычная логика снижения скорости (для не первой программы тела)
       // Адаптивный интервал коррекции: при быстром росте температуры корректируем чаще
-      // Базовый интервал: 25 сек
-      // При приближении к критическому порогу (60% от criticalThreshold): 10 сек
-      // При очень быстром росте (>80% от criticalThreshold): 5 сек
-      unsigned long correctionInterval = 25000; // Базовый интервал 25 сек
+      unsigned long correctionInterval = DETECTOR_CORRECTION_INTERVAL_MS;
       float trendRatio = impurityDetector.currentTrend / criticalThreshold;
-      if (trendRatio > 0.8f) {
-        correctionInterval = 5000;  // Очень быстрый рост - каждые 5 сек
-      } else if (trendRatio > 0.6f) {
-        correctionInterval = 10000; // Быстрый рост - каждые 10 сек
+      if (trendRatio > DETECTOR_CORRECTION_URGENT_RATIO) {
+        correctionInterval = DETECTOR_CORRECTION_INTERVAL_URGENT_MS;
+      } else if (trendRatio > DETECTOR_CORRECTION_FAST_RATIO) {
+        correctionInterval = DETECTOR_CORRECTION_INTERVAL_FAST_MS;
       }
 
       if (now - impurityDetector.lastCorrectionTime > correctionInterval) {
         float correctionStep = get_detector_correction_step();
         const float previousFactor = impurityDetector.correctionFactor;
         impurityDetector.correctionFactor *= (1.0f - correctionStep);
-        if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
+        if (impurityDetector.correctionFactor < DETECTOR_CORRECTION_FLOOR) impurityDetector.correctionFactor = DETECTOR_CORRECTION_FLOOR;
         impurityDetector.lastCorrectionTime = now;
         // Коэффициент упёрся в нижний предел 0.7 - скорость больше не меняется. Без этой
         // проверки сообщение уходило каждые 5-25 сек до конца строки (спам на хвостах).
@@ -879,9 +983,14 @@ void process_impurity_detector() {
     // Восстанавливаем скорость только если нет паузы (ни ручной, ни автоматической от детектора)
     // Если пользователь поставил на паузу вручную, или есть автоматическая пауза - не возобновляем
     if (impurityDetector.correctionFactor < 1.0f && !PauseOn && !program_Wait) {
-      if (now - impurityDetector.lastCorrectionTime > 30000) { // Восстанавливаем медленно, раз в 30 сек
-        impurityDetector.correctionFactor += get_detector_correction_step() * 0.4f;  // сохраняем текущее соотношение 2%/5%=0.4 — восстановление медленнее реакции
-        if (impurityDetector.correctionFactor > 1.0f) impurityDetector.correctionFactor = 1.0f;
+      if (now - impurityDetector.lastCorrectionTime > DETECTOR_RECOVERY_INTERVAL_MS) { // Восстанавливаем медленно
+        impurityDetector.correctionFactor += get_detector_correction_step() * DETECTOR_RECOVERY_STEP_FRAC;
+        if (impurityDetector.correctionFactor >= 1.0f) {
+          impurityDetector.correctionFactor = 1.0f;
+          // Скорость вернулась к базовой: перемерить фон, чтобы порог отражал текущее
+          // состояние колонны, а не первые минуты строки. Старый порог действует до нового набора.
+          detector_bg_restart();
+        }
         impurityDetector.lastCorrectionTime = now;
 
         // Применяем новую скорость
@@ -890,6 +999,23 @@ void process_impurity_detector() {
     }
   }
   // Зона между recoveryThreshold и correctionThreshold - зона нечувствительности (гистерезис)
+}
+
+// Состояние детектора для телеметрии: почему не реагирует и как идёт ожидание
+// стабилизации пара (размах окна, °C; сколько секунд осталось держать стабильность).
+inline uint8_t detector_idle_reason_code() {
+  return static_cast<uint8_t>(detector_idle_reason);
+}
+
+inline float detector_steam_wait_span() {
+  return detector_steam_stability_span;
+}
+
+inline uint16_t detector_steam_wait_left_sec() {
+  if (detector_idle_reason != DETECTOR_IDLE_STEAM_WAIT) return 0;
+  if (detector_steam_stability_reason != DETECTOR_STEAM_HOLDING) return DETECTOR_STEAM_STABLE_MS / 1000;
+  const uint32_t held = millis() - detector_steam_stable_since;
+  return held >= DETECTOR_STEAM_STABLE_MS ? 0 : static_cast<uint16_t>((DETECTOR_STEAM_STABLE_MS - held) / 1000);
 }
 
 /**

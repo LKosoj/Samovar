@@ -286,7 +286,7 @@ a { color: var(--accent); }
 }
 .tab input[hidden] { display: none; }
 .tab input:hover, .tab .nav-link:hover, .page-nav .nav-link:hover { color: var(--text-strong); background: var(--bg-tab); box-shadow: none; top: auto; }
-.tab input.active { background: var(--bg-tab); color: var(--text-strong); border: 0; top: auto; }
+.tab input.active, .page-nav .nav-link[aria-current="page"] { background: var(--bg-tab); color: var(--text-strong); border: 0; top: auto; }
 
 /* ==================== Полоса этапа ==================== */
 .stage {
@@ -437,12 +437,12 @@ a { color: var(--accent); }
   box-shadow: var(--shadow-soft);
   padding: 12px;
   position: sticky;
-  top: calc(var(--top-h) + 20px);
+  top: calc(var(--top-real, var(--top-h)) + 20px);
 }
 .scheme svg {
   width: 100%;
   height: auto;
-  max-height: calc(100vh - var(--top-h) - 60px);
+  max-height: calc(100vh - var(--top-real, var(--top-h)) - 60px);
   display: block;
   margin: 0 auto;
 }
@@ -653,21 +653,68 @@ form.mode-form {
   max-height: calc(100vh * 0.4);
   background: var(--bg-messages);
   padding: 0.5em;
-  z-index: 50000;
+  z-index: 8000;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
   transition: all 0.2s ease;
 }
-/* На странице режима лента сообщений - всплывающий блок под шапкой справа. */
+/* На странице режима лента сообщений - всплывающий блок под шапкой справа.
+   Слои: модальное окно (9999) выше истории (9000) и ленты (8000), а те - выше шапки (10). */
 .toasts {
   position: fixed;
-  top: calc(var(--top-h) + 8px);
+  top: calc(var(--top-real, var(--top-h)) + 8px);
   right: 12px;
   width: 440px;
   max-width: calc(100vw - 24px);
-  z-index: 50000;
+  z-index: 8000;
+}
+
+/* Нижняя панель ленты и истории липнет к нижнему краю прокручиваемого блока:
+   блок после каждого сообщения прокручивается вниз, и кнопка сверху уезжала из виду. */
+.messages-bar,
+.history-bar {
+  position: sticky;
+  bottom: -0.5em;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1em;
+  margin: 0.4em -0.5em -0.5em;
+  padding: 0.4em 0.8em;
+  background: inherit;
+  border-top: 1px solid var(--line);
+}
+.history-bar { margin: 0.4em -0.7em -0.7em; bottom: -0.7em; }
+.messages-bar button,
+.history-bar button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.message-dismiss {
+  flex: 0 0 auto;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3em;
+}
+#request_error {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5em;
 }
 
 .messages_array {
@@ -695,7 +742,6 @@ form.mode-form {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
 }
-.message-dismiss { font-family: inherit; text-align: left; }
 .message_0 { background: var(--state-danger-bg); color: var(--text-on-accent); }
 .message_1 { background: var(--msg-warn); color: #1d1a17; }
 .message_2 { background: var(--msg-ok); color: #1d1a17; }
@@ -703,13 +749,13 @@ form.mode-form {
 /* ==================== История ==================== */
 .history_box {
   position: fixed;
-  top: calc(var(--top-h) + 8px);
+  top: calc(var(--top-real, var(--top-h)) + 8px);
   left: 12px;
   max-height: calc(100vh * 0.80);
   width: min(720px, calc(100vw - 24px));
   background: var(--bg-history);
   padding: 0.7em;
-  z-index: 70000;
+  z-index: 9000;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -717,10 +763,8 @@ form.mode-form {
   transition: all 0.2s ease;
   color: var(--text-strong);
 }
-.history_box .history-clear { position: absolute; right: 0.5em; top: 0.4em; }
-
 .history_array {
-  margin-top: 1.3em;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -771,7 +815,7 @@ form.mode-form {
 .setup-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; max-width: 668px; margin: 0 auto; box-sizing: border-box; gap: 8px; }
 .setup-actions .button, .setup-actions input[type="submit"], .setup-actions input[type="button"] { min-height: 44px; margin: 0; width: auto; min-width: 160px; }
 
-.chart-messages-host { position: absolute; top: calc(var(--top-h) + 8px); left: 200px; width: 600px; max-width: 600px; box-sizing: border-box; z-index: 50000; }
+.chart-messages-host { position: absolute; top: calc(var(--top-real, var(--top-h)) + 8px); left: 200px; width: 600px; max-width: 600px; box-sizing: border-box; z-index: 8000; }
 
 .chart-status-form .container_column { min-width: 0; box-sizing: border-box; }
 
@@ -1177,6 +1221,13 @@ select {
   margin-left: 1em;
 }
 
+/* Подпись поля в телефонной раскладке строки программы (app.js, alignProgramHeader). */
+.prg-col-label {
+  font-size: 0.85em;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
 .specs {
   width: 100%;
 }
@@ -1381,7 +1432,6 @@ body > .theme-toggle {
 }
 
 .history-trigger { z-index: 1; }
-.messages-clear { font-size: 12px; color: var(--text-muted); }
 
 .program-row-action {
   display: inline;
@@ -1517,6 +1567,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
     position: fixed;
     top: auto;
     bottom: 0.5em;
+    z-index: 9500;
     left: 0.5em;
     right: 0.5em;
     width: auto;
@@ -1524,7 +1575,6 @@ form h2 { font-weight: 600; margin: 10px 0; }
     max-width: none;
     margin-left: 0;
     box-sizing: border-box;
-    z-index: 60000;
   }
 }
 
@@ -1538,6 +1588,10 @@ form h2 { font-weight: 600; margin: 10px 0; }
   .stage { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
   .stage .meta { gap: 6px 14px; }
   .grid { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; padding-bottom: 88px; }
+  /* Панель действий вынесена из вкладки «Режим» (app.js, relocateActionsPanel) и
+     висит над любой вкладкой - запас снизу нужен всем, подсказка поднимается над ней. */
+  .mode-form > .tabcontent.panel { padding-bottom: 88px; }
+  .tooltip .tooltiptext { bottom: calc(80px + env(safe-area-inset-bottom)); }
   .col { display: contents; }               /* карточки становятся элементами сетки, порядок задаём явно */
   .sec-scheme { order: 1; }
   .sec-key { order: 2; display: block; }

@@ -1,5 +1,5 @@
-      <input type='button' class="tablinks" onclick="location.href='/chart.htm';" value="График">
-      <input type='button' class="tablinks" onclick="location.href='/setup.htm';" value="Настройки">
+      <input type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/chart.htm';" value="График">
+      <input type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/setup.htm';" value="Настройки">
     </div>
     <div class="spacer"></div>
     <div class="status-chip">
@@ -11,10 +11,15 @@
     <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
   </header>
   <div class="history_box" style="display: none;" id="historyBox">
-    <button type="button" class="history-clear" onclick='SamovarApp.clearHistory()'>[x] очистить историю</button>
     <div class="history_array" id="historyList"></div>
+    <div class="history-bar">
+      <button type="button" class="history-clear" onclick='SamovarApp.clearHistory()'>Очистить историю</button>
+      <button type="button" class="history-close" onclick='SamovarApp.showHistory()'>Закрыть</button>
+    </div>
   </div>
   <div class="messages_box toasts" style="display: none;" id="messagesBox">
-    <button type="button" class="messages-clear" style="position: absolute; top: 0.3em; right: 0.5em; cursor: pointer" onclick='SamovarApp.clearMessages()' aria-controls="messages">[x] очистить</button>
     <div class="messages_array" id="messages"></div>
+    <div class="messages-bar">
+      <button type="button" class="messages-clear" onclick='SamovarApp.clearMessages()' aria-controls="messages">Скрыть все</button>
+    </div>
   </div>

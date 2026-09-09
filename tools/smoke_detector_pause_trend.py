@@ -75,6 +75,9 @@ static float trendFixture = 0;
 static int calculateTrendCalls = 0;
 static float calculate_temperature_trend() { calculateTrendCalls++; return trendFixture; }
 
+enum DetectorIdleReason : uint8_t { DETECTOR_IDLE_ACTIVE = 0, DETECTOR_IDLE_PAUSE = 7 };
+static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_ACTIVE;
+
 // Накопитель усреднения и счётчик опроса датчиков - те же имена, что в прошивке
 static const uint32_t DETECTOR_SAMPLE_INTERVAL_MS = 4000UL;
 static volatile uint32_t DSUpdateCounter = 0;

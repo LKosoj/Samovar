@@ -70,7 +70,7 @@ writer_body = function_body(
 )
 EXPECTED_KEYS = [
     "st", "pn", "pt", "alc", "salc", "rpa", "ppa", "tr", "rtt", "ptr", "tt",
-    "det", "dtr", "boil", "bev", "bps", "wauto", "wsp", "wpwm", "wf", "wft",
+    "det", "dtr", "di", "dwl", "dws", "ud", "ua", "boil", "bev", "bps", "wauto", "wsp", "wpwm", "wf", "wft",
     "prvl", "isspd", "bpause", "order", "mixer", "ph", "phv",
 ]
 found_keys = re.findall(r'jsonField(?:Raw|Float|Bool|String)\(out, first, "([a-z]+)"', writer_body)
