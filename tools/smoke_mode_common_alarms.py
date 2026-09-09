@@ -364,7 +364,7 @@ for name, text, signature, ordered in [
         nbk,
         "void check_alarm_nbk()",
         [
-            "mode_should_close_cooling(TARGET_WATER_TEMP - 20, false)",
+            "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)",
             "if (!PowerOn)",
             "mode_clear_alarm_pause_if_expired();",
             "mode_should_open_cooling(true, false, true)",

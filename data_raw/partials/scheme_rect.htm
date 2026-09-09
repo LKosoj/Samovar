@@ -22,9 +22,18 @@
             <g transform="translate(96 34)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Пар</text><text class="tag" x="8" y="14" fill="var(--steam)"><tspan data-tele="SteamTemp" data-fmt="2"></tspan>°</text></g>
             <line x1="186" y1="46" x2="212" y2="46" stroke="var(--border-dashed)" stroke-width="1.5"/>
             <g transform="translate(300 96)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Вода</text><text class="tag" x="8" y="14" fill="var(--water)"><tspan data-tele="WaterTemp" data-fmt="1"></tspan>°</text></g>
-            <!-- Царга -->
-            <rect class="metal" x="202" y="128" width="36" height="244" rx="4"/>
-            <rect x="206" y="132" width="28" height="236" fill="url(#pack)"/>
+            <!-- Царга. При втором I2C-насосе над ЦП (i2c_second_pump) над царгой встаёт царга пастеризации -->
+            <g data-show="_noCp">
+              <rect class="metal" x="202" y="128" width="36" height="244" rx="4"/>
+              <rect x="206" y="132" width="28" height="236" fill="url(#pack)"/>
+            </g>
+            <g data-show="_cp">
+              <rect class="metal" x="196" y="134" width="48" height="58" rx="6"/>
+              <rect x="200" y="138" width="40" height="50" fill="url(#pack)" opacity=".8"/>
+              <rect class="metal" x="202" y="192" width="36" height="180" rx="4"/>
+              <rect x="206" y="196" width="28" height="172" fill="url(#pack)"/>
+              <g transform="translate(152 156)"><rect class="tag-bg" x="0" y="-12" width="32" height="18" rx="5"/><text class="tag-lbl" x="7" y="1">ЦП</text></g>
+            </g>
             <g class="bubbles" data-on="_running" style="--rise:-228px;--rise-time:3.6s">
               <circle class="bubble" cx="214" cy="360" r="2"/><circle class="bubble" cx="224" cy="364" r="2.5"/><circle class="bubble" cx="219" cy="368" r="1.6"/>
             </g>
@@ -42,9 +51,23 @@
             <text class="tag-lbl" x="242" y="512" text-anchor="middle">нагрев</text>
             <text class="tag tag-sm power-text" data-on="_heaterOn" x="242" y="528" text-anchor="middle" data-tele="_heaterText"></text>
             <g class="pause-badge" data-on="_paused" transform="translate(206 548)"><rect x="0" y="0" width="72" height="18" rx="4"/><text x="36" y="13" text-anchor="middle">ПАУЗА</text></g>
-            <!-- Узел отбора: труба к насосу и банкам -->
-            <path class="pipe" d="M182 122 H96 V372"/>
-            <path class="feed" data-on="_withdrawing" d="M182 122 H96 V372"/>
+            <!-- Узел отбора: труба к насосу и банкам. С ЦП продукт берётся из-под неё,
+                 а головы — из-под дефлегматора вторым I2C-насосом -->
+            <g data-show="_noCp">
+              <path class="pipe" d="M182 122 H96 V372"/>
+              <path class="feed" data-on="_withdrawing" d="M182 122 H96 V372"/>
+            </g>
+            <g data-show="_cp">
+              <path class="pipe" d="M202 198 H96 V372"/>
+              <path class="feed" data-on="_withdrawing" d="M202 198 H96 V372"/>
+              <path class="pipe" d="M182 122 H40 V196"/>
+              <path class="feed" data-on="_cpPumpOn" d="M182 122 H40 V196"/>
+              <circle class="metal" cx="40" cy="214" r="18"/>
+              <g class="rotor" data-on="_cpPumpOn"><circle cx="40" cy="204" r="3.5"/><circle cx="49" cy="219" r="3.5"/><circle cx="31" cy="219" r="3.5"/></g>
+              <path class="pipe" d="M40 232 V250"/>
+              <g class="drops" data-on="_cpPumpOn"><circle class="drop" cx="40" cy="256" r="3"/><circle class="drop" cx="40" cy="256" r="2.2"/></g>
+              <text class="tag-lbl" x="40" y="300" text-anchor="middle">головы</text>
+            </g>
             <circle class="metal" cx="96" cy="400" r="24"/>
             <g class="rotor" data-on="_pumpOn"><circle cx="96" cy="386" r="4"/><circle cx="108" cy="407" r="4"/><circle cx="84" cy="407" r="4"/></g>
             <g transform="translate(10 388)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">Отбор</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="ActualVolumePerHour" data-fmt="2"></tspan> л/ч</text></g>

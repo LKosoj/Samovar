@@ -17,6 +17,7 @@ serveStatic (AsyncStaticWebHandler._tryGzipFirst), и AsyncFileResponse - он �
 """
 import re
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -75,7 +76,7 @@ def check_no_unresolved_includes(name: str, data: bytes) -> str | None:
     return None
 
 
-def build(target: Path) -> list[str]:
+def build(target: Path, file_mode: int) -> list[str]:
     errors: list[str] = []
     for source in sorted(SOURCE.iterdir()):
         if not source.is_file():
@@ -96,9 +97,12 @@ def build(target: Path) -> list[str]:
                 errors.append(error)
                 continue
         if source.name in COMPRESS:
-            (target / f"{source.name}.gz").write_bytes(canonical_gzip(data))
+            output = target / f"{source.name}.gz"
+            output.write_bytes(canonical_gzip(data))
         else:
-            (target / source.name).write_bytes(data)
+            output = target / source.name
+            output.write_bytes(data)
+        output.chmod(file_mode)
     missing = sorted(set(COMPRESS) - {p.name for p in SOURCE.iterdir()})
     if missing:
         errors.append(f"в data_raw/ нет файлов из COMPRESS: {', '.join(missing)}")
@@ -110,11 +114,18 @@ def main() -> int:
         print(f"нет каталога {SOURCE}")
         return 1
 
+    directory_mode = stat.S_IMODE(TARGET.stat().st_mode) if TARGET.is_dir() else None
+
     staging = TARGET.with_name("data.tmp")
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
+    if directory_mode is not None:
+        staging.chmod(directory_mode)
+    else:
+        directory_mode = stat.S_IMODE(staging.stat().st_mode)
 
-    errors = build(staging)
+    # Бит выполнения у каталога разрешает вход в него, но файлы исполняемыми не делает.
+    errors = build(staging, directory_mode & 0o666)
     if errors:
         shutil.rmtree(staging, ignore_errors=True)
         print("сборка data/ не выполнена:")

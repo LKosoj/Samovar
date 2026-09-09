@@ -490,6 +490,8 @@ RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
   return RUNTIME_AJAX_SNAPSHOT_OK;
 }
 
+bool rectSecondPumpRunning = true;
+bool rect_second_i2c_pump_enabled() { return true; }
 bool heater_safety_latched() {
   sourceGetterCalls++;
   return fakeHeaterAlarmLatched;
@@ -632,7 +634,8 @@ EXPECTED_DEFAULT = (
     '"bk_water_auto":1,"bk_steam_setpoint":78.4,'
     '"ISspd":2.500,"i2c_stepper_present":1,"i2c_mixer_present":1,'
     '"i2c_pump_present":1,"i2c_pump_speed":400,"i2c_pump_target_ml":12.5,'
-    '"i2c_pump_remaining_ml":7.0,"i2c_pump_running":1,"heap":123456,'
+    '"i2c_pump_remaining_ml":7.0,"i2c_pump_running":1,'
+    '"i2c_second_pump":1,"i2c_second_pump_running":1,"heap":123456,'
     '"rssi":-45,"fr_bt":98766,"PrgType":"B","current_power_volt":0,'
     '"target_power_volt":0,"current_power_mode":"0","current_power_p":0,'
     '"valve":1,"alc":44.88,"stm_alc":19.53,"Status":"run\\nok",'

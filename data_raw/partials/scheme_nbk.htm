@@ -36,14 +36,14 @@
             <path class="pipe" d="M104 250 H202"/>
             <path class="feed" data-on="_pumpOn" d="M104 250 H202"/>
             <path class="pipe" d="M80 274 V330"/>
-            <g transform="translate(20 300)"><rect class="tag-bg" x="0" y="-11" width="120" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Подача браги</text><text class="tag tag-sm" x="8" y="14"><tspan data-tele="ISspd"></tspan> об/мин</text></g>
+            <g transform="translate(20 300)"><rect class="tag-bg" x="0" y="-11" width="120" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Подача браги</text><text class="tag tag-sm" x="8" y="14"><tspan data-tele="ISspd" data-fmt="1"></tspan> л/ч</text></g>
             <g transform="translate(20 340)"><rect class="tag-bg" x="0" y="-11" width="120" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Брага</text><text class="tag" x="8" y="14" fill="var(--tank)"><tspan data-tele="TankTemp" data-fmt="1"></tspan>°</text></g>
             <text class="tag-lbl" x="80" y="222" text-anchor="middle">насос браги</text>
             <!-- Отбор продукта -->
             <path class="pipe" d="M182 122 H150 V452"/>
             <path class="feed" data-on="_running" d="M182 122 H150 V452"/>
             <g class="drops" data-on="_running"><circle class="drop" cx="150" cy="458" r="3"/><circle class="drop" cx="150" cy="458" r="2.2"/></g>
-            <g transform="translate(112 486)"><rect class="jar" x="0" y="0" width="40" height="48" rx="4"/><rect class="jar-fill" x="2" y="20" width="36" height="26" rx="3"/><text class="tag-lbl jar-lbl" x="20" y="60" text-anchor="middle">продукт</text></g>
+            <g transform="translate(112 486)" data-on="_running"><rect class="jar" x="0" y="0" width="40" height="48" rx="4"/><rect class="jar-fill" x="2" y="20" width="36" height="26" rx="3"/><text class="tag-lbl jar-lbl" x="20" y="60" text-anchor="middle">продукт</text></g>
             <!-- Низ колонны: парогенератор/куб и слив барды -->
             <rect class="metal" x="172" y="410" width="140" height="110" rx="12"/>
             <g clip-path="url(#cubeClip)"><rect class="liquid" x="172" y="470" width="140" height="50"/></g>

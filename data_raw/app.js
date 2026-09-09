@@ -1976,6 +1976,18 @@
       : kind === 'beer' || kind === 'cheese' ? !!data.mixer && v._running
       : v._withdrawing && rate > 0;
     v._mixerOn = !!data.mixer && v._running;
+    // Второй I2C-насос отбора голов над ЦП (ректификация): ЦП и насос на схеме только
+    // если он включён в настройках и плата отвечает; анимация — пока насос качает.
+    v._cp = kind === 'rect' && !!Number(data.i2c_second_pump);
+    v._noCp = !v._cp;
+    v._cpPumpOn = v._cp && !!Number(data.i2c_second_pump_running);
+    // Варочный порядок пива (BeerBrewOrder): у HERMS/RIMS вместо мешалки — насос
+    // рециркуляции и бойлер/труба с ТЭНом; сыр и су-вид всегда рисуют обычный котёл.
+    const order = kind === 'beer' ? String(data.BeerBrewOrder || '') : '';
+    v._herms = order === 'herms';
+    v._rims = order === 'rims';
+    v._recirc = v._herms || v._rims;
+    v._allinone = !v._recirc;
     // Вода охлаждения: по клапану (valve_status прошивки) или работающему ШИМ-насосу.
     // У старой прошивки ключа valve нет — тогда, как раньше, по нагреву.
     v._flowOn = data.valve === undefined ? v._heaterOn : (!!data.valve || num(data.wp_spd) > 0);

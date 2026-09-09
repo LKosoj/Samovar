@@ -1671,7 +1671,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
 // === Тоже Проверка критических аварий === в основном по воде
 void check_alarm_nbk() {// вызывается из Samovar.ino, надо разобраться что оставить, я уже кой чего поубирал
   // Если нагрев выключен и это не самотестирование и вода включена и Т воды на 20 и более гр. ниже уставки
-  if (mode_should_close_cooling(TARGET_WATER_TEMP - 20, false)) {
+  if (mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)) {
     open_valve(false, true); //призыв закрыть воду либо закрытие клапана
     mode_stop_cooling_pump_if_started(); // стоп водяной насос
   }

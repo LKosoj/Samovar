@@ -196,6 +196,8 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   jsonFieldFloat(out, first, "prvl", s.pressure, 2);
 #endif
   jsonFieldFloat(out, first, "isspd", s.i2cStepperSpeed, 3);
+  jsonFieldBool(out, first, "sp", s.secondPumpEnabled);
+  jsonFieldBool(out, first, "spr", s.secondPumpRunning);
   jsonFieldBool(out, first, "bpause", s.beerPaused);
   jsonFieldRaw(out, first, "order", s.beerBrewOrder);
   jsonFieldBool(out, first, "mixer", s.mixer);

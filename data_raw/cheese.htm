@@ -313,6 +313,11 @@
       document.getElementById('TankTemp').textContent = Number(data.TankTemp || 0).toFixed(2);
       document.getElementById('ACPTemp').textContent = Number(data.ACPTemp || 0).toFixed(2);
       document.getElementById('Status').textContent = data.Status || '';
+      document.getElementById('bme_temp').textContent = data.bme_temp;
+      document.getElementById('heap').textContent = data.heap;
+      document.getElementById('rssi').textContent = data.rssi;
+      document.getElementById('fr_bt').textContent = data.fr_bt;
+      if (data.wp_spd !== undefined) document.getElementById('add_param').textContent = '; ШИМ насоса воды: ' + data.wp_spd;
       var acceptedRows = acceptedCheeseRows();
       var current = currentCheeseRow(data, acceptedRows);
       document.getElementById('stageType').textContent = current ? CHEESE_TYPES[current[0]].name : '—';

@@ -4171,6 +4171,10 @@ struct AjaxTelemetrySnapshot {
   bool i2cMixerPresent;
   bool i2cPumpPresent;
   bool i2cPumpRunning;
+  // Второй I2C-насос отбора голов над ЦП (ректификация): включён настройкой и плата
+  // отвечает; работает - по rectSecondPumpRunning (logic.h). Схемы веба/приложений/сайта.
+  bool secondPumpEnabled;
+  bool secondPumpRunning;
   bool hasAlcohol;
   bool hasTimePrediction;
   bool rowPredictionAvailable;
@@ -4273,6 +4277,9 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   const SAMOVAR_MODE mode = Samovar_Mode;
   const int16_t status = SamovarStatusInt;
   snapshot.statusInt = status;  // [Б6.1] числовой статус в телеметрии
+  snapshot.secondPumpEnabled = mode == SAMOVAR_RECTIFICATION_MODE &&
+                               rect_second_i2c_pump_enabled();
+  snapshot.secondPumpRunning = snapshot.secondPumpEnabled && rectSecondPumpRunning;
   const ProgramType currentType = current_program_type();
   if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
        mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE ||
@@ -4410,6 +4417,8 @@ static void writeAjaxTelemetryFields(
     jsonFieldRaw(out, first, "i2c_pump_remaining_ml", 0);
     jsonFieldRaw(out, first, "i2c_pump_running", 0);
   }
+  jsonFieldBool(out, first, "i2c_second_pump", snapshot.secondPumpEnabled);
+  jsonFieldBool(out, first, "i2c_second_pump_running", snapshot.secondPumpRunning);
 
   jsonFieldRaw(out, first, "heap", snapshot.freeHeap);
   jsonFieldRaw(out, first, "rssi", snapshot.rssi);
@@ -4677,7 +4686,7 @@ void apply_config_runtime() {
   }
   if (isnan(SamSetup.MainsVoltage) || SamSetup.MainsVoltage <= 0) SamSetup.MainsVoltage = 230;
 
-  if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
+  if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = 48;
   if (isnan(SamSetup.SetACPTemp) || SamSetup.SetACPTemp == 0) SamSetup.SetACPTemp = 43;
   // [П11-фикс 23.08] Серверный минимум DistTemp поднят с 0 до 30 (WebServer.ino,
   // kSaveFloatFields) - условие окончания (TankSensor.avgTemp >= DistTemp) при малых
