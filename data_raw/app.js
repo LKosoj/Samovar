@@ -724,7 +724,8 @@
     }
     const luaFiles = files
       .filter(function (item) { return item && item.type === 'file' && /\.lua$/i.test(item.name); })
-      .map(function (item) { return String(item.name).replace(/^\//, ''); });
+      .map(function (item) { return String(item.name).replace(/^\//, ''); })
+      .filter(function (name) { return name !== 'script.lua' && name.indexOf('btn_') !== 0; });
     if (luaFiles.length === 0) {
       notify('В памяти Самовара нет Lua-файлов.', 1);
       return false;

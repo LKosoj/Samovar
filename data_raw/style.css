@@ -1344,6 +1344,8 @@ details.spoiler > .spoiler-content {
 
 .popup__button {
   min-width: 120px;
+  min-height: 44px;
+  margin: 0;
 }
 
 .modalline {

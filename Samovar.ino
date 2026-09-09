@@ -2765,8 +2765,6 @@ static void setup_connect_wifi_and_notify() {
     StIP = WiFi.softAPIP().toString();
     Serial.println(F("Started as WiFi AP"));
   }
-  WiFi.setTxPower(WIFI_POWER_19_5dBm);
-
   Serial.print(F("IP address: "));
   if (WiFi.getMode() == WIFI_AP) ipst_set(StIP);
 

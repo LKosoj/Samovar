@@ -40,6 +40,8 @@ BROWSER_TEST = r'''async page => {
     body: JSON.stringify([
       { type: 'file', name: '/job.lua' },
       { type: 'file', name: '/stage.lua' },
+      { type: 'file', name: '/btn_beer_button1.lua' },
+      { type: 'file', name: '/script.lua' },
       { type: 'file', name: '/notes.txt' },
       { type: 'dir', name: '/folder.lua' }
     ])
@@ -82,7 +84,21 @@ BROWSER_TEST = r'''async page => {
       getComputedStyle(document.getElementById('lua-program-popup')).display === 'none');
   }
 
+  async function checkModalButtons(selector, label) {
+    const buttons = page.locator(selector + ' .popup__button');
+    check(await buttons.count() === 2, label + ': ожидались две кнопки');
+    const styles = await buttons.evaluateAll(elements => elements.map(element => ({
+      height: element.getBoundingClientRect().height,
+      primary: element.classList.contains('primary'),
+      secondary: element.classList.contains('secondary')
+    })));
+    check(styles.every(style => style.height >= 44), label + ': кнопки ниже 44 px');
+    check(styles.filter(style => style.primary).length === 1, label + ': нет основной кнопки');
+    check(styles.filter(style => style.secondary).length === 1, label + ': нет вторичной кнопки');
+  }
+
   await openMode('/index.htm', 'L;1;job.lua;0;0;0', '#pspeed0', false);
+  await checkModalButtons('#lua-program-popup', 'Lua-модалка');
   const files = await page.locator('#lua-program-file option').allTextContents();
   check(JSON.stringify(files) === JSON.stringify(['job.lua', 'stage.lua']),
     'список должен содержать только Lua-файлы: ' + JSON.stringify(files));
@@ -116,6 +132,14 @@ BROWSER_TEST = r'''async page => {
       path + ' сериализовал Lua-строку неверно: ' +
         JSON.stringify((await page.locator('#WProgram').inputValue()).trim()));
   }
+
+  await page.evaluate(() => {
+    const mixer = document.getElementById('pmixer0');
+    mixer.value = '1^0^10^5';
+    SamovarApp.openDeviceScheduleModal(mixer);
+  });
+  await checkModalButtons('#popup', 'Модалка мешалки');
+  await page.evaluate(() => SamovarApp.closeDeviceScheduleModal());
 
   await openMode('/cheese.htm', 'L;0;5;0;job.lua;0', '.cheese-lua-call', true);
   await saveModal(25, 'stage.lua');
