@@ -117,7 +117,9 @@ inline uint32_t cheese_work_seconds() {
 inline uint32_t cheese_timeout_remaining_seconds() {
   if (!cheese_runtime_active()) return 0;
   const WProgram& row = program[ProgramNum];
-  const float remaining = cheese_stage_timeout_minutes(row) * 60.0f -
+  const float timeoutSeconds = row.WType == 'L'
+      ? row.Time : cheese_stage_timeout_minutes(row) * 60.0f;
+  const float remaining = timeoutSeconds -
       static_cast<float>(cheese_stage_elapsed_ms()) / 1000.0f;
   return remaining > 0.0f ? static_cast<uint32_t>(ceilf(remaining)) : 0;
 }
@@ -503,7 +505,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
   if (row.WType == 'L') {
 #ifdef USE_LUA
     uint32_t ticket = 0;
-    if (!request_beer_lua_job(ticket)) return false;
+    if (!request_program_lua_job(targetProgram, ticket)) return false;
     cheeseLuaStage.phase = CHEESE_LUA_STAGE_ENTER_QUEUED;
     cheeseLuaStage.ticket = ticket;
     cheeseLuaStage.nextProgram = PROGRAM_END;
@@ -546,7 +548,8 @@ void run_cheese_program(uint8_t num) {
 
 inline bool cheese_lua_stage_tick(uint32_t nowMs, const WProgram& row) {
 #ifdef USE_LUA
-  if (cheese_time_elapsed(nowMs, cheeseRuntime.enteredMs, row.Time)) {
+  if (static_cast<uint32_t>(nowMs - cheeseRuntime.enteredMs) >=
+      static_cast<uint32_t>(row.Time) * 1000UL) {
     cheese_abort("Lua не завершила операцию до тайм-аута");
     return true;
   }

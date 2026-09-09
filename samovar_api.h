@@ -138,6 +138,7 @@ void get_web_interface();
 // Generic parsing and formatting
 String getValue(const String& data, char separator, int index);
 inline String format_float(float v, int d);
+inline bool copy_program_lua_text(uint8_t rowIndex, char* destination, size_t destinationSize);
 
 // Rectification and shared process helpers
 void withdrawal(void);

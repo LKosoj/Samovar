@@ -288,7 +288,7 @@ static_assert(sizeof(ProfileOperationPhase) == sizeof(uint8_t),
               "ProfileOperationPhase must remain byte-sized");
 static_assert(std::is_trivially_copyable<ProfileOperationSlot>::value,
               "ProfileOperationSlot must remain safe for fixed slot copies");
-static_assert(sizeof(ProfileOperationSlot) <= 1480,
+static_assert(sizeof(ProfileOperationSlot) <= 2600,
               "ProfileOperationSlot exceeds replaced pending storage");
 
 static inline ProfileOperationPhase profile_operation_phase_load() {
@@ -716,6 +716,7 @@ String pending_lua_file;
 volatile bool pending_lua_file_flag = false;
 String lua_script_list_cache;
 volatile bool pending_lua_reload_flag = false;
+String pending_lua_reload_file;
 #endif
 
 // [W-3] Кэш I2C-шагового двигателя — обновляется в SysTicker, читается из async
@@ -3522,20 +3523,28 @@ static void tick_apply_pending_nbkopt() {
 static void tick_apply_pending_lua_commands() {
 #ifdef USE_LUA
   bool hasPendingLuaReload = false;
+  String changedLuaFile;
   {
     PendingCommandLockGuard guard;
     if (guard && pending_lua_reload_flag) {
       pending_lua_reload_flag = false;
+      changedLuaFile = pending_lua_reload_file;
       hasPendingLuaReload = true;
     }
   }
   if (hasPendingLuaReload) {
-    if (!load_lua_script()) {
+    if (!load_lua_script() || !reload_program_lua_job(changedLuaFile)) {
       // Возврат уже принятой заявки, а не постановка новой: queue_pending_flag()
       // отбил бы её при смене режима и при занятом локе, и перезагрузка скрипта
       // потерялась бы молча. Запись одного volatile-флага атомарна, а снимает его
       // только этот такт loop(), поэтому гонки нет.
       pending_lua_reload_flag = true;
+    } else {
+      PendingCommandLockGuard guard;
+      if (guard && !pending_lua_reload_flag &&
+          pending_lua_reload_file == changedLuaFile) {
+        pending_lua_reload_file = "";
+      }
     }
   }
 
@@ -3839,6 +3848,9 @@ void loop() {
         break;
       case SAMOVAR_BK:
         mode_apply_power_on_command(commandMsg.command);
+        break;
+      case SAMOVAR_BK_NEXT:
+        run_bk_program(ProgramNum + 1);
         break;
       case SAMOVAR_NBK:
 #ifdef SAMOVAR_USE_POWER

@@ -492,9 +492,9 @@ def main() -> int:
     if result.returncode != 0:
         return result.returncode
 
-    def check_mutant(name: str, piece_key: str, old: str, new: str, expect_message: str) -> int:
+    def check_mutant(name: str, piece_key: str, old: str, new: str, expect_message: str, count: int = 1) -> int:
         mutated_pieces = dict(pieces)
-        mutated_text = pieces[piece_key].replace(old, new, 1)
+        mutated_text = pieces[piece_key].replace(old, new, count)
         if mutated_text == pieces[piece_key]:
             print(f"FAIL: не удалось построить мутацию {name}", file=sys.stderr)
             return 1
@@ -585,6 +585,7 @@ def main() -> int:
         "PowerOn && !bk_work_power_pending &&",
         "PowerOn &&",
         "строки программы переходят во время разгона до кипения",
+        2,
     )
     if status != 0:
         return status

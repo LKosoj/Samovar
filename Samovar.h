@@ -520,7 +520,7 @@ LiquidMenu main_menu1(lcd);
 
 DNSServer dns;
 
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF, SAMOVAR_CHEESE, SAMOVAR_CHEESE_NEXT};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_BK_NEXT, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF, SAMOVAR_CHEESE, SAMOVAR_CHEESE_NEXT};
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE, SAMOVAR_CHEESE_MODE};
 volatile SAMOVAR_MODE Samovar_Mode;
@@ -658,6 +658,7 @@ struct WProgram {
   uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
   float Time;                                                  //время, необходимое для отбора программы
   float Param;                                                 //целевой pH сырного этапа n
+  uint16_t LuaTextOffset;                                      //смещение текста строки L в общем буфере программы
 };
 
 enum ProgramWaitType : uint8_t {
@@ -705,6 +706,7 @@ DSSensor* const sensorList[DS_SENSOR_COUNT] = {
 volatile uint32_t DSUpdateCounter = 0;
 
 WProgram program[PROGRAM_MAX];                                 //массив строк для записи программы отбора.
+char programTextPool[PROGRAM_TEXT_POOL_SIZE] = {0};             //имя Lua-файла и параметры строк L
 
 //**************************************************************************************************************
 const char* host = SAMOVAR_HOST;

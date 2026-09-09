@@ -381,6 +381,11 @@ volatile bool lua_boot_init_ready = false;
 volatile uint32_t lua_beer_job_next_ticket = 0;
 volatile uint32_t lua_beer_job_ticket = 0;
 volatile LuaBeerJobResult lua_beer_job_result = LUA_BEER_JOB_IDLE;
+static int lua_program_script_ref = LUA_NOREF;
+static String lua_program_script_text;
+static String lua_program_call_text;
+static String lua_program_script_name;
+static volatile bool lua_program_job = false;
 #ifdef SAMOVAR_LUA_SIMULATION
 static uint32_t luaSimulationMillis = 0;
 #endif
@@ -475,6 +480,7 @@ inline bool request_lua_mode_stop() {
   lua_start_requested = false;
   lua_job_script = "";
   lua_job_type = LUA_JOB_NONE;
+  lua_program_job = false;
   runtime_state_unlock(true);
   return true;
 }
@@ -539,18 +545,50 @@ inline void finish_beer_lua_periodic_result(bool periodicFailed, bool periodicTi
   runtime_state_unlock(locked);
 }
 
-inline bool request_beer_lua_job(uint32_t& ticket) {
+String get_lua_script(String fn);
+
+inline bool lua_split_program_call(const String& call, String& fileName) {
+  const int separator = call.indexOf('^');
+  fileName = separator < 0 ? call : call.substring(0, separator);
+  return fileName.length() > 4 && fileName.endsWith(".lua");
+}
+
+inline void lua_install_program_args_locked(const String& call) {
+  lua_State* state = lua.GetState();
+  int argumentCount = 1;
+  for (unsigned int i = 0; i < call.length(); i++) {
+    if (call.charAt(i) == '^') argumentCount++;
+  }
+  lua_createtable(state, argumentCount, 0);
+  int index = 0;
+  int start = 0;
+  while (start >= 0) {
+    const int separator = call.indexOf('^', start);
+    String value = separator < 0 ? call.substring(start) : call.substring(start, separator);
+    if (index > 0 && value == "\"\"") value = "";
+    lua_pushlstring(state, value.c_str(), value.length());
+    lua_rawseti(state, -2, index++);
+    start = separator < 0 ? -1 : separator + 1;
+  }
+  lua_setglobal(state, "arg");
+}
+
+inline bool request_compiled_program_lua_job(const String& script, const String& call, const String& fileName, uint32_t& ticket) {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (!locked) return false;
-  const bool modeScriptReady = lua_runtime_ready && script2.length() > 0 &&
-                               lua_chunk_ref_valid(script2_ref);
-  if (!modeScriptReady || mode_switch_in_progress() || !lua_finished ||
+  const bool programScriptReady = lua_runtime_ready && script.length() > 0 &&
+                                  lua_chunk_ref_valid(lua_program_script_ref);
+  if (!programScriptReady || mode_switch_in_progress() || !lua_finished ||
       lua_start_requested || loop_lua_fl) {
-    lua_beer_job_result = modeScriptReady ? LUA_BEER_JOB_FAILED_RUNTIME
-                                          : LUA_BEER_JOB_FAILED_INIT;
+    lua_beer_job_result = programScriptReady ? LUA_BEER_JOB_FAILED_RUNTIME
+                                             : LUA_BEER_JOB_FAILED_INIT;
     runtime_state_unlock(true);
     return false;
   }
+  lua_program_script_text = script;
+  lua_program_call_text = call;
+  lua_program_script_name = fileName;
+  lua_program_job = true;
   ticket = ++lua_beer_job_next_ticket;
   lua_beer_job_ticket = ticket;
   lua_beer_job_result = LUA_BEER_JOB_QUEUED;
@@ -558,6 +596,86 @@ inline bool request_beer_lua_job(uint32_t& ticket) {
   loop_lua_fl = true;
   lua_start_requested = true;
   runtime_state_unlock(true);
+  return true;
+}
+
+inline bool request_program_lua_job(uint8_t rowIndex, uint32_t& ticket) {
+  char callBuffer[PROGRAM_TEXT_POOL_SIZE] = {0};
+  if (!copy_program_lua_text(rowIndex, callBuffer, sizeof(callBuffer))) return false;
+  const String call(callBuffer);
+  String fileName;
+  if (!lua_split_program_call(call, fileName)) return false;
+  const String script = get_lua_script(fileName);
+  if (script.length() == 0) return false;
+
+  bool luaLocked = lua_state_lock(pdMS_TO_TICKS(300));
+  if (!luaLocked) return false;
+  const String compileError = lua_compile_chunk_locked(
+      script, ("@" + fileName).c_str(), lua_program_script_ref);
+  lua_state_unlock(true);
+  if (compileError.length() > 0) {
+    WriteConsoleLog("ERR in " + fileName + ": " + compileError);
+    return false;
+  }
+
+  return request_compiled_program_lua_job(script, call, fileName, ticket);
+}
+
+inline bool reload_program_lua_job(const String& changedFile) {
+  if (changedFile.length() == 0) return true;
+  String fileName = changedFile;
+  if (fileName.charAt(0) == '/') fileName.remove(0, 1);
+
+  String selectedFile;
+  {
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (!locked) return false;
+    if (lua_program_job) selectedFile = lua_program_script_name;
+    runtime_state_unlock(true);
+  }
+  if (selectedFile != fileName) return true;
+
+  const String script = get_lua_script(fileName);
+  bool luaLocked = lua_state_lock(pdMS_TO_TICKS(300));
+  if (!luaLocked) return false;
+  int newRef = LUA_NOREF;
+  String compileError;
+  if (script.length() == 0) {
+    compileError = F("# lua compile error:\nempty script");
+  } else {
+    compileError = lua_compile_chunk_locked(
+        script, ("@" + fileName).c_str(), newRef);
+  }
+
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) {
+    lua_unref_chunk_locked(newRef);
+    lua_state_unlock(true);
+    return false;
+  }
+  if (!lua_program_job || lua_program_script_name != fileName) {
+    runtime_state_unlock(true);
+    lua_unref_chunk_locked(newRef);
+    lua_state_unlock(true);
+    return true;
+  }
+
+  int oldRef = lua_program_script_ref;
+  if (compileError.length() == 0) {
+    lua_program_script_ref = newRef;
+    newRef = LUA_NOREF;
+    lua_program_script_text = script;
+  } else {
+    lua_program_script_ref = LUA_NOREF;
+    lua_beer_job_result = LUA_BEER_JOB_FAILED_RUNTIME;
+  }
+  runtime_state_unlock(true);
+  lua_unref_chunk_locked(oldRef);
+  lua_state_unlock(true);
+
+  if (compileError.length() > 0) {
+    WriteConsoleLog("ERR in " + fileName + ": " + compileError);
+  }
   return true;
 }
 
@@ -595,6 +713,7 @@ inline ActuatorCommandResult request_beer_lua_stop(uint32_t ticket) {
   SetScriptOff = true;
   loop_lua_fl = false;
   lua_start_requested = false;
+  lua_program_job = false;
   lua_beer_job_result = LUA_BEER_JOB_STOPPED;
   runtime_state_unlock(true);
   return ACTUATOR_COMMAND_APPLIED;
@@ -603,6 +722,75 @@ inline ActuatorCommandResult request_beer_lua_stop(uint32_t ticket) {
 inline bool beer_lua_job_idle(uint32_t ticket) {
   if (ticket != lua_beer_job_ticket) return false;
   return lua_mode_owner_idle();
+}
+
+enum LuaSequenceStageResult : uint8_t {
+  LUA_SEQUENCE_STAGE_ACTIVE = 0,
+  LUA_SEQUENCE_STAGE_ADVANCE,
+  LUA_SEQUENCE_STAGE_TIMEOUT,
+  LUA_SEQUENCE_STAGE_FAILED,
+};
+
+struct LuaSequenceStageState {
+  uint32_t ticket;
+  uint32_t enteredMs;
+  uint8_t nextProgram;
+  LuaSequenceStageResult exitResult;
+  bool active;
+  bool stopRequested;
+};
+
+static LuaSequenceStageState luaSequenceStage = {};
+
+inline bool lua_sequence_stage_begin(uint8_t rowIndex, uint32_t nowMs) {
+  uint32_t ticket = 0;
+  if (!request_program_lua_job(rowIndex, ticket)) return false;
+  luaSequenceStage.ticket = ticket;
+  luaSequenceStage.enteredMs = nowMs;
+  luaSequenceStage.nextProgram = PROGRAM_END;
+  luaSequenceStage.exitResult = LUA_SEQUENCE_STAGE_ACTIVE;
+  luaSequenceStage.active = true;
+  luaSequenceStage.stopRequested = false;
+  return true;
+}
+
+inline bool lua_sequence_stage_request_exit(
+    uint8_t nextProgram,
+    LuaSequenceStageResult result = LUA_SEQUENCE_STAGE_ADVANCE) {
+  if (!luaSequenceStage.active) return false;
+  luaSequenceStage.nextProgram = nextProgram;
+  luaSequenceStage.exitResult = result;
+  luaSequenceStage.stopRequested = true;
+  return true;
+}
+
+inline LuaSequenceStageResult lua_sequence_stage_tick(
+    uint32_t nowMs, uint16_t timeoutSeconds, uint8_t& nextProgram) {
+  nextProgram = luaSequenceStage.nextProgram;
+  if (!luaSequenceStage.active) return LUA_SEQUENCE_STAGE_FAILED;
+  if (!luaSequenceStage.stopRequested &&
+      static_cast<uint32_t>(nowMs - luaSequenceStage.enteredMs) >=
+          static_cast<uint32_t>(timeoutSeconds) * 1000UL) {
+    lua_sequence_stage_request_exit(PROGRAM_END, LUA_SEQUENCE_STAGE_TIMEOUT);
+  }
+
+  const LuaBeerJobResult jobResult = beer_lua_job_result(luaSequenceStage.ticket);
+  if (!luaSequenceStage.stopRequested &&
+      jobResult != LUA_BEER_JOB_LOCK_BUSY && jobResult != LUA_BEER_JOB_QUEUED &&
+      jobResult != LUA_BEER_JOB_RUNNING && jobResult != LUA_BEER_JOB_SUCCEEDED) {
+    lua_sequence_stage_request_exit(PROGRAM_END, LUA_SEQUENCE_STAGE_FAILED);
+  }
+  if (!luaSequenceStage.stopRequested) return LUA_SEQUENCE_STAGE_ACTIVE;
+
+  const ActuatorCommandResult stopResult = request_beer_lua_stop(luaSequenceStage.ticket);
+  if (stopResult == ACTUATOR_COMMAND_PENDING) return LUA_SEQUENCE_STAGE_ACTIVE;
+  if (stopResult != ACTUATOR_COMMAND_APPLIED ||
+      !beer_lua_job_idle(luaSequenceStage.ticket)) return LUA_SEQUENCE_STAGE_ACTIVE;
+
+  const LuaSequenceStageResult result = luaSequenceStage.exitResult;
+  nextProgram = luaSequenceStage.nextProgram;
+  luaSequenceStage = {};
+  return result;
 }
 
 static bool lua_copy_current_program(WProgram& currentProgram) {
@@ -1496,6 +1684,20 @@ static int lua_wrapper_set_capacity(lua_State *lua_state) {
   return 0;
 }
 
+// Повернуть сервопривод на произвольный угол (для дозаторов добавок из Lua).
+// Работает только в прошивках с SERVO_PIN; там серво делит с setCapacity один
+// объект servo, так что после setServoAngle ёмкость надо задавать заново.
+#ifdef SERVO_PIN
+static int lua_wrapper_set_servo_angle(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  const int32_t angle = lua_check_int32_arg(lua_state, 1, 0, SERVO_ANGLE, "angle");
+  if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
+  servo.write(angle);
+  return 0;
+}
+#endif
+
 #ifdef USE_WATER_PUMP
 static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -1828,6 +2030,9 @@ void lua_init() {
   lua.Lua_register("setPauseWithdrawal", &lua_wrapper_set_pause_withdrawal);
   lua.Lua_register("setTimer", &lua_wrapper_set_timer);
   lua.Lua_register("setCapacity", &lua_wrapper_set_capacity);
+#ifdef SERVO_PIN
+  lua.Lua_register("setServoAngle", &lua_wrapper_set_servo_angle);
+#endif
 
   lua.Lua_register("openValve", &lua_wrapper_open_valve);
 
@@ -2147,14 +2352,24 @@ void do_lua_script(void *parameter) {
         vTaskDelay(500 / portTICK_PERIOD_MS);
         continue;
       }
-      String local_s1, local_s2;
+      String local_s1, local_s2, localProgramCall, localScriptName;
       int local_script1_ref = script1_ref;
       int local_script2_ref = script2_ref;
+      bool localProgramJob = false;
       {
         bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
         if (locked) {
           local_s1 = script1;
-          local_s2 = script2;
+          localProgramJob = lua_program_job;
+          if (localProgramJob) {
+            local_s2 = lua_program_script_text;
+            local_script2_ref = lua_program_script_ref;
+            localProgramCall = lua_program_call_text;
+            localScriptName = lua_program_script_name;
+          } else {
+            local_s2 = script2;
+            localScriptName = lua_type_script;
+          }
           runtime_state_unlock(true);
         } else {
           lua_state_unlock(lua_locked);
@@ -2190,6 +2405,7 @@ void do_lua_script(void *parameter) {
       bool periodicFailed = false;
       bool periodicTimedOut = false;
       if (local_s2.length() > 0 && lua_chunk_ref_valid(local_script2_ref)) {
+        if (localProgramJob) lua_install_program_args_locked(localProgramCall);
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
           WriteConsoleLog(local_s2);
@@ -2200,10 +2416,10 @@ void do_lua_script(void *parameter) {
         sr.trim();
         if (sr.length() > 0) {
           periodicFailed = true;
-          WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+          WriteConsoleLog("ERR in " + localScriptName + ": " + sr);
           lua_periodic_failure_count_script2++;
           if (lua_periodic_failure_count_script2 >= LUA_PERIODIC_FAILURE_STOP_THRESHOLD) {
-            WriteConsoleLog("режимный скрипт (" + lua_type_script + ") остановлен после " + String(lua_periodic_failure_count_script2) +
+            WriteConsoleLog("режимный скрипт (" + localScriptName + ") остановлен после " + String(lua_periodic_failure_count_script2) +
                              " ошибок подряд, см. предыдущие ERR");
             loop_lua_fl = false;
             lua_periodic_failure_count_script2 = 0;

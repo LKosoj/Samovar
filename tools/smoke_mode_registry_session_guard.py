@@ -59,7 +59,7 @@ HARNESS_TEMPLATE = r'''
 class String;
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_BK_NEXT, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF};
 enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100};
 
 constexpr int16_t SAMOVAR_STATUS_IDLE = 0;
@@ -97,7 +97,7 @@ struct ModeOps {
 // значение всю сессию (SamovarStatusInt не меняется).
 inline const ModeOps* mode_registry() {
   static const ModeOps ops[] = {
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, nullptr, nullptr, nullptr},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_BK_NEXT, nullptr, nullptr, nullptr},
     {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, nullptr, nullptr, nullptr},
   };
   return ops;
@@ -264,9 +264,9 @@ def check_table_start_commands(source: str, errors: list[str]) -> None:
     if len(fields) < 9:
         errors.append(f"mode_registry.h: BK row has fewer than 9 fields: {row}")
         return
-    if fields[8] != "SAMOVAR_NONE":
+    if fields[8] != "SAMOVAR_BK_NEXT":
         errors.append(
-            f"mode_registry.h: BK row startCommand expected SAMOVAR_NONE, got {fields[8]!r}"
+            f"mode_registry.h: BK row startCommand expected SAMOVAR_BK_NEXT, got {fields[8]!r}"
         )
 
     for mode_name in ("SAMOVAR_SUVID_MODE", "SAMOVAR_LUA_MODE"):

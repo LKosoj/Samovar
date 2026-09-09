@@ -206,6 +206,12 @@ static String script1, script2;
 static int script1_ref = 7;
 static int script2_ref = 8;
 static String lua_type_script = "beer.lua";
+static bool lua_program_job = false;
+static String lua_program_script_text;
+static String lua_program_call_text;
+static String lua_program_script_name;
+static int lua_program_script_ref = LUA_NOREF;
+static void lua_install_program_args_locked(const String&) {}
 // [T30a] get_lua_mode_name() нужна только для компиляции РЕАЛЬНОГО тела
 // load_lua_script() как есть; здесь заявки на смену имени никогда нет
 // (lua_type_script_pending всегда false), так что возвращаемое значение не

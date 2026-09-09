@@ -1,0 +1,18 @@
+  <div id="lua-program-overlay" class="overlay"></div>
+  <div id="lua-program-popup" class="popup" role="dialog" aria-modal="true" aria-labelledby="lua-program-title">
+    <div class="popup__content">
+      <h2 id="lua-program-title" class="popup__title">Lua-этап</h2>
+      <div class="modalline">
+        <label for="lua-program-file">Файл Lua</label>
+        <select id="lua-program-file"></select>
+        <label for="lua-program-timeout">Тайм-аут этапа, сек</label>
+        <input id="lua-program-timeout" type="number" min="1" max="65535" step="1">
+      </div>
+      <div id="lua-program-arguments"></div>
+      <button type="button" class="program-row-action" title="Добавить параметр" aria-label="Добавить параметр" onclick="SamovarApp.addLuaProgramArgument()"><img src="plus.png" alt=""></button>
+      <div class="btn-container">
+        <button type="button" class="popup__button" onclick="SamovarApp.closeLuaProgramModal()">Отмена</button>
+        <button type="button" class="popup__button" onclick="SamovarApp.saveLuaProgramModal()">Ок</button>
+      </div>
+    </div>
+  </div>

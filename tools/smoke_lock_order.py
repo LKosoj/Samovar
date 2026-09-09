@@ -484,7 +484,18 @@ CONFIGMUX_SITES = [
      "SamSetup = menuSetupCandidate;"),
     ("program_io.h",
      "inline String program_serialize_rows(uint8_t start, uint8_t end, ProgramRowSerializer serializer)",
-     "memcpy(snapshot, program, sizeof(snapshot));"),
+     "memcpy(snapshot, program, sizeof(snapshot));\n"
+     "  memcpy(textPoolSnapshot, programTextPool, sizeof(textPoolSnapshot));"),
+    ("program_io.h",
+     "inline bool copy_program_lua_text(uint8_t rowIndex, char* destination, size_t destinationSize)",
+     "const uint16_t offset = program[rowIndex].LuaTextOffset;\n"
+     "  if (offset > 0 && offset < PROGRAM_TEXT_POOL_SIZE) {\n"
+     "    const size_t length = strnlen(programTextPool + offset, PROGRAM_TEXT_POOL_SIZE - offset);\n"
+     "    if (length > 0 && length + 1 <= destinationSize) {\n"
+     "      memcpy(destination, programTextPool + offset, length + 1);\n"
+     "      copied = true;\n"
+     "    }\n"
+     "  }"),
 ]
 
 # здесь под спинлок обёрнуто ВСЁ тело целиком - разрывать нельзя, иначе новое

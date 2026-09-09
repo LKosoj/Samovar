@@ -105,6 +105,9 @@
   let bootstrapStarted = false;
   let deviceScheduleInput = null;
   let deviceScheduleOnSave = null;
+  let luaProgramTextInput = null;
+  let luaProgramTimeoutInput = null;
+  let luaProgramOnSave = null;
 
   function byId(id) {
     return document.getElementById(id);
@@ -685,6 +688,102 @@
     deviceScheduleInput.value = byId('m_type').value + '^' + byId('m_direction').value + '^' + run.text + '^' + pause.text;
     const onSave = deviceScheduleOnSave;
     closeDeviceScheduleModal();
+    if (onSave) onSave();
+    return true;
+  }
+
+  function addLuaProgramArgument(value) {
+    const container = byId('lua-program-arguments');
+    const row = document.createElement('div');
+    row.className = 'modalline lua-program-argument';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = value == null ? '' : String(value);
+    input.setAttribute('aria-label', 'Параметр Lua');
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'program-row-action';
+    remove.title = 'Удалить параметр';
+    remove.setAttribute('aria-label', 'Удалить параметр');
+    remove.innerHTML = '<img src="minus.png" alt="">';
+    remove.addEventListener('click', function () { row.remove(); });
+    row.appendChild(input);
+    row.appendChild(remove);
+    container.appendChild(row);
+  }
+
+  async function openLuaProgramModal(textInput, timeoutInput, onSave) {
+    let files;
+    try {
+      const response = await fetch('/edit?list=/');
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      files = await response.json();
+    } catch (error) {
+      notify('Не удалось получить список Lua-файлов: ' + error.message, 1);
+      return false;
+    }
+    const luaFiles = files
+      .filter(function (item) { return item && item.type === 'file' && /\.lua$/i.test(item.name); })
+      .map(function (item) { return String(item.name).replace(/^\//, ''); });
+    if (luaFiles.length === 0) {
+      notify('В памяти Самовара нет Lua-файлов.', 1);
+      return false;
+    }
+    luaProgramTextInput = textInput;
+    luaProgramTimeoutInput = timeoutInput;
+    luaProgramOnSave = typeof onSave === 'function' ? onSave : null;
+    const parts = String(textInput.value || '').split('^');
+    const select = byId('lua-program-file');
+    select.innerHTML = '';
+    luaFiles.forEach(function (name) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    if (parts[0] && luaFiles.indexOf(parts[0]) >= 0) select.value = parts[0];
+    byId('lua-program-timeout').value = String(timeoutInput.value || '1');
+    byId('lua-program-arguments').innerHTML = '';
+    parts.slice(1).forEach(function (value) { addLuaProgramArgument(value); });
+    byId('lua-program-popup').style.display = 'block';
+    byId('lua-program-overlay').classList.add('show');
+    return true;
+  }
+
+  function closeLuaProgramModal() {
+    byId('lua-program-popup').style.display = 'none';
+    byId('lua-program-overlay').classList.remove('show');
+    luaProgramTextInput = null;
+    luaProgramTimeoutInput = null;
+    luaProgramOnSave = null;
+  }
+
+  function saveLuaProgramModal() {
+    if (!luaProgramTextInput || !luaProgramTimeoutInput) return false;
+    const timeout = readNumericInput('lua-program-timeout', {
+      integer: true, min: 1, max: 65535, label: 'Тайм-аут Lua-этапа'
+    });
+    if (!timeout) return false;
+    const values = [];
+    const inputs = byId('lua-program-arguments').querySelectorAll('input');
+    for (let i = 0; i < inputs.length; i++) {
+      const value = inputs[i].value;
+      if (value === '') {
+        notify('Пустой параметр: укажите "" или удалите его.', 1);
+        inputs[i].focus();
+        return false;
+      }
+      if (value.indexOf('^') >= 0) {
+        notify('Символ ^ используется как разделитель параметров.', 1);
+        inputs[i].focus();
+        return false;
+      }
+      values.push(value);
+    }
+    luaProgramTextInput.value = [byId('lua-program-file').value].concat(values).join('^');
+    luaProgramTimeoutInput.value = timeout.text;
+    const onSave = luaProgramOnSave;
+    closeLuaProgramModal();
     if (onSave) onSave();
     return true;
   }
@@ -2394,6 +2493,9 @@
     notify: notify,
     normalizeDeviceScheduleSeconds: normalizeDeviceScheduleSeconds,
     openDeviceScheduleModal: openDeviceScheduleModal,
+    addLuaProgramArgument: addLuaProgramArgument,
+    closeLuaProgramModal: closeLuaProgramModal,
+    openLuaProgramModal: openLuaProgramModal,
     openTab: openTab,
     onTelemetry: onTelemetry,
     pollAjax: pollAjax,
@@ -2416,6 +2518,7 @@
     sendNumericCommand: sendNumericCommand,
     sendPowerCommand: sendPowerCommand,
     saveDeviceScheduleModal: saveDeviceScheduleModal,
+    saveLuaProgramModal: saveLuaProgramModal,
     setConnectionError: setConnectionError,
     setConnectionOk: setConnectionOk,
     setSoundEnabled: setSoundEnabled,

@@ -703,7 +703,7 @@ static bool blynk_changed(String& last, const String& now, bool force) {
   return true;
 }
 
-// Отпечаток программы отбора (FNV-1a по байтам program[] и ProgramLen). Считается раз в
+// Отпечаток программы отбора (FNV-1a по program[], тексту Lua и ProgramLen). Считается раз в
 // цикл push (~1.5 КБ памяти), чтобы слать V24 только после правки программы, не трогая
 // program_io.h (он заморожен smoke-тестами). Рваное чтение параллельно с program_commit()
 // даёт лишь один лишний push V24 на следующем цикле.
@@ -711,6 +711,10 @@ static uint32_t blynk_program_fingerprint() {
   uint32_t h = 2166136261u;
   const uint8_t* bytes = reinterpret_cast<const uint8_t*>(program);
   for (size_t i = 0; i < sizeof(WProgram) * PROGRAM_END; i++) {
+    h = (h ^ bytes[i]) * 16777619u;
+  }
+  bytes = reinterpret_cast<const uint8_t*>(programTextPool);
+  for (size_t i = 0; i < sizeof(programTextPool); i++) {
     h = (h ^ bytes[i]) * 16777619u;
   }
   return (h ^ ProgramLen) * 16777619u;

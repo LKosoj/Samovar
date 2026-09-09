@@ -48,6 +48,7 @@ COMMIT_SIGNATURE = "void program_commit(const ProgramDraft& draft)"
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -68,15 +69,27 @@ static String operator+(const char* left, const String& right) {
 
 using ProgramType = char;
 static const ProgramType PROGRAM_TYPE_NONE = 0;
-struct WProgram { ProgramType WType = PROGRAM_TYPE_NONE; uint8_t capacity_num = 0; float Power = 0; };
+struct WProgram {
+  ProgramType WType = PROGRAM_TYPE_NONE;
+  uint8_t capacity_num = 0;
+  float Power = 0;
+  uint16_t LuaTextOffset = 0;
+};
 static bool program_type_empty(ProgramType value) { return value == PROGRAM_TYPE_NONE; }
 
 static const uint8_t PROGRAM_END = 8;
-struct ProgramDraft { WProgram rows[PROGRAM_END]; uint8_t len = 0; };
+static const size_t PROGRAM_TEXT_POOL_SIZE = 1025;
+struct ProgramDraft {
+  WProgram rows[PROGRAM_END];
+  uint8_t len = 0;
+  uint16_t textPoolLen = 1;
+  char textPool[PROGRAM_TEXT_POOL_SIZE] = {0};
+};
 
 static WProgram program[PROGRAM_END];
 static uint8_t ProgramLen = 0;
 static uint8_t ProgramNum = 0;
+static char programTextPool[PROGRAM_TEXT_POOL_SIZE] = {0};
 
 struct TimePredictor {
   unsigned long startTime = 0;
@@ -113,6 +126,7 @@ static float lastPower = -999.0f;
 static void apply_program_power_row(float power) { powerCalls++; lastPower = power; }
 
 static void heater_boost_output_off() {}
+static void distiller_finish() {}
 
 static int sendMsgCalls = 0;
 static std::string lastMsg;

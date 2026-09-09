@@ -113,10 +113,7 @@ inline const ModeOps* mode_registry_table(size_t& count) {
     // statusRange у ПИВА [BEER, BEER+1) - ЭТО значение SamovarStatusInt всю сессию,
     // а startvalRange [BEER, BEER+1000) - под-стадии внутри сессии (см. комментарий у полей).
     {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text, mode_button_press_beer, nullptr, "пива", mode_tick_beer, beer_finish, true, nullptr},
-    // [P7 п.2] startCommand=SAMOVAR_NONE: у БК нет своего "следующая программа"/старт-действия
-    // через SAMOVAR_START (это команда ректификации) - веб-экшен action=start для БК не должен
-    // молча дёргать чужой (ректификационный) старт. SUVID/LUA намеренно НЕ трогаем (асимметрия).
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, nullptr, "БК", bk_proc, bk_finish, true, nullptr},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_BK_NEXT, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, nullptr, "БК", bk_proc, bk_finish, true, nullptr},
     // [WP17 п.45] НБК управляет мощностью через регулятор (run_nbk_program в nbk.h
     // отказывает без SAMOVAR_USE_POWER) - buildAvailable завязан на тот же макрос,
     // которым сама nbk.h условно компилирует код регулятора. statusRange [NBK, NBK+1) -

@@ -105,6 +105,7 @@ HARNESS = r'''
 // [Б7.2] Без этого define ветвь проверки первой строки в
 // prepare_program_for_mode() (program_io.h) вырезается препроцессором.
 #define SAMOVAR_USE_POWER
+#define USE_LUA
 
 // [БК п.9] Границы 5-го поля БК (program_parse_bk_row, program_io.h) обычно
 // объявлены в Samovar_ini.h - здесь минимальные значения только для
@@ -125,9 +126,11 @@ struct WProgram {
   uint8_t TempSensor;
   float Time;
   float Param;
+  uint16_t LuaTextOffset;
 };
 
 WProgram program[PROGRAM_MAX];
+char programTextPool[PROGRAM_TEXT_POOL_SIZE] = {0};
 volatile uint8_t ProgramLen = 0;
 
 enum SAMOVAR_MODE {
@@ -214,6 +217,53 @@ void check_round_trip(
         same_serialized_float(actual.Power, expected.Power) && actual.TempSensor == expected.TempSensor &&
         same_serialized_float(actual.Time, expected.Time) && same_serialized_float(actual.Param, expected.Param),
         "round-trip fields mismatch");
+  }
+}
+
+void test_lua_rows() {
+  struct LuaCase {
+    const ProgramParseSpec& (*spec)();
+    const char* text;
+    const char* luaText;
+    const char* serialized;
+  };
+  const LuaCase cases[] = {
+      {rect_program_parse_spec, "L;7;cycle.lua^one^\"\";0;0;0\n", "cycle.lua^one^\"\"", "L;7;cycle.lua^one^\"\";0;0;0\n"},
+      {dist_program_parse_spec, "L;8;0;cycle.lua^two\n", "cycle.lua^two", "L;8;0;cycle.lua^two\n"},
+      {bk_program_parse_spec, "L;9;0;cycle.lua^three;0\n", "cycle.lua^three", "L;9;0;cycle.lua^three;0\n"},
+      {beer_program_parse_spec, "L;0;10;cycle.lua^four;0\n", "cycle.lua^four", "L;0;10;cycle.lua^four;0\n"},
+      {cheese_program_parse_spec, "L;0;11;0;cycle.lua^five;0\n", "cycle.lua^five", "L;0;11;0;cycle.lua^five;0\n"},
+  };
+  for (const LuaCase& test : cases) {
+    ProgramDraft draft{};
+    ProgramParseResult result = program_parse_lines(String(test.text), test.spec(), draft);
+    check(result.ok(), "valid Lua row was rejected");
+    check(draft.rows[0].Time >= 7.0f && draft.rows[0].Time <= 11.0f,
+          "Lua timeout was not normalized to seconds in Time");
+    check(std::strcmp(program_lua_text(draft.rows[0], draft.textPool), test.luaText) == 0,
+          "Lua text was not stored exactly");
+    program_commit(draft);
+    String serialized = program_serialize_rows(0, PROGRAM_END,
+        test.spec().parseRow == program_parse_rect_row ? program_append_rect_row :
+        test.spec().parseRow == program_parse_dist_row ? program_append_dist_row :
+        test.spec().parseRow == program_parse_bk_row ? program_append_bk_row :
+        test.spec().parseRow == program_parse_beer_row ? program_append_beer_row :
+        program_append_cheese_row);
+    check(std::strcmp(serialized.c_str(), test.serialized) == 0,
+          "Lua row round-trip text mismatch");
+  }
+
+  const char* invalid[] = {
+      "L;0;cycle.lua;0;0;0\n",
+      "L;65536;cycle.lua;0;0;0\n",
+      "L;1;cycle.txt;0;0;0\n",
+      "L;1;cycle.lua^^last;0;0;0\n",
+      "L;1;cycle.lua^;0;0;0\n",
+  };
+  for (const char* text : invalid) {
+    ProgramDraft draft{};
+    check(!program_parse_lines(String(text), rect_program_parse_spec(), draft).ok(),
+          "invalid Lua row was accepted");
   }
 }
 
@@ -385,7 +435,7 @@ void test_blank_lines_and_all_formats_round_trip() {
       2,
       "MP");
   check_round_trip(
-      "H;63.333;90.125;0.125;1^0^0^0;0\nP;63;30;45;1^0^0^0;0\nC;34;45;0;1^0^0^0;0\nM;0;1;0;1^0^30^0;0\nD;100;15;2;0^0^0^0;1\nN;34;60;5.25;2^-120^30^10;0\nW;0;15;1;0^0^0^0;0\nS;0;15;0;0^0^0^0;0\nL;0;15;0;0^0^0^0;0\n",
+      "H;63.333;90.125;0.125;1^0^0^0;0\nP;63;30;45;1^0^0^0;0\nC;34;45;0;1^0^0^0;0\nM;0;1;0;1^0^30^0;0\nD;100;15;2;0^0^0^0;1\nN;34;60;5.25;2^-120^30^10;0\nW;0;15;1;0^0^0^0;0\nS;0;15;0;0^0^0^0;0\nL;0;15;0;cycle.lua;0\n",
       cheese_program_parse_spec(),
       program_append_cheese_row,
       9,
@@ -489,7 +539,7 @@ void test_cheese_row_semantics() {
       {"N;34;60;5.25;2^-120^30^10;0\n", true},
       {"W;0;15;1;0^0^0^0;0\n", true},
       {"S;0;15;0;0^0^0^0;0\n", true},
-      {"L;0;15;0;0^0^0^0;0\n", true},
+      {"L;0;15;0;cycle.lua;0\n", true},
       {"P;63;30;29;1^0^0^0;0\n", false},
       {"H;63;90;0;1^0^0^0;0\n", false},
       {"C;34;45;1;1^0^0^0;0\n", false},
@@ -577,7 +627,7 @@ void test_mode_mapping_and_defaults() {
         "unsupported mode error kind mismatch");
   check_unchanged(before, before_len, "unsupported mode changed active program");
 
-  check(sizeof(ProgramDraft) == 644, "ProgramDraft size changed");
+  check(sizeof(ProgramDraft) <= PROGRAM_DRAFT_MAX_BYTES, "ProgramDraft exceeds its stack budget");
 }
 
 void test_power_first_row_scope() {
@@ -694,6 +744,7 @@ int main() {
   test_cheese_field_mapping();
   test_mode_mapping_and_defaults();
   test_power_first_row_scope();
+  test_lua_rows();
 
   if (failures != 0) return 1;
   std::cout << "Program atomic parse/commit behavioral checks passed (draft "

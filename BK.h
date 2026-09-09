@@ -55,8 +55,14 @@ static void bk_apply_work_power() {
 // Temp (уставка пара) - состояние, которое начинает действовать С МОМЕНТА
 // входа в строку.
 void run_bk_program(uint8_t num) {
+#ifdef USE_LUA
+  if (luaSequenceStage.active) {
+    lua_sequence_stage_request_exit(num);
+    return;
+  }
+#endif
   if (num > 0 && num - 1 < ProgramLen) {
-    if (!program_type_empty(program[num - 1].WType)) {
+    if (!program_type_empty(program[num - 1].WType) && program[num - 1].WType != 'L') {
       set_capacity(program[num - 1].capacity_num);
 #ifdef SAMOVAR_USE_POWER
       apply_program_power_row(program[num - 1].Power);
@@ -73,6 +79,19 @@ void run_bk_program(uint8_t num) {
   }
 
   ProgramNum = num;
+#ifdef USE_LUA
+  if (program[num].WType == 'L' && !lua_sequence_stage_begin(num, millis())) {
+    SendMsg("Ошибка Lua: скрипт строки не запущен", ALARM_MSG);
+    bk_finish();
+    return;
+  }
+#else
+  if (program[num].WType == 'L') {
+    SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
+    bk_finish();
+    return;
+  }
+#endif
   SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
 #ifdef USE_WATER_PUMP
   // [9b] Обнуление таймера ожидания при КАЖДОМ включении авторежима (а не
@@ -192,6 +211,22 @@ void bk_proc() {
   // строки не исполняются: иначе run_bk_program(0) из bk_apply_work_power()
   // откатил бы уже ушедший вперёд ProgramNum и задвоил переключение ёмкости.
   if (PowerOn && !bk_work_power_pending && ProgramNum < ProgramLen &&
+      !program_type_empty(program[ProgramNum].WType) &&
+      program[ProgramNum].WType == 'L') {
+#ifdef USE_LUA
+    uint8_t nextProgram = PROGRAM_END;
+    const LuaSequenceStageResult luaResult = lua_sequence_stage_tick(
+        millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
+    if (luaResult == LUA_SEQUENCE_STAGE_ADVANCE) run_bk_program(nextProgram);
+    else if (luaResult == LUA_SEQUENCE_STAGE_TIMEOUT) {
+      SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
+      bk_finish();
+    } else if (luaResult == LUA_SEQUENCE_STAGE_FAILED) {
+      SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
+      bk_finish();
+    }
+#endif
+  } else if (PowerOn && !bk_work_power_pending && ProgramNum < ProgramLen &&
       !program_type_empty(program[ProgramNum].WType) &&
       program_threshold_row_done(program[ProgramNum])) {
     run_bk_program(ProgramNum + 1);

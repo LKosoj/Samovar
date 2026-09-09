@@ -176,8 +176,11 @@ expected_hashes = {
     # 05.09.2026: добавлен отдельный строгий формат программы Cheese с шестым
     # полем Param и направлением устройства только -1..1; разбор по-прежнему
     # идёт в draft до атомарного commit.
-    "program_io.h": "2941a5d039d4f9a86084dd3846a595208dae4ce02e836ae95e1e832409cdbce5",
-    "program_types.h": "78a37ac7beda0a3bf50b0ad2e6682075d038a5c15f99e808c665404e22b9ed2b",
+    # 09.09.2026: Lua-строки хранят вызов в общем текстовом пуле черновика;
+    # пул коммитится вместе со строками под тем же configMux, поэтому изоляция
+    # черновика A-09 сохранена.
+    "program_io.h": "f58da4161562c2129cd79af3e1d43e5e1bc0511a1b7754d21dfbe98de1debc34",
+    "program_types.h": "cb420431876edb569b84018dabdf2e2519de7559ec445130ffc80ec1b1140759",
 }
 for name, expected in expected_hashes.items():
     actual = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()

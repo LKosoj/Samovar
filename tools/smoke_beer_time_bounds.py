@@ -44,6 +44,7 @@ struct WProgram {
   uint16_t Volume;
   uint16_t Power;
   uint8_t TempSensor;
+  uint16_t LuaTextOffset;
 };
 
 struct ProgramParseSpec { const char* allowedTypes; };

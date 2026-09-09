@@ -517,13 +517,14 @@ void run_beer_program(uint8_t num) {
   }
 
   if (program[ProgramNum].WType == 'L') {
+    begintime = millis();
     if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
       beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед запуском");
       return;
     }
 #ifdef USE_LUA
     uint32_t ticket = 0;
-    if (!request_beer_lua_job(ticket)) {
+    if (!request_program_lua_job(targetProgram, ticket)) {
       beer_abort_config_error("Ошибка Lua: job не принят к запуску");
       return;
     }
@@ -799,6 +800,11 @@ void beer_stage_tick() {
   // Lua-этап принимает управление только после подтверждённого periodic job.
   if (currentType == 'L') {
 #ifdef USE_LUA
+    if (static_cast<uint32_t>(millis() - begintime) >=
+        static_cast<uint32_t>(program[ProgramNum].Time) * 1000UL) {
+      beer_abort_config_error("Lua не завершила операцию до тайм-аута");
+      return;
+    }
     if (beerLuaStage.phase == BEER_LUA_STAGE_EXIT_QUEUED) {
       if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
         beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку при остановке job");

@@ -90,12 +90,19 @@
         if (line == "") return i == arrayOfStrings.length - 1;
         var arrayOfDelim = arrayOfStrings[i].split(";");
         if (arrayOfDelim.length != 5) return false;
-        if (char_count(arrayOfDelim[3], "^") != 3) return false;
         var type = arrayOfDelim[0];
         var temp = Number(arrayOfDelim[1]);
         var time = Number(arrayOfDelim[2]);
-        var device = arrayOfDelim[3].split("^").map(Number);
         var sensor = Number(arrayOfDelim[4]);
+        if (type === 'L') {
+          var luaParts = arrayOfDelim[3].split('^');
+          if (temp !== 0 || !Number.isInteger(time) || time < 1 || time > 65535 ||
+              sensor !== 0 || !/\.lua$/.test(luaParts[0]) ||
+              luaParts.some(function(value) { return value === ''; })) return false;
+          continue;
+        }
+        if (char_count(arrayOfDelim[3], "^") != 3) return false;
+        var device = arrayOfDelim[3].split("^").map(Number);
         if (!Number.isFinite(temp) || !Number.isFinite(time) ||
             device.length != 4 || device.some(function(v) { return !Number.isInteger(v); }) ||
             !Number.isInteger(sensor) || sensor < 0 || sensor > 4 || time < 0) return false;
@@ -183,7 +190,7 @@
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
         for (j = 1; j < 6; j++) {
-          if (j == 4) {
+          if (j == 4 && k[1].value !== 'L') {
             if (k[j].value == "") k[j].value = "0^0^0^0";
             if (char_count(k[j].value, "^") != 3) k[j].value = "0^0^0^0";
           }
@@ -264,8 +271,12 @@
       pmixer.value = arr[3];
       pmixer.setAttribute("width", "70");
       pmixer.readOnly = true;
+      var luaRowIndex = _lnIdx;
       pmixer.addEventListener("focus", function () {
-        SamovarApp.openDeviceScheduleModal(pmixer, calc_program);
+        if (document.getElementById('ptype' + luaRowIndex).value === 'L') {
+          SamovarApp.openLuaProgramModal(pmixer, ptime, calc_program);
+        }
+        else SamovarApp.openDeviceScheduleModal(pmixer, calc_program);
       });
       dl.appendChild(pmixer);
 
@@ -287,6 +298,7 @@
       var p = "ptype" + _lnIdx;
       var ptype = document.getElementById(p);
       ptype.value = arr[0];
+      dl.dataset.programType = arr[0];
 
       p = "dt" + _lnIdx;
       ptype = document.getElementById(p);
@@ -325,6 +337,14 @@
       else if (t == "F") {color = "background-color: #DACEFF;";}
       else if (t == "L") {color = "background-color: #3498DB;";}
       else if (t == "A") {color = "background-color: #FF3838;";}
+      var changedToLua = t === 'L' && l.dataset.programType !== 'L';
+      if (changedToLua) {
+        document.getElementById('ptemp' + obj).value = '0';
+        document.getElementById('ptime' + obj).value = '1';
+        document.getElementById('pmixer' + obj).value = '';
+        document.getElementById('dt' + obj).value = '0';
+      }
+      l.dataset.programType = t;
       color += "color: #17212B; border-color: #17212B;";
       l.setAttribute("style", color);
       var e = l.childNodes;
@@ -614,4 +634,5 @@
     </div>
 
 <!--#include i2cpump_tab.htm-->
+<!--#include lua_program_modal.htm-->
 <!--#include mode_page_footer.htm-->

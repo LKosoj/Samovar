@@ -379,6 +379,7 @@ static uint32_t state_snapshot_program_signature() {
   for (uint8_t i = 0; i < PROGRAM_END; i++) {
     hash = state_snapshot_hash_bytes(hash, &program[i], sizeof(WProgram));
   }
+  hash = state_snapshot_hash_bytes(hash, programTextPool, sizeof(programTextPool));
   return hash;
 }
 

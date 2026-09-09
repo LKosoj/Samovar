@@ -56,9 +56,11 @@ constexpr float PROGRAM_TIME_MAX = 1440.0f;
 struct ProgramDraft {
   WProgram rows[PROGRAM_MAX];
   uint8_t len;
+  uint16_t textPoolLen;
+  char textPool[PROGRAM_TEXT_POOL_SIZE];
 };
 
-constexpr size_t PROGRAM_DRAFT_MAX_BYTES = 644;
+constexpr size_t PROGRAM_DRAFT_MAX_BYTES = 1800;
 static_assert(std::is_trivially_copyable<WProgram>::value, "WProgram must remain safe for fixed draft copies");
 static_assert(sizeof(ProgramDraft) <= PROGRAM_DRAFT_MAX_BYTES, "ProgramDraft exceeds the firmware stack budget");
 
@@ -114,7 +116,7 @@ enum ProgramFieldKind : uint8_t {
 
 struct ProgramParseSpec;
 using ProgramRowParser = bool (*)(char* line, size_t lineLen, uint8_t rowIndex, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage);
-using ProgramRowSerializer = void (*)(String& out, const WProgram& row);
+using ProgramRowSerializer = void (*)(String& out, const WProgram& row, const char* textPool);
 
 struct ProgramParseSpec {
   const char* tooLongMessage;
@@ -152,6 +154,8 @@ inline void program_reset_draft(ProgramDraft& draft) {
     draft.rows[i] = {};
   }
   draft.len = 0;
+  draft.textPoolLen = 1;
+  draft.textPool[0] = '\0';
 }
 
 inline void program_commit(const ProgramDraft& draft) {
@@ -169,6 +173,11 @@ inline void program_commit(const ProgramDraft& draft) {
     program[i] = {};
     program[i].WType = PROGRAM_TYPE_NONE;
   }
+  memcpy(programTextPool, draft.textPool, draft.textPoolLen);
+  if (draft.textPoolLen < PROGRAM_TEXT_POOL_SIZE) {
+    memset(programTextPool + draft.textPoolLen, 0,
+           PROGRAM_TEXT_POOL_SIZE - draft.textPoolLen);
+  }
   ProgramLen = draft.len;
   portEXIT_CRITICAL(&configMux);
 }
@@ -181,6 +190,7 @@ inline void program_clear() {
   for (uint8_t i = 0; i < PROGRAM_END; i++) {
     program[i].WType = PROGRAM_TYPE_NONE;
   }
+  programTextPool[0] = '\0';
   ProgramLen = 0;
   portEXIT_CRITICAL(&configMux);
 }
@@ -199,6 +209,92 @@ inline size_t program_count_char(const char* text, char needle) {
     if (*p == needle) count++;
   }
   return count;
+}
+
+inline const char* program_lua_text(const WProgram& row, const char* textPool) {
+  if (!textPool || row.LuaTextOffset >= PROGRAM_TEXT_POOL_SIZE) return "";
+  return textPool + row.LuaTextOffset;
+}
+
+inline bool copy_program_lua_text(uint8_t rowIndex, char* destination, size_t destinationSize) {
+  if (!destination || destinationSize == 0 || rowIndex >= ProgramLen || rowIndex >= PROGRAM_END) return false;
+  bool copied = false;
+  portENTER_CRITICAL(&configMux);
+  const uint16_t offset = program[rowIndex].LuaTextOffset;
+  if (offset > 0 && offset < PROGRAM_TEXT_POOL_SIZE) {
+    const size_t length = strnlen(programTextPool + offset, PROGRAM_TEXT_POOL_SIZE - offset);
+    if (length > 0 && length + 1 <= destinationSize) {
+      memcpy(destination, programTextPool + offset, length + 1);
+      copied = true;
+    }
+  }
+  portEXIT_CRITICAL(&configMux);
+  return copied;
+}
+
+inline int8_t program_lua_text_field_index(const ProgramParseSpec& spec) {
+  for (uint8_t i = 0; i < spec.fieldCount; i++) {
+    if (spec.fields[i] == PROGRAM_FIELD_BEER_DEVICE) return i;
+  }
+  for (uint8_t i = 0; i < spec.fieldCount; i++) {
+    if (spec.fields[i] == PROGRAM_FIELD_VOLUME) {
+      for (uint8_t j = 0; j < spec.fieldCount; j++) {
+        if (spec.fields[j] == PROGRAM_FIELD_SPEED) return j;
+      }
+    }
+  }
+  for (uint8_t i = 0; i < spec.fieldCount; i++) {
+    if (spec.fields[i] == PROGRAM_FIELD_POWER) return i;
+  }
+  return -1;
+}
+
+inline bool program_validate_lua_text(const char* text) {
+  if (!text || !*text) return false;
+  const char* separator = strchr(text, '^');
+  const size_t fileLen = separator ? static_cast<size_t>(separator - text) : strlen(text);
+  if (fileLen < 5 || strncmp(text + fileLen - 4, ".lua", 4) != 0) return false;
+  const char* argument = separator;
+  while (argument) {
+    argument++;
+    const char* next = strchr(argument, '^');
+    const size_t length = next ? static_cast<size_t>(next - argument) : strlen(argument);
+    if (length == 0) return false;
+    argument = next;
+  }
+  return true;
+}
+
+inline bool program_store_lua_text(
+    const char* line,
+    const ProgramParseSpec& spec,
+    WProgram& row,
+    ProgramDraft& draft,
+    const char*& errorMessage) {
+  const int8_t targetField = program_lua_text_field_index(spec);
+  if (targetField < 0) return false;
+  const char* start = line;
+  for (int8_t i = 0; i < targetField; i++) {
+    start = strchr(start, ';');
+    if (!start) return false;
+    start++;
+  }
+  const char* end = strchr(start, ';');
+  const size_t length = end ? static_cast<size_t>(end - start) : strlen(start);
+  if (length == 0 || draft.textPoolLen + length + 1 > PROGRAM_TEXT_POOL_SIZE) {
+    errorMessage = "Ошибка программы: текст Lua пуст или слишком длинный";
+    return false;
+  }
+  const uint16_t offset = draft.textPoolLen;
+  memcpy(draft.textPool + offset, start, length);
+  draft.textPool[offset + length] = '\0';
+  if (!program_validate_lua_text(draft.textPool + offset)) {
+    errorMessage = "Ошибка программы: укажите файл .lua; пустой аргумент задаётся как \"\"";
+    return false;
+  }
+  row.LuaTextOffset = offset;
+  draft.textPoolLen += length + 1;
+  return true;
 }
 
 inline bool program_parse_beer_device(char* token, long& devType, long& speed, long& onTime, long& offTime) {
@@ -260,8 +356,8 @@ inline bool program_validate_beer_row_semantics(
       return false;
     case 'L':
 #ifdef USE_LUA
-      if (zeroTempTime && noDevice && sensor == 0) return true;
-      errorMessage = "Ошибка программы: для типа L нужны нулевые параметры";
+      if (temp == 0.0f && timeMin > 0.0f && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для типа L нужен тайм-аут и нулевые параметры";
 #else
       errorMessage = "Ошибка программы: тип L требует USE_LUA";
 #endif
@@ -294,7 +390,20 @@ inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, c
   ProgramType parsedType = PROGRAM_TYPE_NONE;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
             tokVolume && tokSpeed && tokCap && tokTemp && tokPower &&
-            !tokExtra &&
+            !tokExtra;
+  if (ok && parsedType == 'L') {
+    ok = row.LuaTextOffset > 0 &&
+         parse_bounded_long(tokVolume, 1, UINT16_MAX, volume).ok() &&
+         parse_bounded_long(tokCap, 0, 0, cap).ok() &&
+         parse_bounded_float(tokTemp, 0.0f, 0.0f, temp).ok() &&
+         parse_bounded_float(tokPower, 0.0f, 0.0f, power).ok();
+    if (!ok) return false;
+    row.WType = parsedType;
+    row.Volume = static_cast<uint16_t>(volume);
+    row.Time = static_cast<float>(volume);
+    return true;
+  }
+  ok = ok &&
             parse_bounded_long(tokVolume, 0, UINT16_MAX, volume).ok() &&
             parse_bounded_float(tokSpeed, PROGRAM_RATE_MIN, PROGRAM_RATE_MAX, speed).ok() &&
             parse_bounded_long(tokCap, 0, CAPACITY_NUM, cap).ok() &&
@@ -320,6 +429,34 @@ inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, c
   } else {
     row.Time = row.Volume / row.Speed / 1000.0f;
   }
+  return true;
+}
+
+inline bool program_parse_threshold_lua_row(
+    char* line, bool hasSteamField, WProgram& row, const char*& errorMessage) {
+  char* saveTok = nullptr;
+  char* tokType = strtok_r(line, ";", &saveTok);
+  char* tokTimeout = strtok_r(nullptr, ";", &saveTok);
+  char* tokCap = strtok_r(nullptr, ";", &saveTok);
+  char* tokText = strtok_r(nullptr, ";", &saveTok);
+  char* tokSteam = hasSteamField ? strtok_r(nullptr, ";", &saveTok) : nullptr;
+  char* tokExtra = strtok_r(nullptr, ";", &saveTok);
+  long timeout = 0;
+  long cap = 0;
+  float steam = 0.0f;
+  const bool ok = tokType && tokType[0] == 'L' && tokType[1] == '\0' &&
+      tokTimeout && tokCap && tokText && row.LuaTextOffset > 0 && !tokExtra &&
+      parse_bounded_long(tokTimeout, 1, UINT16_MAX, timeout).ok() &&
+      parse_bounded_long(tokCap, 0, 0, cap).ok() &&
+      (!hasSteamField || (tokSteam &&
+       parse_bounded_float(tokSteam, 0.0f, 0.0f, steam).ok()));
+  if (!ok) {
+    errorMessage = "Ошибка программы: для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
+    return false;
+  }
+  row.WType = 'L';
+  row.Time = static_cast<float>(timeout);
+  row.Speed = static_cast<float>(timeout);
   return true;
 }
 
@@ -371,6 +508,9 @@ inline bool program_parse_threshold_fields(
 }
 
 inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
+  if (line[0] == 'L' && line[1] == ';') {
+    return program_parse_threshold_lua_row(line, false, row, errorMessage);
+  }
   char* saveTok = nullptr;
   ProgramType parsedType = PROGRAM_TYPE_NONE;
   float speed = 0;
@@ -403,6 +543,9 @@ inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, c
 // °C): 0 - вручную, иначе строго BK_STEAM_SETPOINT_MIN..MAX (Samovar_ini.h).
 // Первые четыре поля - через общий program_parse_threshold_fields, без копии.
 inline bool program_parse_bk_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
+  if (line[0] == 'L' && line[1] == ';') {
+    return program_parse_threshold_lua_row(line, true, row, errorMessage);
+  }
   char* saveTok = nullptr;
   ProgramType parsedType = PROGRAM_TYPE_NONE;
   float speed = 0;
@@ -447,7 +590,22 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   ProgramType parsedType = PROGRAM_TYPE_NONE;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
             tokTemp && tokTime && tokDevice && tokSensor &&
-            !tokExtra &&
+            !tokExtra;
+  if (ok && parsedType == 'L') {
+    long timeout = 0;
+    ok = row.LuaTextOffset > 0 &&
+         parse_bounded_float(tokTemp, 0.0f, 0.0f, temp).ok() &&
+         parse_bounded_long(tokTime, 1, UINT16_MAX, timeout).ok() &&
+         parse_bounded_long(tokSensor, 0, 0, sensor).ok();
+    if (!ok) {
+      errorMessage = "Ошибка программы: для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
+      return false;
+    }
+    row.WType = parsedType;
+    row.Time = static_cast<float>(timeout);
+    return true;
+  }
+  ok = ok &&
             parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, PROGRAM_TEMP_MAX, temp).ok() &&
             parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
             parse_bounded_long(tokSensor, 0, 4, sensor).ok();
@@ -584,7 +742,23 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   float param = 0.0f;
   long sensor = 0;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
-            tokTemp && tokTime && tokDevice && tokSensor && tokParam && !tokExtra &&
+            tokTemp && tokTime && tokDevice && tokSensor && tokParam && !tokExtra;
+  if (ok && parsedType == 'L') {
+    long timeout = 0;
+    ok = row.LuaTextOffset > 0 &&
+         parse_bounded_float(tokTemp, 0.0f, 0.0f, temp).ok() &&
+         parse_bounded_long(tokTime, 1, UINT16_MAX, timeout).ok() &&
+         parse_bounded_float(tokParam, 0.0f, 0.0f, param).ok() &&
+         parse_bounded_long(tokSensor, 0, 0, sensor).ok();
+    if (!ok) {
+      errorMessage = "Ошибка программы: для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
+      return false;
+    }
+    row.WType = parsedType;
+    row.Time = static_cast<float>(timeout);
+    return true;
+  }
+  ok = ok &&
             parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, (float)UINT16_MAX, temp).ok() &&
             parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
             parse_bounded_long(tokSensor, 0, 4, sensor).ok() &&
@@ -698,6 +872,20 @@ inline ProgramParseResult program_parse_lines(
     }
 
     const char* rowErrorMessage = nullptr;
+    if (line[0] == 'L' && line[1] == ';' && strchr(spec.allowedTypes, 'L')) {
+#ifndef USE_LUA
+      return program_parse_result(
+          PROGRAM_PARSE_INVALID_ROW, lineNumber,
+          "Ошибка программы: тип L требует USE_LUA");
+#else
+      if (!program_store_lua_text(line, spec, draft.rows[i], draft, rowErrorMessage)) {
+      return program_parse_result(
+          PROGRAM_PARSE_INVALID_ROW,
+          lineNumber,
+          rowErrorMessage ? rowErrorMessage : spec.invalidFormatMessage);
+      }
+#endif
+    }
     if (!spec.parseRow(line, lineLen, i, draft.rows[i], spec, rowErrorMessage)) {
       return program_parse_result(
           PROGRAM_PARSE_INVALID_ROW,
@@ -744,19 +932,27 @@ inline String program_serialize_rows(uint8_t start, uint8_t end, ProgramRowSeria
   // portENTER_CRITICAL запрещена, поэтому копируем фиксированный массив под
   // защитой, а строку собираем уже снаружи, из снимка.
   WProgram snapshot[PROGRAM_MAX];
+  char textPoolSnapshot[PROGRAM_TEXT_POOL_SIZE];
   portENTER_CRITICAL(&configMux);
   memcpy(snapshot, program, sizeof(snapshot));
+  memcpy(textPoolSnapshot, programTextPool, sizeof(textPoolSnapshot));
   portEXIT_CRITICAL(&configMux);
   String out = "";
   for (uint8_t i = start; i < end; i++) {
     if (program_type_empty(snapshot[i].WType)) break;
-    serializer(out, snapshot[i]);
+    serializer(out, snapshot[i], textPoolSnapshot);
   }
   return out;
 }
 
-inline void program_append_rect_row(String& out, const WProgram& row) {
+inline void program_append_rect_row(String& out, const WProgram& row, const char* textPool) {
   append_program_type(out, row.WType);
+  if (row.WType == 'L') {
+    out += ";" + String(static_cast<uint16_t>(row.Time)) + ";";
+    out += program_lua_text(row, textPool);
+    out += ";0;0;0\n";
+    return;
+  }
   out += ";";
   out += (String)row.Volume + ";";
   out += (String)row.Speed + ";";
@@ -765,8 +961,14 @@ inline void program_append_rect_row(String& out, const WProgram& row) {
   out += (String)row.Power + "\n";
 }
 
-inline void program_append_dist_row(String& out, const WProgram& row) {
+inline void program_append_dist_row(String& out, const WProgram& row, const char* textPool) {
   append_program_type(out, row.WType);
+  if (row.WType == 'L') {
+    out += ";" + String(static_cast<uint16_t>(row.Time)) + ";0;";
+    out += program_lua_text(row, textPool);
+    out += "\n";
+    return;
+  }
   out += ";";
   out += (String)row.Speed + ";";
   out += (String)(int)row.capacity_num + ";";
@@ -774,8 +976,14 @@ inline void program_append_dist_row(String& out, const WProgram& row) {
 }
 
 // [БК п.9] Формат БК = program_append_dist_row + пятое поле Тпара.
-inline void program_append_bk_row(String& out, const WProgram& row) {
+inline void program_append_bk_row(String& out, const WProgram& row, const char* textPool) {
   append_program_type(out, row.WType);
+  if (row.WType == 'L') {
+    out += ";" + String(static_cast<uint16_t>(row.Time)) + ";0;";
+    out += program_lua_text(row, textPool);
+    out += ";0\n";
+    return;
+  }
   out += ";";
   out += (String)row.Speed + ";";
   out += (String)(int)row.capacity_num + ";";
@@ -783,8 +991,14 @@ inline void program_append_bk_row(String& out, const WProgram& row) {
   out += (String)row.Temp + "\n";
 }
 
-inline void program_append_beer_row(String& out, const WProgram& row) {
+inline void program_append_beer_row(String& out, const WProgram& row, const char* textPool) {
   append_program_type(out, row.WType);
+  if (row.WType == 'L') {
+    out += ";0;" + String(static_cast<uint16_t>(row.Time)) + ";";
+    out += program_lua_text(row, textPool);
+    out += ";0\n";
+    return;
+  }
   out += ";";
   out += (String)row.Temp + ";";
   out += (String)row.Time + ";";
@@ -792,8 +1006,14 @@ inline void program_append_beer_row(String& out, const WProgram& row) {
   out += (String)row.TempSensor + "\n";
 }
 
-inline void program_append_cheese_row(String& out, const WProgram& row) {
+inline void program_append_cheese_row(String& out, const WProgram& row, const char* textPool) {
   append_program_type(out, row.WType);
+  if (row.WType == 'L') {
+    out += ";0;" + String(static_cast<uint16_t>(row.Time)) + ";0;";
+    out += program_lua_text(row, textPool);
+    out += ";0\n";
+    return;
+  }
   out += ";";
   out += String(row.Temp, 6) + ";";
   out += String(row.Time, 6) + ";";
@@ -802,7 +1022,7 @@ inline void program_append_cheese_row(String& out, const WProgram& row) {
   out += (String)row.TempSensor + "\n";
 }
 
-inline void program_append_nbk_row(String& out, const WProgram& row) {
+inline void program_append_nbk_row(String& out, const WProgram& row, const char*) {
   append_program_type(out, row.WType);
   out += ";";
   out += (String)row.Speed + ";";
@@ -823,7 +1043,7 @@ inline const ProgramParseSpec& rect_program_parse_spec() {
     "Ошибка программы: неверный формат строки rect",
     "Ошибка программы: слишком много строк rect",
     nullptr,
-    "HBCTP",
+    "HBCTPL",
     fields,
     static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
     PROGRAM_END,
@@ -846,7 +1066,7 @@ inline const ProgramParseSpec& dist_program_parse_spec() {
     "Ошибка программы: неверный формат строки dist",
     "Ошибка программы: слишком много строк dist",
     nullptr,
-    "TASPR",
+    "TASPRL",
     fields,
     static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
     PROGRAM_END,
@@ -873,7 +1093,7 @@ inline const ProgramParseSpec& bk_program_parse_spec() {
     "Ошибка программы: неверный формат строки bk",
     "Ошибка программы: слишком много строк bk",
     nullptr,
-    "TASPR",
+    "TASPRL",
     fields,
     static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
     PROGRAM_END,
@@ -1030,6 +1250,7 @@ inline ProgramParseResult prepare_program_for_mode(
   // программу не привязывает - его не проверяем. У БК теперь свой формат
   // (PROGRAM_FORMAT_BK) и своё аналогичное правило - см. блок дистилляции ниже. [БК п.9]
   if (result.ok() && mode == SAMOVAR_RECTIFICATION_MODE && draft.len > 0 &&
+      draft.rows[0].WType != 'L' &&
       !(draft.rows[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
     program_reset_draft(draft);
     result = program_parse_result(

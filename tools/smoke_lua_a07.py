@@ -99,7 +99,7 @@ expected_registrations = [
     "setBodyTemp", "setAlarm", "setNumVariable", "setStrVariable",
     "setObject", "setLuaStatus", "setPumpPwm", "setCurrentPower",
     "setMixer", "setNextProgram", "setPauseWithdrawal", "setTimer",
-    "setCapacity", "openValve", "getNumVariable", "getStrVariable",
+    "setCapacity", "setServoAngle", "openValve", "getNumVariable", "getStrVariable",
     "getState", "getObject", "getTimer", "http_request",
     "check_I2C_device", "set_stepper_by_time", "set_stepper_target",
     "get_stepper_status", "i2cpump_start", "i2cpump_stop",
@@ -112,6 +112,19 @@ if registrations != expected_registrations:
     ERRORS.append("Lua registration names/order/cardinality changed")
 if len(registrations) != len(set(registrations)):
     ERRORS.append("Lua registration names contain duplicates")
+
+servo_angle = body(LUA, "static int lua_wrapper_set_servo_angle")
+for token in [
+    'lua_check_int32_arg(lua_state, 1, 0, SERVO_ANGLE, "angle")',
+    "servo.write(angle);",
+    "return 0;",
+]:
+    if token not in servo_angle:
+        ERRORS.append(f"setServoAngle missing behavior: {token}")
+if "#ifdef SERVO_PIN\nstatic int lua_wrapper_set_servo_angle" not in LUA:
+    ERRORS.append("setServoAngle must only exist on builds with SERVO_PIN")
+if '#ifdef SERVO_PIN\n  lua.Lua_register("setServoAngle"' not in LUA:
+    ERRORS.append("setServoAngle registration must require SERVO_PIN")
 
 descriptor_table_start = LUA.find(
     "static const LuaNumVariableDescriptor lua_num_variables[]"

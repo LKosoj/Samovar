@@ -193,10 +193,12 @@ struct WProgram {
   uint8_t TempSensor;
   float Time;
   float Param;
+  uint16_t LuaTextOffset;
 };
 
 WProgram program[PROGRAM_MAX];
 volatile uint8_t ProgramLen = 0;
+char programTextPool[PROGRAM_TEXT_POOL_SIZE] = {0};
 
 enum SAMOVAR_MODE {
   SAMOVAR_RECTIFICATION_MODE,
@@ -488,6 +490,9 @@ int main() {
   ProgramLen = 2;
   tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
   check(writeSnapshotCalls == 3, "изменение числа строк - тоже правка программы");
+  strcpy(programTextPool + 1, "stage.lua^first");
+  tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
+  check(writeSnapshotCalls == 4, "изменение текста Lua-вызова - тоже правка программы");
 
   // 3. Нагрев без отбора (Пиво/Сувид на выдержке) считается работающей сессией.
   reset_world();

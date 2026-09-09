@@ -1366,7 +1366,8 @@ details.spoiler > .spoiler-content {
   gap: 1em;
 }
 
-#overlay {
+#overlay,
+.overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -1377,7 +1378,8 @@ details.spoiler > .spoiler-content {
   display: none;
 }
 
-#overlay.show {
+#overlay.show,
+.overlay.show {
   display: block;
 }
 

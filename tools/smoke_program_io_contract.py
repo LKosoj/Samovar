@@ -147,7 +147,7 @@ if program_io:
         "rect_program_parse_spec": [
             "Ошибка программы: слишком длинная строка (rect)",
             "Ошибка программы: неверный формат строки rect",
-            "\"HBCTP\"",
+            "\"HBCTPL\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_VOLUME",
             "PROGRAM_FIELD_SPEED",
@@ -160,7 +160,7 @@ if program_io:
         "dist_program_parse_spec": [
             "Ошибка программы: слишком длинная строка (dist)",
             "Ошибка программы: неверный формат строки dist",
-            "\"TASPR\"",
+            "\"TASPRL\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_SPEED",
             "PROGRAM_FIELD_CAPACITY",
@@ -171,7 +171,7 @@ if program_io:
         "bk_program_parse_spec": [
             "Ошибка программы: слишком длинная строка (bk)",
             "Ошибка программы: неверный формат строки bk",
-            "\"TASPR\"",
+            "\"TASPRL\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_SPEED",
             "PROGRAM_FIELD_CAPACITY",

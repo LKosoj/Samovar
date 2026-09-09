@@ -177,6 +177,23 @@ void distiller_proc() {
   }
   distBoilStartedPrev = boil_started;
 
+#ifdef USE_LUA
+  if (program_type_at(ProgramNum) == 'L') {
+    uint8_t nextProgram = PROGRAM_END;
+    const LuaSequenceStageResult luaResult = lua_sequence_stage_tick(
+        millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
+    if (luaResult == LUA_SEQUENCE_STAGE_ADVANCE) run_dist_program(nextProgram);
+    else if (luaResult == LUA_SEQUENCE_STAGE_TIMEOUT) {
+      SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
+      distiller_finish();
+    } else if (luaResult == LUA_SEQUENCE_STAGE_FAILED) {
+      SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
+      distiller_finish();
+    }
+    return;
+  }
+#endif
+
   // Обновляем прогноз времени
   updateTimePredictor();
 
@@ -253,6 +270,12 @@ void check_alarm_distiller() {
 }
 
 void run_dist_program(uint8_t num) {
+#ifdef USE_LUA
+  if (luaSequenceStage.active) {
+    lua_sequence_stage_request_exit(num);
+    return;
+  }
+#endif
   // [fix П10] Ёмкость и напряжение строки num-1 (той, что только что завершилась)
   // применяются ЗДЕСЬ, ДО проверки границ ниже. Раньше этот блок стоял после
   // проверки и не выполнялся для завершающего вызова run_dist_program(ProgramLen) -
@@ -269,7 +292,7 @@ void run_dist_program(uint8_t num) {
   // ProgramLen == PROGRAM_MAX - вовсе за границей массива program[]). Поэтому
   // явно проверяем num - 1 < ProgramLen ниже.
   if (num > 0 && num - 1 < ProgramLen) {
-    if (!program_type_empty(program[num - 1].WType)) {
+    if (!program_type_empty(program[num - 1].WType) && program[num - 1].WType != 'L') {
       set_capacity(program[num - 1].capacity_num);
 #ifdef SAMOVAR_USE_POWER
       apply_program_power_row(program[num - 1].Power);
@@ -288,6 +311,20 @@ void run_dist_program(uint8_t num) {
   }
 
   ProgramNum = num;
+
+  if (program[num].WType == 'L') {
+#ifdef USE_LUA
+    if (!lua_sequence_stage_begin(num, millis())) {
+      SendMsg("Ошибка Lua: скрипт строки не запущен", ALARM_MSG);
+      distiller_finish();
+      return;
+    }
+#else
+    SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
+    distiller_finish();
+    return;
+#endif
+  }
 
   SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
   // Переход строки сбрасывает только строковый baseline. Процессный baseline,

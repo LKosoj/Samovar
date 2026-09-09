@@ -220,7 +220,7 @@ static int requestStopCalls = 0;
 static uint32_t lastStopTicket = 0;
 static LuaBeerJobResult luaJobResult = LUA_BEER_JOB_QUEUED;
 
-bool request_beer_lua_job(uint32_t& ticket) {
+bool request_program_lua_job(uint8_t, uint32_t& ticket) {
   requestJobCalls++;
   if (!acceptLuaJob) return false;
   ticket = ++nextTicket;
@@ -285,6 +285,7 @@ static void reset_fixture(ProgramType sourceType) {
   program[0].WType = sourceType;
   program[0].Temp = 20;
   program[1].WType = 'L';
+  program[1].Time = 60;
   program[2].WType = 'P';
   ProgramLen = 3;
   ProgramNum = 0;

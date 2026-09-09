@@ -25,7 +25,7 @@
     num.id = "distiller-program-row-" + _lnIdx;
     dl.appendChild(num);
 
-    num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="distiller-program-row-' + _lnIdx + ' distiller-program-col-type" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option></select>');
+    num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="distiller-program-row-' + _lnIdx + ' distiller-program-col-type" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option><option value="L">Lua</option></select>');
 
     var ptemp = document.createElement("input");
     ptemp.type = "text";
@@ -45,6 +45,11 @@
     ppower.setAttribute("aria-labelledby", "distiller-program-row-" + _lnIdx + " distiller-program-col-power");
     ppower.value = arr[3];
     ppower.setAttribute("onchange", "calc_program();");
+    ppower.addEventListener("focus", function () {
+      if (document.getElementById("ptype" + dl.id.replace("prgln", "")).value === "L") {
+        SamovarApp.openLuaProgramModal(ppower, ptemp, calc_program);
+      }
+    });
     dl.appendChild(ppower);
 
     if (PROGRAM_STEAM_COLUMN) {
@@ -78,6 +83,7 @@
     var ptype = document.getElementById(p);
     var typeCode = (arr[0] == null || arr[0] === undefined) ? "" : String(arr[0]).trim();
     ptype.value = typeCode;
+    dl.dataset.programType = typeCode;
 
     set_bgcolor(_lnIdx);
 
@@ -109,6 +115,17 @@
     else if (t == "A") {color = "background-color: #00BFFF;";}
     else if (t == "R") {color = "background-color: #FFA500;";}
     else if (t == "P") {color = "background-color: #98FB98;";}
+    else if (t == "L") {color = "background-color: #3498DB;";}
+    var changedToLua = t === 'L' && l.dataset.programType !== 'L';
+    var timeout = document.getElementById('ptemp' + obj);
+    var capacity = document.getElementById('pnum' + obj);
+    var text = document.getElementById('ppower' + obj);
+    if (changedToLua) {
+      timeout.value = '1'; capacity.value = '0'; text.value = '';
+      if (PROGRAM_STEAM_COLUMN) document.getElementById('psteam' + obj).value = '0';
+    }
+    text.readOnly = t === 'L';
+    l.dataset.programType = t;
     color += "color: #17212B; border-color: #17212B;";
     l.setAttribute("style", color);
     var e = l.childNodes;

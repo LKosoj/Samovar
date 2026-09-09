@@ -21,6 +21,7 @@
     .cheese-field label, .cheese-mixer label { font-size: .78em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .cheese-row .cheese-field[hidden] { display: flex !important; visibility: hidden; }
     .cheese-mixer { order: 1; display: grid; grid-template-columns: minmax(5.5em, 1.2fr) minmax(3.5em, 1fr) minmax(6.5em, 1.3fr) minmax(3.5em, 1fr) minmax(3.5em, 1fr); gap: 6px 8px; min-width: 0; }
+    .cheese-lua-call { grid-column: 1 / -1; }
     .cheese-help { line-height: 1.45; }
     /* Планшет: мешалка второй линией под полями этапа. */
     @media (max-width: 1100px) {
@@ -56,7 +57,7 @@
       N:{name:'Ожидание pH', labels:['Температура, °C','Тайм-аут, мин','Целевой pH','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['30','120','5.2','0']},
       W:{name:'Ручное действие', labels:['','Тайм-аут, мин','Действие',''], visible:[0,1,1,0], mixer:true, defaults:['0','30','1','0']},
       S:{name:'Слив', labels:['','Тайм-аут, мин','',''], visible:[0,1,0,0], mixer:false, defaults:['0','30','0','0']},
-      L:{name:'Lua', labels:['','Тайм-аут, мин','',''], visible:[0,1,0,0], mixer:false, defaults:['0','30','0','0']}
+      L:{name:'Lua', labels:['','Тайм-аут, сек','',''], visible:[0,1,0,0], mixer:false, lua:true, defaults:['0','1','0','0']}
     };
     var SENSOR_NAMES = ['Куб','Вода','Царга','Пар','ТСА'];
 
@@ -94,13 +95,18 @@
       return [row.type.value, row.value1.value, row.value2.value,
         row.type.value === 'W' || (row.type.value === 'D' && row.value4.value === '1')
           ? row.actionCode.value : row.value3.value,
-        mixerText(row), row.value4.value];
+        row.type.value === 'L' ? row.luaCall.value : mixerText(row), row.value4.value];
     }
 
     function validateCheeseRow(values) {
       var type = values[0], rule = CHEESE_TYPES[type];
       var one = Number(values[1]), two = Number(values[2]), three = Number(values[3]);
       var mixerParts = String(values[4]).split('^'), four = Number(values[5]);
+      if (type === 'L') {
+        return one === 0 && integer(two, 1, 65535) && three === 0 && four === 0 &&
+          /\.lua$/.test(mixerParts[0]) &&
+          mixerParts.every(function(value) { return value !== ''; });
+      }
       if (!rule || mixerParts.length !== 4 || mixerParts.some(function(value) { return value.trim() === ''; })) return false;
       var mixer = mixerParts.map(Number);
       if (mixer.some(function(value) { return !Number.isInteger(value); }) ||
@@ -165,12 +171,17 @@
         row.actionCode.value = rule.defaults[2];
         row.mixerDevice.value = rule.mixer ? '0' : '0';
         row.mixerSpeed.value = '0'; row.mixerDirection.value = '1'; row.mixerOn.value = '0'; row.mixerOff.value = '0';
+        if (rule.lua) row.luaCall.value = '';
       }
       for (var index = 0; index < 4; index++) setField(row, index, rule.labels[index], !!rule.visible[index]);
       row.value3.hidden = row.type.value === 'W';
       row.actionCode.hidden = row.type.value !== 'W';
       if (row.type.value === 'W' && !integer(Number(row.actionCode.value), 1, 8)) row.actionCode.value = '1';
-      row.mixer.hidden = !rule.mixer;
+      row.mixer.hidden = !rule.mixer && !rule.lua;
+      row.luaCall.hidden = !rule.lua;
+      Array.from(row.mixer.querySelectorAll('label')).forEach(function(label) {
+        label.hidden = !!rule.lua;
+      });
       if (!rule.mixer) {
         row.mixerDevice.value = '0'; row.mixerSpeed.value = '0'; row.mixerDirection.value = '1'; row.mixerOn.value = '0'; row.mixerOff.value = '0';
       }
@@ -204,6 +215,7 @@
       row.mixerDirection = row.querySelector('.cheese-mixer-direction');
       row.mixerOn = row.querySelector('.cheese-mixer-on');
       row.mixerOff = row.querySelector('.cheese-mixer-off');
+      row.luaCall = row.querySelector('.cheese-lua-call');
       var plus = row.querySelector('.cheese-add');
       var minus = row.querySelector('.cheese-remove');
       var initial = values || ['H', '30', '60', '1', '0^0^0^0', '0'];
@@ -211,9 +223,15 @@
       row.value1.value = initial[1]; row.value2.value = initial[2]; row.value3.value = initial[3];
       row.actionCode.value = initial[3]; row.value4.value = initial[5];
       var mixer = String(initial[4]).split('^');
-      row.mixerDevice.value = mixer[0]; row.mixerSpeed.value = Math.abs(Number(mixer[1]));
-      row.mixerDirection.value = Number(mixer[1]) < 0 ? '-1' : '1';
-      row.mixerOn.value = mixer[2]; row.mixerOff.value = mixer[3];
+      if (initial[0] === 'L') row.luaCall.value = initial[4];
+      else {
+        row.mixerDevice.value = mixer[0]; row.mixerSpeed.value = Math.abs(Number(mixer[1]));
+        row.mixerDirection.value = Number(mixer[1]) < 0 ? '-1' : '1';
+        row.mixerOn.value = mixer[2]; row.mixerOff.value = mixer[3];
+      }
+      row.luaCall.addEventListener('focus', function() {
+        SamovarApp.openLuaProgramModal(row.luaCall, row.value2, function() {});
+      });
       row.type.addEventListener('change', function() { applyRowRules(row, true); });
       row.value4.addEventListener('change', function() { if (row.type.value === 'D') updateDosingField(row); });
       plus.addEventListener('click', function() {
@@ -511,6 +529,7 @@
             <label>Направление<select class="cheese-mixer-direction"><option value="1">Прямое</option><option value="-1">Обратное</option></select></label>
             <label>Работа, с<input class="cheese-mixer-on" type="number" min="0" max="65535" step="1" value="0"></label>
             <label>Пауза, с<input class="cheese-mixer-off" type="number" min="0" max="65535" step="1" value="0"></label>
+            <input class="cheese-lua-call" type="text" readonly hidden aria-label="Lua-файл и параметры">
           </div>
           <div class="cheese-field"><label></label><select class="cheese-value4"><option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option></select></div>
           <button type="button" class="program-row-action cheese-add" title="Добавить строку"><img src="plus.png" alt=""></button>
@@ -530,6 +549,7 @@
 <!--#include lua_field.htm-->
     </div>
   </form>
+<!--#include lua_program_modal.htm-->
   <img src="Red_light.gif" alt="" style="width:0;height:0;visibility:hidden">
 </body>
 </html>

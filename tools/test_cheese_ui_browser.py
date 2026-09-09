@@ -90,6 +90,9 @@ BROWSER_TEST = r'''async page => {
     if (index) await page.locator(".cheese-row").last().locator(".cheese-add").click();
     const row = page.locator(".cheese-row").last();
     await row.locator(".cheese-type").selectOption(types[index]);
+    if (types[index] === "L") {
+      await row.locator(".cheese-lua-call").evaluate(node => { node.value = "test.lua"; });
+    }
     const visible = await row.locator(".cheese-field").evaluateAll(nodes => nodes.filter(node => !node.hidden).map(node => node.querySelector("label").textContent));
     expect(visible.every(text => text && !text.includes("VALUE")), "technical field name is visible for " + types[index]);
   }

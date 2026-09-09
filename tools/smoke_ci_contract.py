@@ -538,6 +538,7 @@ class BrowserTestRunnerTests(unittest.TestCase):
             "test_edit_ui_browser.py",
             "test_i2c_operation_results_browser.py",
             "test_i2c_pump_ui_browser.py",
+            "test_lua_program_modal_browser.py",
             "test_mode_bootstrap_ui_browser.py",
             "test_mode_logic_ui_browser.py",
             "test_numeric_input_ui_browser.py",

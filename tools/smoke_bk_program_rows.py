@@ -135,10 +135,12 @@ struct WProgram {
   uint8_t TempSensor;
   float Time;
   float Param;
+  uint16_t LuaTextOffset;
 };
 
 WProgram program[PROGRAM_MAX];
 volatile uint8_t ProgramLen = 0;
+char programTextPool[PROGRAM_TEXT_POOL_SIZE] = {0};
 
 enum SAMOVAR_MODE {
   SAMOVAR_RECTIFICATION_MODE,

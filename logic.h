@@ -202,6 +202,23 @@ void withdrawal(void) {
   }
   if (!(SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED)) return;
 
+#ifdef USE_LUA
+  if (program_type_at(ProgramNum) == 'L') {
+    uint8_t nextProgram = PROGRAM_END;
+    const LuaSequenceStageResult result = lua_sequence_stage_tick(
+        millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
+    if (result == LUA_SEQUENCE_STAGE_ADVANCE) run_program(nextProgram);
+    else if (result == LUA_SEQUENCE_STAGE_TIMEOUT) {
+      SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
+      run_program(PROGRAM_END);
+    } else if (result == LUA_SEQUENCE_STAGE_FAILED) {
+      SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
+      run_program(PROGRAM_END);
+    }
+    return;
+  }
+#endif
+
   const uint8_t currentProgram = ProgramNum;
   const WProgram currentRow =
       currentProgram < ProgramLen ? program[currentProgram] : WProgram{};
@@ -852,7 +869,11 @@ inline bool validate_rect_program_startable(String& errorMessage) {
   // targetSteps != 0 - переход по объёму не сработает никогда. Переход по
   // температуре в ректификации не используется (решение владельца), поэтому
   // строка не завершится вообще, а отбор при этом идёт со скоростью 0.
-  if (SamSetup.StepperStepMl == 0) {
+  bool needsWithdrawalPump = false;
+  for (uint8_t i = 0; i < ProgramLen && i < PROGRAM_END; i++) {
+    if (program_type_one_of(program[i].WType, "HBCT")) needsWithdrawalPump = true;
+  }
+  if (needsWithdrawalPump && SamSetup.StepperStepMl == 0) {
     errorMessage = "Насос не откалиброван (шагов на мл = 0). Старт ректификации невозможен.";
     return false;
   }
@@ -864,7 +885,7 @@ inline bool validate_rect_program_startable(String& errorMessage) {
   // [Б7.3] Программа могла попасть в program[] мимо валидатора program_io.h (файл на
   // SPIFFS от старой прошивки, редактирование program[0] через меню энкодера) -
   // та же проверка, что в prepare_program_for_mode().
-  if (!(program[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
+  if (program[0].WType != 'L' && !(program[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
     errorMessage = "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение. Старт ректификации невозможен.";
     return false;
   }
@@ -883,6 +904,12 @@ inline bool validate_rect_program_startable(String& errorMessage) {
 // Запустить программу
 void run_program(uint8_t num) {
   rectProgramCommandFailed = false;
+#ifdef USE_LUA
+  if (luaSequenceStage.active) {
+    lua_sequence_stage_request_exit(num);
+    return;
+  }
+#endif
   if (num >= PROGRAM_MAX) {
     if (!rect_stop_second_i2c_pump_if_running()) {
       rect_fail_second_i2c_pump("завершение программы");
@@ -934,6 +961,23 @@ void run_program(uint8_t num) {
   }
   
   reset_rect_program_pause_state();
+
+  if (program[num].WType == 'L') {
+    stopService();
+    stepper_safe_stop_reset();
+#ifdef USE_LUA
+    if (!lua_sequence_stage_begin(num, millis())) {
+      SendMsg("Ошибка Lua: скрипт строки не запущен", ALARM_MSG);
+      run_program(PROGRAM_END);
+      return;
+    }
+    SendMsg("Программа: старт строки №" + String(num + 1) + ", Lua", NOTIFY_MSG);
+#else
+    SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
+    run_program(PROGRAM_END);
+#endif
+    return;
+  }
 
   //запоминаем текущие значения температур
   SteamSensor.StartProgTemp = SteamSensor.avgTemp;

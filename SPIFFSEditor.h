@@ -15,6 +15,7 @@ static const char *SPIFFS_EDITOR_UPLOAD_COMMITTED = "upload_committed";
 static const char *SPIFFS_EDITOR_UPLOAD_TOUCHED = "upload_touched";
 #ifdef USE_LUA
 extern volatile bool pending_lua_reload_flag;
+extern String pending_lua_reload_file;
 static const char *SPIFFS_EDITOR_LUA_RELOAD_BUSY = "lua_reload_busy";
 #endif
 
@@ -467,6 +468,7 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
         } else {
           PendingCommandLockGuard guard;
           if (guard && !mode_switch_in_progress()) {
+            pending_lua_reload_file = p;
             pending_lua_reload_flag = true;
           } else {
             request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);

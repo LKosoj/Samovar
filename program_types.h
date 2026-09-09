@@ -7,6 +7,7 @@ constexpr ProgramType PROGRAM_TYPE_NONE = '\0';
 constexpr uint8_t PROGRAM_MAX = CAPACITY_NUM * 2;
 constexpr uint8_t PROGRAM_END = PROGRAM_MAX;
 constexpr uint8_t NBK_PROGRAM_MAX = 4;
+constexpr size_t PROGRAM_TEXT_POOL_SIZE = 1025;
 
 static_assert(PROGRAM_MAX > 0 && PROGRAM_MAX < 255, "PROGRAM_MAX must fit uint8_t and leave room for sentinel math");
 static_assert(PROGRAM_END == PROGRAM_MAX, "PROGRAM_END is a sentinel, not a valid program[] index");

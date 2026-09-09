@@ -630,9 +630,10 @@ if samovar_file.exists():
         [
             "guard && pending_lua_reload_flag",
             "pending_lua_reload_flag = false;",
+            "changedLuaFile = pending_lua_reload_file;",
             "hasPendingLuaReload = true;",
             "if (hasPendingLuaReload) {",
-            "if (!load_lua_script()) {",
+            "if (!load_lua_script() || !reload_program_lua_job(changedLuaFile)) {",
             # Возврат заявки прямой записью флага, а не через queue_pending_flag():
             # тот отбил бы её при смене режима и при занятом локе - перезагрузка
             # скрипта потерялась бы молча.

@@ -95,6 +95,7 @@ static float get_steam_alcohol(float t) { return 100.0f - t; }
 
 static void set_capacity(uint8_t) {}
 static void apply_program_power_row(float) {}
+static void distiller_finish() {}
 
 // Заглушка НЕ static: единственный вызов лежит внутри вклеенного тела
 // run_dist_program() ниже. Со static мутация (откат к

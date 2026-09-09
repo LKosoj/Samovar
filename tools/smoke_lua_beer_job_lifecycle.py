@@ -14,7 +14,7 @@ SIGNATURES = [
     "inline bool lua_chunk_ref_valid(int ref)",
     "inline bool consume_lua_periodic_start_request(bool& accepted)",
     "inline void finish_beer_lua_periodic_result(bool periodicFailed, bool periodicTimedOut)",
-    "inline bool request_beer_lua_job(uint32_t& ticket)",
+    "inline bool request_compiled_program_lua_job(const String& script, const String& call, const String& fileName, uint32_t& ticket)",
     "inline LuaBeerJobResult beer_lua_job_result(uint32_t ticket)",
     "inline ActuatorCommandResult request_beer_lua_stop(uint32_t ticket)",
 ]
@@ -84,6 +84,11 @@ static bool loop_lua_fl = false;
 static bool SetScriptOff = false;
 static String script2;
 static int script2_ref = LUA_NOREF;
+static int lua_program_script_ref = LUA_NOREF;
+static String lua_program_script_text;
+static String lua_program_call_text;
+static String lua_program_script_name;
+static bool lua_program_job = false;
 static uint32_t lua_beer_job_next_ticket = 0;
 static uint32_t lua_beer_job_ticket = 0;
 static LuaBeerJobResult lua_beer_job_result = LUA_BEER_JOB_IDLE;
@@ -109,6 +114,7 @@ static void reset_fixture() {
   SetScriptOff = false;
   script2 = String("beer-stage");
   script2_ref = 17;
+  lua_program_script_ref = 17;
   lua_beer_job_next_ticket = 0;
   lua_beer_job_ticket = 0;
   lua_beer_job_result = LUA_BEER_JOB_IDLE;
@@ -118,7 +124,7 @@ static void test_init_failure_blocks_job() {
   reset_fixture();
   lua_runtime_ready = false;
   uint32_t ticket = 999;
-  check(!request_beer_lua_job(ticket), "failed Lua init must reject Beer job");
+  check(!request_compiled_program_lua_job(String("body"), String("stage.lua"), String("stage.lua"), ticket), "failed Lua init must reject program job");
   check(lua_beer_job_result == LUA_BEER_JOB_FAILED_INIT,
         "failed Lua init must publish FAILED_INIT terminal state");
   check(ticket == 999, "failed Lua init must not issue a ticket");
@@ -126,15 +132,14 @@ static void test_init_failure_blocks_job() {
 
 static void test_compile_failure_blocks_job() {
   reset_fixture();
-  script2.clear();
   uint32_t ticket = 999;
-  check(!request_beer_lua_job(ticket), "empty compiled Beer script must reject job");
+  check(!request_compiled_program_lua_job(String(""), String("stage.lua"), String("stage.lua"), ticket), "empty compiled program script must reject job");
   check(lua_beer_job_result == LUA_BEER_JOB_FAILED_INIT,
         "empty compiled Beer script must publish FAILED_INIT");
 
   reset_fixture();
-  script2_ref = LUA_NOREF;
-  check(!request_beer_lua_job(ticket), "invalid compiled Beer chunk ref must reject job");
+  lua_program_script_ref = LUA_NOREF;
+  check(!request_compiled_program_lua_job(String("body"), String("stage.lua"), String("stage.lua"), ticket), "invalid compiled program chunk ref must reject job");
   check(lua_beer_job_result == LUA_BEER_JOB_FAILED_INIT,
         "invalid compiled Beer chunk ref must publish FAILED_INIT");
 }
@@ -142,7 +147,7 @@ static void test_compile_failure_blocks_job() {
 static uint32_t start_running_job() {
   reset_fixture();
   uint32_t ticket = 0;
-  check(request_beer_lua_job(ticket), "valid Beer job must be accepted");
+  check(request_compiled_program_lua_job(String("body"), String("stage.lua^one"), String("stage.lua"), ticket), "valid program job must be accepted");
   bool accepted = false;
   check(consume_lua_periodic_start_request(accepted) && accepted,
         "accepted Beer job must become periodic work");
@@ -184,7 +189,7 @@ static void test_script1_only_failure_reported_as_not_failed_does_not_fail_job()
 static void test_stop_is_latched_and_terminal() {
   reset_fixture();
   uint32_t ticket = 0;
-  check(request_beer_lua_job(ticket), "Beer job setup for stop must succeed");
+  check(request_compiled_program_lua_job(String("body"), String("stage.lua"), String("stage.lua"), ticket), "program job setup for stop must succeed");
   check(request_beer_lua_stop(ticket) == ACTUATOR_COMMAND_APPLIED,
         "Beer job stop must latch under production lock");
   // [T30a] Было lastLockTimeout == portMAX_DELAY - request_beer_lua_stop()
@@ -225,7 +230,7 @@ static void test_stop_lock_busy_is_pending_without_side_effects() {
 static void test_stop_wrong_ticket_is_failed() {
   reset_fixture();
   uint32_t ticket = 0;
-  check(request_beer_lua_job(ticket), "Beer job setup for wrong-ticket stop must succeed");
+  check(request_compiled_program_lua_job(String("body"), String("stage.lua"), String("stage.lua"), ticket), "program job setup for wrong-ticket stop must succeed");
   check(request_beer_lua_stop(ticket + 1) == ACTUATOR_COMMAND_FAILED,
         "Beer job stop with a foreign ticket must report ACTUATOR_COMMAND_FAILED");
   check(!SetScriptOff && loop_lua_fl && lua_start_requested,
@@ -352,9 +357,9 @@ def main() -> int:
         return 1
     mutations = [
         (
-            "const bool modeScriptReady = lua_runtime_ready && script2.length() > 0 &&",
-            "const bool modeScriptReady = true && script2.length() > 0 &&",
-            "failed Lua init must reject Beer job",
+            "const bool programScriptReady = lua_runtime_ready && script.length() > 0 &&",
+            "const bool programScriptReady = true && script.length() > 0 &&",
+            "failed Lua init must reject program job",
         ),
         (
             "lua_beer_job_result = LUA_BEER_JOB_STOPPED;",

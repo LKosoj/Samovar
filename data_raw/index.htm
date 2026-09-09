@@ -354,7 +354,7 @@
       num.id = "index-program-row-" + _lnIdx;
       dl.appendChild(num);
 
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="index-program-row-' + _lnIdx + ' index-program-col-type" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
+      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="index-program-row-' + _lnIdx + ' index-program-col-type" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option><option value="L">Lua</option></select>');
 
       var pvolume = document.createElement("input");
       pvolume.type = "text";
@@ -376,6 +376,11 @@
       pspeed.style = 'margin-left: 2em !important';
       pspeed.setAttribute("inputmode", "decimal");
       pspeed.setAttribute("onchange", "calc_program();");
+      pspeed.addEventListener("focus", function () {
+        if (document.getElementById("ptype" + dl.id.replace("prgln", "")).value === "L") {
+          SamovarApp.openLuaProgramModal(pspeed, pvolume, calc_program);
+        }
+      });
       dl.appendChild(pspeed);
 
       pspeed.insertAdjacentHTML("afterend", '<select style="margin-left: 2em !important" id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" aria-labelledby="index-program-row-' + _lnIdx + ' index-program-col-container" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
@@ -430,6 +435,7 @@
       var p = "ptype" + _lnIdx;
       var ptype = document.getElementById(p);
       ptype.value = arr[0];
+      dl.dataset.programType = arr[0];
 
       var pnum = document.getElementById("pnum" + _lnIdx);
       pnum.value = arr[3];
@@ -479,6 +485,18 @@
         else if (t == "C") {bckg = "#FFF59D";}
         else if (t == "P") {bckg = "#C4C4C4";}
         else if (t == "T") {bckg = "#D8B9A4";}
+        else if (t == "L") {bckg = "#3498DB";}
+        var changedToLua = t === 'L' && l.dataset.programType !== 'L';
+        var timeout = document.getElementById('pvolume' + indx);
+        var text = document.getElementById('pspeed' + indx);
+        var capacity = document.getElementById('pnum' + indx);
+        var power = document.getElementById('pvolt' + indx);
+        if (changedToLua) {
+          timeout.value = '1'; text.value = ''; capacity.value = '0'; power.value = '0';
+          l.childNodes[5].value = '0';
+        }
+        text.readOnly = t === 'L';
+        l.dataset.programType = t;
         l.style.backgroundColor = bckg;
         l.style.color = '#17212B';
         if (indx + 1 < current_progNum) {
@@ -824,4 +842,5 @@
     </div>
 
 <!--#include i2cpump_tab.htm-->
+<!--#include lua_program_modal.htm-->
 <!--#include mode_page_footer.htm-->
