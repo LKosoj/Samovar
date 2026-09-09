@@ -70,6 +70,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
 
     SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });
     function applyChartBootstrap(data) {
+      SamovarApp.showCalculationNavForMode(data.mode);
       const colors = {
         SteamTemp: data.steamColor,
         PipeTemp: data.pipeColor,

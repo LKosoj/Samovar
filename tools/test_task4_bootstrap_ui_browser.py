@@ -34,6 +34,7 @@ BROWSER_TEST = r'''async page => {
     const i = plan.index;
     return route.fulfill({status:200, contentType:"application/json", body:JSON.stringify({
       ...defaults,
+      mode:i,
       version:i ? "task4-two" : "task4-one",
       powerUnit:i ? "P" : "V",
       program:i ? "B;500;0.5;2;0;100\n" : "H;100;0.1;1;0;120\n",
@@ -95,6 +96,8 @@ BROWSER_TEST = r'''async page => {
     expect(own.indexOf("/data.csv") > own.indexOf("/ui-bootstrap"), "chart CSV order");
     expect(own.indexOf("/ajax") > own.indexOf("/ui-bootstrap"), "chart ajax order");
     const chartState = await page.evaluate(() => ({hidden:chart.hiddenSeries, colors:["SteamTemp","PipeTemp","WaterTemp","TankTemp","ACPTemp"].map(id => { const style = getComputedStyle(document.getElementById(id).parentElement); return [style.color, style.textDecorationColor]; })}));
+    expect(await page.locator('.page-nav a[href="/program.htm"]').isHidden() === !!i,
+      "chart calculation link visibility " + i);
     expect(chartState.hidden.Steam === !!i && chartState.hidden.Pipe === !i && chartState.hidden.Water === !!i && chartState.hidden.Tank === !i && chartState.hidden.Pressure === !!i && chartState.hidden.ProgNum === !i, "chart visibility " + i);
     const expectedColors = i ? ["rgb(68, 85, 102)","rgb(119, 136, 153)","rgb(170, 187, 204)","rgb(221, 238, 255)","rgb(16, 32, 48)"] : ["rgb(17, 34, 51)","rgb(34, 51, 68)","rgb(51, 68, 85)","rgb(85, 102, 119)","rgb(119, 136, 153)"];
     expect(chartState.colors.every((value, index) => value[0] === expectedColors[index] && value[1] === expectedColors[index]), "chart colors " + i);
@@ -122,6 +125,13 @@ BROWSER_TEST = r'''async page => {
     const ph = await page.evaluate(() => [document.getElementById("CheesePhSlope").value, document.getElementById("CheesePhOffset").value]);
     expect(JSON.stringify(ph) === JSON.stringify(i ? ["-0.006543","18.25"] : ["-0.00321","14.75"]), "pH values " + i);
   }
+
+  await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
+  expect(await page.locator('.page-nav a[href="/program.htm"]').isVisible(),
+    "setup hides calculation link in rectification mode");
+  await page.goto(baseUrl + "/setup_nonrect.htm", {waitUntil:"load"});
+  expect(await page.locator('.page-nav a[href="/program.htm"]').isHidden(),
+    "setup shows calculation link outside rectification mode");
 
   plan = {index:0, diameter:4};
   await page.goto(baseUrl + "/program.htm", {waitUntil:"load"});
@@ -207,6 +217,11 @@ def main() -> int:
         temp = Path(temp_dir)
         site = temp / "site"
         render_site(site)
+        setup = (site / "setup.htm").read_text(encoding="utf-8")
+        (site / "setup_nonrect.htm").write_text(
+            setup.replace('<option value="2" >', '<option value="2" selected>', 1),
+            encoding="utf-8",
+        )
         handler = functools.partial(QuietHandler, directory=str(site))
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

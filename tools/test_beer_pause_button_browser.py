@@ -96,6 +96,19 @@ BROWSER_TEST = r'''async page => {
     getComputedStyle(document.getElementById("pause")).backgroundColor);
   expect(pausedColor !== initialColor,
          "pause button background did not change when BeerManualPause=1");
+  const beerBubbles = page.locator('.bubbles:not(.is-hidden)').first();
+  expect(await beerBubbles.evaluate(node => node.classList.contains('is-on')),
+         "beer bubbles stopped while heater voltage remained on during pause");
+  const beerBubble = beerBubbles.locator('.bubble').first();
+  const beerTransformBefore = await beerBubble.evaluate(node => getComputedStyle(node).transform);
+  await page.waitForTimeout(120);
+  const beerTransformAfter = await beerBubble.evaluate(node => getComputedStyle(node).transform);
+  expect(beerTransformAfter !== beerTransformBefore,
+         "beer bubbles are visible but do not move while heater voltage is on");
+  await page.evaluate(data => SamovarApp.renderScheme({...data, PowerOn:0}), telemetry);
+  expect(!await beerBubbles.evaluate(node => node.classList.contains('is-on')),
+         "beer bubbles keep moving after heater voltage is off");
+  await page.evaluate(data => SamovarApp.renderScheme(data), telemetry);
 
   // [C1] Второй клик ("Продолжить") обязан слать ту же команду action=pause -
   // сервер сам решает continue/pause по (PauseOn || beerManualPause).

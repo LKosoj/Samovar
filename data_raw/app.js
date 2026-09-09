@@ -2390,6 +2390,11 @@
     });
   }
 
+  function showCalculationNavForMode(mode) {
+    const link = document.querySelector('.page-nav a[href="/program.htm"]');
+    if (link) link.hidden = Number(mode) !== 0;
+  }
+
   // На телефоне карточка «Действия» - фиксированная панель внизу, но лежит внутри
   // вкладки «Режим»: при переходе на «Программа» кнопка выключения нагрева пропадала.
   // Выносим панель из вкладки на узком экране и возвращаем на место на широком.
@@ -2509,6 +2514,7 @@
     removeMessage: removeMessage,
     markProgramSaved: markProgramSaved,
     confirmLeave: confirmLeave,
+    showCalculationNavForMode: showCalculationNavForMode,
     reportUiError: reportUiError,
     readNumericInput: readNumericInput,
     responseErrorText: responseErrorText,

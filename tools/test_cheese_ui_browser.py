@@ -79,6 +79,19 @@ BROWSER_TEST = r'''async page => {
   expect(await page.locator("#stageWorkTime").textContent() === "1 мин 15 с", "work time telemetry is wrong");
   expect(await page.locator("#stageTimeout").textContent() === "28 мин 45 с", "timeout telemetry is wrong");
   expect(await page.locator("#start").inputValue() === "Подтвердить", "manual dose is not a confirmation");
+  const cheeseBubbles = page.locator('.bubbles:not(.is-hidden)').first();
+  expect(await cheeseBubbles.evaluate(node => node.classList.contains('is-on')),
+         "cheese bubbles are not enabled while heater voltage is on");
+  const cheeseBubble = cheeseBubbles.locator('.bubble').first();
+  const cheeseTransformBefore = await cheeseBubble.evaluate(node => getComputedStyle(node).transform);
+  await page.waitForTimeout(120);
+  const cheeseTransformAfter = await cheeseBubble.evaluate(node => getComputedStyle(node).transform);
+  expect(cheeseTransformAfter !== cheeseTransformBefore,
+         "cheese bubbles are visible but do not move while heater voltage is on");
+  await page.evaluate(data => SamovarApp.renderScheme({...data, PowerOn:0}), telemetry(1));
+  expect(!await cheeseBubbles.evaluate(node => node.classList.contains('is-on')),
+         "cheese bubbles keep moving after heater voltage is off");
+  await page.evaluate(data => SamovarApp.renderScheme(data), telemetry(1));
   await page.evaluate(() => { window.confirm = () => true; });
   await page.locator("#start").click();
   expect(commands.length === 1 && String(commands[0]).includes("start=1"), "confirmation did not use existing next command");

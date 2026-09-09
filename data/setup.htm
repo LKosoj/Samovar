@@ -1,11 +1,4 @@
-<!DOCTYPE html>
-<html lang="ru">
-
-<head>
-  <meta charset='utf-8'>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<!--#include head_boilerplate.htm-->
 <link rel="stylesheet" href="style.css?v=7.00u7">
 <title>Самовар</title>
 
@@ -275,6 +268,7 @@
 
     window.onload = function() {
       var setupForm = document.getElementById('setupform');
+      SamovarApp.showCalculationNavForMode(document.getElementById('mode').value);
       setupForm.dataset.dirty = 'false';
       setupForm.dataset.editRevision = '0';
       setupForm.addEventListener('submit', submitSetupForm);
@@ -332,19 +326,7 @@
 </head>
 
 <body>
-  <header class="top">
-    <a class="brand" href="/" title="Главная страница">
-      <svg viewBox="0 0 108 108" aria-hidden="true"><path fill="#E08A3C" d="M43 40h22a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H43a5 5 0 0 1-5-5V45a5 5 0 0 1 5-5z"/><path fill="#8A4A16" d="M40 71h27l3 5H37zM48 66h12v6H48zM42 40h24l-4-4H46z"/><circle cx="76" cy="66" r="2.5" fill="#FF6B4A"/><path fill="none" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round" d="M52 30c-3-3 3-6 0-9M57 30c3-3-3-6 0-9"/></svg>
-      Самовар
-    </a>
-    <nav class="page-nav" aria-label="Разделы">
-      <a class="nav-link" href="/">Режим</a>
-      <a class="nav-link" href="/chart.htm">График</a>
-      <a class="nav-link" href="/program.htm">Расчёт</a>
-      <a class="nav-link" href="/setup.htm">Настройки</a>
-    </nav>
-    <div class="spacer"></div>
-
+<!--#include ui_page_header.htm-->
     <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
   </header>
   <form action='/save' method="post" name="setupform" id="setupform">
@@ -370,8 +352,6 @@
               <option value="2" %BEER%>Пиво</option>
               <option value="3" %BK%>Бражная колонна</option>
               <option value="4" %NBK%>Непрерывная бражная колонна</option>
-              <option value="5" hidden %SUVID%>Су-вид</option>
-              <option value="6" hidden %LUA_MODE%>Lua-режим</option>
               <option value="7" %CHEESE%>Сыроварение</option>
             </select>
           </div>

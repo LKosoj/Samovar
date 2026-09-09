@@ -268,6 +268,7 @@
 
     window.onload = function() {
       var setupForm = document.getElementById('setupform');
+      SamovarApp.showCalculationNavForMode(document.getElementById('mode').value);
       setupForm.dataset.dirty = 'false';
       setupForm.dataset.editRevision = '0';
       setupForm.addEventListener('submit', submitSetupForm);
@@ -351,8 +352,6 @@
               <option value="2" %BEER%>Пиво</option>
               <option value="3" %BK%>Бражная колонна</option>
               <option value="4" %NBK%>Непрерывная бражная колонна</option>
-              <option value="5" hidden %SUVID%>Су-вид</option>
-              <option value="6" hidden %LUA_MODE%>Lua-режим</option>
               <option value="7" %CHEESE%>Сыроварение</option>
             </select>
           </div>
