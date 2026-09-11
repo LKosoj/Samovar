@@ -83,11 +83,12 @@ inline ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInch
   
   // 6. Потоки пара и жидкости (ФЧ)
   float workingVaporFlowMlH = res.workingPowerW * EVAPORATION_FACTOR;
+  float headsVaporFlowMlH = res.headsPowerW * EVAPORATION_FACTOR;
   float platesRatio = 20.0f / res.theoreticalPlates;
   
   // Головы (ФЧ ~ 250)
   float headsFR = 250.0f * platesRatio;
-  res.headsFlowMlH = workingVaporFlowMlH / (1.0f + headsFR);
+  res.headsFlowMlH = headsVaporFlowMlH / (1.0f + headsFR);
   
   // Ограничение скорости голов по сечению (0.08 л/ч на мм2)
   float maxHeadsSpeed = crossSectionMm2 * 0.08f;

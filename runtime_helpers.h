@@ -303,6 +303,12 @@ inline bool reset_lua_message_cursor(TickType_t timeout = pdMS_TO_TICKS(50)) {
   return true;
 }
 
+constexpr size_t LUA_STATUS_V27_ESCAPED_MAX = 361;
+
+inline bool lua_status_v27_fits(const String& status) {
+  return json_escaped_length(status.c_str(), status.length()) <= LUA_STATUS_V27_ESCAPED_MAX;
+}
+
 inline bool set_lua_status_value(const String& status, TickType_t timeout = pdMS_TO_TICKS(50)) {
   return assign_locked_runtime_field(Lua_status, status, timeout);
 }
@@ -326,10 +332,12 @@ enum RuntimeAjaxSnapshotResult : uint8_t {
   RUNTIME_AJAX_SNAPSHOT_CORRUPT,
 };
 
+template <typename UiState>
 inline RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
     String& crt, String& status, String& luaStatus, String& currentPowerMode,
     uint32_t cursor, String& eventText, RuntimeEventDescriptor* events,
     uint8_t& eventCount, uint32_t& latestSequence,
+    const UiState& uiStateSource, UiState& uiStateDestination,
     TickType_t timeout = pdMS_TO_TICKS(50)) {
   bool locked = runtime_state_lock(timeout);
   if (!locked) return RUNTIME_AJAX_SNAPSHOT_LOCK_BUSY;
@@ -337,6 +345,7 @@ inline RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
   status = SamovarStatus;
   luaStatus = Lua_status;
   currentPowerMode = current_power_mode;
+  uiStateDestination = uiStateSource;
   latestSequence = runtime_event_latest_sequence_locked(runtimeEventRing);
   const RuntimeEventSnapshotResult copyResult = runtime_event_copy_batch_locked(
       runtimeEventRing, cursor, events, RUNTIME_EVENT_DESCRIPTOR_CAPACITY,

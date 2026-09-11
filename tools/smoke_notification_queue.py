@@ -272,6 +272,7 @@ struct QueueProbe {
   int popCalls = 0;
   int flushCalls = 0;
   uint32_t queuedAtMillis = 0;
+  const char* message = "2A";
 
   bool isEmpty() {
     emptyCalls++;
@@ -285,7 +286,7 @@ struct QueueProbe {
   bool peek(char* output, uint32_t* queuedAt) {
     peekCalls++;
     if (peekResult) {
-      std::strcpy(output, "2A");
+      std::strcpy(output, message);
       if (queuedAt != nullptr) *queuedAt = queuedAtMillis;
     }
     return peekResult;
@@ -412,6 +413,7 @@ void runConsumerBlock() {
 }
 
 void resetProbe() {
+  pendingV35 = false;
   msg_q = QueueProbe{};
   takeResult = pdTRUE;
   failOnTakeCall = 0;
@@ -552,6 +554,18 @@ void checkConsumerReleasePaths() {
 }
 
 void checkIntegrationPaths() {
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  msg_q.message = "2@P1;s=00000001";
+  pendingV35 = true;
+  runConsumerBlock();
+  check(blynkWriteCalls == 0 && msg_q.popCalls == 0,
+        "typed pair must remain queued until V35 is sent");
+  pendingV35 = false;
+  runConsumerBlock();
+  check(blynkWriteCalls == 1 && msg_q.popCalls == 1,
+        "typed pair must be sent after V35 is no longer pending");
   resetProbe();
   configureIntegrations();
   msg_q.empty = false;
@@ -801,7 +815,10 @@ def build_production_block_harness(source: str | None = None) -> str:
     consumer_block, _ = extract_braced_block_after(
         clock_body, "// Возраст очереди проверяется и без Wi-Fi"
     )
+    defer_signature = "static bool defer_typed_pair_until_v35(const char* message)"
+    defer_function = "bool pendingV35 = false;\nbool blynk_session_start_pending() { return pendingV35; }\n" + defer_signature + " {" + extract_function_body(source, defer_signature) + "}\n"
     return (PRODUCTION_BLOCK_HARNESS
+            .replace("void runConsumerBlock() {", defer_function + "void runConsumerBlock() {")
             .replace("@PRODUCER_BLOCK@", producer_block)
             .replace("@CONSUMER_BLOCK@", consumer_block))
 

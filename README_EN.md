@@ -79,13 +79,18 @@ the process and sends an alarm.
 - Valves
 - Servo
 - Power supply
-- Optional: I2CStepper board with an agitator and dosing pump, PH-4502C pH sensor for cheese
-  making, water-flow sensor, and emergency button
+- Optional: I2CStepper board with an agitator and dosing pump, external ADS1115 ADC and
+  PH-4502C pH sensor for cheese making, water-flow sensor, and emergency button
 
 Cheese mode uses shared connections:
 
-- `LUA_PIN` is the PH-4502C input. Connect either a PH-4502C for cheese mode or an MPX5010DP
-  for other modes, but never both sensors at the same time.
+- `#define USE_ADS1115 0x48` automatically moves the pH sensor to ADS1115 input AIN0 at
+  address `0x48`. There is no separate channel setting, and `LUA_PIN` is not used for pH.
+  If the ADS1115 is not found, Cheese mode startup and pH calibration are blocked while all
+  other modes remain operational.
+- Without `USE_ADS1115`, the previous connection remains: `LUA_PIN` is the PH-4502C input.
+  Connect either a PH-4502C for Cheese mode or an MPX5010DP for other modes, but never both
+  sensors at the same time.
 - Relay 4 controls the brine drain valve. Connect either the cheese-making valve or the boost
   heating element used by other modes, but never both devices at the same time.
 

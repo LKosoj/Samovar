@@ -40,6 +40,12 @@ static void bk_apply_work_power() {
   heater_boost_output_off();
 #endif
   bk_work_power_pending = false;
+  runtime_pair_end(
+      UI_WAIT_BK_WORK_POWER,
+      RUNTIME_PAIR_RESUMED,
+      "Рабочая мощность БК применена.",
+      NOTIFY_MSG);
+  distAlcoholEstimateWarningSent = false;
   // [9b] Тот же момент, что distiller_proc() отмечает вызовом run_dist_program(0)
   // сразу после старта нагрева - здесь это откладывалось до факта закипания,
   // потому что ДО этого момента BKPower ещё не действует. run_bk_program(0)
@@ -190,6 +196,10 @@ void bk_proc() {
           "Включен нагрев бражной колонны",
           false) != MODE_HEATING_START_SUCCEEDED) return;
     bk_work_power_pending = true;
+    runtime_pair_begin(
+        UI_WAIT_BK_WORK_POWER,
+        "Ожидание рабочей мощности БК.",
+        NOTIFY_MSG);
   }
 
   // [A1 п.6] Плато проверяется ДО DistTemp - для БК это новая функциональность,
@@ -274,7 +284,7 @@ void check_alarm_bk() {
   // [П4.1] check_boiling() должна вызываться безусловно каждый тик: если внутри if
   // ниже сработает короткое замыкание на Steam/Pipe>39 (режим мощности сменится
   // раньше), сам check_boiling() больше не вызовется и boil_started может навсегда
-  // остаться false, из-за чего get_alcohol()/get_steam_alcohol() отдают заглушку 100.
+  // остаться false, из-за чего get_alcohol()/get_steam_alcohol() отдают «нет оценки» (-1).
   // check_boiling() возвращает true ТОЛЬКО в тот единственный вызов, когда кипение
   // обнаружено впервые (дальше boil_started=true и guard всегда отдаёт false) -
   // поэтому вызываем её РОВНО ОДИН раз за тик и переиспользуем результат ниже.
@@ -345,6 +355,11 @@ void check_alarm_bk() {
 }
 
 void bk_finish() {
+  runtime_pair_close_mode(
+      SAMOVAR_BK_MODE,
+      RUNTIME_PAIR_PROCESS_END,
+      "Работа БК завершена.",
+      NOTIFY_MSG);
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
   bk_work_power_pending = false;

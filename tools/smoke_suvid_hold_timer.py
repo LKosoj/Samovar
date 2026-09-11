@@ -34,6 +34,7 @@ static bool suvidHeaterOn = false;
 static int8_t suvidHeaterApplied = -1;
 
 static bool PowerOn = true;
+static bool alarm_event = false;
 static bool heater_state = false;
 static uint32_t fakeMillis = 0;
 static uint32_t millis() { return fakeMillis; }
@@ -50,7 +51,23 @@ static void SendMsg(const char*, int type) { messages++; if (type == 1) warnings
 static int buzzerCalls = 0;
 static void set_buzzer(bool) { buzzerCalls++; }
 enum { SAMOVAR_POWER = 1, SAMOVAR_POWER_OFF = 17, ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, SAMOVAR_SUVID_MODE = 6 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED, RUNTIME_PAIR_ROW_CHANGE,
+                          RUNTIME_PAIR_USER_STOP, RUNTIME_PAIR_PROCESS_END,
+                          RUNTIME_PAIR_ERROR };
+enum UiWaitReason { UI_WAIT_SUVID_HOLD_OUTSIDE_BAND = 17 };
 static int Samovar_Mode = SAMOVAR_SUVID_MODE;
+static int pairBegins = 0;
+static int pairEnds = 0;
+static bool pairActive = false;
+static void runtime_pair_begin(UiWaitReason reason, const char*, int) {
+  if (reason == UI_WAIT_SUVID_HOLD_OUTSIDE_BAND && !pairActive) { pairActive = true; pairBegins++; }
+}
+static void runtime_pair_end(UiWaitReason reason, RuntimePairOutcome, const char*, int) {
+  if (reason == UI_WAIT_SUVID_HOLD_OUTSIDE_BAND && pairActive) { pairActive = false; pairEnds++; }
+}
+static void runtime_pair_close_mode(int, RuntimePairOutcome, const char*, int) {
+  if (pairActive) { pairActive = false; pairEnds++; }
+}
 static int queueCalls = 0;
 static bool queueSucceeds = true;
 static int lastQueuedCommand = -1;
@@ -85,6 +102,7 @@ static void reset(uint16_t hold = 0) {
   suvidHold = {}; suvidDeviation = {}; fakeMillis = 0; heaterCalls = 0;
   lastHeater = false; messages = 0; warnings = 0; alarms = 0; buzzerCalls = 0;
   queueCalls = 0; queueSucceeds = true; heater_state = false; lastQueuedCommand = -1;
+  alarm_event = false; pairBegins = 0; pairEnds = 0; pairActive = false;
   suvidHeaterApplied = -1;
 }
 static void test_symmetric_band() {

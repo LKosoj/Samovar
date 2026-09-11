@@ -29,7 +29,9 @@ BrewMate-фикстуру (windows-1251) сюда сознательно не б
 (D4) взяты два РАЗНЫХ BeerXML-файла (Diogenes 68.9 и Sample Blonde Ale 65).
 """
 import functools
+import contextlib
 import http.server
+import io
 import json
 import os
 import shutil
@@ -60,6 +62,12 @@ UNKNOWN_MASH_TYPE = """<?xml version="1.0" encoding="UTF-8"?>
 </RECIPE>
 </RECIPES>
 """
+
+BOIL_CASES = """<?xml version="1.0"?><RECIPES><RECIPE><NAME>Boil</NAME><BOIL_TIME>{boil}</BOIL_TIME><FERMENTABLES><FERMENTABLE><NAME>Malt</NAME><AMOUNT>5</AMOUNT></FERMENTABLE></FERMENTABLES><MASH><MASH_STEPS><MASH_STEP><NAME>Mash</NAME><STEP_TEMP>65</STEP_TEMP><STEP_TIME>60</STEP_TIME></MASH_STEP></MASH_STEPS></MASH></RECIPE></RECIPES>"""
+BOIL_WITH_HOPS = BOIL_CASES.replace("</RECIPE>", "<HOPS><HOP><NAME>Hop</NAME><USE>Boil</USE><TIME>30</TIME><AMOUNT>0.02</AMOUNT></HOP></HOPS></RECIPE>")
+BEERXML_NOTES_BREWMATE = BOIL_CASES.format(boil="30").replace("<NAME>Boil</NAME>", "<NOTES>namerecipe</NOTES><NAME>BeerXML notes</NAME>")
+INVALID_ROOT = "<?xml version=\"1.0\"?><other><namerecipe>not a recipe</namerecipe></other>"
+BREWMATE_CP1251 = """<?xml version="1.0"?><recipe><namerecipe>Тест BrewMate</namerecipe><part>20</part><timeboil>60</timeboil><timebro>14</timebro><tempbro>18</tempbro><np>1.055</np><ibu>40</ibu><grains><grain><grainname>Пилснер</grainname><grainkg>5</grainkg></grain></grains><hops><hop><hopname>Каскад</hopname><hopgr>20</hopgr><hoptime>60</hoptime><hopalpha>6.5</hopalpha><hopuse>Кипячение</hopuse></hop></hops><zatirs><zatir><zatirgr>65</zatirgr><zatirtime>60</zatirtime></zatir></zatirs></recipe>""".encode("cp1251")
 
 INFUSION_STEPS = """<?xml version="1.0" encoding="UTF-8"?>
 <RECIPES>
@@ -213,7 +221,16 @@ BROWSER_TEST = r'''async page => {
   if (setprogram.disabled) throw new Error("brewxml.htm: setprogram must stay enabled: " + JSON.stringify(setprogram));
   if (setprogram.beerModeAttr !== null) throw new Error("brewxml.htm: data-is-beer-mode must not be on <body>: " + JSON.stringify(setprogram));
 
+  const programPosts = [];
+  await page.route("**/program", async route => {
+    if (route.request().method() === "POST") programPosts.push(await route.request().postData());
+    await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({
+      ok: true, err: "", program: "", operationId: 1, state: "queued", error: "none"
+    }) });
+  });
+
   const results = await page.evaluate(async (f) => {
+    window.alert = function () {};
     function loadOnce(text, name) {
       return new Promise(resolve => {
         loadBeerXML(new File([text], name));
@@ -333,6 +350,82 @@ BROWSER_TEST = r'''async page => {
     await loadOnce(f.noHops, "no_hops_herms.xml");
     out.hermsProgram = window.program;
     SamovarApp.setConfiguredBeerBrewOrder("allinone");
+
+    // 18) W04-W06: BOIL_TIME 0 допустим без B, а явный текст/минус отменяет
+    // прежнюю готовую программу. Отсутствующее поле остаётся legacy 60.
+    await loadOnce(__BOIL_60__, "boil-60.xml");
+    out.boil60 = window.program;
+    await loadOnce(__BOIL_ZERO__, "boil-0.xml");
+    out.boilZero = window.program;
+    out.boilZeroReady = window.is_program;
+    await loadOnce(__BOIL_TEXT__, "boil-text.xml");
+    out.boilTextReady = window.is_program;
+    out.boilTextError = (document.getElementById("request_error") || {}).textContent || "";
+    await loadOnce(__BOIL_NEGATIVE__, "boil-negative.xml");
+    out.boilNegativeReady = window.is_program;
+    await loadOnce(__HOPS_60__, "hops-60.xml");
+    out.hops60 = window.program;
+    await loadOnce(__HOPS_ZERO__, "hops-0.xml");
+    out.hopsZero = window.program;
+    out.hopsZeroReady = window.is_program;
+    await loadOnce(__HOPS_TEXT__, "hops-text.xml");
+    out.hopsTextReady = window.is_program;
+    await set_program();
+    await loadOnce(__HOPS_NEGATIVE__, "hops-negative.xml");
+    out.hopsNegativeReady = window.is_program;
+    await set_program();
+    await loadOnce(__BEERXML_NOTES__, "beerxml-notes.xml");
+    out.notesFormatName = document.getElementById("NAME").textContent;
+    await loadOnce(__INVALID_ROOT__, "invalid-root.xml");
+    out.invalidRootReady = window.is_program;
+    out.invalidRootError = (document.getElementById("request_error") || {}).textContent || "";
+
+    // Реальные байты CP1251: строка JS здесь не годится, File([string]) всегда UTF-8.
+    await loadOnce(new Uint8Array(__BREWMATE_CP1251__), "brewmate-cp1251.xml");
+    out.cp1251Name = document.getElementById("NAME").textContent;
+    out.cp1251Ingredients = document.getElementById("ingredients").textContent;
+
+    // A готова; новый B сразу отменяет A. Пока B не дочитан, а также после
+    // ошибочного B, set_program не может выполнить POST. Успешный B — может.
+    const nativeReader = window.FileReader;
+    const readers = [];
+    window.FileReader = class {
+      constructor() { readers.push(this); }
+      readAsArrayBuffer(file) { this.file = file; this.kind = "bytes"; }
+      readAsText(file, encoding) { this.file = file; this.encoding = encoding; this.kind = "text"; }
+    };
+    const finish = (reader, result) => { reader.result = result; reader.onload(); };
+    const bytes = text => new TextEncoder().encode(text).buffer;
+    const oldA = __BOIL_60__.replace("<NAME>Boil</NAME>", "<NAME>A old</NAME>");
+    const newB = __BOIL_60__.replace("<NAME>Boil</NAME>", "<NAME>B new</NAME>");
+    loadBeerXML(new File([oldA], "a.xml"));
+    finish(readers[0], bytes(oldA));
+    finish(readers[1], oldA);
+    out.aReady = window.is_program;
+    loadBeerXML(new File([__BOIL_TEXT__], "bad-b.xml"));
+    out.pendingBReady = window.is_program;
+    await set_program();
+    finish(readers[2], bytes(__BOIL_TEXT__));
+    finish(readers[3], __BOIL_TEXT__);
+    out.badBReady = window.is_program;
+    await set_program();
+    loadBeerXML(new File([newB], "good-b.xml"));
+    finish(readers[4], bytes(newB));
+    finish(readers[5], newB);
+    out.goodBReady = window.is_program;
+    out.goodBName = document.getElementById("NAME").textContent;
+    await set_program();
+
+    // Поздний text callback A не имеет права перезаписать уже готовый B.
+    loadBeerXML(new File([oldA], "late-a.xml"));
+    finish(readers[6], bytes(oldA));
+    loadBeerXML(new File([newB], "late-b.xml"));
+    finish(readers[8], bytes(newB));
+    finish(readers[9], newB);
+    finish(readers[7], oldA);
+    out.lateName = document.getElementById("NAME").textContent;
+    out.lateProgram = window.program;
+    window.FileReader = nativeReader;
 
     const brewmateXml = `<?xml version="1.0"?><recipe><namerecipe>Тест BrewMate</namerecipe><style>IPA</style><part>20</part><timeboil>60</timeboil><timebro>14</timebro><tempbro>18</tempbro><np>1.055</np><ibu>40</ibu><abv>5.8</abv><yeast>US-05</yeast><grains><grain><grainname>Пилснер</grainname><grainkg>5</grainkg></grain></grains><hops><hop><hopname>Cascade</hopname><hopgr>20</hopgr><hoptime>60</hoptime><hopalpha>6.5</hopalpha><hopuse>Кипячение</hopuse></hop><hop><hopname>Citra</hopname><hopgr>30</hopgr><hoptime>30</hoptime><hopalpha>12</hopalpha><hopuse>сухое охмеление</hopuse></hop></hops><zatirs><zatir><zatirgr>65</zatirgr><zatirtime>60</zatirtime></zatir></zatirs></recipe>`;
     get_brewmate_info(brewmateXml);
@@ -504,9 +597,72 @@ BROWSER_TEST = r'''async page => {
     throw new Error("HERMS P row must follow mash sensor/pump mapping: " + results.hermsProgram);
   }
 
+  if (!results.boil60.split("\n").some(l => l.startsWith("B;"))) {
+    throw new Error("BOIL_TIME=60 must produce B rows");
+  }
+  if (!results.boilZeroReady || results.boilZero.split("\n").some(l => l.startsWith("B;")) ||
+      !results.boilZero.includes("C;") || !results.boilZero.includes("F;")) {
+    throw new Error("BOIL_TIME=0 must keep C/F and omit B: " + results.boilZero);
+  }
+  if (results.boilTextReady || !results.boilTextError.includes("BOIL_TIME") || results.boilNegativeReady) {
+    throw new Error("text and negative BOIL_TIME must reject and clear the old program: " + JSON.stringify(results));
+  }
+  const hops60Times = results.hops60.split("\n").filter(l => l.startsWith("B;")).map(l => Number(l.split(";")[2]));
+  if (hops60Times.reduce((sum, value) => sum + value, 0) !== 60 ||
+      !results.hopsZeroReady || results.hopsZero.split("\n").some(l => l.startsWith("B;")) ||
+      !results.hopsZero.includes("C;") || !results.hopsZero.includes("F;") ||
+      results.hopsTextReady || results.hopsNegativeReady) {
+    throw new Error("BOIL_TIME matrix with hops must preserve B totals, zero C/F, and invalid rejection: " +
+      JSON.stringify({hops60Times, zero: results.hopsZero, text: results.hopsTextReady, negative: results.hopsNegativeReady}));
+  }
+  if (results.notesFormatName !== "BeerXML notes") {
+    throw new Error("namerecipe in BeerXML NOTES must not select BrewMate: " + results.notesFormatName);
+  }
+  if (results.invalidRootReady || !results.invalidRootError) {
+    throw new Error("invalid XML root must disable installation: " + JSON.stringify(results));
+  }
+  if (results.cp1251Name !== "Тест BrewMate" || !results.cp1251Ingredients.includes("Пилснер")) {
+    throw new Error("raw CP1251 BrewMate bytes must preserve Cyrillic: " + JSON.stringify({
+      name: results.cp1251Name, ingredients: results.cp1251Ingredients
+    }));
+  }
+  if (!results.aReady || results.pendingBReady || results.badBReady || !results.goodBReady ||
+      results.goodBName !== "B new" || results.lateName !== "B new" ||
+      !results.lateProgram.includes("B;0.00;60")) {
+    throw new Error("new import must cancel A until successful B, and late A must not overwrite B: " +
+      JSON.stringify(results));
+  }
+  if (programPosts.length !== 1 || !programPosts[0] || !programPosts[0].includes("WProgram")) {
+    throw new Error("only successful B may POST /program; pending/invalid B must not: " +
+      JSON.stringify(programPosts));
+  }
+
+  await page.evaluate(() => { window.confirm = () => false; });
+  await page.locator("#return").click();
+  if (await page.evaluate(() => location.pathname) !== "/brewxml.htm") {
+    throw new Error("BrewXML return ignored Cancel with an unapplied recipe");
+  }
+  await page.evaluate(() => { window.confirm = () => true; });
+  await Promise.all([
+    page.waitForURL(baseUrl + "/index.htm"),
+    page.locator("#return").click()
+  ]);
+
   if (errors.length > 0) throw new Error(errors.join("\n"));
-  return { results, setprogram };
+  return { results, setprogram, programPosts };
 }'''
+
+
+def run_browser_code(cli: str, session: str, browser_test: str, temp: Path) -> str:
+    captured = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured):
+            run_cli(cli, session, ["run-code", browser_test], temp, 60)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        output = captured.getvalue()
+        return output if output else str(error)
+    print(captured.getvalue(), end="")
+    return ""
 
 
 def main() -> int:
@@ -560,8 +716,36 @@ def main() -> int:
                 BROWSER_TEST
                 .replace("__BASE_URL__", json.dumps(base_url))
                 .replace("__FIXTURES__", json.dumps(fixtures))
+                .replace("__BOIL_60__", json.dumps(BOIL_CASES.format(boil="60")))
+                .replace("__BOIL_ZERO__", json.dumps(BOIL_CASES.format(boil="0")))
+                .replace("__BOIL_TEXT__", json.dumps(BOIL_CASES.format(boil="abc")))
+                .replace("__BOIL_NEGATIVE__", json.dumps(BOIL_CASES.format(boil="-1")))
+                .replace("__HOPS_60__", json.dumps(BOIL_WITH_HOPS.format(boil="60")))
+                .replace("__HOPS_ZERO__", json.dumps(BOIL_WITH_HOPS.format(boil="0")))
+                .replace("__HOPS_TEXT__", json.dumps(BOIL_WITH_HOPS.format(boil="abc")))
+                .replace("__HOPS_NEGATIVE__", json.dumps(BOIL_WITH_HOPS.format(boil="-1")))
+                .replace("__BEERXML_NOTES__", json.dumps(BEERXML_NOTES_BREWMATE))
+                .replace("__INVALID_ROOT__", json.dumps(INVALID_ROOT))
+                .replace("__BREWMATE_CP1251__", json.dumps(list(BREWMATE_CP1251)))
             )
-            run_cli(cli, session, ["run-code", browser_test], temp, 60)
+            original_error = run_browser_code(cli, session, browser_test, temp)
+            if original_error:
+                raise RuntimeError(original_error)
+            source = (site / "brewxml.htm").read_text(encoding="utf-8")
+            mutations = (
+                ("late FileReader callback", "if (generation !== recipeImportGeneration) return;\n\t\t\ttry {", "if (false) return;\n\t\t\ttry {", "new import must cancel A until successful B"),
+                ("negative BOIL_TIME", "Number(rawBoilTime) < 0", "false", "text and negative BOIL_TIME must reject and clear the old program"),
+            )
+            for label, old, new, expected_error in mutations:
+                mutated = source.replace(old, new, 1)
+                if mutated == source:
+                    raise RuntimeError(f"{label}: mutation anchor not found")
+                (site / "brewxml.htm").write_text(mutated, encoding="utf-8")
+                mutation_error = run_browser_code(cli, session, browser_test, temp)
+                error_section = mutation_error.split("### Ran Playwright code", 1)[0]
+                if expected_error not in error_section:
+                    raise RuntimeError(f"{label}: mutation did not fail with expected assertion")
+            (site / "brewxml.htm").write_text(source, encoding="utf-8")
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
             primary_error = str(error)
         finally:

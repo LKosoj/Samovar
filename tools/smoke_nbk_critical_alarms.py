@@ -143,7 +143,7 @@ if nbk_text:
         ["nbk_finish_common(true);", "nbk_close_data_log();"],
         errors,
     )
-    forbid_tokens("nbk_emergency_finish", body, ["delay(", "set_power(", "run_nbk_program(", "nbk_finish("])
+    forbid_tokens("nbk_emergency_finish", body, ["delay(", "run_nbk_program(", "nbk_finish("])
 
     try:
         body = extract_function_body(nbk_text, "void nbk_finish()")

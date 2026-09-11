@@ -54,7 +54,7 @@ handler_contracts = {
         "param.asStr()",
         "if (!result.ok())",
         "report_blynk_numeric_error(17, result);",
-        "set_pump_speed(stepSpeed, true);",
+        "set_pump_speed(stepSpeed, true, true, UI_CONTROL_SOURCE_MANUAL);",
     ],
     "BLYNK_WRITE(V12)": [
         "parse_exact_bool(param.asStr(), state)",

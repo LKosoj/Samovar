@@ -11,9 +11,28 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
 
     var chart;
     var chartLastAppendMs = 0;
+    var chartSessionId = null;
+    var chartCsvSessionId = null;
+
+    function telemetrySessionId (myObj) {
+      var sessionId = Number(myObj.sessionId);
+      return Number.isInteger(sessionId) && sessionId >= 0 && sessionId <= 4294967295
+        ? sessionId : null;
+    }
 
     function appendChartPoint(myObj) {
       if (!chart) return;
+      var sessionId = telemetrySessionId(myObj);
+      if (sessionId === null) return;
+      if (chartSessionId !== sessionId) {
+        chartSessionId = sessionId;
+        chartCsvSessionId = null;
+        chartLastAppendMs = 0;
+        chart.clearRuntimePairs();
+        loadChartCsv();
+        return;
+      }
+      if (chartCsvSessionId !== sessionId) return;
       let now = Date.now();
       if (now - chartLastAppendMs < 15000) return;
       chartLastAppendMs = now;
@@ -85,7 +104,12 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
     }
     function loadChartCsv () {
       if (!chart) return;
-      chart.loadCsv('data.csv').catch(function (err) {
+      var requestedSessionId = chartSessionId;
+      chart.loadCsv('data.csv', loadChartCsv).then(function (loaded) {
+        if (loaded && chartSessionId === requestedSessionId) {
+          chartCsvSessionId = requestedSessionId;
+        }
+      }).catch(function (err) {
         if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true, retryChartLoad);
       });
     }
@@ -101,6 +125,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       }
       try {
         chart = new SamovarChart('chartdiv', {
+          timeZone: data.timeZone,
           hidden: {
             Steam: !data.steamVisible,
             Pipe: !data.pipeVisible,
@@ -109,6 +134,15 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
             Pressure: !data.pressureVisible,
             ProgNum: !data.programNumberVisible
           }
+        });
+        SamovarApp.onRuntimePair(function(pair, discontinuity) {
+          if (!chart) return;
+          if (discontinuity) {
+            chart.clearRuntimePairs();
+            return;
+          }
+          if (!pair || Number.parseInt(pair.sessionId, 16) !== chartSessionId) return;
+          chart.applyRuntimePair(pair);
         });
         loadChartCsv();
       } catch (err) {

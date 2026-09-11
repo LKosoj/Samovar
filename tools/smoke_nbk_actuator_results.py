@@ -117,6 +117,11 @@ FSM_HARNESS = r'''
 
 #define SAMOVAR_USE_POWER
 
+enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_NBK_TRANSITION = 11, UI_WAIT_NBK_SAFE = 12 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED = 0 };
+static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
+
 enum ActuatorCommandResult : uint8_t {
   ACTUATOR_COMMAND_ACCEPTED = 0,
   ACTUATOR_COMMAND_PENDING,
@@ -162,6 +167,10 @@ static bool nbk_overflow_happened = true;
 static bool nbk_safe_waiting = false;
 static bool nbk_safe_wait_feed_stopped = false;
 static ActuatorCommandResult nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+static uint8_t nbkUiPowerSource = 0;
+static uint8_t nbkUiFeedSource = 0;
+static bool nbkUiPowerApplied = false;
+static bool nbkUiFeedApplied = false;
 
 uint32_t millis() { return fakeMillis; }
 uint32_t safety_deadline_after(uint32_t now, uint32_t delay) {
@@ -201,7 +210,9 @@ inline bool nbk_schedule_actuator_command(
     uint16_t iteration,
     bool commitProgram = false,
     uint8_t candidateProgramNum = 0,
-    bool commitKeepsOptimum = false) {
+    bool commitKeepsOptimum = false,
+    bool closeSafeWaitPair = false,
+    bool closeTransitionPair = false) {
 @SCHEDULE_BODY@
 }
 inline void tick_nbk_actuator_command() {
@@ -326,7 +337,11 @@ SAFE_WAIT_HARNESS = r'''
 #include <cstdint>
 #include <iostream>
 
-enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1 };
+enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_NBK_TRANSITION = 11, UI_WAIT_NBK_SAFE = 12 };
+enum RuntimePairOutcome { RUNTIME_PAIR_ERROR = 4 };
+void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
+void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
 enum ActuatorCommandResult : uint8_t {
   ACTUATOR_COMMAND_ACCEPTED = 0,
   ACTUATOR_COMMAND_PENDING,
@@ -343,6 +358,12 @@ static float nbk_P = 6;
 static bool nbk_safe_waiting = false;
 static bool nbk_safe_wait_feed_stopped = false;
 static ActuatorCommandResult nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+struct NbkPairProbe { bool closeTransitionPair; };
+static NbkPairProbe nbkActuatorCommand = {};
+static uint8_t nbkUiPowerSource = 0;
+static uint8_t nbkUiFeedSource = 0;
+static bool nbkUiPowerApplied = false;
+static bool nbkUiFeedApplied = false;
 static int resetCalls = 0;
 static int powerOffCalls = 0;
 
@@ -382,6 +403,7 @@ static void reset_fixture() {
   nbk_safe_waiting = false;
   nbk_safe_wait_feed_stopped = false;
   nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+  nbkActuatorCommand = {};
   resetCalls = 0;
   powerOffCalls = 0;
 }

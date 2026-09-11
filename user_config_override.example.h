@@ -18,6 +18,7 @@
 //#define USE_BODY_TEMP_AUTOSET
 //#define USE_EXPANDER 0x20
 //#define USE_ANALOG_EXPANDER 0x48
+//#define USE_ADS1115 0x48  // pH автоматически считывается с AIN0
 //#define SAMOVAR_USE_BLYNK
 
 #define MQTT_SERVER ""

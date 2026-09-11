@@ -89,6 +89,7 @@ static constexpr float MIN_ALC_RATE = 0.001f;
 static constexpr unsigned long PREDICTOR_UPDATE_MS = 30000UL;
 static float get_alcohol(float value) { return 100.0f - value; }
 static float get_steam_alcohol(float value) { return 100.0f - value; }
+static bool alcohol_estimate_valid(float value) { return value >= 0.0f && value <= 100.0f; }
 static float max(float left, float right) { return left > right ? left : right; }
 
 class String {

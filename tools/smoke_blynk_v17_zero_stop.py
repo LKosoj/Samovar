@@ -51,6 +51,7 @@ ZERO_STOP_BRANCH = (
     "      stopService();\n"
     "      CurrrentStepperSpeed = 0;\n"
     "      ActualVolumePerHour = 0;\n"
+    "      ui_note_withdrawal_control_source(UI_CONTROL_SOURCE_MANUAL);\n"
     "    }\n"
     "    return;\n"
     "  }\n"
@@ -89,11 +90,18 @@ void stopService() { stopServiceCalls++; }
 static int setPumpSpeedCalls = 0;
 static float lastPumpSpeed = -1.0f;
 static bool lastContinueProcess = false;
-void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true) {
+enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0, UI_CONTROL_SOURCE_MANUAL = 2 };
+static uint8_t lastSource = UI_CONTROL_SOURCE_UNKNOWN;
+void ui_note_withdrawal_control_source(uint8_t source) { lastSource = source; }
+void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true,
+                    UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN) {
   (void)updateBase;
   setPumpSpeedCalls++;
   lastPumpSpeed = pumpspeed;
   lastContinueProcess = continue_process;
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL ||
+      SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE ||
+      SamovarStatusInt == SAMOVAR_STATUS_PAUSED) lastSource = source;
 }
 
 static int reportErrorCalls = 0;
@@ -130,6 +138,7 @@ static void reset_fixture() {
   setPumpSpeedCalls = 0;
   lastPumpSpeed = -1.0f;
   lastContinueProcess = false;
+  lastSource = UI_CONTROL_SOURCE_UNKNOWN;
   reportErrorCalls = 0;
   lastReportPin = 0;
   lastReportError = NUMERIC_PARSE_OK;
@@ -152,6 +161,7 @@ int main() {
   check(reportErrorCalls == 0, "0/withdrawal: нулевой вход валиден, ошибка не репортится");
   check(CurrrentStepperSpeed == 0, "0/withdrawal: CurrrentStepperSpeed должен быть обнулён");
   check(ActualVolumePerHour == 0.0f, "0/withdrawal: ActualVolumePerHour должен быть обнулён");
+  check(lastSource == UI_CONTROL_SOURCE_MANUAL, "0/withdrawal: источник принятой остановки — оператор");
 
   // Сценарий 1б: "0" вне отбора (IDLE/разгон) - обработчик не должен трогать
   // посторонний шаговый (калибровку насоса, HopStepperStep(), самотест) -
@@ -164,6 +174,7 @@ int main() {
   check(reportErrorCalls == 0, "0/idle: нулевой вход валиден, ошибка не репортится");
   check(CurrrentStepperSpeed == 42, "0/idle: CurrrentStepperSpeed не должен меняться");
   check(ActualVolumePerHour == 99.0f, "0/idle: ActualVolumePerHour не должен меняться");
+  check(lastSource == UI_CONTROL_SOURCE_UNKNOWN, "0/idle: непринятая остановка не меняет источник");
 
   reset_fixture();
   SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
@@ -175,15 +186,19 @@ int main() {
   // Сценарии 2 и 3: "5" и "10" - разные ненулевые расходы обязаны давать
   // РАЗНЫЕ скорости насоса (ловит мутацию "всегда одна и та же скорость").
   reset_fixture();
+  SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
   run_v17_handler("5");
   check(stopServiceCalls == 0, "5: stopService() не должен вызываться при ненулевом входе");
   check(setPumpSpeedCalls == 1, "5: set_pump_speed() должен быть вызван ровно один раз");
   check(lastContinueProcess == true, "5: continue_process должен быть true");
   check(lastPumpSpeed > 0.0f, "5: скорость должна быть положительной");
+  check(lastSource == UI_CONTROL_SOURCE_MANUAL, "5: источник принятой скорости — оператор");
   float speedFor5 = lastPumpSpeed;
 
   reset_fixture();
+  SamovarStatusInt = SAMOVAR_STATUS_RECT_AUTOPAUSE;
   run_v17_handler("10");
+  check(lastSource == UI_CONTROL_SOURCE_MANUAL, "10: источник принятой скорости — оператор");
   check(setPumpSpeedCalls == 1, "10: set_pump_speed() должен быть вызван ровно один раз");
   check(lastPumpSpeed > 0.0f, "10: скорость должна быть положительной");
   float speedFor10 = lastPumpSpeed;
@@ -273,6 +288,10 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
+    source_mutant = body.replace("UI_CONTROL_SOURCE_MANUAL", "UI_CONTROL_SOURCE_UNKNOWN")
+    if compile_and_run(build_harness(source_mutant), True) == 0:
+        print("FAIL: V17 manual source mutation survived", file=sys.stderr)
+        return 1
     print("BLYNK_WRITE(V17) zero-stop smoke check passed (behaviour + mutation)")
     return 0
 

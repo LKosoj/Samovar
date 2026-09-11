@@ -83,6 +83,23 @@ inline bool json_write_escaped(Print& out, const char* text, size_t length) {
              == length - plainStart;
 }
 
+inline size_t json_escaped_length(const char* text, size_t length) {
+  class JsonEscapedLengthPrint : public Print {
+   public:
+    size_t length = 0;
+
+    size_t write(uint8_t) override {
+      length++;
+      return 1;
+    }
+    size_t write(const uint8_t*, size_t count) override {
+      length += count;
+      return count;
+    }
+  } out;
+  return json_write_escaped(out, text, length) ? out.length : 0;
+}
+
 /** Тонкий Print-приёмник поверх String - мост между потоковым json_write_escaped()
     и функциями, которым нужна String (toJsonString, spiffsEditorJsonEscape).
     concat() у Arduino String атомарен: при нехватке памяти под reserve()/realloc()

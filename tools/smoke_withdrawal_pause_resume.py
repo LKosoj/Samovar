@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = {
     "get_liquid_volume_by_step": ("float get_liquid_volume_by_step(float StepCount)", "logic.h"),
     "get_liquid_rate_by_step": ("float get_liquid_rate_by_step(int StepperSpeed)", "logic.h"),
-    "set_pump_speed": ("void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase)", "logic.h"),
+    "set_pump_speed": ("void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase,", "logic.h"),
     "rect_row_transition_requested": (
         "inline bool rect_row_transition_requested",
         "logic.h",
@@ -170,6 +170,13 @@ static int16_t startval = SAMOVAR_STARTVAL_RECT_RUNNING;
 // флагами (post-emergency guard) - без них харнесс не соберётся.
 static bool PowerOn = true;
 static bool alarm_event = false;
+enum UiWaitReason { UI_WAIT_RECT_STEAM = 3, UI_WAIT_RECT_PIPE = 4, UI_WAIT_RECT_DETECTOR = 5 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED = 0 };
+enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
+static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
+static void ui_note_withdrawal_control_source(UiControlSource) {}
+static UiControlSource uiWithdrawalControlSource = UI_CONTROL_SOURCE_UNKNOWN;
 static bool program_Pause = false;
 static bool program_Wait = false;
 static bool PauseOn = false;
@@ -255,7 +262,8 @@ static void startService() {}
 // Прототип с дефолтным аргументом (как в samovar_api.h) - нужен, потому что
 // реальное тело withdrawal() вызывает set_pump_speed() двухаргументно,
 // полагаясь на дефолт updateBase=true из прототипа.
-static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true);
+static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true,
+                           UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 
 // ---- Реальный код под тестом (extract_function_body) ----
 @GET_LIQUID_VOLUME_BY_STEP_BODY@
@@ -818,7 +826,7 @@ def build_harness() -> str:
     )
     harness = harness.replace(
         "@SET_PUMP_SPEED_BODY@",
-        wrap("set_pump_speed", "static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) "),
+        wrap("set_pump_speed", "static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase, UiControlSource source) "),
     )
     harness = harness.replace(
         "@RECT_ROW_TRANSITION_REQUESTED_BODY@",

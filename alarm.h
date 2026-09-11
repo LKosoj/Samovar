@@ -180,7 +180,11 @@ inline void perform_emergency_stop() {
   digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
   mixer_status = false;
 
+  runtime_pair_close_mode(Samovar_Mode, RUNTIME_PAIR_ERROR,
+                          "Аварийное отключение", ALARM_MSG);
+
   reset_process_state();
+  cancel_pending_emergency_actions();
 }
 
 bool process_sensor_failed(const char* modeName, const char* sensorName) {
@@ -447,7 +451,7 @@ void check_alarm() {
   // стабилизации - браузер только предупреждает и просит подтверждение, не запрещает)
   // статус RECT_STABILIZING проскакивается и сразу становится RECT_WITHDRAWAL: без разрешения
   // фиксировать кипение и в этом статусе boil_started остался бы false до конца перегона, а
-  // get_alcohol()/get_steam_alcohol() отдавали бы заглушку 100% вместо реальной крепости.
+  // get_alcohol()/get_steam_alcohol() считали бы оценку крепости недоступной (-1).
   // Порог по температуре пара здесь ОБЯЗАТЕЛЕН: он единственное, что не даёт зафиксировать
   // кипение по ХОЛОДНОЙ колонне в RECT_WITHDRAWAL - иначе set_boiling() запомнит заниженную
   // текущую температуру куба как температуру кипения, и вся спиртуозность будет неверной.
@@ -456,7 +460,9 @@ void check_alarm() {
       !boil_started && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
     set_boiling();
     if (boil_started) {
-      SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+      if (alcohol_estimate_valid(alcohol_s)) {
+        SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+      }
     }
   }
 

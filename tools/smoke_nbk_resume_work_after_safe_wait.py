@@ -183,7 +183,9 @@ static float lastCandidateM = -1;
 static float lastCandidateP = -1;
 static bool test_scheduleSucceeds = true;
 bool nbk_schedule_actuator_command(float candidateM, float candidateP,
-                                    NbkActuatorDeadlineTarget, uint32_t, uint16_t) {
+                                    NbkActuatorDeadlineTarget, uint32_t, uint16_t,
+                                    bool = false, uint8_t = 0, bool = false,
+                                    bool = false) {
   scheduleCalls++;
   lastCandidateM = candidateM;
   lastCandidateP = candidateP;
@@ -401,7 +403,9 @@ uint32_t safety_deadline_after(uint32_t now, uint32_t ms) { return now + ms; }
 bool safety_deadline_expired(uint32_t, uint32_t) { return true; }
 
 static int scheduleCalls = 0;
-bool nbk_schedule_actuator_command(float, float, NbkActuatorDeadlineTarget, uint32_t, uint16_t) {
+bool nbk_schedule_actuator_command(float, float, NbkActuatorDeadlineTarget, uint32_t, uint16_t,
+                                   bool = false, uint8_t = 0, bool = false,
+                                   bool = false) {
   scheduleCalls++;
   return true;
 }

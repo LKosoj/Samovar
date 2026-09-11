@@ -12,6 +12,7 @@ from smoke_helpers import extract_function_body, require_ordered_tokens
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = [
     "inline bool lua_chunk_ref_valid(int ref)",
+    "inline bool lua_claim_execution_locked()",
     "inline bool consume_lua_periodic_start_request(bool& accepted)",
     "inline void finish_beer_lua_periodic_result(bool periodicFailed, bool periodicTimedOut)",
     "inline bool request_compiled_program_lua_job(const String& script, const String& call, const String& fileName, uint32_t& ticket)",
@@ -76,7 +77,6 @@ void runtime_state_unlock(bool) {}
 
 static bool modeSwitchInProgress = false;
 bool mode_switch_in_progress() { return modeSwitchInProgress; }
-
 static bool lua_runtime_ready = false;
 static bool lua_finished = true;
 static bool lua_start_requested = false;
@@ -89,6 +89,9 @@ static String lua_program_script_text;
 static String lua_program_call_text;
 static String lua_program_script_name;
 static bool lua_program_job = false;
+static uint32_t lua_next_execution_ticket = 0;
+static uint32_t lua_active_execution_ticket = 0;
+static bool lua_emergency_stop_requested = false;
 static uint32_t lua_beer_job_next_ticket = 0;
 static uint32_t lua_beer_job_ticket = 0;
 static LuaBeerJobResult lua_beer_job_result = LUA_BEER_JOB_IDLE;
@@ -115,6 +118,9 @@ static void reset_fixture() {
   script2 = String("beer-stage");
   script2_ref = 17;
   lua_program_script_ref = 17;
+  lua_next_execution_ticket = 0;
+  lua_active_execution_ticket = 0;
+  lua_emergency_stop_requested = false;
   lua_beer_job_next_ticket = 0;
   lua_beer_job_ticket = 0;
   lua_beer_job_result = LUA_BEER_JOB_IDLE;

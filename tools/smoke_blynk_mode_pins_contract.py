@@ -89,6 +89,8 @@ for match in re.finditer(r'jsonField(?:Raw|Float|Bool|String)\(out, first, "[a-z
 for global_name in ("SamovarStatusInt", "ProgramNum", "PowerOn", "Samovar_Mode", "SamSetup."):
     if global_name in writer_body:
         errors.append(f"write_blynk_mode_json touches global state: {global_name}")
+if "writeUiStateJson(out, first, s.ui, s.luaStatus);" not in writer_body:
+    errors.append("write_blynk_mode_json must serialize ui from the shared snapshot")
 
 # --- V28..V32: разбор -> отчёт -> return до побочных эффектов ---------------
 handler_contracts = {

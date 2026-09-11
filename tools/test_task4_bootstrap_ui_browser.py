@@ -55,6 +55,8 @@ BROWSER_TEST = r'''async page => {
       i2cPumpVisible:!!i,
       cheesePhSlope:i ? -0.006543 : -0.00321,
       cheesePhOffset:i ? 18.25 : 14.75,
+      cheesePhAvailable:!i,
+      cheesePhAds1115Address:i ? 72 : 0,
       cheeseCoolingScheme:i ? "two-valves" : "pump"
     })});
   });
@@ -119,11 +121,19 @@ BROWSER_TEST = r'''async page => {
     expect(calibration.running === !!i && calibration.pump === (i ? "i2c" : "") && calibration.select === (i ? "i2c" : "local") && calibration.steps === String(i ? 87600 : 32100) && calibration.visible === !!i, "calibration state " + i);
 
     before = await openSuccess("calibrate_ph.htm", i);
-    await page.waitForFunction(() => document.getElementById("phCurrent").textContent === "6.75");
+    if (!i) await page.waitForFunction(() => document.getElementById("phCurrent").textContent === "6.75");
     own = requests.slice(before);
     expect(own.indexOf("/ajax") > own.indexOf("/ui-bootstrap"), "pH ajax order");
-    const ph = await page.evaluate(() => [document.getElementById("CheesePhSlope").value, document.getElementById("CheesePhOffset").value]);
-    expect(JSON.stringify(ph) === JSON.stringify(i ? ["-0.006543","18.25"] : ["-0.00321","14.75"]), "pH values " + i);
+    const ph = await page.evaluate(() => [
+      document.getElementById("CheesePhSlope").value,
+      document.getElementById("CheesePhOffset").value,
+      document.getElementById("savePh").disabled,
+      document.getElementById("phStatus").textContent,
+      document.getElementById("phConnection").textContent
+    ]);
+    expect(ph[0] === (i ? "-0.006543" : "-0.00321") && ph[1] === (i ? "18.25" : "14.75"), "pH values " + i);
+    expect(ph[2] === !!i, "pH calibration blocking " + i);
+    expect(i ? ph[3].includes("ADS1115 не найден") && ph[4].includes("AIN0") : ph[3] === "" && ph[4].includes("LUA_PIN"), "pH source text " + i);
   }
 
   await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});

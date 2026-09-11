@@ -142,7 +142,7 @@ if withdrawal_body:
     # (updateBase param, default true) is the one that writes CurrentBaseSpeedRate.
     # Check the real call site, not a comment mentioning the variable name.
     base_speed_call = re.search(
-        r"set_pump_speed\(\s*CurrrentStepperSpeed\s*,\s*true\s*(?:,\s*(true|false)\s*)?\)",
+        r"set_pump_speed\(\s*CurrrentStepperSpeed\s*,\s*true\s*(?:,\s*(true|false)\s*(?:,\s*uiWithdrawalControlSource\s*)?)?\)",
         withdrawal_body,
     )
     if not base_speed_call:

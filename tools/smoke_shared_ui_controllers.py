@@ -29,9 +29,9 @@ MODE_PAGES = {
 }
 ALL_PAGES = (*MODE_PAGES, "chart.htm")
 FROZEN_HASHES = {
-    # 08.09.2026: edit.htm — общая палитра и браузерное редактирование gzip.
-    "edit.htm": "71fd22ba823dd5fd34f98646dca5dcf794afdf1b32fd1a7086b958f8d36cbd52",
-    "edit.htm.gz": "e625a3cc6a5de371e623add21e2b0cbccc765c67296941567d1b0850132c8650",
+    # T06: подтверждение ухода и результат сохранения; палитра/gzip сохранены.
+    "edit.htm": "877f8284cd8a7a420a2e525cb4a560f82540edd7ef3916daef72fb2066827e0e",
+    "edit.htm.gz": "9196350d02681f6975c6e7a0ccb4982872c85c9f4411a0fb46c24f5784547dc8",
 }
 
 
@@ -200,7 +200,7 @@ def main() -> int:
         "if (remainingCount === 0) IsCalmingPause = false",
         "SamovarApp.addMessage(importantStatus, 1)",
         "SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer)",
-        "chart.loadCsv('data.csv')", "appendChartPoint(myObj)",
+        "chart.loadCsv('data.csv', loadChartCsv)", "appendChartPoint(myObj)",
     ):
         require(marker in chart, f"chart: missing preserved contract: {marker}")
     require("onclick=\"SamovarApp.toggleTheme()\"" in chart and

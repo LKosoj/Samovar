@@ -163,6 +163,14 @@ def main() -> int:
             errors.append(
                 f"power_regulator.h: the setpoint clamp is {firmware_volt:g} V, expected 230 V"
             )
+    if "const availableMaxVolts = Math.min(mainsVolt, 230);" not in page:
+        errors.append(
+            "data_raw/program.htm: voltage recommendations do not limit the setpoint to mains or 230 V"
+        )
+    if "const recommendedMaxVolts = wattsToProgramVolts(recommendedMaxW, heaterMaxPwr);" not in page:
+        errors.append(
+            "data_raw/program.htm: recommendation precheck no longer uses the same watt-to-volt conversion"
+        )
 
     # --- mainsVoltage is actually wired up in /ui-bootstrap ------------------
     if '"mainsVoltage", snapshot.setup.MainsVoltage' not in web_server:

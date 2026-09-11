@@ -129,6 +129,11 @@ inline void check_alarm_suvid() {
   mode_request_water_flow_emergency_if_needed();
 
   if (!PowerOn) {
+    const RuntimePairOutcome outcome = alarm_event || suvidHold.reachTimeoutMsgSent
+        ? RUNTIME_PAIR_ERROR
+        : (suvidHold.fired ? RUNTIME_PAIR_PROCESS_END : RUNTIME_PAIR_USER_STOP);
+    runtime_pair_close_mode(SAMOVAR_SUVID_MODE, outcome,
+                            "Сувид завершён", NOTIFY_MSG);
     suvidHeaterOn = false;  // холодный старт следующей сессии: не наследовать состояние реле
     set_heater_state_flag(false);
     suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};
@@ -177,6 +182,8 @@ inline void check_alarm_suvid() {
       if (!suvidDeviation.active) {
         suvidDeviation.active = true;
         suvidDeviation.sinceMs = now;
+        runtime_pair_begin(UI_WAIT_SUVID_HOLD_OUTSIDE_BAND,
+                           "Выдержка приостановлена: температура вне полосы", WARNING_MSG);
       }
       if (!suvidDeviation.warningSent &&
           (uint32_t)(now - suvidDeviation.sinceMs) >= 60000UL) {
@@ -184,6 +191,10 @@ inline void check_alarm_suvid() {
         suvidDeviation.warningSent = true;
       }
     } else {
+      if (suvidDeviation.active) {
+        runtime_pair_end(UI_WAIT_SUVID_HOLD_OUTSIDE_BAND, RUNTIME_PAIR_RESUMED,
+                         "Выдержка продолжена", NOTIFY_MSG);
+      }
       suvidDeviation = {false, false, 0};
     }
   } else if ((uint32_t)(now - suvidHold.sessionStartMs) >= SUVID_REACH_TIMEOUT_MS) {

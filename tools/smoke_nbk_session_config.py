@@ -61,6 +61,10 @@ static const char* nbkSessionConfigError = "";
 static bool nbkHeaterResistanceInputValid = true;
 static bool nbkMainsVoltageInputValid = true;
 static bool nbkPreserveStartupInputValidity = false;
+static bool nbkUiPowerApplied = false;
+static bool nbkUiFeedApplied = false;
+static uint8_t nbkUiPowerSource = 0;
+static uint8_t nbkUiFeedSource = 0;
 
 inline void nbk_preserve_startup_input_validity(
     float heaterResistance, float mainsVoltage) {

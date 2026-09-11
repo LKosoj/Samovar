@@ -479,6 +479,85 @@ BROWSER_TEST = r'''async page => {
   }
   covered.push(scenario);
 
+  scenario = "program/edit-during-pending-success";
+  await page.goto(baseUrl + "/program.htm", { waitUntil: "load" });
+  await installFetch({
+    path: "/program",
+    mutationPlans: [acceptedProgram(44)],
+    lookupPlans: [
+      terminal(44, "running", "none"),
+      { ...terminal(44, "succeeded", "none"), hold: true }
+    ]
+  });
+  await page.locator("#vless").fill("2");
+  await page.locator("#setprogram").click();
+  await page.waitForFunction(() => typeof window.__releaseLookup === "function");
+  await page.locator("#vless").fill("3");
+  await page.evaluate(() => window.__releaseLookup());
+  const editedProgramSuccess = await page.evaluate(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    window.confirm = () => false;
+    return {
+      leave: SamovarApp.confirmLeave(),
+      volume: document.getElementById("vless").value,
+      body: window.__mutationRequests[0].body,
+      message: JSON.parse(localStorage.getItem("samovarHistoryV2") || "[]").at(-1).msg
+    };
+  });
+  if (editedProgramSuccess.leave || editedProgramSuccess.volume !== "3" ||
+      !editedProgramSuccess.body.some(entry => entry[0] === "vless" && entry[1] === "2") ||
+      editedProgramSuccess.message !== "Программа применена.") {
+    throw new Error(scenario + " stale revision/payload mismatch: " + JSON.stringify(editedProgramSuccess));
+  }
+  covered.push(scenario);
+
+  scenario = "program/header-leave-confirmation";
+  await page.evaluate(() => { window.confirm = () => false; });
+  await page.locator('a.nav-link[href="/chart.htm"]').click();
+  if (await page.evaluate(() => location.pathname) !== "/program.htm") {
+    throw new Error(scenario + " cancel changed the page");
+  }
+  await page.evaluate(() => { window.confirm = () => true; });
+  await Promise.all([
+    page.waitForURL(baseUrl + "/chart.htm"),
+    page.locator('a.nav-link[href="/chart.htm"]').click()
+  ]);
+  covered.push(scenario);
+
+  scenario = "program/return-leave-confirmation";
+  await page.goto(baseUrl + "/program.htm", { waitUntil: "load" });
+  await page.locator("#vless").fill("5");
+  await page.evaluate(() => { window.confirm = () => false; });
+  await page.locator("#return").click();
+  if (await page.evaluate(() => location.pathname) !== "/program.htm") {
+    throw new Error(scenario + " cancel changed the page");
+  }
+  await page.evaluate(() => { window.confirm = () => true; });
+  await Promise.all([
+    page.waitForURL(baseUrl + "/index.htm"),
+    page.locator("#return").click()
+  ]);
+  covered.push(scenario);
+
+  scenario = "program/edit-during-pending-failed";
+  await page.goto(baseUrl + "/program.htm", { waitUntil: "load" });
+  await installFetch({
+    path: "/program",
+    mutationPlans: [acceptedProgram(45)],
+    lookupPlans: [terminal(45, "failed", "mode_switch_failed")]
+  });
+  await page.locator("#vless").fill("4");
+  await page.locator("#setprogram").click();
+  await page.waitForFunction(() => document.getElementById("request_error").style.display !== "none");
+  const editedProgramFailed = await page.evaluate(() => {
+    window.confirm = () => false;
+    return { leave: SamovarApp.confirmLeave(), volume: document.getElementById("vless").value };
+  });
+  if (editedProgramFailed.leave || editedProgramFailed.volume !== "4") {
+    throw new Error(scenario + " dirty state mismatch: " + JSON.stringify(editedProgramFailed));
+  }
+  covered.push(scenario);
+
   scenario = "program/failed";
   await installFetch({
     path: "/program",
@@ -602,16 +681,16 @@ def run_cli(cli, session, arguments, cwd, timeout, check=True):
       return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
 
     if result.returncode != 0:
-      raise RuntimeError(f"playwright-cli {command} failed (exit {result.returncode})")
+      raise RuntimeError(f"playwright-cli {command} failed (exit {result.returncode})\n{result.stdout}")
     if has_marker("### Error"):
-      raise RuntimeError(f"playwright-cli {command} failed: '### Error' marker in output")
+      raise RuntimeError(f"playwright-cli {command} failed: '### Error' marker in output\n{result.stdout}")
     if has_marker("### Modal state"):
       raise RuntimeError(
         f"playwright-cli {command} failed: '### Modal state' marker in output "
-        "(a dialog blocked the script and was never handled)"
+        "(a dialog blocked the script and was never handled)\n" + result.stdout
       )
     if command == "run-code" and not has_marker("### Result"):
-      raise RuntimeError(f"playwright-cli {command} failed: '### Result' marker missing from output")
+      raise RuntimeError(f"playwright-cli {command} failed: '### Result' marker missing from output\n{result.stdout}")
   return result.returncode
 
 
@@ -667,6 +746,23 @@ def main():
         "__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}")
       )
       run_cli(cli, session, ["run-code", code], temp, 240)
+      source = (site / "app.js").read_text(encoding="utf-8")
+      mutated = source.replace("markProgramSaved(submittedProgramRevision);", "markProgramSaved();", 1)
+      if mutated == source:
+        raise RuntimeError("F10 mutation anchor not found")
+      (site / "app.js").write_text(mutated, encoding="utf-8")
+      mutation_session = session + "-f10-mutation"
+      mutation_error = ""
+      try:
+        run_cli(cli, mutation_session, open_args, temp, 30)
+        run_cli(cli, mutation_session, ["run-code", code], temp, 240)
+      except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        mutation_error = str(error)
+      finally:
+        run_cli(cli, mutation_session, ["close"], temp, 30, check=False)
+      mutation_error = mutation_error.split("### Ran Playwright code", 1)[0]
+      if "program/edit-during-pending-success stale revision/payload mismatch" not in mutation_error:
+        raise RuntimeError("F10 mutation did not fail with the expected stale-revision assertion")
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
       primary_error = str(error)
     finally:

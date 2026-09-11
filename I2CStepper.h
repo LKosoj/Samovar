@@ -468,28 +468,29 @@ inline uint16_t i2c_stepper_steps_per_ml() {
 inline bool start_second_i2c_pump(float rateLitersPerHour, uint16_t volumeMl) {
   if (use_I2C_dev != I2CSTEPPER_PUMP_ADDR || rateLitersPerHour <= 0) return false;
   const bool configOwned = i2c_stepper_config_begin(i2cStepperPump);
+  if (!configOwned) return false;
 
   const uint32_t rateMlHour = (uint32_t)round(rateLitersPerHour * 1000.0f);
-  bool configured = false;
-  if (configOwned) {
-    i2cStepperPump.stepsPerMl = i2c_stepper_steps_per_ml();
-    i2cStepperPump.optionFlags &= ~I2CSTEPPER_FLAG_DIRECTION;
-    if (volumeMl > 0) {
-      i2cStepperPump.mode = I2CSTEP_MODE_FILLING;
-      i2cStepperPump.fillingMl = volumeMl;
-      i2cStepperPump.fillingMlHour =
-          rateMlHour > 65535UL ? 65535 : (uint16_t)rateMlHour;
-    } else {
-      i2cStepperPump.mode = I2CSTEP_MODE_PUMP;
-      i2cStepperPump.pumpMlHour =
-          rateMlHour > 65535UL ? 65535 : (uint16_t)rateMlHour;
-    }
-    configured = i2c_stepper_write_config(i2cStepperPump);
+  i2cStepperPump.stepsPerMl = i2c_stepper_steps_per_ml();
+  i2cStepperPump.optionFlags &= ~I2CSTEPPER_FLAG_DIRECTION;
+  if (volumeMl > 0) {
+    i2cStepperPump.mode = I2CSTEP_MODE_FILLING;
+    i2cStepperPump.fillingMl = volumeMl;
+    i2cStepperPump.fillingMlHour =
+        rateMlHour > 65535UL ? 65535 : (uint16_t)rateMlHour;
+  } else {
+    i2cStepperPump.mode = I2CSTEP_MODE_PUMP;
+    i2cStepperPump.pumpMlHour =
+        rateMlHour > 65535UL ? 65535 : (uint16_t)rateMlHour;
+  }
+  if (!i2c_stepper_write_config(i2cStepperPump)) {
+    i2c_stepper_config_end(i2cStepperPump);
+    return false;
   }
   const bool confirmed =
       i2c_stepper_send_confirmed_command(i2cStepperPump, I2CSTEP_CMD_START);
-  if (configOwned) i2c_stepper_config_end(i2cStepperPump);
-  return configured && confirmed;
+  i2c_stepper_config_end(i2cStepperPump);
+  return confirmed;
 }
 
 inline bool stop_second_i2c_pump() {

@@ -75,6 +75,7 @@ int main() {
   check_near(sugar.floodPowerW, 1179.72f, 1.0f, "floodPowerW для эталонного случая");
   check_near(sugar.bodyFlowMaxMlH, 606.71f, 1.0f, "bodyFlowMaxMlH для эталонного случая (без клампа)");
   check_near(sugar.bodyFlowMinMlH, 400.66f, 1.0f, "bodyFlowMinMlH для эталонного случая (без клампа)");
+  check_near(sugar.headsFlowMlH, 7.63f, 0.05f, "headsFlowMlH для сахара должен считаться по мощности голов");
   check(sugar.bodyFlowMaxMlH > sugar.bodyFlowMinMlH,
         "верхняя граница потока тела должна быть больше нижней (иначе диапазон отбора вывернут наизнанку)");
   check_near(sugar.tailsFlowMlH, 254.82f, 1.0f, "tailsFlowMlH для эталонного случая");
@@ -111,6 +112,8 @@ int main() {
   ColumnResults fruit = calculate_column_etalon(0);
   check(fruit.workingPowerW < sugar.workingPowerW,
         "рабочая мощность для фруктов (pWorkFactor=0.48) должна быть меньше, чем для сахара (0.75)");
+  check_near(fruit.headsFlowMlH, 4.60f, 0.05f,
+             "headsFlowMlH для фруктов должен считаться по отдельной мощности голов");
 
   // Диаметр 1.5 / 2 / 3: мощность захлёба пропорциональна площади сечения (d^2).
   SamSetup.ColDiam = 2.0f;
@@ -168,8 +171,9 @@ int main() {
 '''
 
 
-def build_column_harness() -> str:
-    source = (ROOT / "column_math.h").read_text(encoding="utf-8")
+def build_column_harness(source=None) -> str:
+    if source is None:
+        source = (ROOT / "column_math.h").read_text(encoding="utf-8")
     struct_body, _ = extract_braced_block_after(source, "struct ColumnResults {")
     fn_body = extract_function_body(source, "inline ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInches)")
     harness = COLUMN_HARNESS_TEMPLATE.replace(
@@ -193,7 +197,7 @@ def build_time_harness() -> str:
     )
 
 
-def compile_and_run(harness: str, label: str) -> int:
+def compile_and_run(harness: str, label: str, show_output=True) -> int:
     with tempfile.TemporaryDirectory(prefix="samovar-column-time-math-") as temp_dir:
         temp = Path(temp_dir)
         source = temp / f"{label}.cpp"
@@ -206,13 +210,15 @@ def compile_and_run(harness: str, label: str) -> int:
             check=False,
         )
         if compiled.returncode != 0:
-            sys.stderr.write(f"{label} compile failed:\n")
-            sys.stderr.write(compiled.stdout)
-            sys.stderr.write(compiled.stderr)
+            if show_output:
+                sys.stderr.write(f"{label} compile failed:\n")
+                sys.stderr.write(compiled.stdout)
+                sys.stderr.write(compiled.stderr)
             return compiled.returncode
         ran = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
-        sys.stdout.write(ran.stdout)
-        sys.stderr.write(ran.stderr)
+        if show_output:
+            sys.stdout.write(ran.stdout)
+            sys.stderr.write(ran.stderr)
         return ran.returncode
 
 
@@ -225,6 +231,19 @@ def main() -> int:
         return 1
     rc1 = compile_and_run(column_harness, "column_math_test")
     rc2 = compile_and_run(time_harness, "time_utils_test")
+    source = (ROOT / "column_math.h").read_text(encoding="utf-8")
+    mutated = source.replace(
+        "float headsVaporFlowMlH = res.headsPowerW * EVAPORATION_FACTOR;",
+        "float headsVaporFlowMlH = res.workingPowerW * EVAPORATION_FACTOR;",
+        1,
+    )
+    if mutated == source:
+        print("column_math.h mutation anchor not found", file=sys.stderr)
+        return 1
+    mutation_rc = compile_and_run(build_column_harness(mutated), "column_math_heads_mutation", show_output=False)
+    if mutation_rc == 0:
+        print("column_math.h heads-flow mutation was not detected", file=sys.stderr)
+        return 1
     return 1 if (rc1 or rc2) else 0
 
 

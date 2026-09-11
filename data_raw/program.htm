@@ -282,18 +282,18 @@ function restoreColumnDiameterSelect(selectObject) {
 
 function applyRecommendedSpeeds(options) {
   const silent = options && options.silent;
-  if (unscaledProgramBody) {
-    document.getElementById('WProgram1').value = unscaledProgramBody;
-    loadedProgramPowerUnit = unscaledProgramPowerUnit;
-    glcalcnum = false;
-    calc_program();
-  }
   if (!columnParams) {
+    if (unscaledProgramBody) {
+      document.getElementById('WProgram1').value = unscaledProgramBody;
+      loadedProgramPowerUnit = unscaledProgramPowerUnit;
+      glcalcnum = false;
+      calc_program();
+    }
     if (!silent) SamovarApp.showRequestError('Параметры колонны не загружены.');
     return false;
   }
   const p = columnParams;
-  const programLines = document.getElementById('prg').childNodes;
+  let programLines = document.getElementById('prg').childNodes;
   let heaterMaxPwr = 0;
   if (pwr_unit === 'V') {
     heaterMaxPwr = Number(document.getElementById('heaterMaxPower').value);
@@ -303,24 +303,44 @@ function applyRecommendedSpeeds(options) {
     }
   }
 
-  // [Ф5] Рекомендация выше того, что ТЭН может отдать: прошивка молча обрежет уставку
+  // [Ф5] Рекомендация выше доступной уставки: прошивка молча обрежет её
   // до 230 В, и колонна пойдёт на полной мощности без единого предупреждения.
   // Отказываем целиком до того, как что-либо в программе изменено.
   if (pwr_unit === 'V') {
     let recommendedMaxW = 0;
-    for (let i = 1; i < programLines.length; i++) {
-      const line = programLines[i];
-      if (!line || !line.querySelector) continue;
-      const typeEl = line.querySelector('select[name^="ptype"]');
-      const powerInput = line.querySelector('input[name^="pvolt"]');
-      if (!typeEl || !powerInput) continue;
-      const rowW = recommendedRowPowerW(typeEl.value, powerInput.value, p);
-      if (rowW > recommendedMaxW) recommendedMaxW = rowW;
+    if (unscaledProgramBody) {
+      const candidateLines = unscaledProgramBody.split("\n");
+      for (let i = 0; i < candidateLines.length; i++) {
+        const fields = candidateLines[i].split(";");
+        if (fields.length < 5) continue;
+        const rowW = recommendedRowPowerW(fields[3], fields[4], p);
+        if (rowW > recommendedMaxW) recommendedMaxW = rowW;
+      }
+    } else {
+      for (let i = 1; i < programLines.length; i++) {
+        const line = programLines[i];
+        if (!line || !line.querySelector) continue;
+        const typeEl = line.querySelector('select[name^="ptype"]');
+        const powerInput = line.querySelector('input[name^="pvolt"]');
+        if (!typeEl || !powerInput) continue;
+        const rowW = recommendedRowPowerW(typeEl.value, powerInput.value, p);
+        if (rowW > recommendedMaxW) recommendedMaxW = rowW;
+      }
     }
-    if (recommendedMaxW > heaterMaxPwr) {
-      if (!silent) SamovarApp.showRequestError('Рекомендованная мощность ' + Math.round(recommendedMaxW) + ' Вт больше мощности ТЭНа ' + Math.round(heaterMaxPwr) + ' Вт: рекомендации не применены.');
+    const recommendedMaxVolts = wattsToProgramVolts(recommendedMaxW, heaterMaxPwr);
+    const availableMaxVolts = Math.min(mainsVolt, 230);
+    if (recommendedMaxVolts > availableMaxVolts) {
+      if (!silent) SamovarApp.showRequestError('Рекомендованная уставка ' + recommendedMaxVolts + ' В больше доступных ' + availableMaxVolts + ' В: рекомендации не применены.');
       return false;
     }
+  }
+
+  if (unscaledProgramBody) {
+    document.getElementById('WProgram1').value = unscaledProgramBody;
+    loadedProgramPowerUnit = unscaledProgramPowerUnit;
+    glcalcnum = false;
+    calc_program();
+    programLines = document.getElementById('prg').childNodes;
   }
 
   const scaledHeads = scaleProgramSpeedsByType(programLines, 'H', p.headsFlowMlH);
@@ -1139,7 +1159,7 @@ async function set_program(){
       SamovarApp.notify(result.err || 'Программа не установлена', 0);
       return;
     }
-    SamovarApp.notify("Программа сохранена.", 2);
+    SamovarApp.notify("Программа применена.", 2);
   } catch (e) {
     SamovarApp.notify('Ошибка сети: ' + e, 0);
   }
@@ -1488,7 +1508,7 @@ Samovar v. <span id='version'></span>
 <div class="program-actions">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
 <input id='clearprogram' type='button' value='Очистить программу' onclick='SamovarApp.clearProgram();' class="button">
-<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='if (SamovarApp.confirmLeave()) location.href="index.htm"' class="button">
 </div>
 <div class="messages_box toasts" style="display: none;" id="messagesBox">
   <div class="messages_array" id="messages"></div>

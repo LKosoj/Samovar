@@ -334,15 +334,15 @@
 
 <body>
   <header class="top">
-    <a class="brand" href="/" title="Главная страница">
+    <a class="brand" href="/" title="Главная страница" onclick="return SamovarApp.confirmLeave()">
       <svg viewBox="0 0 108 108" aria-hidden="true"><path fill="#E08A3C" d="M43 40h22a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H43a5 5 0 0 1-5-5V45a5 5 0 0 1 5-5z"/><path fill="#8A4A16" d="M40 71h27l3 5H37zM48 66h12v6H48zM42 40h24l-4-4H46z"/><circle cx="76" cy="66" r="2.5" fill="#FF6B4A"/><path fill="none" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round" d="M52 30c-3-3 3-6 0-9M57 30c3-3-3-6 0-9"/></svg>
       Самовар
     </a>
     <nav class="page-nav" aria-label="Разделы">
-      <a class="nav-link" href="/">Режим</a>
-      <a class="nav-link" href="/chart.htm">График</a>
-      <a class="nav-link" href="/program.htm">Расчёт</a>
-      <a class="nav-link" href="/setup.htm">Настройки</a>
+      <a class="nav-link" href="/" onclick="return SamovarApp.confirmLeave()">Режим</a>
+      <a class="nav-link" href="/chart.htm" onclick="return SamovarApp.confirmLeave()">График</a>
+      <a class="nav-link" href="/program.htm" onclick="return SamovarApp.confirmLeave()">Расчёт</a>
+      <a class="nav-link" href="/setup.htm" onclick="return SamovarApp.confirmLeave()">Настройки</a>
     </nav>
     <div class="spacer"></div>
 
@@ -599,7 +599,7 @@
 
     <div id="Cheese" class="tabcontent" aria-hidden="true">
       <h2>Настройки сыроварения:</h2>
-      <p><strong>Подключение для режима «Сыр»:</strong> PH-4502C занимает <code>LUA_PIN</code>, а сливной клапан — реле №4. Оператор должен физически подключить либо PH-4502C, либо MPX5010DP к общему аналоговому входу и либо клапан, либо разгонный ТЭН к реле №4. В остальных режимах MPX5010DP, Lua и разгонный ТЭН остаются доступны.</p>
+      <p><strong>Подключение для режима «Сыр»:</strong> если определён <code>USE_ADS1115</code>, датчик pH автоматически считывается с AIN0 ADS1115 по указанному адресу, а <code>LUA_PIN</code> для pH не используется. Если ADS1115 не найден, сыроварение и калибровка pH блокируются, остальные режимы продолжают работать. Без <code>USE_ADS1115</code> PH-4502C занимает <code>LUA_PIN</code> и конфликтует с MPX5010DP. Сливной клапан занимает реле №4 вместо разгонного ТЭНа.</p>
       <div class="btn-cell" style="margin: 0 auto;">
         <input type="button" value="Калибровка pH" onclick="if (confirmLeaveIfDirty()) location.href='calibrate_ph.htm'" class="button">
       </div>

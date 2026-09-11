@@ -414,6 +414,7 @@ const char* profile_load_result_code(ProfileLoadResult result) {
     case PROFILE_LOAD_PAYLOAD_ENCODING: return "payload_encoding";
     case PROFILE_LOAD_LEGACY_INVALID: return "legacy_invalid";
     case PROFILE_LOAD_EEPROM_OPEN_FAILED: return "eeprom_open_failed";
+    case PROFILE_LOAD_MIGRATION_PERSIST_FAILED: return "migration_persist_failed";
   }
   return "read_failed";
 }
@@ -517,7 +518,8 @@ PersistResult save_profile_nvs(const SetupEEPROM& candidate) {
   return PERSIST_OK;
 }
 
-ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
+ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persistResult) {
+  persistResult = PERSIST_OK;
   nvs_handle_t readHandle;
   const esp_err_t openError = nvs_open(
       SAMOVAR_PROFILE_NAMESPACE, NVS_READONLY, &readHandle);
@@ -561,8 +563,9 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v6(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
-    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
     candidate = migrated;
+    persistResult = save_profile_nvs(migrated);
+    if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
     return PROFILE_LOAD_OK;
   }
 
@@ -598,8 +601,9 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v5(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
-    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
     candidate = migrated;
+    persistResult = save_profile_nvs(migrated);
+    if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
     return PROFILE_LOAD_OK;
   }
 
@@ -618,8 +622,9 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v4(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
-    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
     candidate = migrated;
+    persistResult = save_profile_nvs(migrated);
+    if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
     return PROFILE_LOAD_OK;
   }
 
@@ -638,8 +643,9 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v3(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
-    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
     candidate = migrated;
+    persistResult = save_profile_nvs(migrated);
+    if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
     return PROFILE_LOAD_OK;
   }
 
@@ -658,8 +664,9 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v2(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
-    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
     candidate = migrated;
+    persistResult = save_profile_nvs(migrated);
+    if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
     return PROFILE_LOAD_OK;
   }
 
@@ -677,8 +684,9 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
   if (validation != PROFILE_LOAD_OK) return validation;
   SetupEEPROM migrated{};
   if (!decode_setup_payload_v1(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
-  if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
   candidate = migrated;
+  persistResult = save_profile_nvs(migrated);
+  if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
   return PROFILE_LOAD_OK;
 }
 

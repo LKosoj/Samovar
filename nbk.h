@@ -82,6 +82,12 @@ uint32_t nbk_pressure_stale_start_time = 0; // [П7] отсчёт устойчи
 bool nbk_safe_waiting = false;
 bool nbk_safe_wait_feed_stopped = false;
 ActuatorCommandResult nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+// Источник последней подтверждённой команды только для live UI: 0 неизвестен,
+// 1 программа, 4 safety. Он не участвует в алгоритме НБК.
+uint8_t nbkUiPowerSource = 0;
+uint8_t nbkUiFeedSource = 0;
+bool nbkUiPowerApplied = false;
+bool nbkUiFeedApplied = false;
 #ifdef USE_NBK_END_BY_STEAM_RISE
 float nbk_steam_min = 0; // [T4] минимум Тп в Работе (не в паузе) с начала текущей сессии; 0 = ещё не зафиксирован
 uint32_t nbk_steam_rise_start = 0; // [T4] millis() начала устойчивого роста Тп >= минимум + NBK_END_STEAM_RISE; 0 = не идёт
@@ -171,6 +177,10 @@ inline bool nbk_capture_session_config() {
   const float cappedMainsVoltage = min(nbkSessionConfig.mainsVoltage, NBK_MAINS_VOLTAGE_CAP);
   nbkSessionConfig.maxPower = cappedMainsVoltage * cappedMainsVoltage / nbkSessionConfig.heaterResistance;
   nbkSessionConfig.valid = true;
+  nbkUiPowerApplied = false;
+  nbkUiFeedApplied = false;
+  nbkUiPowerSource = 0;
+  nbkUiFeedSource = 0;
   return true;
 }
 
@@ -377,6 +387,8 @@ struct NbkActuatorCommandState {
   bool commitProgram;
   uint8_t candidateProgramNum;
   bool commitKeepsOptimum; // [П1] true = коммит переводит W в паузу автовхода, не переписывая nbk_Mo/nbk_Po
+  bool closeSafeWaitPair;
+  bool closeTransitionPair;
 };
 
 static NbkActuatorCommandState nbkActuatorCommand = {};
@@ -387,6 +399,7 @@ inline void nbk_reset_actuator_command() {
 }
 
 inline void nbk_enter_safe_wait(const String& reason) {
+  const bool closeTransitionPair = nbkActuatorCommand.closeTransitionPair;
   nbk_reset_actuator_command();
   const ActuatorCommandResult feedResult = SetSpeed(0);
   set_power(false, false);
@@ -399,12 +412,31 @@ inline void nbk_enter_safe_wait(const String& reason) {
         : ACTUATOR_COMMAND_FAILED;
   } else if (!PowerOn) {
     nbk_M = 0;
+    nbkUiPowerSource = 4;
+    nbkUiPowerApplied = true;
+    if (nbk_safe_wait_feed_stopped) {
+      nbkUiFeedSource = 4;
+      nbkUiFeedApplied = true;
+    }
     nbk_safe_wait_result = nbk_safe_wait_feed_stopped
         ? ACTUATOR_COMMAND_APPLIED
         : ACTUATOR_COMMAND_FAILED;
   } else {
     nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
   }
+  if (closeTransitionPair) {
+    runtime_pair_end(
+        UI_WAIT_NBK_TRANSITION,
+        RUNTIME_PAIR_ERROR,
+        "Разгон НБК не подтвердил команды приводов.",
+        ALARM_MSG);
+  }
+  runtime_pair_begin(
+      UI_WAIT_NBK_SAFE,
+      "Безопасное ожидание НБК.",
+      nbk_safe_wait_result == ACTUATOR_COMMAND_APPLIED
+          ? WARNING_MSG
+          : ALARM_MSG);
   SendMsg(reason, nbk_safe_wait_result == ACTUATOR_COMMAND_APPLIED
       ? WARNING_MSG
       : ALARM_MSG);
@@ -412,7 +444,11 @@ inline void nbk_enter_safe_wait(const String& reason) {
 
 inline void tick_nbk_safe_wait() {
   if (!nbk_safe_waiting || power_transition_active()) return;
-  if (!PowerOn) nbk_M = 0;
+  if (!PowerOn) {
+    nbk_M = 0;
+    nbkUiPowerSource = 4;
+    nbkUiPowerApplied = true;
+  }
   nbk_safe_wait_result =
       nbk_safe_wait_feed_stopped && !PowerOn
           ? ACTUATOR_COMMAND_APPLIED
@@ -427,7 +463,9 @@ inline bool nbk_schedule_actuator_command(
     uint16_t iteration,
     bool commitProgram = false,
     uint8_t candidateProgramNum = 0,
-    bool commitKeepsOptimum = false) {
+    bool commitKeepsOptimum = false,
+    bool closeSafeWaitPair = false,
+    bool closeTransitionPair = false) {
   if (nbkActuatorCommand.active ||
       !(candidateM >= 0.0f) ||
       !(candidateP >= 0.0f)) {
@@ -446,6 +484,8 @@ inline bool nbk_schedule_actuator_command(
   nbkActuatorCommand.commitProgram = commitProgram;
   nbkActuatorCommand.candidateProgramNum = candidateProgramNum;
   nbkActuatorCommand.commitKeepsOptimum = commitKeepsOptimum;
+  nbkActuatorCommand.closeSafeWaitPair = closeSafeWaitPair;
+  nbkActuatorCommand.closeTransitionPair = closeTransitionPair;
   return true;
 }
 
@@ -489,6 +529,24 @@ inline void tick_nbk_actuator_command() {
   }
 
   nbk_M = nbkActuatorCommand.candidateM;
+  nbkUiPowerSource = 1;
+  nbkUiFeedSource = 1;
+  nbkUiPowerApplied = true;
+  nbkUiFeedApplied = true;
+  if (nbkActuatorCommand.closeSafeWaitPair) {
+    runtime_pair_end(
+        UI_WAIT_NBK_SAFE,
+        RUNTIME_PAIR_RESUMED,
+        "Работа НБК возобновлена.",
+        NOTIFY_MSG);
+  }
+  if (nbkActuatorCommand.closeTransitionPair) {
+    runtime_pair_end(
+        UI_WAIT_NBK_TRANSITION,
+        RUNTIME_PAIR_RESUMED,
+        "Разгон НБК завершён.",
+        NOTIFY_MSG);
+  }
   if (nbkActuatorCommand.deadlineTarget ==
       NBK_ACTUATOR_OPTIMIZATION_DEADLINE) {
     nbk_opt_iter = nbkActuatorCommand.iteration;
@@ -1206,7 +1264,11 @@ inline void nbk_resume_work_after_safe_wait() {
           nbk_Po,
           NBK_ACTUATOR_WORK_DEADLINE,
           uint32_t(nbk_column_inertia) * 1000,
-          nbk_opt_iter)) {
+          nbk_opt_iter,
+          false,
+          0,
+          false,
+          true)) {
     nbk_enter_safe_wait("Возобновление Работы НБК: параметры не приняты приводами.");
     return;
   }
@@ -1292,6 +1354,7 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
   }
   if (!nbk_stage_sensors_valid(program[num].WType)) return;
   if (program[num].WType == 'W') {
+    const bool resumeSafeWait = nbk_safe_waiting;
     if (!nbkSessionConfig.valid) {
       nbk_enter_safe_wait(
           "Переход к Работе НБК отклонён: нет снимка конфигурации сессии.");
@@ -1405,7 +1468,9 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
             uint32_t(nbk_column_inertia) * 1000,
             nbk_opt_iter,
             true,
-            num)) {
+            num,
+            false,
+            resumeSafeWait)) {
       nbk_enter_safe_wait(
           "Параметры строки W не приняты приводами НБК.");
       return;
@@ -1423,6 +1488,11 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
   // return выше. Стоит ДО проверки power_transition_active(): пока нагрев ещё
   // выключается после входа в safe wait, нажатие не должно уходить в "старт отменён".
   if (nbk_safe_waiting && num > 0) {
+    runtime_pair_end(
+        UI_WAIT_NBK_SAFE,
+        RUNTIME_PAIR_USER_STOP,
+        "Безопасное ожидание остановлено оператором.",
+        NOTIFY_MSG);
     SendMsg("Безопасное ожидание НБК: сессия завершена по команде оператора.", NOTIFY_MSG);
     nbk_finish();
     return;
@@ -1505,6 +1575,10 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
       powerStartPending ? NBK_TRANSITION_HEAT_WAIT_POWER : NBK_TRANSITION_HEAT_WAIT,
       powerStartPending ? 0 : safety_deadline_after(millis(), 2500)
     );
+    runtime_pair_begin(
+        UI_WAIT_NBK_TRANSITION,
+        "Переход разгона НБК начат.",
+        NOTIFY_MSG);
   }
   // при переходе на Настройку
    //2) "Ручная настройка" - определение Ин, Тн, Мо и По вручную (инструкция будет)
@@ -1772,6 +1846,11 @@ inline void tick_nbk_transition() {
     // «процесс идёт» при выключенном нагреве (зомби-состояние).
     const bool resetOwnerState = SamovarStatusInt == SAMOVAR_STATUS_NBK;
     set_power(false, false);
+    runtime_pair_end(
+        UI_WAIT_NBK_TRANSITION,
+        RUNTIME_PAIR_ERROR,
+        "Переход разгона НБК прерван.",
+        ALARM_MSG);
     SendMsg("Запуск нагрева НБК прерван: условие старта нарушено, процесс остановлен.", ALARM_MSG);
     if (resetOwnerState) {
       ProgramNum = 0;
@@ -1797,7 +1876,6 @@ inline void tick_nbk_transition() {
   }
 
   if (!safety_transition_due(nbkTransition.transition, millis())) return;
-  safety_transition_cancel(nbkTransition.transition);
   const float candidateM = program[ProgramNum].Power > 0
       ? toPower(program[ProgramNum].Power)
       : nbk_M_max;
@@ -1810,10 +1888,17 @@ inline void tick_nbk_transition() {
           candidateP,
           NBK_ACTUATOR_NO_DEADLINE,
           0,
-          nbk_opt_iter)) {
+          nbk_opt_iter,
+          false,
+          0,
+          false,
+          false,
+          true)) {
     nbk_enter_safe_wait(
         "Разгон НБК требует подтверждаемую ненулевую подачу.");
+    return;
   }
+  safety_transition_cancel(nbkTransition.transition);
 }
 
 void nbk_finish_common(bool resetWorkState) {
@@ -1869,6 +1954,11 @@ inline void nbk_finish() {
   if (nbk_finish_transition_active()) return;
   const bool heatStartupPending = nbk_transition_blocks_process();
   if (heatStartupPending) set_power(false, false);
+  runtime_pair_close_mode(
+      SAMOVAR_NBK_MODE,
+      RUNTIME_PAIR_PROCESS_END,
+      "Работа НБК завершена.",
+      NOTIFY_MSG);
   cancel_nbk_transition();
   nbk_finish_common(false);
   safety_transition_begin(
@@ -1886,6 +1976,12 @@ inline void nbk_emergency_finish() {
     transitionPhase == NBK_TRANSITION_FINISH_WAIT ||
     transitionPhase == NBK_TRANSITION_FINISH_WAIT_POWER_OFF ||
     transitionPhase == NBK_TRANSITION_HEAT_CANCEL_WAIT_POWER_OFF;
+  if (PowerOn) set_power(false, false);
+  runtime_pair_close_mode(
+      SAMOVAR_NBK_MODE,
+      RUNTIME_PAIR_ERROR,
+      "Работа НБК прервана аварией.",
+      ALARM_MSG);
   cancel_nbk_transition();
   if (stats.startTime == 0 && startval < SAMOVAR_STARTVAL_NBK_RUNNING && !PowerOn) {
     nbk_reset_actuator_command();

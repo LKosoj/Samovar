@@ -65,6 +65,8 @@ using TickType_t = unsigned long;
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 enum ProgramWaitType : uint8_t { PROGRAM_WAIT_NONE = 0, PROGRAM_WAIT_STEAM, PROGRAM_WAIT_PIPE, PROGRAM_WAIT_DETECTOR };
+enum { UI_WAIT_MANUAL_BEER = 2, RUNTIME_PAIR_RESUMED = 0 };
+void runtime_pair_end(int, int, const char*, MESSAGE_TYPE) {}
 
 // Минимальный совместимый с Arduino String: только то, что реально нужно
 // извлечённому телу (конструирование из const char*, чтение как std::string

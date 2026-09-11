@@ -28,7 +28,7 @@ BROWSER_TEST = r'''async page => {
     bme_pressure:760,start_pressure:759.5,prvl:1.2,VolumeAll:0,
     ActualVolumePerHour:0,WthdrwlProgress:0,CurrrentSpeed:0,CurrrentStepps:0,
     TargetStepps:0,WthdrwlStatus:0,ProgramNum:0,DetectorTrend:0.012,
-    DetectorStatus:2,useautospeed:true,
+    DetectorStatus:2,useDetector:true,useautospeed:true,
     BoilingEvidence:2,BoilingPrecisionSensorConfigured:1,
     current_power_volt:220,target_power_volt:220,current_power_mode:"WORK",
     current_power_p:2000,WFtotalMl:10,WFflowRate:2,bme_temp:24,heap:200000,
@@ -239,16 +239,10 @@ BROWSER_TEST = r'''async page => {
       expect(await page.locator("#SuvidTemp").count() === 0 &&
              await page.locator("#SuvidHoldMinutes").count() === 0,
              "Suvid controls must not be on setup.htm");
-      const suvidOption = await page.locator('#mode option[value="5"]').evaluate(el => ({
-        hidden: el.hidden, text: el.textContent.trim()
-      }));
-      expect(suvidOption.hidden === true,
-             "Su-vid must stay a hidden option so a stored Mode=5 is not replaced on save");
-      const luaOption = await page.locator('#mode option[value="6"]').evaluate(el => ({
-        hidden: el.hidden, text: el.textContent.trim()
-      }));
-      expect(luaOption.hidden === true,
-             "Lua must stay a hidden option so a stored Mode=6 is not replaced on save");
+      expect(await page.locator('#mode option[value="5"]').count() === 0,
+             "setup must not contain a Su-vid mode option, including hidden options");
+      expect(await page.locator('#mode option[value="6"]').count() === 0,
+             "setup must not contain a Lua mode option, including hidden options");
       const overflow = await page.evaluate(() =>
         document.documentElement.scrollWidth - document.documentElement.clientWidth
       );

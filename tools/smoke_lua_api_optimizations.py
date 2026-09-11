@@ -152,16 +152,16 @@ if lua_text:
         deferred_error = body.find(
             'if (!statusSet) return luaL_error(lua_state, "Lua_status busy");'
         )
-        if deferred_error < 0 or "luaL_error" in body[:deferred_error]:
+        if deferred_error < 0 or 'if (statusTooLong) return luaL_error(lua_state, "Lua_status too long for V27");' not in body:
             errors.append(
-                "lua_wrapper_set_lua_status must report busy only after String destruction"
+                "lua_wrapper_set_lua_status must distinguish oversized V27 status from busy"
             )
         elif not re.search(
-            r'}\s*if \(!statusSet\) return luaL_error\(lua_state, "Lua_status busy"\);',
+            r'}\s*if \(statusTooLong\) return luaL_error\(lua_state, "Lua_status too long for V27"\);\s*if \(!statusSet\) return luaL_error\(lua_state, "Lua_status busy"\);',
             body,
         ):
             errors.append(
-                "lua_wrapper_set_lua_status busy error is not outside the String scope"
+                "lua_wrapper_set_lua_status errors are not outside the String scope"
             )
     except ValueError as exc:
         errors.append(str(exc))

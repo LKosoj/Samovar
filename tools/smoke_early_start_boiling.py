@@ -32,7 +32,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -107,6 +107,8 @@ constexpr float CHANGE_POWER_MODE_STEAM_TEMP = 39.0f;
 static int SamovarStatusInt = 0;
 static bool boil_started = false;
 static float alcohol_s = 0.0f;
+
+@ALCOHOL_ESTIMATE_VALID@
 
 struct SteamSensorType { float avgTemp = 0; };
 static SteamSensorType SteamSensor;
@@ -199,8 +201,10 @@ int main() {
 '''
 
 
-def build_harness(block: str) -> str:
-    return PRELUDE + MAIN_TEMPLATE.replace("@BLOCK@", block)
+def build_harness(block: str, alcohol_estimate_valid: str) -> str:
+    return (PRELUDE
+            .replace("@ALCOHOL_ESTIMATE_VALID@", alcohol_estimate_valid)
+            + MAIN_TEMPLATE.replace("@BLOCK@", block))
 
 
 def compile_and_run(name: str, harness: str) -> int:
@@ -229,12 +233,19 @@ def compile_and_run(name: str, harness: str) -> int:
 def main() -> int:
     try:
         alarm_source = (ROOT / "alarm.h").read_text(encoding="utf-8")
+        logic_source = (ROOT / "logic.h").read_text(encoding="utf-8")
         block = extract_if_statement(alarm_source, ANCHOR_COMMENT)
+        valid_body = extract_function_body(
+            logic_source, "inline bool alcohol_estimate_valid"
+        )
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    return compile_and_run("early-start-boiling", build_harness(block))
+    valid_function = "static bool alcohol_estimate_valid(float value) {" + valid_body + "}"
+    return compile_and_run(
+        "early-start-boiling", build_harness(block, valid_function)
+    )
 
 
 if __name__ == "__main__":

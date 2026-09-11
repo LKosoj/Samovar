@@ -18,6 +18,30 @@ errors = []
 
 brewxml = BREWXML_PAGE.read_text(encoding="utf-8")
 
+# W04-W06: новый файл немедленно сбрасывает старую программу; generation не
+# позволяет позднему FileReader перезаписать результат следующего импорта.
+for token in (
+    "var recipeImportGeneration = 0;",
+    "is_program = false;",
+    "program = \"\";",
+    "var generation = ++recipeImportGeneration;",
+    "if (generation !== recipeImportGeneration) return;",
+    "reader.readAsArrayBuffer(file);",
+    'root.nodeName === "RECIPES"',
+    'root.getElementsByTagName("RECIPE").length',
+    'root.nodeName === "recipe"',
+    'kind === "BrewMate" ? "windows-1251" : "UTF-8"',
+):
+    if token not in brewxml:
+        errors.append(f"brewxml.htm: W04-W06 import contract is missing: {token}")
+
+# Некорректное явно заданное BOIL_TIME не должно тихо стать 60; отсутствие поля
+# сохраняет прежний check_value(..., "bt") contract.
+if "var rawBoilTime = get_object_value(R.BOIL_TIME);" not in brewxml or \
+        "некорректное время кипячения BOIL_TIME" not in brewxml or \
+        "Number(rawBoilTime) < 0" not in brewxml:
+    errors.append("brewxml.htm: explicit BOIL_TIME validation is missing")
+
 # D1: выбор рецепта при нескольких RECIPE в файле.
 if 'id="recipe-select"' not in brewxml:
     errors.append("brewxml.htm: recipe-select control is missing")

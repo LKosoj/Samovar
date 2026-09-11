@@ -116,6 +116,7 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #define USE_WATER_VALVE LOW
 #define USE_EXPANDER 0x20
 #define USE_ANALOG_EXPANDER 0x48
+#define USE_ADS1115 0x49
 #define I2CStepperStepMl 16000
 #define WETTING_POWER 220
 #define USE_PRESSURE_1WIRE {0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x55}
@@ -366,6 +367,7 @@ def check_matrix(matrix: str, parsed: dict) -> list[str]:
             "board": "ESP32S3", "regulator": "sem_avr", "atmospheric_sensor": "bmp280_alt",
             "column_pressure_sensor": "onewire", "SAMOVAR_USE_BLYNK": False,
             "USE_WATER_PUMP": False, "USE_LUA": True, "USE_EXPANDER": "0x20",
+            "USE_ADS1115": "0x49",
             "USE_WATER_VALVE": "LOW", "USE_PRESSURE_XGZ": None,
             "USE_PRESSURE_1WIRE": "{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x55}",
             "wifi_ssid": 'Lab\\"<SSID>', "wifi_password": "pass\\word",

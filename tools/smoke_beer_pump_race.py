@@ -54,6 +54,10 @@ enum ActuatorCommandResult {
   ACTUATOR_COMMAND_APPLIED,
   ACTUATOR_COMMAND_FAILED,
 };
+enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum SAMOVAR_MODE { SAMOVAR_BEER_MODE = 2 };
+enum RuntimePairOutcome { RUNTIME_PAIR_PROCESS_END = 3, RUNTIME_PAIR_ERROR = 4 };
+static void runtime_pair_close_mode(SAMOVAR_MODE, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
 
 struct WProgram {
   uint8_t capacity_num = 0;
@@ -160,6 +164,8 @@ static unsigned long begintime = 0;
 // мешалки не завязана на Lua-стадию), поэтому взвод PENDING-веткой сюда не
 // доходит, но символ обязан существовать для компиляции реального тела.
 static bool beerFinishPending = false;
+static bool beerHoldClockFrozen = false;
+static bool beerPairErrorPending = false;
 
 constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
 static int16_t startval = 5;
@@ -172,9 +178,8 @@ void beer_reset_lua_stage() { beerLuaStage.phase = BEER_LUA_STAGE_IDLE; }
 
 static int stopProcessCalls = 0;
 void stop_process(const char*) { stopProcessCalls++; }
-constexpr int ALARM_MSG = 0;
 static int sendMsgCalls = 0;
-void SendMsg(const char*, int) { sendMsgCalls++; }
+void SendMsg(const char*, MESSAGE_TYPE) { sendMsgCalls++; }
 
 ActuatorCommandResult set_mixer_state(bool state, bool dir);
 

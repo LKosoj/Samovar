@@ -578,12 +578,32 @@ require(
     "main-loop mode barrier",
     loop,
     (
-        "while (!mode_switch_in_progress() && receive_samovar_command",
+        "while (!mode_switch_in_progress() && !pending_emergency_actions_cancel &&",
         "if (mode_switch_in_progress())",
         "process_buzzer()",
         "return",
     ),
 )
+def post_emergency_queue_gate_open(body: str) -> bool:
+    return "pending_emergency_actions_cancel" in body and "heater_safety_latched()" not in body
+
+
+i2c_owner = function_body(samovar, "static void process_pending_i2c_operations()")
+for body_name, body in (("ordinary command dispatcher", loop),
+                        ("I2C operation owner", i2c_owner)):
+    if not post_emergency_queue_gate_open(body):
+        errors.append(f"{body_name} must stop only work claimed before emergency cleanup completes")
+
+for label, old, new, signature in (
+    ("ordinary", "!pending_emergency_actions_cancel &&\n         receive_samovar_command", "!pending_emergency_actions_cancel &&\n         !heater_safety_latched() && receive_samovar_command", "void loop()"),
+    ("I2C", "if (pending_emergency_actions_cancel) {", "if (pending_emergency_actions_cancel || heater_safety_latched()) {", "static void process_pending_i2c_operations()"),
+):
+    mutant = samovar.replace(old, new, 1)
+    if mutant == samovar:
+        errors.append(f"post-emergency {label} queue mutation anchor not found")
+        continue
+    if post_emergency_queue_gate_open(extract_function_body(mutant, signature)):
+        errors.append(f"post-emergency {label} queue mutation survived")
 require(
     "actuator cleanup",
     mode_switch,

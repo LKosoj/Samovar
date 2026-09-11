@@ -165,6 +165,7 @@ OPTIONAL_SPECS = (
     OptionalSpec("USE_WATER_VALVE", "Управление клапаном воды", "Насосы", "token"),
     OptionalSpec("USE_EXPANDER", "Адрес расширителя PCF8575", "Оборудование", "number"),
     OptionalSpec("USE_ANALOG_EXPANDER", "Адрес расширителя PCF8591", "Оборудование", "number"),
+    OptionalSpec("USE_ADS1115", "Адрес АЦП ADS1115", "Оборудование", "number"),
     OptionalSpec("I2CStepperStepMl", "Шагов на мл для I2CStepper", "Шаговый двигатель", "number"),
     OptionalSpec("WETTING_POWER", "Мощность смачивания насадки", "Ректификация", "number"),
 )
@@ -2379,8 +2380,9 @@ class ConfiguratorWindow:
         ttk.Label(
             section_frames["Оборудование"],
             text=(
-                "Режим «Сыр»: оператор подключает к LUA_PIN либо PH-4502C, либо "
-                "MPX5010DP; к реле №4 — либо клапан слива, либо разгонный ТЭН."
+                "Режим «Сыр»: USE_ADS1115 автоматически переводит pH на AIN0. "
+                "Без ADS1115 PH-4502C использует LUA_PIN и конфликтует с MPX5010DP; "
+                "к реле №4 подключается либо клапан слива, либо разгонный ТЭН."
             ),
             wraplength=430,
             foreground="#555555",

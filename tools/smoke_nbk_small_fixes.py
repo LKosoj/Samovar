@@ -128,7 +128,7 @@ if nbk:
                 ": nbk_Po;",
                 "nbk_schedule_actuator_command(",
                 "true,",
-                "num))",
+                "num,",
             ],
             errors,
         )

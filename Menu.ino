@@ -334,10 +334,12 @@ void writeString(String Str, uint8_t num) {
 }
 
 void menu_pump_speed_up() {
-  set_pump_speed(get_speed_from_rate(ActualVolumePerHour + 0.01 * multiplier), true);
+  set_pump_speed(get_speed_from_rate(ActualVolumePerHour + 0.01 * multiplier), true,
+                 true, UI_CONTROL_SOURCE_MANUAL);
 }
 void menu_pump_speed_down() {
-  set_pump_speed(get_speed_from_rate(ActualVolumePerHour - 0.01 * multiplier), true);
+  set_pump_speed(get_speed_from_rate(ActualVolumePerHour - 0.01 * multiplier), true,
+                 true, UI_CONTROL_SOURCE_MANUAL);
 }
 
 void set_delta_steam_temp_up() {
@@ -533,6 +535,8 @@ void menu_samovar_start() {
     }
   } else {
     Str = "Stoped";
+    runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_USER_STOP,
+                            "Остановлено пользователем", NOTIFY_MSG);
     run_program(PROGRAM_END);
     reset_sensor_counter();
   }

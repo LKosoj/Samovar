@@ -178,7 +178,7 @@ if samovar_text:
         )
         if owner_body.count("operation_store_mark_running_locked(") != 1 or \
                 owner_body.count("operation_store_finish_locked(") != 1 or \
-                owner_body.count("publish_pending_i2c_result(") != 1:
+                owner_body.count("publish_pending_i2c_result(") != 2:
             errors.append("A-02 owner transition/publication callsite count drift")
     if cache_refresh_body:
         require_ordered_tokens(

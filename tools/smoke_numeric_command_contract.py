@@ -103,7 +103,7 @@ require_ordered_tokens(
         "take_pending_value(pending_water_temp_flag, pending_water_temp_value, waterTemp)",
         "set_water_temp(waterTemp);",
         "take_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)",
-        "set_pump_speed(pumpSpeedSteps, true);",
+        "set_pump_speed(pumpSpeedSteps, true, true, UI_CONTROL_SOURCE_MANUAL);",
         "pnbk = pending_pnbk_value;",
         "pnbk.kind == CONTROL_NBK_INCREMENT",
         "pnbk.kind == CONTROL_NBK_DECREMENT",

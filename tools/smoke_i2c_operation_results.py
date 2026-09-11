@@ -747,6 +747,8 @@ PendingOperationResult pending_i2c_operation_result{};
 
 static std::deque<bool> pendingLockResults;
 static bool modeSwitchInProgress = false;
+static bool pending_emergency_actions_cancel = false;
+static bool heaterSafetyLatched = false;
 static int unlockCalls = 0;
 static OperationError executorResults[5] = {};
 static int executorCalls[5] = {};
@@ -844,6 +846,8 @@ static void reset_fixture() {
   pending_i2c_operation_result = {};
   pendingLockResults.clear();
   modeSwitchInProgress = false;
+  pending_emergency_actions_cancel = false;
+  heaterSafetyLatched = false;
   unlockCalls = 0;
   feedLoopWDTCalls = 0;
   for (size_t index = 0; index < 5; index++) {
@@ -965,6 +969,31 @@ static void test_mode_barrier_and_discard() {
         "running discard cleared an owned operation");
 }
 
+static void test_emergency_after_i2c_claim_cancels_before_execution() {
+  reset_fixture();
+  const OperationId id = queue_fixture(PENDING_I2C_OPERATION_I2C_CALIBRATION);
+  pending_emergency_actions_cancel = true;
+  process_pending_i2c_operations();
+  check(record_for(id).state == OPERATION_STATE_RUNNING &&
+            executorCalls[PENDING_I2C_OPERATION_I2C_CALIBRATION] == 0 &&
+            pending_i2c_operation_result.pending,
+        "pending emergency cleanup must not start the claimed I2C executor");
+  process_pending_i2c_operations();
+  const OperationRecord cancelled = record_for(id);
+  check(cancelled.state == OPERATION_STATE_FAILED &&
+            cancelled.error == OPERATION_ERROR_CANCELLED &&
+            !pending_i2ccal_flag && !pending_i2c_operation_result.pending,
+        "claimed I2C operation must publish CANCELLED and release its DTO");
+
+  reset_fixture();
+  const OperationId newId = queue_fixture(PENDING_I2C_OPERATION_PUMP);
+  heaterSafetyLatched = true;
+  process_pending_i2c_operations();
+  check(record_for(newId).state == OPERATION_STATE_RUNNING &&
+            executorCalls[PENDING_I2C_OPERATION_PUMP] == 1,
+        "new I2C work after completed emergency cleanup must be accepted");
+}
+
 static void test_terminal_retry_has_no_duplicate_side_effect() {
   reset_fixture();
   const OperationId id = queue_fixture(PENDING_I2C_OPERATION_PUMP);
@@ -1066,6 +1095,7 @@ static void test_publish_mismatch_result_is_discarded() {
 int main() {
   test_each_owner_lifecycle();
   test_mode_barrier_and_discard();
+  test_emergency_after_i2c_claim_cancels_before_execution();
   test_terminal_retry_has_no_duplicate_side_effect();
   test_clear_targets_only_matching_owner();
   test_reaper_frees_stale_i2c_channel();
@@ -1135,6 +1165,36 @@ def compile_and_run_harness(
                 if part
             )
             errors.append(f"{name} harness failed:\n{output}")
+
+
+def require_lifecycle_mutation(harness: str) -> None:
+    old = "if (pending_emergency_actions_cancel) {"
+    mutant = harness.replace(
+        old,
+        "if (false) {",
+        1,
+    )
+    if mutant == harness:
+        errors.append("cannot construct emergency I2C cancellation mutation")
+        return
+    with tempfile.TemporaryDirectory(prefix="samovar-a02-emergency-mutant-") as tmp:
+        source_path = Path(tmp) / "mutant.cpp"
+        binary_path = Path(tmp) / "mutant"
+        source_path.write_text(mutant, encoding="utf-8")
+        compiled = subprocess.run(
+            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I", str(ROOT),
+             str(source_path), "-o", str(binary_path)],
+            capture_output=True, text=True, check=False)
+        if compiled.returncode:
+            errors.append(
+                "emergency I2C mutation did not reach behavioral assert:\n"
+                + compiled.stderr.strip()
+            )
+            return
+        ran = subprocess.run([str(binary_path)], capture_output=True, text=True, check=False)
+        output = ran.stdout + ran.stderr
+        if ran.returncode == 0 or "pending emergency cleanup" not in output:
+            errors.append("emergency I2C cancellation mutation survived")
 
 
 operation_store = strip_cpp_comments(read("operation_store.h"))
@@ -1248,6 +1308,7 @@ for name, kind, slot, flag in queue_specs:
 
 process = body(samovar, "static void process_pending_i2c_operations()")
 cancel = body(samovar, "static bool cancel_queued_i2c_operations_locked(")
+emergency_cancel = body(samovar, "inline void tick_pending_emergency_actions()")
 discard = body(web, "static bool discard_pending_mode_control_commands(")
 loop = body(samovar, "void loop()")
 stepper_execute = definition_body(
@@ -1302,6 +1363,24 @@ for token in ("operation_store_mark_running_locked(", "i2c_stepper_", "save_prof
         errors.append(f"cancel_queued_i2c_operations_locked owns forbidden action: {token}")
 if "cancel_queued_i2c_operations_locked(" not in discard:
     errors.append("mode-switch discard does not delegate A-02 queued cancellation")
+
+require_ordered_tokens(
+    "emergency cancellation clears I2C, ordinary commands, and Lua work",
+    emergency_cancel,
+    ["request_lua_emergency_stop()", "cancel_queued_i2c_operations_locked(cancelled)",
+     "discard_samovar_commands()", "pending_emergency_actions_cancel = false;"],
+    errors,
+)
+for token in ("pending_emergency_actions_cancel", "OPERATION_ERROR_CANCELLED",
+              "publish_pending_i2c_result("):
+    if token not in process:
+        errors.append(f"claimed I2C emergency gate missing: {token}")
+if "heater_safety_latched()" in process:
+    errors.append("claimed I2C emergency gate must not permanently block new work")
+if "!pending_emergency_actions_cancel" not in loop:
+    errors.append("ordinary command dispatcher lacks the emergency race gate")
+if "heater_safety_latched()" in loop:
+    errors.append("ordinary command dispatcher must not permanently block new work")
 
 require_ordered_tokens(
     "loop A-02 owner order",
@@ -1400,7 +1479,9 @@ try:
         executor_fake_headers(),
         copy_i2c_header=True,
     )
-    compile_and_run_harness("lifecycle", build_lifecycle_harness())
+    lifecycle_harness = build_lifecycle_harness()
+    compile_and_run_harness("lifecycle", lifecycle_harness)
+    require_lifecycle_mutation(lifecycle_harness)
 except ValueError as exc:
     errors.append(f"A-02 harness extraction failed: {exc}")
 

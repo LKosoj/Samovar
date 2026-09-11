@@ -119,6 +119,7 @@ enum DetectorIdleReason : uint8_t {
   DETECTOR_IDLE_STEAM_WAIT,      // первая строка тела: ждёт стабилизации пара
   DETECTOR_IDLE_FILLING,         // окно истории ещё не набрано
   DETECTOR_IDLE_PAUSE,           // пауза (своя, по датчику или ручная)
+  DETECTOR_IDLE_TAILS = 8,       // хвосты: только наблюдение
 };
 static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_OFF;
 
@@ -560,7 +561,7 @@ inline void apply_row_stop_pause_policy() {
   if (CurrentBaseSpeedRate <= 0) return;
   float reducedRate = CurrentBaseSpeedRate * (1.0f - PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT / 100.0f);
   float reducedStepSpeed = get_speed_from_rate(reducedRate);
-  set_pump_speed(reducedStepSpeed, false, true);  // continue_process=false: насос остаётся стоять, меняем только базу на будущее резюме
+  set_pump_speed(reducedStepSpeed, false, true, UI_CONTROL_SOURCE_AUTO_SPEED);  // continue_process=false: насос остаётся стоять, меняем только базу на будущее резюме
   SendMsg("Строка №" + String(ProgramNum + 1) + ": " + String(PROGRAM_ROW_STOP_PAUSE_LIMIT) +
           " стоп-паузы подряд. Базовая скорость снижена до " + String(reducedRate, 2) + " л/ч.", ALARM_MSG);
 }
@@ -616,18 +617,30 @@ inline float get_detector_correction_step() {
   return pct / 100.0f;
 }
 
+inline float detector_temperature_for_history(float rawTemperature) {
+  if (!SamSetup.UsePreccureCorrect && bme_pressure > 0) {
+    rawTemperature += (760.0f - bme_pressure) * DETECTOR_PRESSURE_TEMP_COEF;
+  }
+  return rawTemperature;
+}
+
 // Пересчёт и применение скорости насоса под текущий correctionFactor детектора.
 // Общий код для веток коррекции и восстановления скорости в process_impurity_detector().
-// [fix П32] Возвращает, ПРИМЕНИЛАСЬ ли скорость фактически. set_pump_speed() (logic.h)
-// молча отвергает значение ниже 1 шага/с и ничего не сообщает о факте отказа - здесь
-// тот же порог проверяется заранее, чтобы вызывающий код не считал коррекцию успешной,
-// когда насос её не принял.
+// Возвращает, изменилась ли фактическая команда привода. Коэффициент может меняться
+// без изменения целого числа шагов в секунду, и тогда переставлять таймер и сообщать
+// о снижении скорости нельзя.
 inline bool apply_detector_speed_correction(float baseSpeedRate) {
+  if (program_type_at(ProgramNum) == 'T') return false;
   if (baseSpeedRate <= 0) return false;
+  const float previousActualVolumePerHour = ActualVolumePerHour;
   float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
   float targetStepSpeed = baseStepSpeed * impurityDetector.correctionFactor;
-  if (targetStepSpeed < 1.0f) return false;  // тот же порог отказа, что и в set_pump_speed()
-  set_pump_speed(targetStepSpeed, true, false);
+  if (targetStepSpeed < 1.0f ||
+      (uint16_t)targetStepSpeed == CurrrentStepperSpeed) {
+    ActualVolumePerHour = previousActualVolumePerHour;
+    return false;
+  }
+  set_pump_speed(targetStepSpeed, true, false, UI_CONTROL_SOURCE_DETECTOR);
   return true;
 }
 
@@ -636,9 +649,9 @@ inline bool apply_detector_speed_correction(float baseSpeedRate) {
  */
 void process_impurity_detector() {
   // [L-20/M-30] Детектор выключен в настройках — сбрасываем всё и выходим.
-  // useDetector — единственный выключатель детектора (на всех типах строк H/B/C/T);
-  // useautospeed лишь разрешает ему снижать скорость отбора (ветки коррекции и
-  // восстановления ниже), паузу по критическому тренду детектор ставит и без него.
+  // useDetector — единственный выключатель детектора; на B/C он управляет и может
+  // поставить критическую паузу, на H/T только ведёт наблюдение. useautospeed лишь
+  // разрешает снижение и восстановление скорости на B/C.
   if (!SamSetup.useDetector) {
     impurityDetector.detectorStatus = 0;
     detector_idle_reason = DETECTOR_IDLE_OFF;
@@ -674,7 +687,8 @@ void process_impurity_detector() {
     bool isDetectorOwnPause = program_Wait && copy_program_wait_type(pauseWaitType) && pauseWaitType == PROGRAM_WAIT_DETECTOR;
     if (isDetectorOwnPause) {
       bool usePipeSensor = (detector_last_pipe_sensor == 1);
-      float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
+      float detectorTemp = detector_temperature_for_history(
+          usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp);
       detector_sample_tick(detectorTemp, millis());
       return;
     }
@@ -789,29 +803,22 @@ void process_impurity_detector() {
     }
   }
 
-  float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
-
-  // Поправка на атмосферное давление. Если она включена в настройках, avgTemp уже
-  // приведена к 760 мм рт. ст. в DS_getvalue(); иначе приводим здесь сами, чтобы
-  // ход погоды (~0.037 °C на мм рт. ст.) не читался детектором как рост температуры.
-  if (!SamSetup.UsePreccureCorrect && bme_pressure > 0) {
-    detectorTemp += (760.0f - bme_pressure) * DETECTOR_PRESSURE_TEMP_COEF;
-  }
+  float detectorTemp = detector_temperature_for_history(
+      usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp);
 
   // Сбор данных: показания усредняются, точка ложится в историю раз в интервал
   const bool trendUpdated = detector_sample_tick(detectorTemp, now);
 
-  // Головы: детектор только наблюдает. Рост Т пара на головах - штатный процесс
-  // (лёгкие фракции выводятся, пар очищается, Т идёт к спиртовой полке), а не
-  // проскок примесей, поэтому управлять по нему скоростью нельзя.
+  // Головы: рост Т пара штатен, это не проскок примесей. Хвосты тоже наблюдаем без
+  // управляющих действий; на H/T нельзя менять скорость или ставить паузу.
   // История и тренд выше уже обновлены - телеметрия и лог перегона остаются живыми.
-  // correctionFactor держим равным 1.0: скорость на головах задаёт только строка
-  // программы (run_program), детектор её не трогает.
-  if (currentType == 'H') {
+  // correctionFactor держим равным 1.0: скорость задаёт только строка программы
+  // (run_program), детектор её не трогает.
+  if (currentType == 'H' || currentType == 'T') {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
     impurityDetector.criticalConfirm = 0;
-    detector_idle_reason = DETECTOR_IDLE_HEADS;
+    detector_idle_reason = currentType == 'H' ? DETECTOR_IDLE_HEADS : DETECTOR_IDLE_TAILS;
     return;
   }
 
@@ -896,6 +903,8 @@ void process_impurity_detector() {
       impurityDetector.detectorStatus = 2; // Breakthrough
       program_Wait = true;
       pause_withdrawal(true);
+      if (PauseOn) runtime_pair_begin(UI_WAIT_RECT_DETECTOR,
+                                      "Пауза отбора: критический тренд", ALARM_MSG);
       uint16_t delaySec = usePipeSensor ? PipeSensor.Delay : SteamSensor.Delay;
       t_min = now + delaySec * 1000;
       set_buzzer(true);
@@ -956,19 +965,13 @@ void process_impurity_detector() {
         // проверки сообщение уходило каждые 5-25 сек до конца строки (спам на хвостах).
         const bool factorChanged = impurityDetector.correctionFactor != previousFactor;
 
-        // Применяем новую скорость и сообщаем оператору правду о результате:
-        // насос мог отвергнуть слишком малое значение (уже на минимуме) - тогда
-        // это не "снижение скорости", а исчерпание защиты.
+        // Сообщаем о снижении только после изменения фактической команды.
         if (factorChanged) {
           bool speedApplied = apply_detector_speed_correction(CurrentBaseSpeedRate);
           if (speedApplied) {
             SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
                     ", порог: " + String(warningThreshold, 3) + ", variance: " +
                     String(impurityDetector.tempVariance, 4) + ")", NOTIFY_MSG);
-          } else {
-            SendMsg("Детектор: скорость уже на минимуме, дальнейшее снижение невозможно (тренд " +
-                    String(impurityDetector.currentTrend, 3) + ", variance: " +
-                    String(impurityDetector.tempVariance, 4) + ")", WARNING_MSG);
           }
         }
       }

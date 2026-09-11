@@ -245,6 +245,7 @@ def run_behavioral_harness() -> tuple[int, str, str]:
     state_helpers = "\n".join(
         definition(LUA, signature)
         for signature in [
+            "inline bool lua_active_execution_cancelled()",
             "inline bool lua_state_mutation_allowed()",
             "inline int lua_reject_state_mutation(lua_State* lua_state)",
             "inline bool lua_simulation_enabled()",
@@ -416,6 +417,9 @@ float water_pump_speed = 0.0f;
 float pressure_value = 0.0f;
 bool PauseOn = false;
 float program_Wait = 0.0f;
+uint32_t lua_active_execution_ticket = 0;
+uint32_t lua_cancelled_execution_ticket = 0;
+bool lua_emergency_stop_requested = false;
 
 void water_pulse_count_set(uint16_t value) { waterPulseCount = value; }
 uint16_t water_pulse_count_get() { return waterPulseCount; }
@@ -561,6 +565,8 @@ bool set_lua_status_value(const String& value) {
   if (luaStatusSetResult) lastLuaStatus = value;
   return luaStatusSetResult;
 }
+
+bool lua_status_v27_fits(const String& value) { return value.length() <= 361; }
 
 int vTaskDelayCalls = 0;
 TickType_t lastDelayTicks = 0;
@@ -786,8 +792,10 @@ void test_delay(lua_State* state) {
   vTaskDelayCalls = 0;
   lastDelayTicks = 0;
   run_chunk(state, "delay(0)", true, 0);
+  check(vTaskDelayCalls == 1 && lastDelayTicks == 0,
+        "delay(0) must preserve its scheduler yield");
   run_chunk(state, "delay(1000)", true, 0);
-  check(vTaskDelayCalls == 2, "integer delays did not reach vTaskDelay");
+  check(vTaskDelayCalls == 101, "integer delays must keep the requested duration in cancellable slices");
   run_chunk(state, "delay(0.5)", false);
   check_last_error_contains("Invalid delay: format", "fractional delay error text/class");
   run_chunk(state, "delay(-1)", false);
@@ -1447,6 +1455,13 @@ void test_string_callbacks(lua_State* state) {
   check_last_error_contains("Lua_status busy", "Lua_status busy error text");
   check(lastLuaStatus.empty(), "busy Lua_status changed state");
   check_strings_destroyed("Lua_status busy retained Arduino String");
+
+  const int luaStatusCallsBeforeLong = luaStatusSetCalls;
+  run_chunk(state, "setLuaStatus('" + std::string(362, 'x') + "')", false);
+  check_last_error_contains("Lua_status too long for V27", "long Lua_status error text");
+  check(luaStatusSetCalls == luaStatusCallsBeforeLong,
+        "long Lua_status reached mutation boundary");
+  check_strings_destroyed("long Lua_status retained Arduino String");
 
   luaStatusSetResult = true;
   run_chunk(state, "setLuaStatus('ready')", true, 0);

@@ -58,6 +58,10 @@ struct ImpurityDetector {
 
 static ImpurityDetector impurityDetector;
 static float CurrentBaseSpeedRate = 0;
+static float ActualVolumePerHour = 0;
+static uint16_t CurrrentStepperSpeed = 0;
+static uint8_t ProgramNum = 0;
+static char programType = 'B';
 static unsigned long correctionIntervalFixture = 25000;
 static const float DETECTOR_CORRECTION_FLOOR = 0.7f;
 
@@ -65,11 +69,22 @@ static const float DETECTOR_CORRECTION_FLOOR = 0.7f;
 static float correctionStepFixture = 0.05f;
 static float get_detector_correction_step() { return correctionStepFixture; }
 
-static float get_speed_from_rate(float rate) { return rate * 10.0f; }
+static float get_speed_from_rate(float rate) {
+  ActualVolumePerHour = rate;
+  return rate * 10.0f;
+}
+
+static char program_type_at(uint8_t) { return programType; }
 
 static int setPumpSpeedCalls = 0;
 static float lastPumpSpeed = 0;
-static void set_pump_speed(float speed, bool, bool) { setPumpSpeedCalls++; lastPumpSpeed = speed; }
+enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0, UI_CONTROL_SOURCE_DETECTOR = 7 };
+static void set_pump_speed(float speed, bool, bool, UiControlSource) {
+  setPumpSpeedCalls++;
+  lastPumpSpeed = speed;
+  CurrrentStepperSpeed = (uint16_t)speed;
+  ActualVolumePerHour = speed / 10.0f;
+}
 
 static int sendMsgCalls = 0;
 static MESSAGE_TYPE lastMsgType = NONE_MSG;
@@ -105,6 +120,8 @@ static void reset_counters() {
   sendMsgCalls = 0;
   lastPumpSpeed = 0;
   lastMsgType = NONE_MSG;
+  ActualVolumePerHour = 0;
+  CurrrentStepperSpeed = 0;
 }
 
 int main() {
@@ -114,6 +131,7 @@ int main() {
   // Обычная коррекция: коэффициент снизился - шлём и команду насосу, и сообщение.
   reset_counters();
   impurityDetector.correctionFactor = 1.0f;
+  CurrrentStepperSpeed = 50;
   impurityDetector.lastCorrectionTime = 0;
   apply_speed_correction(100000, 0.02f);
   check(nearly_equal(impurityDetector.correctionFactor, 0.95f), "коэффициент должен упасть до 0.95");
@@ -125,6 +143,7 @@ int main() {
   // Коэффициент уже на нижнем пределе: скорость не меняется - молчим (это и был спам).
   reset_counters();
   impurityDetector.correctionFactor = 0.7f;
+  CurrrentStepperSpeed = 35;
   impurityDetector.lastCorrectionTime = 0;
   apply_speed_correction(200000, 0.02f);
   check(nearly_equal(impurityDetector.correctionFactor, 0.7f), "коэффициент должен остаться 0.7");
@@ -136,6 +155,7 @@ int main() {
   // об этом сообщаем, и это последнее сообщение до конца строки программы.
   reset_counters();
   impurityDetector.correctionFactor = 0.72f;
+  CurrrentStepperSpeed = 36;
   impurityDetector.lastCorrectionTime = 0;
   apply_speed_correction(300000, 0.02f);
   check(nearly_equal(impurityDetector.correctionFactor, 0.7f), "коэффициент должен склампиться до 0.7");
@@ -151,18 +171,17 @@ int main() {
   check(setPumpSpeedCalls == 0, "до истечения интервала насос не трогаем");
   check(sendMsgCalls == 0, "до истечения интервала сообщений нет");
 
-  // [П32] Целевая скорость ниже 1 шага - set_pump_speed() (logic.h) её молча отверг бы.
-  // Коэффициент меняется (factorChanged=true), но базовая скорость настолько мала,
-  // что физически снижать уже некуда. Насос трогать нельзя, и врать про "снижение
-  // скорости" тоже нельзя - нужно правдивое сообщение об исчерпании защиты.
+  // Целевая скорость ниже 1 шага: команда и показание фактического расхода не меняются.
   reset_counters();
   CurrentBaseSpeedRate = 0.05f;  // get_speed_from_rate(0.05) = 0.5 -> target = 0.5*0.95 = 0.475 < 1
+  ActualVolumePerHour = 0.42f;
   impurityDetector.correctionFactor = 1.0f;
   impurityDetector.lastCorrectionTime = 0;
   apply_speed_correction(400000, 0.02f);
   check(setPumpSpeedCalls == 0, "цель ниже 1 шага - команду насосу слать нельзя");
-  check(sendMsgCalls == 1, "об исчерпании защиты нужно сообщить ровно один раз");
-  check(lastMsgType == WARNING_MSG, "исчерпание защиты - это WARNING, а не бодрое NOTIFY про снижение");
+  check(sendMsgCalls == 0, "без изменения команды сообщение слать нельзя");
+  check(nearly_equal(ActualVolumePerHour, 0.42f),
+        "no-op корректора не должен подменять фактический расход базовой скоростью");
 
   if (failures != 0) return 1;
   std::cout << "detector message anti-spam behaviour checks passed\n";

@@ -108,7 +108,8 @@ def validate_source(source: str) -> list[str]:
             "else if (mainButtonClicked)",
             "if (!PowerOn)",
             "set_power(true);",
-            "pause_withdrawal(!PauseOn);",
+            "pause_withdrawal(false);",
+            "pause_withdrawal(true);",
         ],
         errors,
     )
@@ -133,6 +134,9 @@ bool PowerOn = true;
 bool program_Pause = false;
 bool program_Wait = false;
 bool PauseOn = false;
+bool rectManualPauseActive = false;
+enum { UI_WAIT_MANUAL_RECT = 1, NOTIFY_MSG = 2 };
+void runtime_pair_begin(int, const char*, int) {}
 int16_t startval = SAMOVAR_STARTVAL_RECT_RUNNING;
 int16_t SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
 

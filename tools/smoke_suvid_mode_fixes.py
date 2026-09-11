@@ -13,8 +13,8 @@
 проверка воды) в теле check_alarm_suvid больше не вызывается; и кламп уставки
 SuvidTemp в WebServer.ino снижен со 150 до 100°.
 
-Настройки Су-вид с setup.htm сняты: Су-вид и Lua не предлагаются в списке
-(скрытые option value=5/6 остаются, чтобы сохранённый режим не затирался).
+Настройки Су-вид с setup.htm сняты: пункты Су-вид и Lua отсутствуют в списке,
+включая скрытые option value=5/6 (решение владельца).
 """
 import re
 import sys
@@ -247,14 +247,10 @@ setup_text = read_text("data_raw/setup.htm")
 if setup_text:
     if "SuvidTemp" in setup_text or "SuvidHoldMinutes" in setup_text:
         errors.append("setup page must not expose SuvidTemp/SuvidHoldMinutes")
-    if '<option value="5" hidden %SUVID%>Су-вид</option>' not in setup_text:
-        errors.append("setup page must keep a hidden Su-vid option so Mode=5 is not clobbered on save")
-    if re.search(r'<option value="5"(?! hidden)', setup_text):
-        errors.append("setup page must not offer Su-vid as a selectable mode")
-    if '<option value="6" hidden %LUA_MODE%>Lua-режим</option>' not in setup_text:
-        errors.append("setup page must keep a hidden Lua option so Mode=6 is not clobbered on save")
-    if re.search(r'<option value="6"(?! hidden)', setup_text):
-        errors.append("setup page must not offer Lua as a selectable mode")
+    if re.search(r'<option\b[^>]*\svalue\s*=\s*(?:"5"|\'5\'|5(?=[\s>]))', setup_text, re.I):
+        errors.append("setup page must not contain a Su-vid mode option, including hidden options")
+    if re.search(r'<option\b[^>]*\svalue\s*=\s*(?:"6"|\'6\'|6(?=[\s>]))', setup_text, re.I):
+        errors.append("setup page must not contain a Lua mode option, including hidden options")
 
 if errors:
     print("suvid mode fixes smoke failed:")

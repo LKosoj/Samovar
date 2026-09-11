@@ -72,6 +72,7 @@ BLYNK_WRITE(V17) {
       stopService();
       CurrrentStepperSpeed = 0;
       ActualVolumePerHour = 0;
+      ui_note_withdrawal_control_source(UI_CONTROL_SOURCE_MANUAL);
     }
     return;
   }
@@ -82,7 +83,7 @@ BLYNK_WRITE(V17) {
     report_blynk_numeric_error(17, result);
     return;
   }
-  set_pump_speed(stepSpeed, true);
+  set_pump_speed(stepSpeed, true, true, UI_CONTROL_SOURCE_MANUAL);
 }
 
 BLYNK_WRITE(V18) {
@@ -203,6 +204,7 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   jsonFieldBool(out, first, "mixer", s.mixer);
   jsonFieldFloat(out, first, "ph", s.cheesePh, 2);
   jsonFieldBool(out, first, "phv", s.cheesePhValid);
+  writeUiStateJson(out, first, s.ui, s.luaStatus);
   out.print('}');
 }
 
@@ -513,6 +515,13 @@ void blynk_stage_session_start(const String& line) {
   s_pendingV35Revision++;
   s_pendingV35Ready = true;
   portEXIT_CRITICAL(&s_blynkSessionMux);
+}
+
+bool blynk_session_start_pending() {
+  portENTER_CRITICAL(&s_blynkSessionMux);
+  const bool pending = s_pendingV35Ready;
+  portEXIT_CRITICAL(&s_blynkSessionMux);
+  return pending;
 }
 
 // Вызывается только из blynk_push_tick(). Возвращает false, если V35 остался pending: V34

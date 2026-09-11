@@ -30,6 +30,15 @@ using std::min;
 #define CHEESE_PH_CONFIRM_MS 30000UL
 #define CHEESE_PH_INVALID_MS 10000UL
 typedef char ProgramType;
+enum UiWaitReason { UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE=18, UI_WAIT_CHEESE_DOSE=20,
+                    UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM=21,
+                    UI_WAIT_LUA_KNOWN=23 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED, RUNTIME_PAIR_ROW_CHANGE,
+                          RUNTIME_PAIR_USER_STOP, RUNTIME_PAIR_PROCESS_END,
+                          RUNTIME_PAIR_ERROR };
+enum { ALARM_MSG=0, WARNING_MSG=1, NOTIFY_MSG=2 };
+static void runtime_pair_begin(UiWaitReason, const char*, int) {}
+static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, int) {}
 enum CheeseStageKind : uint8_t { CHEESE_STAGE_INVALID=0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD, CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH, CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA };
 struct WProgram { ProgramType WType; float Temp; float Time; float Param; uint8_t TempSensor; };
 struct DSSensor { float avgTemp; } sensor;

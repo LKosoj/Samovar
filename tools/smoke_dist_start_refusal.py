@@ -121,6 +121,7 @@ static const uint8_t SAFETY_HEATER_OUTPUT_BOOST = 1;
 static void heater_enable_outputs(uint8_t) {}
 static bool distBoostGated = false;
 static bool distBoilStartedPrev = false;
+static bool distAlcoholEstimateWarningSent = false;
 
 static int resetTimePredictorCalls = 0;
 static void resetTimePredictor() { resetTimePredictorCalls++; }
@@ -195,6 +196,7 @@ static void reset_all() {
   runDistProgramCalls = 0;
   distBoostGated = false;
   distBoilStartedPrev = false;
+  distAlcoholEstimateWarningSent = false;
   resetTimePredictorCalls = 0;
   sessionStartTime = 0;
   sessionTimerValid = false;

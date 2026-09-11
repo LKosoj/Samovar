@@ -34,12 +34,33 @@ def extract_struct(source: str, name: str) -> str:
     raise ValueError(f"struct is not closed: {name}")
 
 
+def extract_region(source: str, start_token: str, end_token: str) -> str:
+    start = source.find(start_token)
+    end = source.find(end_token, start)
+    if start < 0 or end < start:
+        raise ValueError(f"region not found: {start_token} .. {end_token}")
+    return source[start:end]
+
+
 def production_section(source: str, string_utils_source: str) -> str:
     json_write_escaped = extract_function_body(
         string_utils_source,
         "inline bool json_write_escaped(Print& out, const char* text, size_t length)",
     )
     snapshot = extract_struct(source, "AjaxTelemetrySnapshot")
+    ui_types = extract_region(source, "enum UiStagePhase", "static UiStateDescriptor s_uiStateCache")
+    ui_wait_reason = extract_region(read("runtime_pair_events.h"), "enum UiWaitReason", "struct RuntimePairState")
+    ui_add_control = extract_function_body(
+        source, "static void ui_add_control(UiStateDescriptor& value, uint8_t kind,"
+    )
+    ui_add_heater = extract_function_body(
+        source, "static void ui_add_heater_control(UiStateDescriptor& value)"
+    )
+    ui_sensor_source = extract_function_body(
+        source, "static uint8_t ui_end_source_from_program_sensor(uint8_t sensorId)"
+    )
+    ui_active_row = extract_function_body(source, "static bool ui_has_active_program_row()")
+    ui_builder = extract_function_body(source, "static UiStateDescriptor build_ui_state_from_loop()")
     capture = extract_function_body(
         source,
         "static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(",
@@ -72,7 +93,35 @@ def production_section(source: str, string_utils_source: str) -> str:
         read("json_field_raw.h"),
         "static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value)",
     )
+    ui_end = extract_function_body(
+        source, "static void writeUiEndFields(Print& out, bool& first, const UiEndDescriptor& value)"
+    )
+    ui_writer = extract_function_body(
+        source, "static void writeUiStateJson(Print& out, bool& first, const UiStateDescriptor& value,"
+    )
     return f"""
+{ui_wait_reason}
+{re.search(r'static UiControlSource uiWithdrawalControlSource = [^;]+;', source).group(0)}
+{ui_types}
+static UiStateDescriptor s_uiStateCache{{}};
+static void ui_add_control(UiStateDescriptor& value, uint8_t kind,
+                           bool hasRequested, float requested,
+                           bool hasApplied, float applied, uint8_t unit,
+                           uint8_t source) {{
+{ui_add_control}
+}}
+static void ui_add_heater_control(UiStateDescriptor& value) {{
+{ui_add_heater}
+}}
+static uint8_t ui_end_source_from_program_sensor(uint8_t sensorId) {{
+{ui_sensor_source}
+}}
+static bool ui_has_active_program_row() {{
+{ui_active_row}
+}}
+static UiStateDescriptor build_ui_state_from_loop() {{
+{ui_builder}
+}}
 {snapshot}
 
 static inline void jsonAddKey(Print &out, bool &first, const char *key) {{
@@ -102,6 +151,15 @@ static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool 
 template <typename T>
 static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value) {{
 {json_field_raw}
+}}
+
+static void writeUiEndFields(Print& out, bool& first, const UiEndDescriptor& value) {{
+{ui_end}
+}}
+
+static void writeUiStateJson(Print& out, bool& first, const UiStateDescriptor& value,
+                             const String& luaStatus) {{
+{ui_writer}
 }}
 
 static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
@@ -149,6 +207,8 @@ HARNESS_PREFIX = r'''
 #include <sstream>
 #include <string>
 #include <type_traits>
+
+using std::isfinite;
 
 #define SAMOVAR_VERSION "6.27"
 #define I2CSTEPPER_STATUS_RUNNING 1
@@ -234,6 +294,14 @@ enum SAMOVAR_MODE : uint8_t {
   SAMOVAR_CHEESE_MODE,
 };
 
+constexpr uint8_t PROGRAM_END = 0xFF;
+enum ProgramWaitType : uint8_t {
+  PROGRAM_WAIT_NONE = 0,
+  PROGRAM_WAIT_STEAM,
+  PROGRAM_WAIT_PIPE,
+  PROGRAM_WAIT_DETECTOR,
+};
+
 using ProgramType = char;
 
 struct SetupFixture {
@@ -242,11 +310,28 @@ struct SetupFixture {
   uint16_t StepperStepMl;
   uint8_t BeerBrewOrder;
   bool useDetector;
+  float DistTemp;
+  uint8_t DistTimeF;
+  uint16_t SuvidHoldMinutes;
 };
 
 struct SensorFixture {
   float avgTemp;
   float BodyTemp;
+};
+using DSSensor = SensorFixture;
+
+struct WProgram {
+  ProgramType WType;
+  uint16_t Volume;
+  float Speed;
+  uint8_t capacity_num;
+  float Temp;
+  float Power;
+  uint8_t TempSensor;
+  float Time;
+  float Param;
+  uint16_t LuaTextOffset;
 };
 
 struct DetectorFixture {
@@ -275,21 +360,40 @@ struct TimePredictorFixture {
 volatile float bme_temp = 1.25f;
 volatile float bme_pressure = 760.0f;
 volatile float start_pressure = 755.5f;
-SetupFixture SamSetup{true, true, 800, 0, true};
+SetupFixture SamSetup{true, true, 800, 0, true, 96.0f, 5, 15};
 SensorFixture SteamSensor{78.125f, 77.0f};
 SensorFixture PipeSensor{77.25f, 76.0f};
 SensorFixture WaterSensor{20.5f, 0.0f};
 SensorFixture TankSensor{89.75f, 0.0f};
 SensorFixture ACPSensor{30.0f, 0.0f};
+WProgram program[8] = {};
 DetectorFixture impurityDetector{0.125f, 2};
 volatile float ActualVolumePerHour = 1.234f;
 volatile bool PowerOn = true;
 volatile bool PauseOn = false;
+volatile bool program_Pause = false;
+volatile bool program_Wait = false;
+volatile ProgramWaitType program_Wait_Type = PROGRAM_WAIT_NONE;
+bool copy_program_wait_type(ProgramWaitType& waitType) {{
+  waitType = program_Wait_Type;
+  return true;
+}}
 bool beerManualPause = false;  // [Пиво 02.09 C2]
+bool rectManualPauseActive = false;
+bool heater_state = true;
 volatile uint8_t WthdrwlProgress = 55;
 volatile int16_t startval = 1;
 volatile uint8_t ProgramNum = 2;
+uint8_t ProgramLen = 3;
+bool bk_work_power_pending = false;
+float bk_pwm = 456.0f;
+uint8_t beerSkipConfirmProgramNum = 0xFF;
+unsigned long begintime = 0;
 bool mixer_status = true;
+struct SuvidHoldFixture { bool active; bool inBand; };
+SuvidHoldFixture suvidHold{false, false};
+bool suvidHeaterOn = false;
+int32_t suvid_hold_remaining_sec() { return suvidHold.active ? 420 : -1; }
 // [9b] Всегда читаются captureAjaxTelemetrySnapshot() безусловно (без #ifdef
 // USE_WATER_PUMP) - см. BK.h/Samovar.ino. Ненулевые значения фиксируют, что
 // снимок реально читает эти глобалы, а не просто печатает дефолт структуры.
@@ -304,12 +408,57 @@ constexpr int16_t SAMOVAR_STATUS_RECT_WITHDRAWAL = 10;
 constexpr int16_t SAMOVAR_STATUS_RECT_AUTOPAUSE = 15;
 constexpr int16_t SAMOVAR_STATUS_BEER = 2000;
 constexpr int16_t SAMOVAR_STATUS_CHEESE = 5000;
+constexpr int16_t SAMOVAR_STARTVAL_BEER_WAIT_MALT = 2002;
 volatile int16_t SamovarStatusInt = 10;
 volatile float current_power_volt = 221.26f;
 volatile float target_power_volt = 220.0f;
 volatile uint16_t current_power_p = 1500;
 uint16_t water_pump_speed = 321;
 bool valve_status = true;
+bool program_type_one_of(ProgramType type, const char* types) {
+  return std::string(types).find(type) != std::string::npos;
+}
+float fromPower(float value) { return value; }
+struct NbkActuatorCommandFixture {
+  bool active;
+  bool closeTransitionPair;
+  bool closeSafeWaitPair;
+};
+NbkActuatorCommandFixture nbkActuatorCommand{};
+bool nbk_transition_active() { return false; }
+bool nbk_safe_waiting = false;
+float nbk_M = 0;
+float nbk_P = 0;
+uint8_t nbkUiPowerSource = 0;
+uint8_t nbkUiFeedSource = 0;
+bool nbkUiPowerApplied = false;
+bool nbkUiFeedApplied = false;
+enum CheeseStageKind : uint8_t {
+  CHEESE_STAGE_INVALID, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD,
+  CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE,
+  CHEESE_STAGE_PH, CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA,
+};
+struct CheeseRuntimeFixture {
+  uint32_t holdAccumulatedMs;
+  bool mixerRunning;
+  bool doserStarted;
+  bool doserCompleted;
+  bool temperatureConfirmActive;
+  bool phReachedActive;
+};
+CheeseRuntimeFixture cheeseRuntime{};
+CheeseStageKind cheese_stage_kind(ProgramType type) {
+  switch (type) {
+    case 'H': return CHEESE_STAGE_HEAT; case 'P': return CHEESE_STAGE_HOLD;
+    case 'C': return CHEESE_STAGE_COOL; case 'M': return CHEESE_STAGE_MIX;
+    case 'D': return CHEESE_STAGE_DOSE; case 'N': return CHEESE_STAGE_PH;
+    case 'W': return CHEESE_STAGE_WAIT; case 'S': return CHEESE_STAGE_DRAIN;
+    case 'L': return CHEESE_STAGE_LUA; default: return CHEESE_STAGE_INVALID;
+  }
+}
+bool cheese_in_temperature_band(float actual, float target) {
+  return std::fabs(actual - target) <= 0.3f;
+}
 volatile float WFflowRate = 1.25f;
 volatile uint32_t WFtotalMilliLitres = 456;
 float pressure_value = 3.5f;
@@ -349,6 +498,7 @@ static bool fakeCheesePhValid = true;
 static bool fakeCheesePhRawValid = true;
 static uint32_t fakeCheeseWorkSeconds = 75;
 static uint32_t fakeCheeseTimeoutRemainingSeconds = 1725;
+uint32_t currentSessionId = 1001;
 char latched_emergency_stop_reason[192] = "";
 
 struct ESPFixture {
@@ -371,6 +521,16 @@ uint32_t millis() {
 }
 
 bool sensor_configured(const SensorFixture&) { return true; }
+bool sensor_valid(const SensorFixture&) { return true; }
+bool beer_control_sensor(uint8_t sensorId, const SensorFixture*& sensor, const char*& name) {
+  static const char* names[] = {"tank", "water", "pipe", "steam", "acp"};
+  static const SensorFixture* sensors[] = {&TankSensor, &WaterSensor, &PipeSensor, &SteamSensor, &ACPSensor};
+  if (sensorId >= 5) return false;
+  sensor = sensors[sensorId];
+  name = names[sensorId];
+  return true;
+}
+#define BEER_TEMP_HYSTERESIS 0.3f
 // Состояние детектора примесей (impurity_detector.h): снимок читает его через
 // функции-доступы, а не через статики файла детектора.
 uint8_t detector_idle_reason_code() { return 5; }
@@ -467,12 +627,14 @@ float get_steam_alcohol(float temperature) {
   return temperature / 4.0f;
 }
 
+template <typename UiState>
 RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
     String& crt, String& status, String& luaStatus, String& currentPowerMode,
     uint32_t, String& eventText, RuntimeEventDescriptor* events, uint8_t& eventCount,
-    uint32_t& latestSequence) {
+    uint32_t& latestSequence, const UiState& uiStateSource, UiState& uiStateDestination) {
   copyCalls++;
   if (copyResult != RUNTIME_AJAX_SNAPSHOT_OK) return copyResult;
+  uiStateDestination = uiStateSource;
   crt = "clock\"x";
   status = "run\nok";
   luaStatus = "lua\\ok";
@@ -536,21 +698,40 @@ static void mutateSources() {
   fakeCheesePhRawValid = false;
   fakeCheeseWorkSeconds = 0;
   fakeCheeseTimeoutRemainingSeconds = 0;
+  currentSessionId = 2002;
 }
 
 int main() {
+  PowerOn = true;
+  ProgramNum = 2;
+  programType = 'B';
+  program_Wait = true;
+  program_Wait_Type = PROGRAM_WAIT_STEAM;
+  s_uiStateCache = build_ui_state_from_loop();
   AjaxTelemetrySnapshot first{};
   if (captureAjaxTelemetrySnapshot(6, first) != RUNTIME_AJAX_SNAPSHOT_OK) return 10;
-  if (copyCalls != 1 || first.eventCount != 1 || first.runtimeEvents[0].sequence != 7) return 11;
+  if (copyCalls != 1 || first.eventCount != 1 || first.runtimeEvents[0].sequence != 7 ||
+      first.ui.mode != SAMOVAR_RECTIFICATION_MODE || first.ui.row != 3 ||
+      first.ui.waitCount != 1 || first.ui.waits[0].reason != UI_WAIT_RECT_STEAM) return 11;
   const std::string before = serialize(first);
 
   mutateSources();
   const std::string after = serialize(first);
   if (before != after) return 12;
 
+  Samovar_Mode = SAMOVAR_SUVID_MODE;
+  PowerOn = true;
+  SamSetup.SuvidHoldMinutes = 15;
+  suvidHold = {true, false};
+  s_uiStateCache = build_ui_state_from_loop();
+
   AjaxTelemetrySnapshot second{};
   if (captureAjaxTelemetrySnapshot(7, second) != RUNTIME_AJAX_SNAPSHOT_OK) return 13;
-  if (copyCalls != 2 || serialize(second) == before) return 14;
+  if (copyCalls != 2 || serialize(second) == before ||
+      second.ui.mode != SAMOVAR_SUVID_MODE || second.ui.phase != UI_PHASE_HOLD ||
+      !second.ui.end.present || second.ui.end.remainingSeconds != 420 ||
+      second.ui.waitCount != 1 || second.ui.waits[0].reason != UI_WAIT_SUVID_HOLD_OUTSIDE_BAND ||
+      !contains(serialize(second), "\"sessionId\":2002")) return 14;
 
   Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
   PowerOn = true;
@@ -571,7 +752,6 @@ int main() {
       !contains(distillationJson, "\"ProcessTimeRemaining\":22") ||
       !contains(distillationJson, "\"TotalTime\":99") ||
       !contains(distillationJson, "\"i2c_pump_speed\":0,\"i2c_pump_target_ml\":0,\"i2c_pump_remaining_ml\":0,\"i2c_pump_running\":0")) return 16;
-
   const SAMOVAR_MODE alcoholModes[] = {
       SAMOVAR_RECTIFICATION_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE};
   for (SAMOVAR_MODE mode : alcoholModes) {
@@ -608,6 +788,43 @@ int main() {
   if (captureAjaxTelemetrySnapshot(0, failed) != RUNTIME_AJAX_SNAPSHOT_CORRUPT ||
       sourceGetterCalls != gettersBeforeFailure) return 23;
 
+  // Реальное извлечённое тело build_ui_state_from_loop(): два подтверждённых
+  // значения НБК должны попасть в разные applied-controls, а не в requested.
+  Samovar_Mode = SAMOVAR_NBK_MODE;
+  PowerOn = true;
+  ProgramNum = 1; ProgramLen = 3; programType = 'H';
+  nbkUiPowerApplied = true; nbkUiFeedApplied = true;
+  nbkUiPowerSource = UI_CONTROL_SOURCE_PROGRAM;
+  nbkUiFeedSource = UI_CONTROL_SOURCE_PROGRAM;
+  nbk_M = 120.0f; nbk_P = 1.25f;
+  UiStateDescriptor nbkFirst = build_ui_state_from_loop();
+  nbk_M = 240.0f; nbk_P = 2.50f;
+  UiStateDescriptor nbkSecond = build_ui_state_from_loop();
+  if (nbkFirst.phase != UI_PHASE_HEATING || !nbkFirst.end.present ||
+      nbkFirst.controlCount != 2 || !nbkFirst.controls[0].hasApplied ||
+      nbkFirst.controls[0].applied != 120.0f ||
+      nbkSecond.controls[0].applied != 240.0f ||
+      nbkFirst.controls[1].applied != 1.25f ||
+      nbkSecond.controls[1].applied != 2.50f ||
+      nbkFirst.controls[0].source != UI_CONTROL_SOURCE_PROGRAM) return 24;
+  nbkUiPowerApplied = false; nbkUiFeedApplied = false;
+  if (build_ui_state_from_loop().controlCount != 0) return 25;
+
+  // Выдержка сыра использует накопленное время, а не duration строки: проверяем
+  // две разные остаточные величины и реальное ожидание замороженных часов.
+  Samovar_Mode = SAMOVAR_CHEESE_MODE;
+  ProgramNum = 1; ProgramLen = 3; programType = 'P';
+  program[1].WType = 'P'; program[1].Time = 10.0f; program[1].Temp = 65.0f;
+  TankSensor.avgTemp = 60.0f;
+  cheeseRuntime = CheeseRuntimeFixture{120000U, false, false, false, false, false};
+  UiStateDescriptor cheeseFirst = build_ui_state_from_loop();
+  cheeseRuntime.holdAccumulatedMs = 420000U;
+  UiStateDescriptor cheeseSecond = build_ui_state_from_loop();
+  if (cheeseFirst.phase != UI_PHASE_HOLD || !cheeseFirst.end.present ||
+      !cheeseFirst.end.hasRemainingSeconds || cheeseFirst.end.remainingSeconds != 480 ||
+      cheeseSecond.end.remainingSeconds != 180 || cheeseFirst.waitCount != 1 ||
+      cheeseFirst.waits[0].reason != UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE) return 26;
+
   std::cout << before << '\n';
   return 0;
 }
@@ -624,6 +841,7 @@ EXPECTED_DEFAULT = (
     '"DetectorIdle":5,"DetectorWaitSpan":0.125,"DetectorWaitLeft":321,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
     '"useautospeed":1,"useDetector":1,"version":"6.27",'
+    '"sessionId":1001,'
     '"boot_degraded":0,"boot_degraded_reason":"","VolumeAll":42,'
     '"ActualVolumePerHour":1.234,"PowerOn":1,"PauseOn":0,"BeerManualPause":0,'
     '"BeerBrewOrder":"allinone",'
@@ -638,7 +856,8 @@ EXPECTED_DEFAULT = (
     '"i2c_second_pump":1,"i2c_second_pump_running":1,"heap":123456,'
     '"rssi":-45,"fr_bt":98766,"PrgType":"B","current_power_volt":0,'
     '"target_power_volt":0,"current_power_mode":"0","current_power_p":0,'
-    '"valve":1,"alc":44.88,"stm_alc":19.53,"Status":"run\\nok",'
+    '"valve":1,"alc":44.88,"stm_alc":19.53,'
+    '"ui":{"m":0,"r":3,"p":8,"w":[{"q":3,"co":1}],"c":[{"k":2,"r":0.000,"a":1.234,"u":3,"s":0},{"k":1,"r":1.000,"a":1.000,"u":8,"s":0}]},"Status":"run\\nok",'
     '"Lstatus":"lua\\\\ok","heaterAlarmLatched":0,"heaterAlarmReason":"","latestMessageSequence":42'
 )
 
@@ -649,6 +868,9 @@ EXPECTED_FEATURES = EXPECTED_DEFAULT.replace(
     '"current_power_volt":221.3,"target_power_volt":220.0,'
     '"current_power_mode":"auto","current_power_p":1500,"valve":1,"wp_spd":321,'
     '"WFflowRate":1.25,"WFtotalMl":456,"prvl":3.50,"alc":',
+).replace(
+    '"c":[{"k":2,"r":0.000,"a":1.234,"u":3,"s":0},{"k":1,"r":1.000,"a":1.000,"u":8,"s":0}]',
+    '"c":[{"k":2,"r":0.000,"a":1.234,"u":3,"s":0},{"k":1,"r":220.000,"a":221.260,"u":9,"s":0}]',
 )
 
 
@@ -690,6 +912,13 @@ def main() -> int:
         writer = extract_function_body(
             samovar, "static void writeAjaxTelemetryFields("
         )
+        ui_builder = extract_function_body(
+            samovar, "static UiStateDescriptor build_ui_state_from_loop()"
+        )
+        ui_publisher = extract_function_body(
+            samovar, "static void publish_ui_state_from_loop()"
+        )
+        loop_body = extract_function_body(samovar, "void loop()")
         send_ajax = extract_function_body(
             samovar, "void send_ajax_json(AsyncWebServerRequest *request)"
         )
@@ -728,6 +957,25 @@ def main() -> int:
         errors.append("writeAjaxTelemetryFields must have one definition and one call")
     if capture.count("copy_ajax_runtime_snapshot(") != 1:
         errors.append("capture must call copy_ajax_runtime_snapshot exactly once")
+    if "build_ui_state_from_loop(" in capture or "snapshot.ui." in capture:
+        errors.append("HTTP capture must copy, not build or amend, ui state")
+    if "const UiStateDescriptor value = build_ui_state_from_loop();" not in ui_publisher or \
+       "s_uiStateCache = value;" not in ui_publisher:
+        errors.append("loop must build and publish the complete ui cache")
+    if not re.search(
+        r"runtime_state_lock\(0\).*s_uiStateCache\s*=\s*value;.*runtime_state_unlock\(true\);",
+        ui_publisher,
+        re.DOTALL,
+    ):
+        errors.append("ui cache publication must use the existing runtime lock")
+    if not re.search(
+        r"mode_dispatch_loop\(\);\s*cheese_ph_tick\(\);\s*suvid_tick\(\);\s*"
+        r"session_checkpoint_tick\(\);\s*publish_ui_state_from_loop\(\);",
+        loop_body,
+    ):
+        errors.append("ui cache must be published after mode ticks")
+    if "copy_program_wait_type(waitType)" not in ui_builder:
+        errors.append("ui builder must copy the shared program wait type through its helper")
 
     writer_clean = strip_cpp_literals(strip_cpp_comments(writer))
     forbidden_writer_tokens = (
@@ -768,6 +1016,7 @@ def main() -> int:
         "RuntimeEventDescriptor runtimeEvents",
         "float currentSpeed", "uint8_t eventCount",
         "bool heaterAlarmLatched", "String heaterAlarmReason", "uint32_t latestMessageSequence",
+        "UiStateDescriptor ui",
         "uint32_t cheeseWorkSeconds", "uint32_t cheeseTimeoutRemainingSeconds",
     )
     for token in required_snapshot_members:

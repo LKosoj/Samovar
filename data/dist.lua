@@ -18,6 +18,7 @@ target_power_volt = getNumVariable("target_power_volt") + 0 --получаем �
 capacity_num = getNumVariable("capacity_num") + 0 --получаем текущую емкость
 sg = getObject("sg", "NUMERIC") + 0 -- получаем статус начала работы скрипта
 gb = getObject("gb", "NUMERIC") + 0 -- получаем статус реакции на начало кипения
+alcohol_invalid = getObject("alcohol_invalid", "NUMERIC") + 0 -- получаем статус недоступной спиртуозности
 
 local function changeCapacity(num)
   setCapacity(num) --устанавливаем емкость №num
@@ -62,12 +63,18 @@ setLuaStatus(string.format("Текущая спиртуозность  = %.2f; �
     end
   else
   --логика по спиртуозности
-    if (capacity_num + 0 == 0) and (alcohol <= alcohol_s / 2) then
-      --спирта осталась половина - переключаем на 1 емкость
-      changeCapacity(1)
-    elseif (capacity_num + 0 == 1) and (alcohol <= alcohol_s / 4) then
-      --спирта осталась четверть - переключаем на 2 емкость
-      changeCapacity(2)
+    if alcohol >= 0 and alcohol_s >= 0 then
+      setObject("alcohol_invalid", 0)
+      if (capacity_num + 0 == 0) and (alcohol <= alcohol_s / 2) then
+        --спирта осталась половина - переключаем на 1 емкость
+        changeCapacity(1)
+      elseif (capacity_num + 0 == 1) and (alcohol <= alcohol_s / 4) then
+        --спирта осталась четверть - переключаем на 2 емкость
+        changeCapacity(2)
+      end
+    elseif alcohol_invalid == 0 then
+      setObject("alcohol_invalid", 1)
+      sendMsg("Спиртуозность недоступна: переключение емкости отложено", 1)
     end
   end
 end

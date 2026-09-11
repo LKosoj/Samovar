@@ -580,7 +580,7 @@
 
     <div id="Cheese" class="tabcontent" aria-hidden="true">
       <h2>Настройки сыроварения:</h2>
-      <p><strong>Подключение для режима «Сыр»:</strong> PH-4502C занимает <code>LUA_PIN</code>, а сливной клапан — реле №4. Оператор должен физически подключить либо PH-4502C, либо MPX5010DP к общему аналоговому входу и либо клапан, либо разгонный ТЭН к реле №4. В остальных режимах MPX5010DP, Lua и разгонный ТЭН остаются доступны.</p>
+      <p><strong>Подключение для режима «Сыр»:</strong> если определён <code>USE_ADS1115</code>, датчик pH автоматически считывается с AIN0 ADS1115 по указанному адресу, а <code>LUA_PIN</code> для pH не используется. Если ADS1115 не найден, сыроварение и калибровка pH блокируются, остальные режимы продолжают работать. Без <code>USE_ADS1115</code> PH-4502C занимает <code>LUA_PIN</code> и конфликтует с MPX5010DP. Сливной клапан занимает реле №4 вместо разгонного ТЭНа.</p>
       <div class="btn-cell" style="margin: 0 auto;">
         <input type="button" value="Калибровка pH" onclick="if (confirmLeaveIfDirty()) location.href='calibrate_ph.htm'" class="button">
       </div>

@@ -30,6 +30,10 @@ HARNESS_PREFIX = r'''
 #define USE_WATER_PUMP 1
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_BK_WORK_POWER = 10 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED = 0 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
+static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
 
 class String {
  public:
@@ -51,6 +55,7 @@ static const int SAMOVAR_STARTVAL_IDLE = 0;
 static int startval = SAMOVAR_STARTVAL_IDLE;
 
 static bool PowerOn = false;
+static bool boil_started = true;
 
 struct Sensor { float avgTemp = 0; float StartProgTemp = 0; };
 static Sensor TankSensor, SteamSensor, WaterSensor;
@@ -119,6 +124,8 @@ static bool program_type_empty(ProgramType value) { return value == PROGRAM_TYPE
 
 static float get_alcohol(float t) { return 100.0f - t; }
 static float get_steam_alcohol(float t) { return 100.0f - t; }
+static bool alcohol_estimate_valid(float value) { return value >= 0.0f && value <= 100.0f; }
+static bool distAlcoholEstimateWarningSent = false;
 
 static int sendMsgCalls = 0;
 static std::string lastSendMsgText;

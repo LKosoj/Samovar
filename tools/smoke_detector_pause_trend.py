@@ -42,6 +42,13 @@ struct DSSensor {
   float avgTemp = 0;
 };
 
+struct SetupEEPROM {
+  bool UsePreccureCorrect = true;
+} SamSetup;
+
+static float bme_pressure = 0;
+static const float DETECTOR_PRESSURE_TEMP_COEF = 0.037f;
+
 struct ImpurityDetector {
   uint8_t detectorStatus = 0;
   float currentTrend = 0;
@@ -86,6 +93,7 @@ static uint16_t detector_avg_count = 0;
 static uint32_t detector_last_ds_counter = 0;
 
 // ---- Реальный код под тестом (extract_function_body / extract_braced_block_after) ----
+@TEMPERATURE_FUNCTION@
 @SAMPLE_TICK_FUNCTION@
 
 static void detector_pause_tick() {
@@ -118,6 +126,8 @@ static void reset_fixture() {
   detector_avg_sum = 0.0;
   detector_avg_count = 0;
   detector_last_ds_counter = 0;
+  SamSetup.UsePreccureCorrect = true;
+  bme_pressure = 0;
 }
 
 // Сценарий 1: детекторная пауза (program_Wait && тип == PROGRAM_WAIT_DETECTOR) -
@@ -285,7 +295,11 @@ def build_harness() -> str:
     signature = "bool detector_sample_tick(float detectorTemp, uint32_t now)"
     tick_body = extract_function_body(detector_source, signature)
     tick_function = signature + " {" + tick_body + "}"
-    return HARNESS_TEMPLATE.replace("@SAMPLE_TICK_FUNCTION@", tick_function).replace(
+    temperature_signature = "inline float detector_temperature_for_history(float rawTemperature)"
+    temperature_body = extract_function_body(detector_source, temperature_signature)
+    temperature_function = temperature_signature + " {" + temperature_body + "}"
+    return HARNESS_TEMPLATE.replace("@TEMPERATURE_FUNCTION@", temperature_function).replace(
+        "@SAMPLE_TICK_FUNCTION@", tick_function).replace(
         "@PAUSE_BRANCH_BODY@", body
     )
 

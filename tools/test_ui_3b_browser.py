@@ -33,6 +33,7 @@ BROWSER_TEST = r'''async page => {
     pwmValue:index ? 400 : 300, nbkDp:index ? 1.5 : 0.7, columnDiameter:2, columnHeight:1.5, packDensity:80,
     heaterResistance:10, mainsVoltage:220, heaterMaxPower:4840, stepperMaxSpeed:1000, stepperStepsPerMl:100,
     i2cStepperStepsPerMl:100, calibrationRunning:false, calibrationPump:'local', cheesePhSlope:1, cheesePhOffset:0,
+    cheesePhAvailable:true, cheesePhAds1115Address:0,
     cheeseCoolingScheme:'pump'
   });
   page.on('console', message => {

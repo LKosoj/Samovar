@@ -36,6 +36,8 @@ HARNESS_TEMPLATE = r'''
 #define SAMOVAR_USE_POWER 1
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_BK_WORK_POWER = 10 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
 
 class String {
  public:

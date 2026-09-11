@@ -27,7 +27,7 @@ SIGNATURES = {
     "get_speed_from_rate": ("float get_speed_from_rate(float volume_per_hour)", "logic.h"),
     "get_liquid_rate_by_step": ("float get_liquid_rate_by_step(int StepperSpeed)", "logic.h"),
     "get_liquid_volume_by_step": ("float get_liquid_volume_by_step(float StepCount)", "logic.h"),
-    "set_pump_speed": ("void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase)", "logic.h"),
+    "set_pump_speed": ("void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase,", "logic.h"),
 }
 
 # Значения по умолчанию из Samovar_ini.h на момент написания теста. Захардкожены
@@ -63,6 +63,8 @@ class String {
 };
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0, UI_CONTROL_SOURCE_AUTO_SPEED = 6 };
+static void ui_note_withdrawal_control_source(UiControlSource) {}
 
 constexpr uint8_t PROGRAM_ROW_STOP_PAUSE_LIMIT = @LIMIT@;
 constexpr int PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT = @CUT_PCT@;
@@ -101,7 +103,7 @@ static void stepper_safe_set_max_speed(uint16_t) {}
 static uint32_t stepper_safe_get_target() { return 0; }
 static void stepper_safe_set_target(uint32_t) {}
 
-static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true);
+static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase, UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 
 // ---- Реальный код под тестом ----
 @GET_LIQUID_VOLUME_BY_STEP_BODY@
@@ -224,7 +226,7 @@ def build_harness() -> str:
     )
     harness = harness.replace(
         "@SET_PUMP_SPEED_BODY@",
-        "static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) {" + bodies["set_pump_speed"] + "}",
+        "static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase, UiControlSource source) {" + bodies["set_pump_speed"] + "}",
     )
     harness = harness.replace(
         "@APPLY_ROW_STOP_PAUSE_POLICY_BODY@",

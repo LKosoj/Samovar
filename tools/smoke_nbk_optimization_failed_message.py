@@ -101,13 +101,15 @@ bool nbk_schedule_actuator_command(
     uint16_t,
     bool commit,
     uint8_t programNum,
-    bool commitKeepsOptimum = false) {
+    bool commitKeepsOptimum = false,
+    bool closeSafeWaitPair = false) {
   scheduleCalls++;
   scheduledM = power;
   scheduledP = speed;
   scheduledCommit = commit;
   scheduledProgram = programNum;
   scheduledKeepsOptimum = commitKeepsOptimum;
+  (void)closeSafeWaitPair;
   scheduledDelay = delayMs;
   scheduledDeadlineTarget = deadlineTarget;
   return true;
@@ -279,8 +281,8 @@ def main() -> int:
             1,
         ),
         source.replace(
-            "            true,\n            num))",
-            "            false,\n            num))",
+            "            true,\n            num,\n            false,\n            resumeSafeWait))",
+            "            false,\n            num,\n            false,\n            resumeSafeWait))",
             1,
         ),
         # [Ремонт-2026-09-02 П1] снимаем проверку сохранённого оптимума перед

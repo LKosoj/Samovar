@@ -55,6 +55,14 @@ W_HARNESS = r'''
 float fromPower(float value) { return value; }
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_NBK_SAFE = 12 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED = 0, RUNTIME_PAIR_USER_STOP = 2 };
+static int pairEndCalls = 0;
+static RuntimePairOutcome lastPairOutcome = RUNTIME_PAIR_RESUMED;
+void runtime_pair_end(UiWaitReason, RuntimePairOutcome outcome, const char*, MESSAGE_TYPE) {
+  pairEndCalls++;
+  lastPairOutcome = outcome;
+}
 enum ActuatorCommandResult : uint8_t {
   ACTUATOR_COMMAND_ACCEPTED = 0,
   ACTUATOR_COMMAND_PENDING,
@@ -144,7 +152,8 @@ bool nbk_schedule_actuator_command(
     uint16_t,
     bool commit = false,
     uint8_t programNum = 0,
-    bool commitKeepsOptimum = false) {
+    bool commitKeepsOptimum = false,
+    bool = false) {
   scheduleCalls++;
   scheduledM = power;
   scheduledP = speed;
@@ -188,6 +197,8 @@ static void reset_fixture() {
   scheduleShouldSucceed = true;
   sendMsgCalls = 0;
   cleanStreamCalls = 0;
+  pairEndCalls = 0;
+  lastPairOutcome = RUNTIME_PAIR_RESUMED;
   lastMsg.clear();
   nbk_opt_entry_by_pressure = false;
   pressure_value = 25.0f;
@@ -356,6 +367,8 @@ int main() {
   check(cancelCalls == 0, "порядок веток: отмены на строке W быть не должно");
   check(powerOnCalls == 1, "порядок веток: возобновление обязано включить нагрев");
   check(cleanStreamCalls == 1, "порядок веток: выход из safe wait обязан вернуть чистый поток");
+  check(pairEndCalls == 0,
+        "принятая команда W ещё не подтверждает RESUMED до tick привода");
   check(!fellThrough, "порядок веток: W-ветка обязана завершиться return");
 
   // B: safe wait на строке НЕ W (O) - штатное завершение сессии через П8.
@@ -366,6 +379,8 @@ int main() {
   run_w(1, true);
   check(finishCalls == 1, "порядок веток: safe wait на строке O обязан завершить сессию (П8)");
   check(scheduleCalls == 0 && cancelCalls == 0, "порядок веток: на строке O ни команды, ни отмены");
+  check(pairEndCalls == 1 && lastPairOutcome == RUNTIME_PAIR_USER_STOP,
+        "порядок веток: останов safe wait обязан закрыть q12 как USER_STOP");
   check(!fellThrough, "порядок веток: ветка П8 обязана завершиться return");
 
   // C: без safe wait и с переходом нагрева - legacy-отмена, не завершение.

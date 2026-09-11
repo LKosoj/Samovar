@@ -28,6 +28,7 @@ BOOTSTRAP = {
     "mainsVoltage": 220, "heaterMaxPower": 4840, "stepperMaxSpeed": 1000,
     "stepperStepsPerMl": 100, "i2cStepperStepsPerMl": 100,
     "calibrationRunning": False, "calibrationPump": "local", "cheesePhSlope": 1,
+    "cheesePhAvailable": True, "cheesePhAds1115Address": 0,
     "cheesePhOffset": 0, "cheeseCoolingScheme": "pump",
 }
 
@@ -35,7 +36,7 @@ BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const bootstrap = __BOOTSTRAP__;
   const posts = [], commands = [], problems = [];
-  let programPlan = "success";
+  let programPlan = "success", holdProgramOperation = false, releaseProgramOperation = null;
   const expect = (condition, message) => { if (!condition) throw new Error(message); };
   const telemetry = programNum => ({
     version:"cheese-test", crnt_tm:"12:00", stm:"00:01", SteamTemp:40, PipeTemp:35,
@@ -53,8 +54,14 @@ BROWSER_TEST = r'''async page => {
   }));
   await page.route("**/ajax*", async route => {
     const match = route.request().url().match(/[?&]operationId=(\d+)/);
-    if (match) return route.fulfill({status:200, contentType:"application/json",
-      body:JSON.stringify({operationId:Number(match[1]),state:"succeeded",error:"none"})});
+    if (match) {
+      if (holdProgramOperation) {
+        await page.evaluate(() => { window.__cheeseOperationRequested = true; });
+        await new Promise(resolve => { releaseProgramOperation = resolve; });
+      }
+      return route.fulfill({status:200, contentType:"application/json",
+        body:JSON.stringify({operationId:Number(match[1]),state:"succeeded",error:"none"})});
+    }
     return route.fulfill({status:200, contentType:"application/json", body:JSON.stringify(telemetry(1))});
   });
   await page.route("**/program", async route => {
@@ -174,6 +181,37 @@ BROWSER_TEST = r'''async page => {
   const remainingTypes = await page.locator(".cheese-type").evaluateAll(nodes => nodes.map(node => node.value));
   expect(!remainingTypes.includes("L"), "remove did not delete the selected row");
 
+  holdProgramOperation = true;
+  await page.evaluate(() => {
+    const postProgram = SamovarApp.postProgram;
+    window.__cheeseApplyComplete = false;
+    SamovarApp.postProgram = async function(form) {
+      const result = await postProgram(form);
+      window.__cheeseApplyComplete = true;
+      return result;
+    };
+  });
+  await heat.locator(".cheese-value2").fill("61");
+  await page.locator("#setprogram").click();
+  await page.waitForFunction(() => window.__cheeseOperationRequested === true);
+  await heat.locator(".cheese-value2").fill("62");
+  releaseProgramOperation();
+  await page.waitForFunction(() => window.__cheeseApplyComplete === true);
+  const pendingCheesePayload = String(posts.at(-1));
+  const pendingCheeseEdit = await page.evaluate(() => {
+    window.confirm = () => false;
+    return {
+      leave: SamovarApp.confirmLeave(),
+      timeout: document.querySelector(".cheese-value2").value,
+      message: JSON.parse(localStorage.getItem("samovarHistoryV2") || "[]").at(-1).msg
+    };
+  });
+  expect(!pendingCheeseEdit.leave && pendingCheeseEdit.timeout === "62" &&
+         pendingCheesePayload.includes("61") && !pendingCheesePayload.includes("62") &&
+         pendingCheeseEdit.message === "Сырная программа применена.",
+         "pending Cheese apply cleared newer draft or sent the wrong payload: " + JSON.stringify(pendingCheeseEdit));
+  holdProgramOperation = false;
+
   const beforeInvalid = posts.length;
   await heat.locator(".cheese-mixer-device").selectOption("1");
   await heat.locator(".cheese-mixer-speed").fill("10");
@@ -221,6 +259,19 @@ BROWSER_TEST = r'''async page => {
     expect(await page.locator("#cheeseCoolingScheme").textContent() === expected,
       "cooling scheme " + scheme + " is not localized");
   }
+
+  await page.getByRole("button", {name:"Программа"}).click();
+  await page.locator(".cheese-value2").fill("92");
+  await page.getByRole("button", {name:"Дополнительно"}).click();
+  await page.evaluate(() => { window.confirm = () => false; });
+  await page.getByRole("button", {name:"Калибровка pH"}).click();
+  expect(await page.evaluate(() => location.pathname) === "/cheese.htm",
+         "pH navigation ignored Cancel with a dirty Cheese program");
+  await page.evaluate(() => { window.confirm = () => true; });
+  await Promise.all([
+    page.waitForURL(baseUrl + "/calibrate_ph.htm"),
+    page.getByRole("button", {name:"Калибровка pH"}).click()
+  ]);
 
   await page.setViewportSize({width:390,height:844});
   expect(!await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), "mobile editor has horizontal overflow");

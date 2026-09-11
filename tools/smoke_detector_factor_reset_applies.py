@@ -53,6 +53,10 @@ enum DetectorIdleReason : uint8_t { DETECTOR_IDLE_ACTIVE = 0, DETECTOR_IDLE_OFF 
 static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_ACTIVE;
 
 static volatile float CurrentBaseSpeedRate = 0.0f;
+static uint16_t CurrrentStepperSpeed = 0;
+static float ActualVolumePerHour = 0.0f;
+static uint8_t ProgramNum = 0;
+static char programType = 'B';
 
 static const int SAMOVAR_STATUS_RECT_WITHDRAWAL = 10;
 static int SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
@@ -60,9 +64,12 @@ static int SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
 // ---- Моки внешних зависимостей ----
 static float lastPumpSpeedArg = -1.0f;
 static int setPumpSpeedCallCount = 0;
+enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0, UI_CONTROL_SOURCE_DETECTOR = 7 };
 
-static void set_pump_speed(float stepSpeed, bool, bool) {
+static void set_pump_speed(float stepSpeed, bool, bool, UiControlSource) {
   lastPumpSpeedArg = stepSpeed;
+  CurrrentStepperSpeed = (uint16_t)stepSpeed;
+  ActualVolumePerHour = stepSpeed;
   setPumpSpeedCallCount++;
 }
 
@@ -70,8 +77,11 @@ static void set_pump_speed(float stepSpeed, bool, bool) {
 // SamSetup.StepperStepMl - для проверки пропорциональности коррекции достаточно
 // тождественного преобразования rate -> шаги/с.
 static float get_speed_from_rate(float volume_per_hour) {
+  ActualVolumePerHour = volume_per_hour;
   return volume_per_hour;
 }
+
+static char program_type_at(uint8_t) { return programType; }
 
 // ---- Реальный код под тестом (фрагменты impurity_detector.h) ----
 static bool apply_detector_speed_correction(float baseSpeedRate) {
@@ -104,6 +114,8 @@ static void reset_fixture(float correctionFactor, float baseSpeedRate) {
   impurityDetector.detectorStatus = 2;
   impurityDetector.correctionFactor = correctionFactor;
   CurrentBaseSpeedRate = baseSpeedRate;
+  CurrrentStepperSpeed = 0;
+  ActualVolumePerHour = baseSpeedRate;
   lastPumpSpeedArg = -1.0f;
   setPumpSpeedCallCount = 0;
   reachedTailAutospeedOff = false;

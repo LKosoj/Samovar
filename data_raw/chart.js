@@ -18,6 +18,7 @@
   // первое открытие графика показывало ошибку и кнопку «Повторить».
   const BUSY_RETRY_DELAY_MS = 500;
   const BUSY_RETRY_LIMIT = 8;
+  const PAIR_OUTCOME_NAMES = ['возобновлено', 'смена строки', 'остановлено пользователем', 'процесс завершён', 'ошибка'];
 
   function parseNumber(value) {
     if (value === undefined || value === null || value === '') return null;
@@ -87,6 +88,28 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function monotonicDurationMs(begin, end) {
+    const delta = BigInt('0x' + end) - BigInt('0x' + begin);
+    return delta >= 0n ? delta.toString() : null;
+  }
+
+  function localPairDate(utc, timeZone) {
+    if (!utc || !Number.isInteger(timeZone) || timeZone < 0 || timeZone > 23) return null;
+    const date = new Date((Number.parseInt(utc, 16) + timeZone * 3600) * 1000);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function csvLocalEpoch(value, year, timeZone) {
+    const match = /^(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value || '');
+    if (!match) return null;
+    const parts = match.slice(1).map(Number);
+    const date = new Date(Date.UTC(year, parts[0] - 1, parts[1], parts[2], parts[3], parts[4]));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== parts[0] ||
+        date.getUTCDate() !== parts[1] || date.getUTCHours() !== parts[2] ||
+        date.getUTCMinutes() !== parts[3] || date.getUTCSeconds() !== parts[4]) return null;
+    return date.getTime() - timeZone * 3600000;
   }
 
   // Ручка границы участка. Это не <input type="range">: две отдельные ручки на
@@ -342,6 +365,7 @@
     if (!this.parent) throw new Error('Chart container not found: ' + elementId);
     this.rows = [];
     this.loading = false;
+    this.csvLoadGeneration = 0;
     this.autoRefresh = true;
     this.lastDate = '';
     this.options = options || {};
@@ -349,6 +373,8 @@
     this.viewFrom = 0;
     this.viewTo = null;
     this.hoverIndex = null;
+    this.runtimePairs = Object.create(null);
+    this.runtimeBootId = null;
     this._plot = { left: 54, width: 1 };
     const elements = createCanvas(this.parent);
     this.canvas = elements.canvas;
@@ -550,17 +576,87 @@
     this.draw();
   };
 
+  SamovarChart.prototype.clearRuntimePairs = function () {
+    this.runtimePairs = Object.create(null);
+    this.runtimeBootId = null;
+    this.draw();
+  };
+
+  SamovarChart.prototype.applyRuntimePair = function (pair) {
+    if (!pair) return false;
+    if (this.runtimeBootId !== null && this.runtimeBootId !== pair.bootId) {
+      this.runtimePairs = Object.create(null);
+    }
+    this.runtimeBootId = pair.bootId;
+    const key = pair.sessionId + ':' + pair.bootId + ':' + pair.pairId;
+    let entry = this.runtimePairs[key];
+    if (pair.event === 'begin') {
+      if (entry && (entry.begin || entry.end)) return false;
+      entry = entry || {};
+      entry.begin = pair;
+      this.runtimePairs[key] = entry;
+    } else {
+      if (!entry) {
+        this.runtimePairs[key] = { end: pair };
+        this.draw();
+        return true;
+      }
+      if (!entry.begin || entry.end) return false;
+      entry.end = pair;
+      entry.durationMs = monotonicDurationMs(entry.begin.monotonicMs, pair.monotonicMs);
+    }
+    this.draw();
+    return true;
+  };
+
+  SamovarChart.prototype.runtimePairSummary = function () {
+    let complete = 0;
+    let open = 0;
+    Object.keys(this.runtimePairs).forEach(function (key) {
+      if (this.runtimePairs[key].begin && this.runtimePairs[key].end && this.runtimePairs[key].durationMs !== null) complete += 1;
+      else open += 1;
+    }, this);
+    return { complete: complete, open: open };
+  };
+
+  SamovarChart.prototype.runtimePairPosition = function (pair) {
+    const date = localPairDate(pair.utc, this.options.timeZone);
+    if (!date) return null;
+    const eventEpoch = Number.parseInt(pair.utc, 16) * 1000;
+    const year = date.getUTCFullYear();
+    let position = null;
+    for (let index = 0; index < this.rows.length; index++) {
+      const current = csvLocalEpoch(this.rows[index].Date, year, this.options.timeZone);
+      let candidate = null;
+      if (current === eventEpoch) candidate = index;
+      else if (index > 0 && current !== null) {
+        const previous = csvLocalEpoch(this.rows[index - 1].Date, year, this.options.timeZone);
+        if (previous !== null && current > previous && eventEpoch > previous && eventEpoch < current) {
+          candidate = (index - 1) + (eventEpoch - previous) / (current - previous);
+        }
+      }
+      if (candidate === null) continue;
+      if (position !== null) return null;
+      position = candidate;
+    }
+    return position;
+  };
+
   // Загрузка графика была единственным местом в проекте без ограничения времени
   // ожидания: при обрыве связи fetch мог висеть бесконечно, и страница навсегда
   // оставалась на "Загрузка графика...". Таймаут и повторная попытка сделаны так же,
   // как в app.js (AbortController + showRequestError-подобное сообщение с кнопкой).
-  SamovarChart.prototype.loadCsv = async function (url) {
-    // Вторая загрузка поверх незавершённой первой дала бы две гонки за this.rows,
-    // поэтому повторные вызовы (кнопка "Повторить", автообновление) отбиваются.
-    if (this.loading) return false;
+  SamovarChart.prototype.loadCsv = async function (url, retryFn) {
+    // Более новая загрузка может относиться к другой сессии. Старый ответ тогда
+    // не вправе заменить уже полученную историю новой сессии.
+    const loadGeneration = ++this.csvLoadGeneration;
+    this.clearRuntimePairs();
     this.loading = true;
     const self = this;
-    const retry = function () { self.loadCsv(url); };
+    const retry = retryFn || function () { self.loadCsv(url); };
+    const isCurrentLoad = function () {
+      return self.csvLoadGeneration === loadGeneration;
+    };
     this.setStatus('Загрузка графика...', false);
     let busyAttempt = 0;
     try {
@@ -571,6 +667,7 @@
         try {
           resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
         } catch (err) {
+          if (!isCurrentLoad()) return false;
           const timedOut = err && err.name === 'AbortError';
           this.setStatus(
             'Ошибка загрузки графика: ' + (timedOut ? 'превышено время ожидания.' : err),
@@ -580,19 +677,28 @@
         } finally {
           clearTimeout(timer);
         }
+        if (!isCurrentLoad()) return false;
         if (resp.status === 503 && busyAttempt < BUSY_RETRY_LIMIT) {
           busyAttempt += 1;
           await new Promise(function (resolve) {
             setTimeout(resolve, BUSY_RETRY_DELAY_MS);
           });
+          if (!isCurrentLoad()) return false;
           continue;
         }
         if (!resp.ok) {
           this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true, retry);
           return false;
         }
-        const text = await resp.text();
-        this.setData(parseCsv(text));
+        try {
+          const text = await resp.text();
+          if (!isCurrentLoad()) return false;
+          this.setData(parseCsv(text));
+        } catch (err) {
+          if (!isCurrentLoad()) return false;
+          this.setStatus('Ошибка загрузки графика: ' + err, true, retry);
+          return false;
+        }
         this.setStatus(
           (this.rows.length ? 'Загружено точек: ' + this.rows.length + '. ' : 'Нет данных графика. ') +
           'Ползунки под графиком задают участок, двойной щелчок по полосе — весь график, легенда — вкл/выкл, наведение — значения.',
@@ -601,7 +707,7 @@
         return true;
       }
     } finally {
-      this.loading = false;
+      if (isCurrentLoad()) this.loading = false;
     }
   };
 
@@ -619,6 +725,65 @@
     this.lastDate = row.Date;
     if (atEnd) this.viewTo = null;
     this.draw();
+  };
+
+  SamovarChart.prototype.drawRuntimePairs = function (ctx, area, span) {
+    const self = this;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(area.left, area.top, area.width, area.height);
+    ctx.clip();
+    Object.keys(this.runtimePairs).forEach(function(key) {
+      const entry = self.runtimePairs[key];
+      if (!entry.begin) return;
+      const begin = self.runtimePairPosition(entry.begin);
+      if (begin === null) return;
+      const x = area.left + area.width * (begin - span.from) / Math.max(1, span.to - span.from);
+      ctx.strokeStyle = '#8a4baf';
+      ctx.fillStyle = '#8a4baf';
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, area.top);
+      ctx.lineTo(x, area.top + area.height);
+      ctx.stroke();
+      if (entry.end && entry.durationMs !== null && entry.begin.utc && entry.end.utc &&
+          Number.parseInt(entry.end.utc, 16) >= Number.parseInt(entry.begin.utc, 16)) {
+        // UTC имеет точность секунды. Более сильное расхождение с монотонным
+        // временем означает скачок часов, а не подтверждённый интервал шкалы.
+        const utcDuration = BigInt(Number.parseInt(entry.end.utc, 16) - Number.parseInt(entry.begin.utc, 16)) * 1000n;
+        const discrepancy = utcDuration - BigInt(entry.durationMs);
+        if (discrepancy <= -1000n || discrepancy >= 1000n) return;
+        const end = self.runtimePairPosition(entry.end);
+        if (end !== null) {
+          const endX = area.left + area.width * (end - span.from) / Math.max(1, span.to - span.from);
+          ctx.globalAlpha = 0.12;
+          ctx.fillRect(Math.min(x, endX), area.top, Math.abs(endX - x), area.height);
+        }
+      }
+    });
+    ctx.restore();
+  };
+
+  SamovarChart.prototype.drawProgramMarkers = function (ctx, area, span) {
+    if (span.to <= span.from) return;
+    ctx.save();
+    ctx.strokeStyle = '#777777';
+    ctx.fillStyle = '#777777';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    for (let index = span.from; index <= span.to; index++) {
+      const row = this.rows[index];
+      if (index === 0 || row.ProgNum === null || this.rows[index - 1].ProgNum === null ||
+          row.ProgNum === this.rows[index - 1].ProgNum) continue;
+      const x = area.left + area.width * (index - span.from) / Math.max(1, span.to - span.from);
+      ctx.beginPath();
+      ctx.moveTo(x, area.top);
+      ctx.lineTo(x, area.top + area.height);
+      ctx.stroke();
+      ctx.fillText('Строка ' + row.ProgNum, x, area.top + 12);
+    }
+    ctx.restore();
   };
 
   SamovarChart.prototype.draw = function () {
@@ -673,6 +838,8 @@
     progSeries.forEach(function (series) {
       drawSeries(ctx, rows, area, progBounds, series);
     });
+    this.drawProgramMarkers(ctx, area, this.span());
+    this.drawRuntimePairs(ctx, area, this.span());
     ctx.fillStyle = textColor;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'left';
@@ -725,8 +892,17 @@
     if (!this.readout) return;
     const idx = this.hoverIndex;
     if (idx == null || !this.rows[idx]) {
+      const pairs = this.runtimePairSummary();
+      const pairText = Object.keys(this.runtimePairs).map(function(key) {
+        const entry = this.runtimePairs[key];
+        const duration = entry.durationMs === undefined ? 'неполная' : (entry.durationMs === null ? 'обратный монотонный порядок' : entry.durationMs + ' мс');
+        const reason = Number.parseInt(entry.begin ? entry.begin.reason : entry.end.reason, 16);
+        const outcome = entry.end ? PAIR_OUTCOME_NAMES[Number.parseInt(entry.end.outcome, 16)] : '—';
+        return SamovarApp.uiWaitReasonName(reason) + ': ' + duration + ', итог ' + outcome;
+      }, this).join('; ');
       this.readout.textContent = n
-        ? ('Точек: ' + n + (span.from === 0 && span.to === n - 1 ? '' : (', показан участок ' + (span.from + 1) + '–' + (span.to + 1))))
+        ? ('Точек: ' + n + (span.from === 0 && span.to === n - 1 ? '' : (', показан участок ' + (span.from + 1) + '–' + (span.to + 1))) +
+          (pairs.complete || pairs.open ? '; ' + pairText : ''))
         : '';
       return;
     }

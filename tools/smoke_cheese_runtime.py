@@ -21,6 +21,8 @@ SIGNATURES = {
     "ph_invalid": "inline bool cheese_ph_invalid_too_long(uint32_t nowMs, bool valid)",
     "median": "inline int cheese_median3(int a, int b, int c)",
     "calibrate": "inline float cheese_calibrated_ph(int raw, float slope, float offset)",
+    "calibration_valid": "inline bool cheese_ph_calibration_valid(float slope, float offset)",
+    "read": "inline bool cheese_read_ph_raw(int& raw)",
     "sample": "inline void cheese_sample_ph(uint32_t nowMs)",
 }
 
@@ -29,6 +31,10 @@ HARNESS = r'''
 #include <cstdint>
 #include <iostream>
 using std::isfinite;
+
+enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM = 21 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
 
 #define CHEESE_TEMPERATURE_DELTA 0.3f
 #define CHEESE_TEMPERATURE_CONFIRM_MS 10000UL
@@ -58,6 +64,8 @@ static float cheesePhValue = 0.0f;
 static bool cheesePhValid = false;
 static bool cheesePhSampled = false;
 static uint32_t cheesePhSampleMs = 0;
+static bool cheesePhSampleAttempted = false;
+static uint32_t cheesePhLastAttemptMs = 0;
 static int analogValue = 0;
 static int analogReads = 0;
 int analogRead(int) { ++analogReads; return analogValue; }
@@ -70,6 +78,8 @@ int analogRead(int) { ++analogReads; return analogValue; }
 @PH_INVALID@
 @MEDIAN@
 @CALIBRATE@
+@CALIBRATION_VALID@
+@READ@
 @SAMPLE@
 
 static int failures = 0;
@@ -132,6 +142,13 @@ int main() {
   check(cheese_median3(4, 9, 1) == 4, "median failed descending order");
   check(cheese_calibrated_ph(1000, -0.003f, 8.0f) == 5.0f,
         "pH calibration changed");
+  check(cheese_ph_calibration_valid(0.003f, 7.0f) &&
+            cheese_ph_calibration_valid(-0.003f, 7.0f),
+        "both pH calibration polarities must stay valid");
+  check(!cheese_ph_calibration_valid(0.0f, 7.0f) &&
+            !cheese_ph_calibration_valid(NAN, 7.0f) &&
+            !cheese_ph_calibration_valid(0.003f, INFINITY),
+        "zero or non-finite pH calibration must be invalid");
   cheesePhSampled = false; analogReads = 0; analogValue = 1000;
   cheese_sample_ph(0);
   check(analogReads == 3 && cheesePhRaw == 1000 && cheesePhValue == 1.0f,
@@ -194,6 +211,8 @@ def main() -> int:
         "ph_invalid": "inline bool cheese_ph_invalid_too_long(uint32_t nowMs, bool valid) {\n" + bodies["ph_invalid"] + "\n}",
         "median": "inline int cheese_median3(int a, int b, int c) {\n" + bodies["median"] + "\n}",
         "calibrate": "inline float cheese_calibrated_ph(int raw, float slope, float offset) {\n" + bodies["calibrate"] + "\n}",
+        "calibration_valid": "inline bool cheese_ph_calibration_valid(float slope, float offset) {\n" + bodies["calibration_valid"] + "\n}",
+        "read": "inline bool cheese_read_ph_raw(int& raw) {\n" + bodies["read"] + "\n}",
         "sample": "inline void cheese_sample_ph(uint32_t nowMs) {\n" + bodies["sample"] + "\n}",
     }
     harness = HARNESS
@@ -208,7 +227,8 @@ def main() -> int:
         ("CHEESE_PH_CONFIRM_MS 30000UL", "CHEESE_PH_CONFIRM_MS 29000UL", "30-second pH confirmation"),
         ("CHEESE_PH_INVALID_MS 10000UL", "CHEESE_PH_INVALID_MS 9000UL", "10-second invalid pH"),
         ("return b;", "return a;", "median pH"),
-        ("cheesePhSampled &&", "false &&", "pH sample interval"),
+        ("cheesePhSampleAttempted &&", "false &&", "pH sample interval"),
+        ("slope != 0.0f", "true", "zero pH slope"),
     ]
     for old, new, label in mutations:
         mutant = harness.replace(old, new, 1)

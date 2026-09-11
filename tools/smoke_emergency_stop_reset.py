@@ -359,6 +359,11 @@ struct ImpurityDetector {
 enum ProgramWaitType : uint8_t { PROGRAM_WAIT_NONE = 0, PROGRAM_WAIT_STEAM, PROGRAM_WAIT_PIPE, PROGRAM_WAIT_DETECTOR };
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 enum SAMOVAR_MODE { SAMOVAR_RECTIFICATION_MODE, SAMOVAR_OTHER_MODE };
+enum UiWaitReason { UI_WAIT_MANUAL_RECT = 1, UI_WAIT_RECT_STEAM = 3, UI_WAIT_RECT_PIPE = 4, UI_WAIT_RECT_DETECTOR = 5 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED = 0 };
+enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
+static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
 
 constexpr int16_t SAMOVAR_STATUS_RECT_WITHDRAWAL = 10;
 constexpr int16_t SAMOVAR_STATUS_RECT_AUTOPAUSE = 15;
@@ -393,6 +398,8 @@ static unsigned long t_min = 0;
 static uint8_t RowStopPauseCount = 0;
 static unsigned long program_done_hold_since = 0;
 static SAMOVAR_MODE Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+static UiControlSource uiWithdrawalControlSource = UI_CONTROL_SOURCE_UNKNOWN;
+static bool rectManualPauseActive = false;
 
 // [T09] Пост-аварийные гейты withdrawal() и pause_withdrawal() читают эти флаги.
 static bool PowerOn = true;
@@ -417,7 +424,7 @@ static uint32_t body_temp_capture_deadline = 0;
 static bool body_temp_autoset_allowed() { return false; }
 static bool is_first_body_program_after_heads(uint8_t, ProgramType) { return false; }
 static bool program_type_one_of(ProgramType, const char*) { return false; }
-static void set_pump_speed(float, bool, bool = true) {}
+static void set_pump_speed(float, bool, bool = true, UiControlSource = UI_CONTROL_SOURCE_UNKNOWN) {}
 static void run_program(uint8_t) {}
 
 static ProgramType program_type_at(uint8_t index) {

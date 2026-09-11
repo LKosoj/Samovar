@@ -378,12 +378,19 @@ function onEditorThemeToggle() {
 function createFileUploader(tree, editor) {
   var input = ge("upload-select");
   var path = ge("upload-path");
+  function reloadNotQueued(responseText) {
+    return responseText.indexOf("UPLOADED, LUA RELOAD NOT QUEUED: ") === 0;
+  }
   function afterWrite(status, responseText) {
     if (status != 200) {
       setStatus(describeHttpError(status, responseText), "err");
       return;
     }
-    setStatus(responseText || "Готово", "ok");
+    if (reloadNotQueued(responseText)) {
+      setStatus("Сохранено; Lua не применён: " + responseText.substring(33), "");
+    } else {
+      setStatus(responseText || "Готово", "ok");
+    }
     tree.refreshPath("/");
   }
   ge("btn-refresh").onclick = function () { tree.refreshPath("/"); };
@@ -393,11 +400,12 @@ function createFileUploader(tree, editor) {
       setStatus("Укажите имя файла в поле пути", "err");
       return;
     }
+    if (!editor.confirmDiscard()) return;
     var formData = new FormData();
     formData.append("path", p);
     requests.add("PUT", "/edit", formData, function (status, responseText) {
       afterWrite(status, responseText);
-      if (status == 200) editor.loadUrl(p);
+      if (status == 200) editor.loadUrl(p, true);
     });
   };
   ge("btn-save").onclick = function () { editor.execCommand("saveCommand"); };
@@ -559,10 +567,14 @@ function createEditor(element, file, lang, theme) {
     enableLiveAutocompletion: true
   });
   var dirty = false;
+  var loadGeneration = 0;
   function setDirty(on) {
     dirty = !!on;
     ge("btn-save").dataset.dirty = dirty ? "1" : "0";
   }
+  editor.confirmDiscard = function () {
+    return !dirty || confirm("Есть несохранённые изменения. Открыть другой файл?");
+  };
   async function httpPost(filename, data, mime) {
     if (isGzipFile(filename)) {
       try {
@@ -581,14 +593,16 @@ function createEditor(element, file, lang, theme) {
         return;
       }
       setDirty(false);
-      setStatus("Сохранено: " + filename, "ok");
+      if (responseText.indexOf("UPLOADED, LUA RELOAD NOT QUEUED: ") === 0) {
+        setStatus("Сохранено; Lua не применён: " + filename, "");
+      } else {
+        setStatus("Сохранено: " + filename, "ok");
+      }
     });
   }
-  function httpGet(theUrl) {
+  function httpGet(theUrl, generation) {
     var gzip = isGzipFile(theUrl);
     requests.add("GET", "/edit", { edit: theUrl }, async function (status, response) {
-      ge("preview").style.display = "none";
-      ge("editor").style.display = "block";
       var responseText = typeof response === "string"
         ? response
         : new TextDecoder().decode(response || new ArrayBuffer(0));
@@ -600,11 +614,31 @@ function createEditor(element, file, lang, theme) {
           responseText = "Не удалось распаковать gzip: " + error.message;
         }
       }
-      editor.setValue(status == 200 ? responseText : "");
+      if (generation !== loadGeneration) return;
+      if (status != 200) {
+        setStatus(describeHttpError(status, responseText), "err");
+        return;
+      }
+      ge("preview").style.display = "none";
+      ge("editor").style.display = "block";
+      editor.setValue(responseText);
       editor.clearSelection();
       setDirty(false);
-      if (status != 200) setStatus(describeHttpError(status, responseText), "err");
-      else setStatus("");
+      file = theUrl;
+      ge("editor-filename").value = file;
+      lang = getLangFromFilename(file);
+      type = lang === "c_cpp" ? "text/plain" : "text/" + lang;
+      if (lang !== "plain") editor.getSession().setMode("ace/mode/" + lang);
+      else editor.getSession().setMode("ace/mode/text");
+      var treeNav = ge("tree");
+      var active = treeNav && treeNav.querySelector(".tvu");
+      if (active) {
+        var items = active.querySelectorAll("li");
+        for (var i = 0; i < items.length; i++) {
+          items[i].classList.toggle("is-active", items[i].dataset.path === file);
+        }
+      }
+      setStatus("");
     }, gzip ? "arraybuffer" : "");
   }
   if (lang !== "plain") editor.getSession().setMode("ace/mode/" + lang);
@@ -621,22 +655,10 @@ function createEditor(element, file, lang, theme) {
     exec: function () { httpPost(file, editor.getValue() + "", type); },
     readOnly: false
   });
-  editor.loadUrl = function (filename) {
-    ge("editor-filename").value = filename;
-    file = filename;
-    lang = getLangFromFilename(file);
-    type = lang === "c_cpp" ? "text/plain" : "text/" + lang;
-    if (lang !== "plain") editor.getSession().setMode("ace/mode/" + lang);
-    else editor.getSession().setMode("ace/mode/text");
-    httpGet(file);
-    var treeNav = ge("tree");
-    var active = treeNav && treeNav.querySelector(".tvu");
-    if (active) {
-      var items = active.querySelectorAll("li");
-      for (var i = 0; i < items.length; i++) {
-        items[i].classList.toggle("is-active", items[i].dataset.path === filename);
-      }
-    }
+  editor.loadUrl = function (filename, confirmed) {
+    if (!confirmed && !editor.confirmDiscard()) return;
+    loadGeneration++;
+    httpGet(filename, loadGeneration);
   };
   window.addEventListener("beforeunload", function (e) {
     if (!dirty) return;

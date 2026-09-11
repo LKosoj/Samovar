@@ -313,9 +313,8 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
     if (request->hasParam("data", true, true)) {
       String p = request->getParam("data", true, true)->value();
       if (p[0] != '/') p = "/" + p;
-      // handleUpload() не может ответить клиенту сам, поэтому лишь помечает запрос
-      // причиной отказа. Любая непустая причина (идёт процесс или барьер смены
-      // режима для .lua) означает 503 BUSY.
+      // handleUpload() передаёт причину отказа через атрибут запроса.
+      // Для полностью записанного Lua отказ reload не означает ошибку записи.
       String uploadError = request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR);
       if (uploadError == SPIFFS_EDITOR_UPLOAD_BAD_NAME) {
         request->send(400, "text/plain", "BAD NAME: " + p);
@@ -325,6 +324,13 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
         request->send(500, "text/plain", "WRITE FAILED: " + p);
         return;
       }
+#ifdef USE_LUA
+      if (uploadError == SPIFFS_EDITOR_LUA_RELOAD_BUSY &&
+          request->getAttribute(SPIFFS_EDITOR_UPLOAD_COMMITTED) == "1") {
+        request->send(200, "text/plain", "UPLOADED, LUA RELOAD NOT QUEUED: " + p);
+        return;
+      }
+#endif
       if (uploadError.length() > 0) {
         if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_COMMITTED) != "1" &&
             request->getAttribute(SPIFFS_EDITOR_UPLOAD_TOUCHED) == "1" &&

@@ -47,6 +47,7 @@
     var CHEESE_PROGRAM_FIELDS = 6;
     // TYPE;VALUE1;VALUE2;VALUE3;MIXER;VALUE4
     var HeaterPowerOn = false;
+    var CheesePhAvailable = true;
     var acceptedCheeseProgram = '';
     var CHEESE_TYPES = {
       H:{name:'Нагрев', labels:['Цель, °C','Тайм-аут, мин','Скорость, °C/мин','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['30','60','1','0']},
@@ -288,9 +289,9 @@
         var program = serializeCheeseRows();
         document.getElementById('WProgram').value = program;
         var result = await SamovarApp.postProgram(document.forms.mainform);
-        if (!result.ok) return programError(result.err || 'Программа не сохранена.');
+        if (!result.ok) return programError(result.err || 'Программа не применена.');
         acceptedCheeseProgram = program;
-        SamovarApp.notify('Сырная программа сохранена.', 2);
+        SamovarApp.notify('Сырная программа применена.', 2);
         return true;
       } catch (error) {
         return programError(error.message || error);
@@ -355,11 +356,16 @@
       document.getElementById('start').value = manualConfirmationRequired(current) ? 'Подтвердить' : 'Следующий этап';
       HeaterPowerOn = Number(data.PowerOn) === 1;
       document.getElementById('power').value = HeaterPowerOn ? 'Остановить сыроварение' : 'Начать сыроварение';
+      SamovarApp.renderUiDetails(data);
     }
 
     function applyCheeseBootstrap(data) {
       if (typeof data.program !== 'string' || typeof data.luaButtonList !== 'string' || typeof data.version !== 'string') {
         throw new Error('неверный формат программы или Lua-кнопок.');
+      }
+      if (typeof data.cheesePhAvailable !== 'boolean' ||
+          !Number.isInteger(Number(data.cheesePhAds1115Address))) {
+        throw new Error('неверный источник pH.');
       }
       var coolingSchemes = {
         pump: 'насос',
@@ -380,6 +386,14 @@
       document.getElementById('ACPTemp').parentElement.style.color = data.acpColor;
       document.getElementById('version').textContent = data.version;
       document.getElementById('cheeseCoolingScheme').textContent = coolingSchemes[data.cheeseCoolingScheme];
+      CheesePhAvailable = data.cheesePhAvailable;
+      var address = Number(data.cheesePhAds1115Address);
+      document.getElementById('power').disabled = !CheesePhAvailable;
+      document.getElementById('cheesePhConnection').textContent = address > 0
+        ? 'USE_ADS1115 автоматически переводит pH на AIN0 ADS1115 по адресу 0x' + address.toString(16).toUpperCase() + '. LUA_PIN остаётся свободным.'
+        : 'Без USE_ADS1115 PH-4502C использует LUA_PIN через схему, безопасную для входа 3,3 В, и конфликтует с MPX5010DP.';
+      document.getElementById('cheesePhAvailability').textContent = CheesePhAvailable
+        ? '' : 'ADS1115 не найден. Запуск сыроварения заблокирован.';
       renderProgram(data.program);
     }
 
@@ -508,7 +522,7 @@
     <div id="Prog" class="tabcontent panel" aria-hidden="true">
       <div class="prg" id="programRows"></div>
       <div class="btn-cell" style="margin: 1em auto;">
-        <button type="button" class="button" id="setprogram" onclick="set_program()">Сохранить программу</button>
+        <button type="button" class="button" id="setprogram" onclick="set_program()">Применить программу</button>
         <button type="button" class="button" onclick="SaveProgramToFile()">Экспорт</button>
         <label class="button" for="programFile">Импорт</label>
         <input id="programFile" type="file" accept=".txt,text/plain" onchange="if(this.files[0]) loadFile(this.files[0])">
@@ -540,10 +554,11 @@
 
     <div id="Other" class="tabcontent panel" aria-hidden="true">
       <div class="container_column" style="border: 1px dashed var(--border-dashed); border-radius: 8px; margin-bottom: 1em; padding: 1em;">
-        <input type="button" class="button" value="Калибровка pH" onclick="location.href='/calibrate_ph.htm'">
+        <input type="button" class="button" value="Калибровка pH" onclick="if (SamovarApp.confirmLeave()) location.href='/calibrate_ph.htm'">
         <div class="cheese-help">
-        PH-4502C подключается к LUA_PIN только через схему, безопасную для входа 3,3 В.
-        Не подключайте PH-4502C и MPX5010DP одновременно. В режиме «Сыр» реле №4 — клапан слива, а не разгонный ТЭН.
+        <span id="cheesePhConnection"></span>
+        <strong id="cheesePhAvailability"></strong>
+        В режиме «Сыр» реле №4 — клапан слива, а не разгонный ТЭН.
         </div>
       </div>
 <!--#include lua_field.htm-->

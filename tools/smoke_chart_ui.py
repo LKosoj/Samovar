@@ -39,7 +39,7 @@ if chart_htm:
         "typeof SamovarChart !== 'function'",
         "chart = new SamovarChart('chartdiv'",
         "SamovarApp.loadUiBootstrap(applyChartBootstrap)",
-        "chart.loadCsv('data.csv')",
+        "chart.loadCsv('data.csv', loadChartCsv)",
         "function appendChartPoint(myObj)",
         "chart.appendAjaxPoint(myObj)",
         "SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });",
@@ -79,7 +79,7 @@ if chart_htm:
 
     try:
         load_body = extract_function_body(chart_htm, "function loadChartCsv ()")
-        for token in ["chart.loadCsv('data.csv').catch", "retryChartLoad"]:
+        for token in ["chart.loadCsv('data.csv', loadChartCsv).then", ".catch(function (err)", "retryChartLoad"]:
             if token not in load_body:
                 errors.append(f"data_raw/chart.htm CSV loading does not report errors: {token}")
     except ValueError as exc:

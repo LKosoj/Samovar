@@ -926,6 +926,8 @@ struct UiBootstrapSnapshot {
   bool i2cPumpVisible;
   bool calibrationRunning;
   bool i2cCalibration;
+  bool cheesePhAvailable;
+  int cheesePhAds1115Address;
   int pwmValue;
   float pwmLow;
   float heaterMaxPower;
@@ -1226,6 +1228,8 @@ static bool capture_ui_bootstrap_snapshot(UiBootstrapSnapshot& snapshot) {
   snapshot.i2cCalibration = I2CPumpCalibrating;
   snapshot.calibrationRunning =
       startval == SAMOVAR_STARTVAL_CALIBRATION || snapshot.i2cCalibration;
+  snapshot.cheesePhAvailable = cheese_ph_available();
+  snapshot.cheesePhAds1115Address = cheese_ph_ads1115_address();
   snapshot.pwmValue = bk_pwm;
   snapshot.pwmLow = PWM_LOW_VALUE * 10;
   return true;
@@ -1323,6 +1327,7 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
       !ui_bootstrap_write_float(out, first, "heaterResistance", snapshot.setup.HeaterResistant, 9) ||
       !ui_bootstrap_write_float(out, first, "heaterMaxPower", snapshot.heaterMaxPower, 9) ||
       !ui_bootstrap_write_float(out, first, "mainsVoltage", snapshot.setup.MainsVoltage, 2) ||
+      !ui_bootstrap_write_long(out, first, "timeZone", snapshot.setup.TimeZone) ||
       !ui_bootstrap_write_long(out, first, "stepperMaxSpeed", STEPPER_MAX_SPEED) ||
       !ui_bootstrap_write_long(out, first, "stepperStepsPerMl", snapshot.setup.StepperStepMl * 100L) ||
       !ui_bootstrap_write_long(out, first, "i2cStepperStepsPerMl", snapshot.setup.StepperStepMlI2C * 100L) ||
@@ -1335,6 +1340,8 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
                                   strlen(ui_bootstrap_cheese_cooling_scheme())) ||
       !ui_bootstrap_write_float(out, first, "cheesePhSlope", snapshot.setup.CheesePhSlope, 9) ||
       !ui_bootstrap_write_float(out, first, "cheesePhOffset", snapshot.setup.CheesePhOffset, 9) ||
+      !ui_bootstrap_write_bool(out, first, "cheesePhAvailable", snapshot.cheesePhAvailable) ||
+      !ui_bootstrap_write_long(out, first, "cheesePhAds1115Address", snapshot.cheesePhAds1115Address) ||
       out.print('}') != 1) return false;
   return true;
 }
@@ -1978,6 +1985,11 @@ static bool save_param_name_allowed(const String& name) {
   return false;
 }
 
+static bool cheese_ph_calibration_requested(AsyncWebServerRequest *request) {
+  return request &&
+      (request->hasArg("CheesePhSlope") || request->hasArg("CheesePhOffset"));
+}
+
 // [T28] Мигрированный из EEPROM профиль (migrate_from_eeprom() в NVS_Manager.ino)
 // проверяет только flag и Mode - остальные ~30 числовых полей уходят в NVS как есть,
 // и мусор из битого сектора молча становится рабочими настройками на годы. Переиспользуем
@@ -2039,6 +2051,14 @@ void handleSave(AsyncWebServerRequest *request) {
           request, param->name().c_str(), NUMERIC_PARSE_INVALID_ARGUMENT);
       return;
     }
+  }
+  if (cheese_ph_calibration_requested(request) && !cheese_ph_available()) {
+    send_no_store_response(
+        request, 409, "application/json",
+        build_error_envelope(
+            "not_available", "CheesePhSlope",
+            "ADS1115 недоступен: калибровка pH заблокирована"));
+    return;
   }
   if (request_param_count(request, "clear") != 0) {
     send_no_store_response(
@@ -2172,6 +2192,17 @@ void handleSave(AsyncWebServerRequest *request) {
     send_no_store_response(
         request, 400, "application/json",
         build_save_range_errors_envelope(saveFirstBadField, saveBadFieldsJson));
+    return;
+  }
+
+  if (cheese_ph_calibration_requested(request) &&
+      !cheese_ph_calibration_valid(
+          staged.CheesePhSlope, staged.CheesePhOffset)) {
+    send_no_store_response(
+        request, 400, "application/json",
+        build_error_envelope(
+            "not_allowed", "CheesePhSlope",
+            "pH calibration requires a finite non-zero slope"));
     return;
   }
 

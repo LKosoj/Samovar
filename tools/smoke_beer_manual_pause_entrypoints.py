@@ -56,6 +56,8 @@ HARNESS_TEMPLATE = r'''
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 enum SamovarModeEnum { SAMOVAR_RECTIFICATION_MODE = 0, SAMOVAR_BEER_MODE = 1 };
+enum UiWaitReason { UI_WAIT_MANUAL_RECT = 1, UI_WAIT_MANUAL_BEER = 2 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
 
 class String {
 public:
@@ -71,6 +73,10 @@ SamovarModeEnum Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 static const int16_t SAMOVAR_STARTVAL_BEER_START = 2000;
 int16_t startval = 0;
 bool beerManualPause = false;
+bool PauseOn = false;
+bool program_Wait = false;
+bool program_Pause = false;
+bool rectManualPauseActive = false;
 static char programTypeStub = 'M';
 
 // --- Моки истинно внешних зависимостей (не-static) ---

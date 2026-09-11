@@ -67,11 +67,17 @@ static CheeseLuaStageState cheeseLuaStage = {
     CHEESE_LUA_STAGE_IDLE, 0, PROGRAM_END};
 static CheeseRuntimeState cheeseRuntime = {};
 static bool cheeseFinishPending = false;
+static bool cheesePairErrorPending = false;
 static int cheesePhRaw = 0;
 static float cheesePhValue = 0.0f;
 static bool cheesePhValid = false;
 static bool cheesePhSampled = false;
 static uint32_t cheesePhSampleMs = 0;
+static bool cheesePhSampleAttempted = false;
+static uint32_t cheesePhLastAttemptMs = 0;
+#ifdef USE_ADS1115
+static bool cheesePhAds1115Ready = false;
+#endif
 
 inline CheeseStageKind cheese_stage_kind(ProgramType type) {
   switch (type) {
@@ -136,6 +142,8 @@ inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand) {
   if (!cheeseRuntime.temperatureConfirmActive) {
     cheeseRuntime.temperatureConfirmSinceMs = nowMs;
     cheeseRuntime.temperatureConfirmActive = true;
+    runtime_pair_begin(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                       "Подтверждение температуры начато", NOTIFY_MSG);
     return false;
   }
   return nowMs - cheeseRuntime.temperatureConfirmSinceMs >=
@@ -144,6 +152,12 @@ inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand) {
 
 inline float cheese_calibrated_ph(int raw, float slope, float offset) {
   return slope * raw + offset;
+}
+
+inline bool cheese_ph_calibration_valid(float slope, float offset) {
+  return isfinite(slope) && isfinite(offset) && slope >= -100.0f &&
+      slope <= 100.0f && offset >= -100.0f && offset <= 100.0f &&
+      slope != 0.0f;
 }
 
 inline int cheese_ph_raw() { return cheesePhRaw; }
@@ -162,17 +176,83 @@ inline int cheese_median3(int a, int b, int c) {
   return b;
 }
 
+#ifdef USE_ADS1115
+inline bool cheese_ads1115_configure() {
+  // AIN0 относительно GND, диапазон ±4,096 В, непрерывное преобразование 128 раз/с.
+  cheesePhAds1115Ready =
+      i2c_stepper_write_u16(USE_ADS1115, 0x01, 0xC283);
+  return cheesePhAds1115Ready;
+}
+
+inline bool cheese_ads1115_read_raw(int& raw) {
+  uint16_t value = 0;
+  if (!i2c_stepper_read_u16(USE_ADS1115, 0x00, value, 50)) {
+    cheesePhAds1115Ready = false;
+    return false;
+  }
+  raw = static_cast<int16_t>(value);
+  cheesePhAds1115Ready = true;
+  return true;
+}
+#endif
+
+inline bool cheese_ph_prepare() {
+#ifdef USE_ADS1115
+  return cheesePhAds1115Ready || cheese_ads1115_configure();
+#else
+  return true;
+#endif
+}
+
+inline void cheese_ph_init() {
+  cheese_ph_prepare();
+}
+
+inline bool cheese_ph_available() {
+#ifdef USE_ADS1115
+  return cheesePhAds1115Ready;
+#else
+  return true;
+#endif
+}
+
+inline int cheese_ph_ads1115_address() {
+#ifdef USE_ADS1115
+  return USE_ADS1115;
+#else
+  return 0;
+#endif
+}
+
+inline bool cheese_read_ph_raw(int& raw) {
+#ifdef USE_ADS1115
+  return cheese_ph_prepare() && cheese_ads1115_read_raw(raw);
+#else
+  raw = cheese_median3(analogRead(LUA_PIN), analogRead(LUA_PIN),
+                       analogRead(LUA_PIN));
+  return true;
+#endif
+}
+
 inline void cheese_sample_ph(uint32_t nowMs) {
-  if (cheesePhSampled &&
-      nowMs - cheesePhSampleMs < CHEESE_PH_SAMPLE_INTERVAL_MS) return;
-  const int raw = cheese_median3(analogRead(LUA_PIN), analogRead(LUA_PIN),
-                                 analogRead(LUA_PIN));
+  if (cheesePhSampleAttempted &&
+      nowMs - cheesePhLastAttemptMs < CHEESE_PH_SAMPLE_INTERVAL_MS) return;
+  cheesePhSampleAttempted = true;
+  cheesePhLastAttemptMs = nowMs;
+  int raw = 0;
+  if (!cheese_read_ph_raw(raw)) {
+    cheesePhSampled = false;
+    cheesePhValid = false;
+    return;
+  }
   cheesePhRaw = raw;
   cheesePhSampleMs = nowMs;
   cheesePhSampled = true;
   const float measured = cheese_calibrated_ph(
       raw, SamSetup.CheesePhSlope, SamSetup.CheesePhOffset);
-  cheesePhValid = isfinite(measured) && measured >= 0.0f && measured <= 14.0f;
+  cheesePhValid = cheese_ph_calibration_valid(
+      SamSetup.CheesePhSlope, SamSetup.CheesePhOffset) &&
+      isfinite(measured) && measured >= 0.0f && measured <= 14.0f;
   if (cheesePhValid) cheesePhValue = measured;
 }
 
@@ -251,6 +331,8 @@ inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached) {
   if (!cheeseRuntime.phReachedActive) {
     cheeseRuntime.phReachedSinceMs = nowMs;
     cheeseRuntime.phReachedActive = true;
+    runtime_pair_begin(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                       "Подтверждение pH начато", NOTIFY_MSG);
     return false;
   }
   return nowMs - cheeseRuntime.phReachedSinceMs >= CHEESE_PH_CONFIRM_MS;
@@ -323,11 +405,14 @@ inline bool cheese_lua_stop_pending() {
 
 inline void cheese_reset_stage_state() {
   cheeseRuntime = {};
+  cheesePairErrorPending = false;
   cheesePhRaw = 0;
   cheesePhValue = 0.0f;
   cheesePhValid = false;
   cheesePhSampled = false;
   cheesePhSampleMs = 0;
+  cheesePhSampleAttempted = false;
+  cheesePhLastAttemptMs = 0;
   cheeseFinishPending = false;
   cheese_reset_lua_stage();
 }
@@ -375,6 +460,7 @@ void cheese_finish();
 void run_cheese_program(uint8_t num);
 
 inline void cheese_abort(const String& reason) {
+  cheesePairErrorPending = true;
   SendMsg("Строка " + String(ProgramNum + 1) + ": " + reason, ALARM_MSG);
   cheese_finish();
 }
@@ -509,6 +595,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
     cheeseLuaStage.phase = CHEESE_LUA_STAGE_ENTER_QUEUED;
     cheeseLuaStage.ticket = ticket;
     cheeseLuaStage.nextProgram = PROGRAM_END;
+    runtime_pair_begin(UI_WAIT_LUA_KNOWN, "Lua-задача принята", NOTIFY_MSG);
 #else
     return false;
 #endif
@@ -522,6 +609,13 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
   cheeseRuntime.lastTickMs = nowMs;
   cheeseRuntime.heatStartSetpoint = NAN;
   startval = SAMOVAR_STARTVAL_CHEESE_START + 1;
+  runtime_pair_close_mode(SAMOVAR_CHEESE_MODE, RUNTIME_PAIR_ROW_CHANGE,
+                          "Переход к следующей строке", NOTIFY_MSG);
+  if (row.WType == 'W') {
+    runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR, "Ожидание действия оператора", NOTIFY_MSG);
+  } else if (row.WType == 'D' && row.TempSensor == 2) {
+    runtime_pair_begin(UI_WAIT_CHEESE_DOSE, "Дозатор запущен", NOTIFY_MSG);
+  }
   SendMsg("Строка " + String(ProgramNum + 1) + "; " +
           cheese_stage_name(row.WType), NOTIFY_MSG);
   return true;
@@ -557,6 +651,8 @@ inline bool cheese_lua_stage_tick(uint32_t nowMs, const WProgram& row) {
       cheeseLuaStage.phase == CHEESE_LUA_STAGE_EXIT_QUEUED) {
     const uint8_t nextProgram = cheeseLuaStage.nextProgram;
     if (!cheese_finish_lua_exit()) return true;
+    runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_RESUMED,
+                     "Lua-задача завершена", NOTIFY_MSG);
     if (nextProgram == PROGRAM_END) cheese_finish();
     else if (!cheese_prepare_stage(nextProgram)) cheese_abort("Ошибка перехода после Lua");
     return true;
@@ -618,14 +714,25 @@ void cheese_stage_tick() {
           row.Param * static_cast<float>(nowMs - cheeseRuntime.enteredMs) / 60000.0f);
       set_heater_state(target, sensor->avgTemp);
       if (cheese_temperature_confirmed(nowMs,
-          cheese_in_temperature_band(sensor->avgTemp, row.Temp))) run_cheese_program(ProgramNum + 1);
+          cheese_in_temperature_band(sensor->avgTemp, row.Temp))) {
+        runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                         RUNTIME_PAIR_RESUMED, "Температура подтверждена", NOTIFY_MSG);
+        run_cheese_program(ProgramNum + 1);
+      }
       return;
     }
     case CHEESE_STAGE_HOLD: {
       set_heater_state(row.Temp, sensor->avgTemp);
       const uint32_t elapsed = nowMs - cheeseRuntime.lastTickMs;
       cheeseRuntime.lastTickMs = nowMs;
-      if (cheese_in_temperature_band(sensor->avgTemp, row.Temp)) cheeseRuntime.holdAccumulatedMs += elapsed;
+      if (cheese_in_temperature_band(sensor->avgTemp, row.Temp)) {
+        cheeseRuntime.holdAccumulatedMs += elapsed;
+        runtime_pair_end(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED,
+                         "Выдержка продолжена", NOTIFY_MSG);
+      } else {
+        runtime_pair_begin(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE,
+                           "Выдержка приостановлена: температура вне полосы", WARNING_MSG);
+      }
       if (static_cast<float>(cheeseRuntime.holdAccumulatedMs) >= row.Time * 60000.0f) {
         run_cheese_program(ProgramNum + 1);
       } else if (cheese_time_elapsed(nowMs, cheeseRuntime.enteredMs,
@@ -645,7 +752,11 @@ void cheese_stage_tick() {
       if (cheese_temperature_confirmed(nowMs,
           cheese_in_temperature_band(sensor->avgTemp, row.Temp))) {
         if (!cheese_set_cooling_outputs(false, false)) cheese_abort("Не удалось выключить охлаждение");
-        else run_cheese_program(ProgramNum + 1);
+        else {
+          runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                           RUNTIME_PAIR_RESUMED, "Температура подтверждена", NOTIFY_MSG);
+          run_cheese_program(ProgramNum + 1);
+        }
       }
       return;
     }
@@ -657,6 +768,8 @@ void cheese_stage_tick() {
       if (row.TempSensor == 2 && cheese_local_doser_complete()) {
         stepper_safe_stop();
         cheeseRuntime.doserCompleted = true;
+        runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED,
+                         "Дозирование завершено", NOTIFY_MSG);
         run_cheese_program(ProgramNum + 1);
       }
       return;
@@ -672,6 +785,8 @@ void cheese_stage_tick() {
       }
       cheese_ph_invalid_too_long(nowMs, true);
       if (cheese_ph_target_confirmed(nowMs, cheesePhValue <= row.Param)) {
+        runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                         RUNTIME_PAIR_RESUMED, "pH подтверждён", NOTIFY_MSG);
         run_cheese_program(ProgramNum + 1);
       }
       return;
@@ -692,6 +807,11 @@ void cheese_finish() {
     return;
   }
   if (!cheese_finish_lua_exit()) return;
+  runtime_pair_close_mode(SAMOVAR_CHEESE_MODE,
+                          cheesePairErrorPending ? RUNTIME_PAIR_ERROR : RUNTIME_PAIR_PROCESS_END,
+                          cheesePairErrorPending ? "Сыроварение остановлено из-за ошибки"
+                                                : "Сыроварение завершено",
+                          cheesePairErrorPending ? ALARM_MSG : NOTIFY_MSG);
   cheese_reset_stage_state();
   begintime = 0;
   ProgramNum = 0;
@@ -703,6 +823,10 @@ void cheese_finish() {
 void cheese_proc() {
   if (SamovarStatusInt != SAMOVAR_STATUS_CHEESE ||
       startval != SAMOVAR_STARTVAL_CHEESE_START || PowerOn) return;
+  if (!cheese_ph_prepare()) {
+    mode_cancel_process_start("ADS1115 не найден. Старт сыроварения отменён.");
+    return;
+  }
   String programError;
   if (!cheese_validate_program(programError)) {
     mode_cancel_process_start(programError);
@@ -722,7 +846,9 @@ void cheese_proc() {
     mode_warn_log_close_failed();
     return;
   }
+#ifndef USE_ADS1115
   pinMode(LUA_PIN, INPUT);
+#endif
   cheese_reset_stage_state();
   cheese_set_drain(false);
   session_begin(sessionDescription);

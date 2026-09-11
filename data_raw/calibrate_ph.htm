@@ -5,10 +5,29 @@
   <script>
     var latestPh = {raw:null, value:null, rawValid:false, valid:false};
     var calibrationPoints = [null, null];
+    var phAvailable = true;
 
     function applyPhCalibrationBootstrap(data) {
+      if (typeof data.cheesePhAvailable !== 'boolean' ||
+          !Number.isInteger(Number(data.cheesePhAds1115Address))) {
+        throw new Error('неверный источник pH.');
+      }
       document.getElementById('CheesePhSlope').value = String(data.cheesePhSlope);
       document.getElementById('CheesePhOffset').value = String(data.cheesePhOffset);
+      phAvailable = data.cheesePhAvailable;
+      var address = Number(data.cheesePhAds1115Address);
+      document.getElementById('phConnection').textContent = address > 0
+        ? 'USE_ADS1115 автоматически переводит pH на AIN0 ADS1115 по адресу 0x' + address.toString(16).toUpperCase() + '. LUA_PIN для pH не используется.'
+        : 'Без USE_ADS1115 PH-4502C подключается к LUA_PIN через согласование уровня до 3,3 В и конфликтует с MPX5010DP.';
+      ['point1Ph', 'point2Ph', 'capturePoint1', 'capturePoint2', 'calculatePh',
+       'CheesePhSlope', 'CheesePhOffset', 'savePh'].forEach(function(id) {
+        document.getElementById(id).disabled = !phAvailable;
+      });
+      if (!phAvailable) {
+        var message = 'ADS1115 не найден. Калибровка pH недоступна.';
+        document.getElementById('phStatus').textContent = message;
+        SamovarApp.showRequestError(message);
+      }
     }
 
     function phError(message) {
@@ -18,6 +37,7 @@
     }
 
     function renderCalibrationTelemetry(data) {
+      if (!phAvailable) return;
       latestPh.raw = Number(data.CheesePhRaw);
       latestPh.value = Number(data.CheesePh);
       latestPh.rawValid = Number(data.CheesePhRawValid) === 1 && Number.isFinite(latestPh.raw);
@@ -27,9 +47,11 @@
     }
 
     function capturePhPoint(index) {
+      if (!phAvailable) return phError('ADS1115 не найден. Калибровка pH недоступна.');
       var input = document.getElementById(index === 0 ? 'point1Ph' : 'point2Ph');
-      var ph = Number(String(input.value).replace(',', '.'));
-      if (!latestPh.rawValid || !Number.isFinite(ph) || ph < 0 || ph > 14) return phError('Нужны свежий ADC и pH от 0 до 14.');
+      var phText = String(input.value).trim();
+      var ph = Number(phText.replace(',', '.'));
+      if (!latestPh.rawValid || !phText || !Number.isFinite(ph) || ph < 0 || ph > 14) return phError('Нужны свежий ADC и pH от 0 до 14.');
       calibrationPoints[index] = {raw:latestPh.raw, ph:ph};
       document.getElementById(index === 0 ? 'point1Raw' : 'point2Raw').textContent = String(latestPh.raw);
       document.getElementById('phStatus').textContent = 'Точка ' + (index + 1) + ' зафиксирована.';
@@ -38,13 +60,15 @@
     }
 
     function calculatePhCalibration() {
+      if (!phAvailable) return phError('ADS1115 не найден. Калибровка pH недоступна.');
       var first = calibrationPoints[0];
       var second = calibrationPoints[1];
       if (!first || !second) return phError('Сначала зафиксируйте две точки.');
+      if (first.ph === second.ph) return phError('Значения pH двух точек должны различаться.');
       if (first.raw === second.raw) return phError('Значения ADC двух точек должны различаться.');
       var slope = (second.ph - first.ph) / (second.raw - first.raw);
       var offset = first.ph - slope * first.raw;
-      if (!Number.isFinite(slope) || !Number.isFinite(offset)) return phError('Не удалось рассчитать коэффициенты.');
+      if (!Number.isFinite(slope) || !Number.isFinite(offset) || slope === 0) return phError('Не удалось рассчитать коэффициенты.');
       document.getElementById('CheesePhSlope').value = slope.toFixed(6);
       document.getElementById('CheesePhOffset').value = offset.toFixed(6);
       document.getElementById('phStatus').textContent = 'Коэффициенты рассчитаны. Сохраните их.';
@@ -53,9 +77,12 @@
     }
 
     async function savePhCalibration() {
-      var slope = Number(document.getElementById('CheesePhSlope').value);
-      var offset = Number(document.getElementById('CheesePhOffset').value);
-      if (!Number.isFinite(slope) || !Number.isFinite(offset)) {
+      if (!phAvailable) return phError('ADS1115 не найден. Калибровка pH недоступна.');
+      var slopeText = String(document.getElementById('CheesePhSlope').value).trim();
+      var offsetText = String(document.getElementById('CheesePhOffset').value).trim();
+      var slope = Number(slopeText);
+      var offset = Number(offsetText);
+      if (!slopeText || !offsetText || !Number.isFinite(slope) || !Number.isFinite(offset) || slope === 0) {
         return phError('Проверьте коэффициенты.');
       }
       var button = document.getElementById('savePh');
@@ -120,7 +147,7 @@
       <button type="button" class="button" id="savePh" onclick="savePhCalibration()">Сохранить калибровку</button>
       <p id="phStatus" role="status" aria-live="polite"></p>
     </div>
-    <div class="container_row" style="border: 1px dashed #bbb; padding: 1em;">PH-4502C подключается к LUA_PIN только через согласование уровня до 3,3 В. Не подключайте его одновременно с MPX5010DP.</div>
+    <div id="phConnection" class="container_row" style="border: 1px dashed #bbb; padding: 1em;"></div>
     </div>
   </form>
 </body>

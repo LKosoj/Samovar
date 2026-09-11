@@ -32,6 +32,8 @@
 // время, поэтому компенсация - это сдвиг обеих меток при выходе из паузы
 // (см. check_mixer_state()), а не вычитание из прошедшего времени.
 static unsigned long beerMixerPauseSinceMs = 0;
+static bool beerHoldClockFrozen = false;
+static bool beerPairErrorPending = false;
 
 struct BoilingDetector {
     float tempHistory[TEMP_HISTORY_SIZE];
@@ -189,6 +191,8 @@ inline void beer_reset_stage_state() {
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
   beerMixerPauseSinceMs = 0;
+  beerHoldClockFrozen = false;
+  beerPairErrorPending = false;
   beerSkipConfirmProgramNum = 0xFF;
 }
 
@@ -440,14 +444,15 @@ void run_beer_program(uint8_t num) {
       if (beerSkipConfirmProgramNum != ProgramNum || nowMsConfirm > beerSkipConfirmDeadlineMs) {
         beerSkipConfirmProgramNum = ProgramNum;
         beerSkipConfirmDeadlineMs = nowMsConfirm + BEER_SKIP_CONFIRM_WINDOW_MS;
+        runtime_pair_begin(UI_WAIT_BEER_SKIP_COOL_CONFIRM,
+                           "Ожидание подтверждения пропуска охлаждения", WARNING_MSG);
         SendMsg("Сусло ещё не остыло до цели. Повторите переход в течение 10 секунд для подтверждения.", WARNING_MSG);
         return;
       }
     }
   }
-  beerSkipConfirmProgramNum = 0xFF;
-
   uint8_t targetProgram = num;
+  bool beerLuaJobAccepted = false;
   if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= PROGRAM_END) {
     targetProgram = PROGRAM_END;
     SetScriptOff = 1;
@@ -495,6 +500,8 @@ void run_beer_program(uint8_t num) {
 
   if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
 
+  beerSkipConfirmProgramNum = 0xFF;
+
   // [Пиво 02.09 A3] Повторный вход на строку 'M' тоже взводит подэтап нагрева,
   // не только старт программы - иначе beer_stage_tick/статус не увидят "нагрев".
   if (startval == SAMOVAR_STARTVAL_BEER_START || program[targetProgram].WType == 'M') startval = SAMOVAR_STARTVAL_BEER_HEATING;
@@ -531,6 +538,7 @@ void run_beer_program(uint8_t num) {
     beerLuaStage.phase = BEER_LUA_STAGE_ENTER_QUEUED;
     beerLuaStage.ticket = ticket;
     beerLuaStage.nextProgram = PROGRAM_END;
+    beerLuaJobAccepted = true;
 #else
     beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
     return;
@@ -572,6 +580,12 @@ void run_beer_program(uint8_t num) {
   // [P2 п.5+6] Накопитель простоя считается только для текущей строки P/B.
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
+  beerHoldClockFrozen = false;
+  runtime_pair_close_mode(SAMOVAR_BEER_MODE, RUNTIME_PAIR_ROW_CHANGE,
+                          "Переход к следующей строке", NOTIFY_MSG);
+  if (beerLuaJobAccepted) {
+    runtime_pair_begin(UI_WAIT_LUA_KNOWN, "Lua-задача принята", NOTIFY_MSG);
+  }
 }
 
 /**
@@ -622,6 +636,10 @@ void beer_finish() {
     SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
     return;
   }
+  runtime_pair_close_mode(SAMOVAR_BEER_MODE,
+                          beerPairErrorPending ? RUNTIME_PAIR_ERROR : RUNTIME_PAIR_PROCESS_END,
+                          beerPairErrorPending ? "Варка остановлена из-за ошибки" : "Варка завершена",
+                          beerPairErrorPending ? ALARM_MSG : NOTIFY_MSG);
   // Детектор кипения, накопитель таймаута разгона [П13], ручная пауза и накопители
   // простоя строки [P2 п.5+6], метка простоя мешалки и ожидание подтверждения
   // пропуска охлаждения [P2 п.9] не переживают завершение процесса. Все они
@@ -643,6 +661,7 @@ void beer_finish() {
  *        аварийную защёлку: достаточно поправить программу и запустить заново.
  */
 void beer_abort_config_error(const String& reason) {
+  beerPairErrorPending = true;
   SendMsg(reason, ALARM_MSG);
   beer_finish();
 }
@@ -752,11 +771,24 @@ void beer_stage_tick() {
     beer_abort_config_error("Ошибка программы: неверный датчик температуры в строке " + String(ProgramNum + 1));
     return;
   }
-  if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
+  if (!sensor_valid(*controlSensor)) {
+    process_sensor_failed("Пиво", controlSensorName);
+    return;
+  }
   temp = controlSensor->avgTemp;
   tempDelta = BEER_TEMP_HYSTERESIS;
   ProgramType currentType = current_program_type();
   beer_update_stage_idle(currentType, temp, tempDelta, nowMs);
+  const bool holdClockFrozen = currentType == 'P' && begintime > 0 &&
+      sensor_valid(*controlSensor) && temp < program[ProgramNum].Temp - tempDelta;
+  if (holdClockFrozen && !beerHoldClockFrozen) {
+    runtime_pair_begin(UI_WAIT_BEER_HOLD_CLOCK_FREEZE,
+                       "Пауза выдержки: температура ниже цели", WARNING_MSG);
+  } else if (!holdClockFrozen && beerHoldClockFrozen) {
+    runtime_pair_end(UI_WAIT_BEER_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED,
+                     "Выдержка продолжена", NOTIFY_MSG);
+  }
+  beerHoldClockFrozen = holdClockFrozen;
 
   // [П12] Единая точка входа ручной паузы: гейтит ВСЕ варочные строки
   // (M/P/B/C/F) одним вызовом - выключает нагрев/клапан/насос/мешалку и не
@@ -828,6 +860,8 @@ void beer_stage_tick() {
     }
     if (result == LUA_BEER_JOB_SUCCEEDED) {
       beerLuaStage.phase = BEER_LUA_STAGE_RUNNING;
+      runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_RESUMED,
+                       "Lua-задача подтверждена", NOTIFY_MSG);
       return;
     }
     beer_abort_config_error(result == LUA_BEER_JOB_FAILED_INIT
@@ -845,6 +879,8 @@ void beer_stage_tick() {
       setHeaterPosition(false);
       if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       begintime = millis();
+      runtime_pair_begin(UI_WAIT_BEER_OPERATOR_WAIT,
+                         "Ожидание действия оператора", NOTIFY_MSG);
     }
     check_mixer_state(); // Управление мешалкой и насосом по параметрам программы
     return;
@@ -904,6 +940,7 @@ void beer_stage_tick() {
       SendMsg(("Достигнута температура засыпи солода!"), NOTIFY_MSG);
     }
     startval = SAMOVAR_STARTVAL_BEER_WAIT_MALT;
+    runtime_pair_begin(UI_WAIT_BEER_MALT, "Ожидание засыпи солода", NOTIFY_MSG);
   }
 
   if (currentType == 'P' && temp >= program[ProgramNum].Temp - tempDelta) {

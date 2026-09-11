@@ -32,6 +32,7 @@
   const OPERATION_TIMEOUT_MS = 45000;
   const MAX_MESSAGE_SEQUENCE = 0xFFFFFFFF;
   const RUNTIME_EVENT_BATCH_LIMIT = 32;
+  const RUNTIME_PAIR_PATTERN = /^(?:(?:Тревога|Предупреждение)! )?@P1;s=([0-9A-F]{8});b=([0-9A-F]{8});p=([0-9A-F]{8});e=([BE]);m=([0-7]);r=([0-9A-F]{2});q=([0-9A-F]{2});o=([0-9A-F]{2});t=([0-9A-F]{16})(?:;u=([0-9A-F]{8}))?\|(.+)$/;
   const MESSAGE_GAP_WARNING = 'Пропущены сообщения: обнаружен разрыв последовательности.';
   const MESSAGE_REBOOT_WARNING = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
@@ -48,7 +49,7 @@
     'columnHeight', 'packDensity', 'heaterResistance', 'mainsVoltage', 'heaterMaxPower',
     'stepperMaxSpeed', 'stepperStepsPerMl', 'i2cStepperStepsPerMl',
     'calibrationRunning', 'calibrationPump', 'cheesePhSlope', 'cheesePhOffset',
-    'cheeseCoolingScheme'
+    'cheeseCoolingScheme', 'cheesePhAvailable', 'cheesePhAds1115Address'
   ];
   const UI_BOOTSTRAP_STRING_KEYS = [
     'version', 'powerUnit', 'program', 'description', 'luaButtonList',
@@ -57,11 +58,12 @@
   ];
   const UI_BOOTSTRAP_BOOLEAN_KEYS = [
     'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
-    'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible', 'calibrationRunning'
+    'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible', 'calibrationRunning',
+    'cheesePhAvailable'
   ];
   const UI_BOOTSTRAP_INTEGER_KEYS = [
     'mode', 'pwmValue', 'packDensity', 'stepperMaxSpeed', 'stepperStepsPerMl',
-    'i2cStepperStepsPerMl'
+    'i2cStepperStepsPerMl', 'cheesePhAds1115Address'
   ];
   const UI_BOOTSTRAP_NUMBER_KEYS = [
     'pwmLow', 'nbkDp', 'columnDiameter', 'columnHeight', 'heaterResistance',
@@ -72,6 +74,7 @@
   let offlineThreshold = 3;
   let isOffline = false;
   let runtimeBusyCounter = 0;
+  let lastValidTelemetryAt = Date.now();
   let messages = [];
   let historyShown = false;
   // Картинки индикатора связи и сирена лежат рядом с app.js. На устройстве это корень,
@@ -134,6 +137,7 @@
       }
       case 6: return '⏳ Набираю историю';
       case 7: return '⏸ Пауза';
+      case 8: return '👁 Хвосты: наблюдение';
       case 1: return '— не активен';
       default: return '';
     }
@@ -854,8 +858,8 @@
     }
   }
 
-  function setConnectionError() {
-    if (offlineCounter < offlineThreshold) {
+  function setConnectionError(staleTelemetry) {
+    if (!staleTelemetry && offlineCounter < offlineThreshold) {
       offlineCounter++;
       return;
     }
@@ -1154,6 +1158,128 @@
     if (myObj.wp_spd !== undefined) {
       byId('add_param').textContent = "; ШИМ насоса воды: " + myObj.wp_spd;
     }
+    renderUiDetails(myObj);
+  }
+
+  const UI_PHASE_NAMES = ['Простой', 'Строка программы', 'Нагрев', 'Стабилизация', 'Выдержка', 'Охлаждение', 'Ожидание оператора', 'Подтверждение привода', 'Безопасное ожидание', 'Известная Lua-операция', 'Завершение', 'Ошибка', 'Неизвестная Lua-фаза'];
+  const UI_END_NAMES = ['', 'порог датчика', 'объём', 'спиртуозность', 'соотношение', 'время', 'результат привода', 'действие оператора', 'конец программы', 'результат Lua-операции', 'плато температуры'];
+  const UI_END_SOURCE_NAMES = ['', 'по пару', 'по царге', 'по воде', 'по кубу', 'по ТСА', 'по pH', 'по таймеру', 'по объёму', 'по приводу'];
+  const UI_END_OPERATOR_NAMES = ['', 'не ниже', 'не выше', 'по истечении времени', 'после подтверждения', 'вручную'];
+  const UI_WAIT_NAMES = ['', 'Ручная пауза ректификации', 'Ручная пауза пивоварения', 'Ожидание температуры пара', 'Ожидание температуры царги', 'Пауза детектора', 'Программная пауза', 'Нагрев дистилляции', 'Недостоверная спиртуозность', 'Ожидание кипения БК', 'Подтверждение мощности БК', 'Переход НБК', 'Безопасное ожидание НБК', 'Ожидание солода', 'Подтверждение пропуска охлаждения', 'Заморозка выдержки пива', 'Ожидание оператора пивоварения', 'Выдержка Сувид вне полосы', 'Заморозка выдержки сыра', 'Ожидание оператора сыра', 'Дозирование сыра', 'Подтверждение температуры/pH', 'Подтверждение привода', 'Известная Lua-операция'];
+  const UI_CONTINUATION_NAMES = ['способ продолжения неизвестен', 'автоматически', 'после действия оператора', 'после подтверждения привода', 'при смене строки', 'при завершении процесса'];
+  const UI_UNIT_NAMES = ['', '°C', 'мл', 'л/ч', '%', 'pH', 'с', 'мин', 'вкл/выкл', 'В', 'Вт', 'ШИМ'];
+  const UI_SOURCE_NAMES = ['источник неизвестен', 'по программе', 'вручную', 'автоматика воды', 'защита', 'операция', 'автоскорость', 'детектор'];
+  const UI_EQUIPMENT_NAMES = ['', 'нагрев', 'отбор', 'вода', 'мешалка', 'I2C-насос', 'подача НБК'];
+
+  function uiWaitReasonName(code) {
+    return UI_WAIT_NAMES[code];
+  }
+
+  function hasUiInteger(value, min, max) {
+    return Number.isInteger(value) && value >= min && value <= max;
+  }
+
+  function hasUiValue(value) {
+    return (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean';
+  }
+
+  function validateUiCondition(condition) {
+    return condition && typeof condition === 'object' && hasUiInteger(condition.e, 1, 10) &&
+      (condition.es === undefined || hasUiInteger(condition.es, 0, 9)) &&
+      (condition.eo === undefined || hasUiInteger(condition.eo, 0, 5)) &&
+      (condition.ev === undefined || Number.isFinite(condition.ev)) &&
+      (condition.eu === undefined || hasUiInteger(condition.eu, 0, 8)) &&
+      ((condition.ev === undefined) === (condition.eu === undefined)) &&
+      (condition.et === undefined || hasUiInteger(condition.et, 0, 0xFFFFFFFF));
+  }
+
+  function validateUi(ui) {
+    if (!ui || typeof ui !== 'object' || !hasUiInteger(ui.m, 0, 7) || !hasUiInteger(ui.p, 0, 12) ||
+        (ui.r !== undefined && !hasUiInteger(ui.r, 1, 255)) ||
+        (ui.n !== undefined && !hasUiInteger(ui.n, 1, 255)) ||
+        (ui.ls !== undefined && (ui.m !== 6 || typeof ui.ls !== 'string'))) return false;
+    const hasEnd = ui.e !== undefined || ui.es !== undefined || ui.eo !== undefined ||
+      ui.ev !== undefined || ui.eu !== undefined || ui.et !== undefined;
+    if (hasEnd && !validateUiCondition(ui)) return false;
+    if (ui.g !== undefined && (!Array.isArray(ui.g) || ui.g.length > 2 || !ui.g.every(validateUiCondition))) return false;
+    if (ui.w !== undefined && (!Array.isArray(ui.w) || ui.w.length > 2 || !ui.w.every(function(wait) {
+      return wait && typeof wait === 'object' && hasUiInteger(wait.q, 1, 23) && hasUiInteger(wait.co, 0, 5);
+    }))) return false;
+    if (ui.c !== undefined && (!Array.isArray(ui.c) || ui.c.length > 4 || !ui.c.every(function(control) {
+      return control && typeof control === 'object' && hasUiInteger(control.k, 1, 6) &&
+        hasUiInteger(control.u, 0, 11) && hasUiInteger(control.s, 0, 7) &&
+        (control.r === undefined || hasUiValue(control.r)) && (control.a === undefined || hasUiValue(control.a));
+    }))) return false;
+    return true;
+  }
+
+  function formatUiCondition(condition) {
+    const unit = UI_UNIT_NAMES[condition.eu] || '';
+    const operator = UI_END_OPERATOR_NAMES[condition.eo] || '';
+    const source = UI_END_SOURCE_NAMES[condition.es] || '';
+    const target = condition.ev === undefined ? '' : ' ' + condition.ev + (unit ? ' ' + unit : '');
+    return UI_END_NAMES[condition.e] + ':' + (operator ? ' ' + operator : '') + target + (source ? ' ' + source : '') +
+      (condition.et === undefined ? '' : '; осталось ' + condition.et + ' с');
+  }
+
+  function renderUiControls(controls) {
+    let block = byId('ui_control_details');
+    if (!block) {
+      const host = document.querySelector('#regulator, .sec-actions');
+      if (!host) return;
+      block = document.createElement('div');
+      block.id = 'ui_control_details';
+      block.className = 'meta';
+      host.appendChild(block);
+    }
+    if (!controls || !controls.length) {
+      block.style.display = 'none';
+      return;
+    }
+    block.textContent = controls.map(function(control) {
+      function valueText(value) {
+        if (value === undefined) return '—';
+        if (control.u === 8 && (value === true || value === 1)) return 'вкл';
+        if (control.u === 8 && (value === false || value === 0)) return 'выкл';
+        return String(value) + (UI_UNIT_NAMES[control.u] ? ' ' + UI_UNIT_NAMES[control.u] : '');
+      }
+      return UI_EQUIPMENT_NAMES[control.k] + ': задано ' + valueText(control.r) +
+        ', применяется ' + valueText(control.a) + ' (' + UI_SOURCE_NAMES[control.s] + ')';
+    }).join('; ');
+    block.style.display = '';
+  }
+
+  function renderUiDetails(data) {
+    let block = byId('ui_details');
+    if (!block) {
+      const stage = document.querySelector('.stage');
+      if (!stage) return;
+      block = document.createElement('div');
+      block.id = 'ui_details';
+      block.className = 'meta';
+      stage.appendChild(block);
+    }
+    const ui = data && data.ui;
+    if (!validateUi(ui)) {
+      block.textContent = 'Подробное объяснение недоступно: данные этапа отсутствуют или некорректны.';
+      block.style.display = '';
+      renderUiControls(null);
+      return;
+    }
+    const lines = ['Этап: ' + UI_PHASE_NAMES[ui.p]];
+    if (Number.isInteger(ui.r)) lines.push('Строка: ' + ui.r);
+    if (ui.e !== undefined) lines.push('Завершение: ' + formatUiCondition(ui));
+    if (ui.g && ui.g.length) lines.push('Процесс: ' + ui.g.map(formatUiCondition).join('; '));
+    if (Array.isArray(ui.w) && ui.w.length) {
+      lines.push('Ожидание: ' + ui.w.map(function (wait) {
+        return uiWaitReasonName(wait.q) + '; ' + UI_CONTINUATION_NAMES[wait.co];
+      }).join('; '));
+    }
+    if (Number.isInteger(ui.n)) lines.push('Далее: строка ' + ui.n);
+    if (ui.m === 6 && typeof ui.ls === 'string') lines.push('Lua: ' + ui.ls);
+    block.textContent = lines.join(' · ');
+    block.style.display = '';
+    renderUiControls(ui.c);
   }
 
   async function fetchJson(url, options) {
@@ -1232,6 +1358,32 @@
     return events;
   }
 
+  function parseRuntimePair(text) {
+    const match = RUNTIME_PAIR_PATTERN.exec(text);
+    if (!match) return null;
+    const isBegin = match[4] === 'B';
+    if ((isBegin && match[8] !== 'FF') ||
+        (!isBegin && !/^(?:00|01|02|03|04)$/.test(match[8])) ||
+        match[1] === '00000000' || match[3] === '00000000' ||
+        (match[6] !== 'FF' && match[6] === '00') ||
+        match[7] === '00' || Number.parseInt(match[7], 16) > 23) {
+      return null;
+    }
+    return {
+      sessionId: match[1],
+      bootId: match[2],
+      pairId: match[3],
+      event: isBegin ? 'begin' : 'end',
+      mode: match[5],
+      row: match[6],
+      reason: match[7],
+      outcome: match[8],
+      monotonicMs: match[9],
+      utc: match[10] || null,
+      text: match[11]
+    };
+  }
+
   function validateHeaterTelemetry(data) {
     if ((data.heaterAlarmLatched !== 0 && data.heaterAlarmLatched !== 1) ||
         typeof data.heaterAlarmReason !== 'string' ||
@@ -1258,8 +1410,8 @@
       return {
         message: addMessage,
         log: function (text, data) { console.log(data.crnt_tm + '; ' + text); },
-        connection: function (hasError) {
-          if (hasError) setConnectionError();
+        connection: function (hasError, staleTelemetry) {
+          if (hasError) setConnectionError(staleTelemetry);
           else setConnectionOk();
         }
       };
@@ -1292,12 +1444,17 @@
           signal: ctrl.signal
         });
         if (resp.status === 503) {
-          // Состояние контроллера временно занято (мьютекс/снапшот) - это не обрыв связи,
-          // сервер жив и отвечает. Считаем такие ответы отдельно и не эскалируем как сбой.
+          // Состояние контроллера временно занято (мьютекс/снапшот) - это не обрыв
+          // связи само по себе. Но серия 503 не обновляет показания: когда возраст
+          // последнего валидного /ajax превышает обычный порог опросов, используем
+          // уже существующее состояние устаревших данных.
           runtimeBusyCounter += 1;
           if (runtimeBusyCounter >= offlineThreshold) {
             runtimeBusyCounter = 0;
             activeSinks.message(RUNTIME_BUSY_WARNING, 1);
+          }
+          if (Date.now() - lastValidTelemetryAt >= offlineThreshold * 2000) {
+            activeSinks.connection(true, true);
           }
           return false;
         }
@@ -1316,6 +1473,7 @@
       try {
         events = validateRuntimeEvents(data);
         const heaterTelemetry = validateHeaterTelemetry(data);
+        lastValidTelemetryAt = Date.now();
         activeSinks.connection(false);
         renderFn(data);
         notifyTelemetryListeners(data);
@@ -1344,6 +1502,7 @@
               // снят, программа восстанавливается из снимка). Прошивка сама о старте
               // не сообщает, поэтому единственный признак - именно откат счётчика.
               activeSinks.message(deviceRestarted ? MESSAGE_REBOOT_WARNING : MESSAGE_GAP_WARNING, 1);
+              notifyRuntimePairListeners(null, deviceRestarted ? 'reboot' : 'gap');
             }
             if (event.kind === 'message') {
               activeSinks.message(event.text, event.level);
@@ -1352,6 +1511,10 @@
                 event.text,
                 Object.assign({}, data, { messageSequence: event.sequence })
               );
+            }
+            if (event.kind === 'message') {
+              const pair = parseRuntimePair(event.text);
+              if (pair) notifyRuntimePairListeners(pair, null);
             }
             messageCursor = event.sequence;
           }
@@ -1590,7 +1753,8 @@
   }
 
   function validateUiBootstrap(data) {
-    if (!hasExactKeys(data, UI_BOOTSTRAP_KEYS)) return false;
+    const expectedKeys = data.timeZone === undefined ? UI_BOOTSTRAP_KEYS : UI_BOOTSTRAP_KEYS.concat('timeZone');
+    if (!hasExactKeys(data, expectedKeys)) return false;
     for (let index = 0; index < UI_BOOTSTRAP_STRING_KEYS.length; index++) {
       if (typeof data[UI_BOOTSTRAP_STRING_KEYS[index]] !== 'string') return false;
     }
@@ -1601,6 +1765,7 @@
     for (let index = 0; index < UI_BOOTSTRAP_INTEGER_KEYS.length; index++) {
       if (!Number.isSafeInteger(data[UI_BOOTSTRAP_INTEGER_KEYS[index]])) return false;
     }
+    if (data.timeZone !== undefined && (!Number.isSafeInteger(data.timeZone) || data.timeZone < 0 || data.timeZone > 23)) return false;
     for (let index = 0; index < UI_BOOTSTRAP_NUMBER_KEYS.length; index++) {
       if (!Number.isFinite(data[UI_BOOTSTRAP_NUMBER_KEYS[index]])) return false;
     }
@@ -1835,6 +2000,7 @@
       showRequestError(err);
       return { ok: false, err: err, program: '', httpStatus: 0, queued: false };
     }
+    const submittedProgramRevision = programRevision;
     programMutationPending = true;
     try {
       assertOnline();
@@ -1849,7 +2015,7 @@
       result.queued = false;
       result.state = 'succeeded';
       clearRequestError();
-      markProgramSaved();
+      markProgramSaved(submittedProgramRevision);
       return result;
     } catch (err) {
       const message = String(err && err.message ? err.message : err);
@@ -1949,6 +2115,7 @@
   // data-jar="i" (i-я из трёх банок окна вокруг текущей ёмкости, см. jarWindow).
   // Ключи - поля /ajax плюс производные с подчёркиванием (см. deriveView).
   const telemetryListeners = [];
+  const runtimePairListeners = [];
 
   function onTelemetry(fn) {
     if (typeof fn === 'function') telemetryListeners.push(fn);
@@ -1957,6 +2124,16 @@
   function notifyTelemetryListeners(data) {
     telemetryListeners.forEach(function (fn) {
       try { fn(data); } catch (err) { console.error('telemetry listener', err); }
+    });
+  }
+
+  function onRuntimePair(fn) {
+    if (typeof fn === 'function') runtimePairListeners.push(fn);
+  }
+
+  function notifyRuntimePairListeners(pair, discontinuity) {
+    runtimePairListeners.forEach(function (fn) {
+      try { fn(pair, discontinuity); } catch (err) { console.error('runtime pair listener', err); }
     });
   }
 
@@ -2101,7 +2278,8 @@
     v._cubePressure = num(data.prvl);
     v._pressureLabel = v._cubePressure !== null ? 'В кубе' : 'На старте';
     v._pressureAlt = v._cubePressure !== null ? v._cubePressure : num(data.start_pressure);
-    v._alcCube = num(data.alc);
+    v._alcCube = typeof data.alc === 'number' && Number.isFinite(data.alc) && data.alc >= 0
+      ? data.alc : null;
     const ds = Number(data.DetectorStatus);
     const detIdle = Number(data.DetectorIdle);
     v._detectorText = !data.useDetector ? 'выкл'
@@ -2109,9 +2287,11 @@
       : detIdle === 5 ? '⏳ ждёт пар'
       : detIdle === 3 || detIdle === 4 || detIdle === 6 ? '⏳ ожидание'
       : detIdle === 7 ? '⏸ пауза'
+      : detIdle === 8 ? 'наблюдение'
       : detIdle === 1 ? '—'
       : ds === 0 ? '● стабильно' : ds === 1 ? (data.useautospeed ? '▲ снижаю скорость' : '▲ рост') : ds === 2 ? '■ проскок' : '—';
-    v._alcSteam = num(data.stm_alc);
+    v._alcSteam = typeof data.stm_alc === 'number' && Number.isFinite(data.stm_alc) && data.stm_alc >= 0
+      ? data.stm_alc : null;
 
     const lines = programLines();
     const n = Number(data.ProgramNum) || 0;
@@ -2422,15 +2602,21 @@
   // в шапке ведут на другие страницы, и правки терялись молча. Ссылки спрашивают
   // confirmLeave() - как confirmLeaveIfDirty() в setup.htm.
   let programDirty = false;
+  let programRevision = 0;
+  function markProgramDirty() {
+    programDirty = true;
+    programRevision += 1;
+  }
+
   function trackProgramDirty() {
     const prog = byId('Prog');
     if (!prog) return;
-    prog.addEventListener('input', function () { programDirty = true; });
-    prog.addEventListener('change', function () { programDirty = true; });
+    prog.addEventListener('input', markProgramDirty);
+    prog.addEventListener('change', markProgramDirty);
   }
 
-  function markProgramSaved() {
-    programDirty = false;
+  function markProgramSaved(revision) {
+    if (revision === undefined || revision === programRevision) programDirty = false;
   }
 
   function confirmLeave() {
@@ -2503,16 +2689,20 @@
     closeLuaProgramModal: closeLuaProgramModal,
     openLuaProgramModal: openLuaProgramModal,
     openTab: openTab,
+    onRuntimePair: onRuntimePair,
     onTelemetry: onTelemetry,
     pollAjax: pollAjax,
     renderScheme: renderScheme,
     postProgram: postProgram,
     readOperationAcceptance: readOperationAcceptance,
     renderI2cPumpStatus: renderI2cPumpStatus,
+    renderUiDetails: renderUiDetails,
+    uiWaitReasonName: uiWaitReasonName,
     renderTelemetryCommon: renderTelemetryCommon,
     removeLastMessage: removeLastMessage,
     removeMessage: removeMessage,
     markProgramSaved: markProgramSaved,
+    markProgramDirty: markProgramDirty,
     confirmLeave: confirmLeave,
     showCalculationNavForMode: showCalculationNavForMode,
     reportUiError: reportUiError,

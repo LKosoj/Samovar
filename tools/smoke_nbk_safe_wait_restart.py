@@ -46,6 +46,9 @@ enum ActuatorCommandResult : uint8_t {
   ACTUATOR_COMMAND_FAILED,
 };
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum UiWaitReason { UI_WAIT_NBK_SAFE = 12 };
+enum RuntimePairOutcome { RUNTIME_PAIR_USER_STOP = 2 };
+void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
 
 class String {
  public:

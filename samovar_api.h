@@ -47,6 +47,7 @@ enum ProfileLoadResult : uint8_t {
   PROFILE_LOAD_PAYLOAD_ENCODING,
   PROFILE_LOAD_LEGACY_INVALID,
   PROFILE_LOAD_EEPROM_OPEN_FAILED,
+  PROFILE_LOAD_MIGRATION_PERSIST_FAILED,
 };
 
 enum FsInitResult : uint8_t {
@@ -66,6 +67,14 @@ enum PumpCalibrationResult : uint8_t {
 void writeString(String Str, uint8_t num);
 void WriteConsoleLog(String StringLogMsg);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+#include "runtime_pair_events.h"
+void runtime_pair_begin(UiWaitReason reason, const char* tail, MESSAGE_TYPE level);
+void runtime_pair_end(UiWaitReason reason, RuntimePairOutcome outcome,
+                      const char* tail, MESSAGE_TYPE level,
+                      uint32_t expectedPairId = 0);
+void runtime_pair_close_mode(SAMOVAR_MODE mode, RuntimePairOutcome outcome,
+                             const char* tail, MESSAGE_TYPE level);
+void ui_note_withdrawal_control_source(uint8_t source);
 void stopService(void);
 void startService(void);
 void send_ajax_json(AsyncWebServerRequest *request);
@@ -76,7 +85,7 @@ void configModeCallback(AsyncWiFiManager *myWiFiManager);
 
 // NVS/profile and filesystem
 void set_default_setup_profile(SetupEEPROM& candidate);
-ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate);
+ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persistResult);
 ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate);
 PersistResult save_profile_nvs(const SetupEEPROM& candidate);
 const char* persist_result_code(PersistResult result);
@@ -207,6 +216,7 @@ void check_power_error();
 void get_current_power();
 float get_steam_alcohol(float t);
 float get_alcohol(float t);
+inline bool alcohol_estimate_valid(float value);
 void set_boiling();
 bool check_boiling();
 inline bool self_test_active();
@@ -216,8 +226,11 @@ inline void stop_self_test(void);
 inline void request_emergency_stop(const String& reason);
 inline void perform_emergency_stop();
 inline void retry_i2c_pump_stop_if_unconfirmed();
+inline void cancel_pending_emergency_actions();
+inline void tick_pending_emergency_actions();
 #ifdef USE_LUA
 inline bool request_lua_mode_stop();
+inline bool request_lua_emergency_stop();
 inline bool lua_mode_owner_idle();
 #endif
 bool process_sensor_failed(const char* modeName, const char* sensorName);
@@ -331,7 +344,8 @@ void get_task_stack_usage();
 void init_pump_pwm(uint8_t pin, int freq);
 ActuatorCommandResult set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true);
+void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true,
+                    UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 
 // I2C stepper
 inline void detect_i2c_steppers();

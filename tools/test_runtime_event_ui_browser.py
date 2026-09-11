@@ -28,6 +28,7 @@ CASE_NAMES = (
     "reboot_collision",
     "long_log",
     "in_flight",
+    "telemetry_freshness",
     "mode_index",
     "mode_beer",
     "mode_distiller",
@@ -147,7 +148,8 @@ BROWSER_TEST = r'''async page => {
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0,
+    sessionId: 101
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -763,6 +765,47 @@ BROWSER_TEST = r'''async page => {
       'one request delivered more than one event: ' + JSON.stringify(delivered));
   }
 
+  async function testTelemetryFreshness() {
+    const current = await newPage('telemetry-freshness', [
+      { type: 'error', text: 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)' },
+      { type: 'error', text: 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)' }
+    ]);
+    const plans = [
+      { status: 200, body: withEvent({}) },
+      { status: 503, body: { error: 'busy' } },
+      { status: 503, body: { error: 'busy' } },
+      { status: 200, body: withEvent({}) }
+    ];
+    await routeTelemetry(current, async (route, cursor, index) => {
+      const plan = plans[index];
+      expect(!!plan, 'freshness response plan exhausted at ' + index);
+      await fulfillJson(route, plan.body, plan.status);
+    });
+    await openHarness(current);
+    const freshness = await current.evaluate(async () => {
+      const realNow = Date.now;
+      let now = 1000;
+      Date.now = () => now;
+      try {
+        SamovarApp.init({ threshold: 3 });
+        await SamovarApp.pollAjax(function () {});
+        now = 6999;
+        await SamovarApp.pollAjax(function () {});
+        const beforeAge = document.documentElement.classList.contains('connection-lost');
+        now = 7000;
+        await SamovarApp.pollAjax(function () {});
+        await new Promise(resolve => setTimeout(resolve, 120));
+        const stale = document.documentElement.classList.contains('connection-lost');
+        await SamovarApp.pollAjax(function () {});
+        return { beforeAge, stale, restored: !document.documentElement.classList.contains('connection-lost') };
+      } finally {
+        Date.now = realNow;
+      }
+    });
+    expect(!freshness.beforeAge && freshness.stale && freshness.restored,
+      '503 freshness must stale telemetry then restore on 200: ' + JSON.stringify(freshness));
+  }
+
   async function installModeRoutes(current, messageText, logText) {
     const state = await routeTelemetry(current, async (route, cursor) => {
       let event = {};
@@ -986,6 +1029,7 @@ BROWSER_TEST = r'''async page => {
     reboot_collision: testRebootCollision,
     long_log: testLongConsoleEvent,
     in_flight: testSingleInFlight,
+    telemetry_freshness: testTelemetryFreshness,
     mode_index: function () { return testModePage('index.htm'); },
     mode_beer: function () { return testModePage('beer.htm'); },
     mode_distiller: function () { return testModePage('distiller.htm'); },
@@ -1023,6 +1067,7 @@ CASE_BROWSER_FUNCTIONS = {
     "reboot_collision": ("openHarness", "testRebootCollision"),
     "long_log": ("openHarness", "pollWithSinks", "testLongConsoleEvent"),
     "in_flight": ("openHarness", "testSingleInFlight"),
+    "telemetry_freshness": ("openHarness", "testTelemetryFreshness"),
     "mode_index": ("installModeRoutes", "testModePage"),
     "mode_beer": ("installModeRoutes", "testModePage"),
     "mode_distiller": ("installModeRoutes", "testModePage"),
@@ -1043,6 +1088,7 @@ CASE_BROWSER_CALLS = {
     "reboot_collision": "await testRebootCollision();",
     "long_log": "await testLongConsoleEvent();",
     "in_flight": "await testSingleInFlight();",
+    "telemetry_freshness": "await testTelemetryFreshness();",
     "mode_index": "await testModePage('index.htm');",
     "mode_beer": "await testModePage('beer.htm');",
     "mode_distiller": "await testModePage('distiller.htm');",
@@ -1113,7 +1159,7 @@ def run_cli_capture(
         return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
 
     if result.returncode != 0 or has_marker("### Error"):
-        raise RuntimeError(f"playwright-cli {command} failed")
+        raise RuntimeError(f"playwright-cli {command} failed\n{result.stdout}")
     if has_marker("### Modal state"):
         raise RuntimeError(
             f"playwright-cli {command} failed: '### Modal state' marker in output "
@@ -1242,6 +1288,37 @@ def main() -> int:
                     raise RuntimeError(f"{case}: {error}") from error
                 finally:
                     run_cli(cli, session, ["close"], temp, 30, check=False)
+
+            source = (site / "app.js").read_text(encoding="utf-8")
+            mutated = source.replace(
+                "if (resp.status === 503) {\n",
+                "if (resp.status === 503) {\n          lastValidTelemetryAt = Date.now();\n",
+                1,
+            )
+            if mutated == source:
+                raise RuntimeError("F11 mutation anchor not found")
+            (site / "app.js").write_text(mutated, encoding="utf-8")
+            mutation_session = session_prefix + "-telemetry-freshness-mutation"
+            mutation_error = ""
+            try:
+                run_cli(cli, mutation_session, open_args, temp, 30)
+                mutation_code = (
+                    "async page => {"
+                    f"const response=await page.request.get({case_urls['telemetry_freshness']});"
+                    "if(!response.ok())throw new Error('runtime case fetch failed: '+response.status());"
+                    "const source=await response.text();"
+                    "const test=eval(source);"
+                    "return await test(page);"
+                    "}"
+                )
+                run_cli_capture(cli, mutation_session, ["run-code", mutation_code], temp, 90)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                mutation_error = str(error)
+            finally:
+                run_cli(cli, mutation_session, ["close"], temp, 30, check=False)
+            mutation_error = mutation_error.split("### Ran Playwright code", 1)[0]
+            if "503 freshness must stale telemetry then restore on 200" not in mutation_error:
+                raise RuntimeError("F11 mutation did not fail with the expected freshness assertion")
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
             primary_error = str(error)
         finally:

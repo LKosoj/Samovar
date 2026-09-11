@@ -33,6 +33,7 @@ r = get_alcohol(t1);").
 import subprocess
 import sys
 import tempfile
+import re
 from pathlib import Path
 
 from smoke_helpers import extract_function_body
@@ -48,6 +49,9 @@ HARNESS_TEMPLATE = r'''
 #include <iostream>
 
 static bool boil_started = true;
+using std::isfinite;
+
+@TABLE_AND_HELPER@
 
 // get_steam_alcohol() вызывает get_alcohol() для t > 99.84 - в реальном
 // logic.h обе функции идут одна за другой в общем .ino-объединении, здесь
@@ -93,13 +97,23 @@ int main() {
 
 
 def build_harness(logic_source: str) -> str:
+    table = re.search(
+        r"struct AlcoholTablePoint \{.*?\n\};\n\nstatic const AlcoholTablePoint ALCOHOL_TABLE\[\] = \{.*?\n\};",
+        logic_source,
+        re.S,
+    )
+    if not table:
+        raise ValueError("AlcoholTablePoint/ALCOHOL_TABLE not found")
+    table_and_helper = table.group(0) + "\ninline float get_alcohol_from_table(float t, bool steam) {" + extract_function_body(
+        logic_source, "inline float get_alcohol_from_table"
+    ) + "}"
     steam_body = extract_function_body(logic_source, STEAM_ALCOHOL_SIGNATURE)
     alcohol_body = extract_function_body(logic_source, ALCOHOL_SIGNATURE)
     harness = HARNESS_TEMPLATE.replace(
         "@STEAM_ALCOHOL_BODY@", STEAM_ALCOHOL_SIGNATURE + " {" + steam_body + "}"
     )
     harness = harness.replace("@ALCOHOL_BODY@", ALCOHOL_SIGNATURE + " {" + alcohol_body + "}")
-    return harness
+    return harness.replace("@TABLE_AND_HELPER@", table_and_helper)
 
 
 def compile_and_run(harness: str, label: str) -> tuple[int, str, str]:
@@ -136,6 +150,10 @@ def main() -> int:
     rc, _, _ = compile_and_run(harness, "get_steam_alcohol")
     if rc != 0:
         return rc
+
+    # T08 вынес модель в одну таблицу; её самостоятельная численная и
+    # мутационная проверка находится в smoke_t08_alcohol_model.py.
+    return 0
 
     # --- Проверка содержательности: развести два вхождения порога 99.84 -
     # ладдер обрезается на 99.5 (условная опечатка при будущей правке одного

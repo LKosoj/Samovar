@@ -505,6 +505,7 @@ nvs_harness = (
           bool writerBegin;
           size_t writeResult;
           esp_err_t openError;
+          int failNvsOpenCall;
           esp_err_t sizeError;
           esp_err_t readError;
           size_t sizeReported;
@@ -544,6 +545,7 @@ nvs_harness = (
           fake.writerBegin = true;
           fake.writeResult = std::numeric_limits<size_t>::max();
           fake.openError = ESP_OK;
+          fake.failNvsOpenCall = 0;
           fake.sizeError = ESP_OK;
           fake.readError = ESP_OK;
           fake.sizeReported = std::numeric_limits<size_t>::max();
@@ -722,6 +724,7 @@ nvs_harness = (
             }
             return ESP_ERR_NVS_NOT_FOUND;
           }
+          if (fake.failNvsOpenCall == fake.opens) return ESP_FAIL;
           if (fake.openError != ESP_OK) return fake.openError;
           *handle = 1;
           return ESP_OK;
@@ -948,7 +951,7 @@ for token, signature in [
     ),
     (
         "load_profile_nvs(",
-        "ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate)",
+        "ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persistResult)",
     ),
     (
         "load_legacy_profile_namespace(",
@@ -1263,10 +1266,12 @@ nvs_harness += (
 
         static void expect_load_failure(ProfileLoadResult expected) {
           SetupEEPROM destination;
+          PersistResult persistResult = PERSIST_OK;
           memset(&destination, 0xA5, sizeof(destination));
           uint8_t before[sizeof(destination)];
           memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == expected);
+          assert(load_profile_nvs(destination, persistResult) == expected);
+          assert(persistResult == PERSIST_OK);
           assert(memcmp(before, &destination, sizeof(before)) == 0);
         }
 
@@ -1346,6 +1351,7 @@ nvs_harness += (
 
         static void test_load_fault_matrix() {
           const SetupEEPROM expected = sample_setup();
+          PersistResult persistResult = PERSIST_OK;
 
           reset_fake();
           fake.openError = ESP_ERR_NVS_NOT_FOUND;
@@ -1399,7 +1405,8 @@ nvs_harness += (
           seed_current_blob(expected);
           SetupEEPROM loaded;
           memset(&loaded, 0xA5, sizeof(loaded));
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.flag == expected.flag);
           assert(loaded.Kp == expected.Kp);
           assert(loaded.Mode == expected.Mode);
@@ -1417,13 +1424,15 @@ nvs_harness += (
 
         static void test_v1_v2_v3_v4_v5_v6_profiles_migrate_after_verified_v7_write() {
           SetupEEPROM legacy = sample_setup();
+          PersistResult persistResult = PERSIST_OK;
           legacy.Mode = SAMOVAR_LUA_MODE;
           legacy.SuvidHoldMinutes = 999;
 
           reset_fake();
           fake.blob = encode_v1_blob(legacy);
           SetupEEPROM loaded{};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp);
           assert(loaded.SuvidTemp == legacy.SuvidTemp);
           assert(loaded.SuvidHoldMinutes == 0);
@@ -1447,15 +1456,16 @@ nvs_harness += (
           fake.writerBegin = false;
           SetupEEPROM destination;
           memset(&destination, 0xA5, sizeof(destination));
-          uint8_t before[sizeof(destination)];
-          memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
-          assert(memcmp(before, &destination, sizeof(before)) == 0);
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_OPEN_FAILED);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
 
           reset_fake();
           fake.blob = encode_v2_blob(legacy);
           loaded = {};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.SuvidHoldMinutes == legacy.SuvidHoldMinutes);
           assert(loaded.BeerBrewOrder == legacy.BeerBrewOrder);
           assert(loaded.MpxZeroAdc == 36.7f);
@@ -1470,16 +1480,18 @@ nvs_harness += (
 
           reset_fake();
           fake.blob = encode_v2_blob(legacy);
-          fake.writerBegin = false;
+          fake.writeResult = 0;
           memset(&destination, 0x5A, sizeof(destination));
-          memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
-          assert(memcmp(before, &destination, sizeof(before)) == 0);
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_WRITE_FAILED);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
 
           reset_fake();
           fake.blob = encode_v3_blob(legacy);
           loaded = {};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.MpxZeroAdc == legacy.MpxZeroAdc);
           assert(loaded.NbkUseStreamServo == legacy.NbkUseStreamServo);
           assert(loaded.CheesePhSlope == 1.0f);
@@ -1489,11 +1501,11 @@ nvs_harness += (
 
           reset_fake();
           fake.blob = encode_v3_blob(legacy);
-          fake.writerBegin = false;
+          fake.writeResult = ProfileCodec::BLOB_SIZE - 1;
           memset(&destination, 0x3C, sizeof(destination));
-          memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
-          assert(memcmp(before, &destination, sizeof(before)) == 0);
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_SHORT_WRITE);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
 
           // V4/V5 содержат pH-сглаживание и удалённые два uint16; V6 — только
           // pH-сглаживание. После миграции они сознательно отсутствуют в V7, но хвост старого payload обязан быть
@@ -1501,7 +1513,9 @@ nvs_harness += (
           reset_fake();
           fake.blob = encode_v4_blob(legacy);
           loaded = {};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp);
           assert(loaded.SuvidTemp == legacy.SuvidTemp);
           assert(loaded.MpxZeroAdc == legacy.MpxZeroAdc);
@@ -1514,7 +1528,9 @@ nvs_harness += (
           reset_fake();
           fake.blob = encode_v5_blob(legacy, 0x33, 0x1234, 0xABCD);
           loaded = {};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp);
           assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
           assert(fake.writes == 1);
@@ -1523,41 +1539,45 @@ nvs_harness += (
 
           reset_fake();
           fake.blob = encode_v5_blob(legacy, 0x77, 0x1234, 0xABCD);
-          fake.writerBegin = false;
+          fake.mutation = MUTATE_VALID_DIFFERENT;
           memset(&destination, 0xD4, sizeof(destination));
-          memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
-          assert(memcmp(before, &destination, sizeof(before)) == 0);
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_READBACK_MISMATCH);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
 
           reset_fake();
           fake.blob = encode_v6_blob(legacy, 0x00);
           loaded = {};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
           assert(fake.writes == 1 && encode_blob(loaded) == fake.blob);
 
           reset_fake();
           fake.blob = encode_v6_blob(legacy, 0xFF);
           loaded = {};
-          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
           assert(loaded.CheesePhOffset == legacy.CheesePhOffset);
           assert(fake.writes == 1 && encode_blob(loaded) == fake.blob);
 
           reset_fake();
           fake.blob = encode_v6_blob(legacy, 0x55);
-          fake.writerBegin = false;
+          fake.failNvsOpenCall = 2;
           memset(&destination, 0xB4, sizeof(destination));
-          memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
-          assert(memcmp(before, &destination, sizeof(before)) == 0);
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_REOPEN_FAILED);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
 
           reset_fake();
           fake.blob = encode_v4_blob(legacy);
-          fake.writerBegin = false;
+          fake.mutation = MUTATE_CRC;
           memset(&destination, 0xC3, sizeof(destination));
-          memcpy(before, &destination, sizeof(before));
-          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
-          assert(memcmp(before, &destination, sizeof(before)) == 0);
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_READBACK_CRC);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
         }
 
         static void mark_field(bool* occupied, size_t offset, size_t size) {
@@ -1862,6 +1882,32 @@ nvs_harness += (
           assert(fake.writes == 0 && fake.initMarkers == 1);
           assert(SamSetup.Kp == current.Kp);
           // Профиль прочитан штатно, миграции не было - стирать нечего.
+          assert(fake.legacyCleanupCalls == 0);
+
+          // Старый V1 прочитан, но открыть writer не удалось: предупреждаем именно
+          // об обновлении формата и продолжаем на проверенном candidate, не на
+          // дефолтах. Legacy-очистка к этой ветке не относится и не вызывается.
+          reset_fake(FAKE_MIGRATION);
+          add_namespace("sam_cfg");
+          fake.blob = encode_v1_blob(current);
+          fake.writerBegin = false;
+          set_boot_sentinel();
+          assert(boot_degraded());
+          assert(fake.degradedStage == "profile upgrade" && fake.initMarkers == 1);
+          assert(SamSetup.Kp == current.Kp && SamSetup.Mode == current.Mode);
+          assert(fake.legacyCleanupCalls == 0);
+
+          // V6 проходит ту же ветку при другой истинной причине — putBytes вернул
+          // ноль. Это не ошибка чтения старого blob и не повод подменять настройки.
+          reset_fake(FAKE_MIGRATION);
+          add_namespace("sam_cfg");
+          fake.blob = encode_v6_blob(current, 0x55);
+          fake.writeResult = 0;
+          set_boot_sentinel();
+          assert(boot_degraded());
+          assert(fake.degradedStage == "profile upgrade" && fake.initMarkers == 1);
+          assert(fake.bootDegradedReason == "profile upgrade: write_failed");
+          assert(SamSetup.Kp == current.Kp && SamSetup.Mode == current.Mode);
           assert(fake.legacyCleanupCalls == 0);
 
           // Битый канонический блоб: "load" деградация, но грузимся на безопасных
@@ -2953,6 +2999,13 @@ if load_body:
         "SetupEEPROM decoded" not in load_body,
         "profile load must decode V1/V2/V3/V4/V5/V6 and confirm their V7 rewrite with fixed buffers",
     )
+    require(
+        load_body.startswith("\n  persistResult = PERSIST_OK;") and
+        load_body.count("candidate = migrated;") == 6 and
+        load_body.count("persistResult = save_profile_nvs(migrated);") == 6 and
+        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 6,
+        "legacy V1-V6 load must retain its decoded candidate and report the exact V7 persist failure",
+    )
 
 if migrate_body:
     ordered(
@@ -3168,7 +3221,8 @@ for token in [
     "enum PersistResult : uint8_t",
     "enum ProfileLoadResult : uint8_t",
     "PersistResult save_profile_nvs(const SetupEEPROM& candidate);",
-    "ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate);",
+    "ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persistResult);",
+    "PROFILE_LOAD_MIGRATION_PERSIST_FAILED",
     "ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate);",
     "void set_default_setup_profile(SetupEEPROM& candidate);",
 ]:
@@ -3215,7 +3269,9 @@ if setup_body:
         setup_body,
         [
             "SetupEEPROM startupProfile{}",
-            "load_profile_nvs(startupProfile)",
+            "load_profile_nvs(startupProfile, profilePersistResult)",
+            "PROFILE_LOAD_MIGRATION_PERSIST_FAILED",
+            "report_degraded_boot(\"profile upgrade\", persist_result_code(profilePersistResult))",
             "migrate_from_eeprom(startupProfile)",
             "set_default_setup_profile(startupProfile)",
             "save_profile_nvs(startupProfile)",

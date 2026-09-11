@@ -62,9 +62,18 @@ static int openValveCalls = 0;
 static const int POWER_SPEED_MODE = 1;
 static const int POWER_WORK_MODE = 2;
 static int powerMode = POWER_SPEED_MODE;
+enum UiWaitReason { UI_WAIT_BK_WORK_POWER = 10 };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED = 0 };
+enum MESSAGE_TYPE { NOTIFY_MSG = 2 };
+static int pairBeginCalls = 0;
+static int pairEndCalls = 0;
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) { pairBeginCalls++; }
+static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) { pairEndCalls++; }
 // [A1 п.1] Глобальная переменная BK.h - extract_function_body её не извлекает
 // (она вне тела функций), харнесс заводит свою копию сам.
 static bool bk_work_power_pending = false;
+// T08: реальная защёлка предупреждения сбрасывается при переходе БК к работе.
+static bool distAlcoholEstimateWarningSent = false;
 static const float CHANGE_POWER_MODE_STEAM_TEMP = 39.0f;
 static const float DELTA_T_CLOSE_VALVE = 2.0f;
 static const int MODE_HEATING_START_SUCCEEDED = 1;
@@ -174,6 +183,7 @@ int main() {
   TankSensor.avgTemp = 25.0f;
   bk_proc();
   check(PowerOn, "cold start должен включить нагрев через общий start helper");
+  check(pairBeginCalls == 1, "старт БК должен открыть одну реальную пару ожидания мощности");
   check(finishCalls == 0, "cold start не должен завершить BK");
 
   checkBoilingCalls = 0;
@@ -185,12 +195,17 @@ int main() {
   check(workModeCalls == 0, "до кипения рабочая мощность не включается");
 
   boilingFixture = true;
+  distAlcoholEstimateWarningSent = true;
   checkBoilingCalls = 0;
   check_alarm_bk();
   check(checkBoilingCalls == 1,
         "boiling tick не должен опрашивать детектор дважды");
   check(powerMode == POWER_WORK_MODE && workModeCalls == 1,
         "подтверждение кипения должно включить рабочий режим");
+  check(pairEndCalls == 1,
+        "применение рабочей мощности должно закрыть пару только после снятия pending");
+  check(!distAlcoholEstimateWarningSent,
+        "новый BK-эпизод должен сбросить защёлку предупреждения о спиртуозности");
   check(boiling_evidence == BOILING_EVIDENCE_TANK_AND_WATER,
         "источник подтверждения должен сохраниться");
 
@@ -369,6 +384,32 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+
+        warning_reset_body = apply_work_power_body.replace(
+            "distAlcoholEstimateWarningSent = false;", "(void)0;", 1
+        )
+        if warning_reset_body == apply_work_power_body:
+            print("FAIL: не удалось построить мутацию reset предупреждения BK", file=sys.stderr)
+            return 1
+        warning_reset_mutant = harness.replace(
+            apply_work_power_body, warning_reset_body, 1
+        )
+        if warning_reset_mutant == harness:
+            print("FAIL: не удалось внедрить мутацию reset предупреждения BK", file=sys.stderr)
+            return 1
+        warning_reset_result = compile_and_run(
+            "bk_route_warning_reset_mutant", warning_reset_mutant
+        )
+        warning_reset_output = warning_reset_result.stdout + warning_reset_result.stderr
+        if warning_reset_result.returncode == 0 or \
+                "FAIL: новый BK-эпизод должен сбросить защёлку предупреждения о спиртуозности" not in warning_reset_output:
+            print(
+                "FAIL: мутация reset предупреждения BK не дала содержательного assert:\n"
+                + warning_reset_output,
+                file=sys.stderr,
+            )
+            return 1
+        print("BK warning-reset mutation rejected by the episode-reset assert")
         return 0
 
 

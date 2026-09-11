@@ -207,11 +207,19 @@ void withdrawal(void) {
     uint8_t nextProgram = PROGRAM_END;
     const LuaSequenceStageResult result = lua_sequence_stage_tick(
         millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
-    if (result == LUA_SEQUENCE_STAGE_ADVANCE) run_program(nextProgram);
+    if (result == LUA_SEQUENCE_STAGE_ADVANCE) {
+      runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_ROW_CHANGE,
+                       "Lua-операция завершена", NOTIFY_MSG);
+      run_program(nextProgram);
+    }
     else if (result == LUA_SEQUENCE_STAGE_TIMEOUT) {
+      runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_ERROR,
+                       "Lua-операция не завершена", ALARM_MSG);
       SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
       run_program(PROGRAM_END);
     } else if (result == LUA_SEQUENCE_STAGE_FAILED) {
+      runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_ERROR,
+                       "Lua-операция завершилась с ошибкой", ALARM_MSG);
       SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
       run_program(PROGRAM_END);
     }
@@ -315,6 +323,9 @@ void withdrawal(void) {
           // Сбрасываем детектор при постановке на паузу - после снятия с паузы сохраненная скорость станет новой базовой
           reset_impurity_detector();
           pause_withdrawal(true);
+          if (PauseOn) runtime_pair_begin(
+              waitType == PROGRAM_WAIT_STEAM ? UI_WAIT_RECT_STEAM : UI_WAIT_RECT_PIPE,
+              "Автоматическая пауза отбора", WARNING_MSG);
           t_min = millis() + sensor.Delay * 1000;
           set_buzzer(true);
           SendMsg(String("Пауза по ") + sensorLabel, WARNING_MSG);
@@ -338,13 +349,16 @@ void withdrawal(void) {
       t_min = 0;
       program_Wait = false;
       pause_withdrawal(false);
+      if (!PauseOn) runtime_pair_end(
+          waitType == PROGRAM_WAIT_STEAM ? UI_WAIT_RECT_STEAM : UI_WAIT_RECT_PIPE,
+          RUNTIME_PAIR_RESUMED, "Отбор возобновлён", NOTIFY_MSG);
       // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
       // [П3-1] Базой становится CurrentBaseSpeedRate (через set_pump_speed с updateBase=true),
       // program[].Speed больше не перезаписываем - строка программы не портится.
       if (SamSetup.useautospeed && currentProgram < PROGRAM_MAX && CurrrentStepperSpeed > 0) {
         impurityDetector.correctionFactor = 1.0f;
         impurityDetector.lastCorrectionTime = millis();
-        set_pump_speed(CurrrentStepperSpeed, true);
+        set_pump_speed(CurrrentStepperSpeed, true, true, uiWithdrawalControlSource);
       }
     }
     return true;
@@ -363,6 +377,8 @@ void withdrawal(void) {
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
+    if (!PauseOn) runtime_pair_end(UI_WAIT_RECT_DETECTOR, RUNTIME_PAIR_RESUMED,
+                                   "Отбор возобновлён", NOTIFY_MSG);
     detector_on_auto_resume();
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -436,6 +452,9 @@ void pause_withdrawal(bool Pause) {
       rect_fail_second_i2c_pump("продолжение");
       return;
     }
+    runtime_pair_end(UI_WAIT_MANUAL_RECT, RUNTIME_PAIR_RESUMED,
+                     "Отбор возобновлён", NOTIFY_MSG);
+    rectManualPauseActive = false;
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
     stepper_safe_set_current(CurrrentStepps);
     stepper_safe_set_target(TargetStepps);
@@ -450,9 +469,15 @@ void pause_withdrawal(bool Pause) {
 // resume_from_pause(), чтобы три точки входа не расходились логикой.
 void enter_manual_pause() {
   pause_withdrawal(true);
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && PauseOn &&
+      !program_Wait && !program_Pause) {
+    rectManualPauseActive = true;
+    runtime_pair_begin(UI_WAIT_MANUAL_RECT, "Ручная пауза отбора", NOTIFY_MSG);
+  }
   if (Samovar_Mode == SAMOVAR_BEER_MODE && startval > SAMOVAR_STARTVAL_BEER_START) {
     if (!beerManualPause) {
       beerManualPause = true;
+      runtime_pair_begin(UI_WAIT_MANUAL_BEER, "Ручная пауза затирания", NOTIFY_MSG);
       const char type = current_program_type();
       if (type == 'A' || type == 'L') {
         SendMsg("Пауза будет применена на ближайшем шаге затирания.", NOTIFY_MSG);
@@ -478,12 +503,15 @@ void resume_from_pause() {
   detector_on_manual_resume();
   if (Samovar_Mode == SAMOVAR_BEER_MODE && beerManualPause) {
     beerManualPause = false;
+    runtime_pair_end(UI_WAIT_MANUAL_BEER, RUNTIME_PAIR_RESUMED,
+                     "Затирание продолжено", NOTIFY_MSG);
     SendMsg("Затирание продолжено.", NOTIFY_MSG);
   }
 }
 
 // Установить скорость насоса
-void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) {
+void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase,
+                    UiControlSource source) {
   if (pumpspeed < 1) return;
   if (!(SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED)) return;
 
@@ -505,6 +533,7 @@ void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) {
     program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
   if (cp)
     startService();
+  ui_note_withdrawal_control_source(source);
 }
 
 // Получить температуру с выбранного датчика для режима пива
@@ -849,6 +878,7 @@ static void reset_rect_program_pause_state(bool resumeStepper = true) {
   program_Pause = false;
   program_Wait = false;
   PauseOn = false;
+  rectManualPauseActive = false;
   if (!set_program_wait_type(PROGRAM_WAIT_NONE, pdMS_TO_TICKS(500))) {
     SendMsg("Не удалось сбросить тип автоматической паузы.", WARNING_MSG);
   }
@@ -916,6 +946,8 @@ void run_program(uint8_t num) {
       return;
     }
     // PROGRAM_END — sentinel завершения; его нельзя публиковать в ProgramNum.
+    runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_PROCESS_END,
+                            "Программа завершена", NOTIFY_MSG);
     reset_rect_program_pause_state();
     ProgramNum = 0;
     startval = SAMOVAR_STARTVAL_IDLE;
@@ -971,6 +1003,9 @@ void run_program(uint8_t num) {
       run_program(PROGRAM_END);
       return;
     }
+    runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_ROW_CHANGE,
+                            "Переход к следующей строке", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_LUA_KNOWN, "Lua-операция начата", NOTIFY_MSG);
     SendMsg("Программа: старт строки №" + String(num + 1) + ", Lua", NOTIFY_MSG);
 #else
     SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
@@ -1024,6 +1059,8 @@ void run_program(uint8_t num) {
     rect_fail_second_i2c_pump("старт строки " + String(num + 1));
     return;
   }
+  runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_ROW_CHANGE,
+                          "Переход к следующей строке", NOTIFY_MSG);
   if (program_type_one_of(program[num].WType, "HBTC")) {
     if (program_type_one_of(program[num].WType, "HT")) {
       SteamSensor.BodyTemp = 0;
@@ -1046,7 +1083,13 @@ void run_program(uint8_t num) {
                   " л/ч) превышает предел насоса, ограничена до " + (String)get_liquid_rate_by_step(CurrrentStepperSpeed) + " л/ч.",
               WARNING_MSG);
     }
-    CurrentBaseSpeedRate = program[num].Speed;  // [П3-1] новая база для детектора при старте строки
+    // Детектор управляет локальным отбором B/C, поэтому его базой служит достижимая
+    // команда локального привода, а не исходное значение строки. На головах работает
+    // второй I2C-насос, но детектор там только наблюдает и его скорость не корректирует.
+    const float appliedVolumePerHour = rectSecondPumpHeadsRow
+        ? program[num].Speed
+        : get_liquid_rate_by_step(CurrrentStepperSpeed);
+    CurrentBaseSpeedRate = appliedVolumePerHour;
     TargetStepps = rectSecondPumpHeadsRow
         ? rectSecondPumpTargetSteps
         : (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;
@@ -1059,7 +1102,8 @@ void run_program(uint8_t num) {
       stopService();
       stepper_safe_stop_reset();
     }
-    ActualVolumePerHour = program[num].Speed;
+    ActualVolumePerHour = appliedVolumePerHour;
+    ui_note_withdrawal_control_source(UI_CONTROL_SOURCE_PROGRAM);
     // [L-3] Семантика поля Temp строк B/C (согласно UI-документации data/index.htm):
     //   Temp == 0  → не используется (переход только по объёму)
     //   0 < Temp < 20 → дельта: переход на следующую строку, когда
@@ -1112,6 +1156,7 @@ void run_program(uint8_t num) {
     p_s += ", пауза " + (String)program[num].Volume + " сек.";
     t_min = millis() + program[num].Volume * 1000;
     program_Pause = true;
+    runtime_pair_begin(UI_WAIT_RECT_PROGRAM_PAUSE, "Программная пауза", NOTIFY_MSG);
     stopService();
     stepper_safe_set_max_speed(0);
     CurrrentStepperSpeed = 0;
@@ -1149,130 +1194,59 @@ void set_body_temp() {
 #include "valve_buzzer.h"
 #include "power_regulator.h"
 
+struct AlcoholTablePoint {
+  float temperature;
+  float tankAbv;
+  float steamAbv;
+};
+
+static const AlcoholTablePoint ALCOHOL_TABLE[] = {
+  // Lai 2014, водная ветвь при 101,3 кПа; x/y пересчитаны по OIML R22 в ABV20.
+  // Температура уже один раз приведена существующей поправкой давления датчика.
+  {100.000000f, 0.000000f, 0.000000f},
+  {96.120000f, 4.708548f, 35.359976f},
+  {92.460000f, 10.582202f, 55.280043f},
+  {86.640000f, 27.074223f, 73.718532f},
+  {83.510000f, 43.478043f, 80.332667f},
+  {81.730000f, 59.236769f, 84.072362f},
+  {80.740000f, 70.052927f, 85.542446f},
+  {79.910000f, 78.685755f, 87.494459f},
+  {79.580000f, 81.508834f, 88.534304f},
+  {78.890000f, 86.617200f, 90.610020f},
+  {78.520000f, 92.091596f, 93.352720f},
+  {78.490000f, 93.841006f, 94.566318f},
+  {78.250000f, 95.730555f, 95.959930f},
+  {78.170000f, 97.086581f, 97.086581f},
+};
+
+inline bool alcohol_estimate_valid(float value) {
+  return value >= 0.0f && value <= 100.0f;
+}
+
+inline float get_alcohol_from_table(float t, bool steam) {
+  if (!boil_started || !isfinite(t) ||
+      t < ALCOHOL_TABLE[13].temperature || t > ALCOHOL_TABLE[0].temperature) {
+    return -1.0f;
+  }
+  for (uint8_t i = 0; i < 13; i++) {
+    const AlcoholTablePoint& high = ALCOHOL_TABLE[i];
+    const AlcoholTablePoint& low = ALCOHOL_TABLE[i + 1];
+    if (t <= high.temperature && t >= low.temperature) {
+      const float highAbv = steam ? high.steamAbv : high.tankAbv;
+      const float lowAbv = steam ? low.steamAbv : low.tankAbv;
+      return lowAbv + (highAbv - lowAbv) *
+          (t - low.temperature) / (high.temperature - low.temperature);
+    }
+  }
+  return -1.0f;
+}
+
 float get_steam_alcohol(float t) {
-  if (!boil_started) return 100;
-
-  float r;
-  float t1;
-  float s;
-  float k;
-  uint8_t t0;
-
-  // [L-6/M-26] avgTemp уже нормализован к 760 мм рт. ст. в DS_getvalue()
-  // (sensorinit.h: correctT = (760 - bme_pressure) * 0.037, при UsePreccureCorrect).
-  // Повторный пересчёт по давлению прибавлял бы ту же поправку ещё раз
-  // со знаком, противоположным первой (~0.038*(P-760)), → коррекции почти гасились
-  // и спиртуозность считалась фактически по сырой температуре.
-  // Решение: t1 сохраняем для ветки t > 99.84 (где вызывается get_alcohol(t1) —
-  // он тоже исправлен), повторный пересчёт по давлению не делаем — t уже в нужной шкале.
-  t1 = t;
-
-  // [П9] Верхняя граница включительно: без неё t == 99.84 не попадает ни в эту
-  // ветку, ни в "t > 99.84" ниже - проваливается в общий default (s=82,k=-1,
-  // t0=82) и даёт скачок к ~64% вместо стыка с соседними точками (~0.3%).
-  if (t >= 99 && t <= 99.84) {
-    s = 11.21;
-    k = -13;
-    t0 = 99;
-  } else if (t >= 98 && t < 99) {
-    s = 20.744;
-    k = -9.84;
-    t0 = 98;
-  } else if (t >= 97 && t < 98) {
-    s = 29.936;
-    k = -9;
-    t0 = 97;
-  } else if (t >= 96 && t < 97) {
-    s = 39.781;
-    k = -9.6;
-    t0 = 96;
-  } else if (t >= 95 && t < 96) {
-    s = 44.628;
-    k = -4.847;
-    t0 = 95;
-  } else if (t >= 94 && t < 95) {
-    s = 49.2775;
-    k = -4.65;
-    t0 = 94;
-  } else if (t >= 93 && t < 94) {
-    s = 53.76;
-    k = -4.483;
-    t0 = 93;
-  } else if (t >= 92 && t < 93) {
-    s = 57.539;
-    k = -3.778;
-    t0 = 92;
-  } else if (t >= 91 && t < 92) {
-    s = 61.22;
-    k = -3.682;
-    t0 = 91;
-  } else if (t >= 90 && t < 91) {
-    s = 66.4633;
-    k = -5.244;
-    t0 = 90;
-  } else if (t >= 89 && t < 90) {
-    s = 69.334;
-    k = -2.87;
-    t0 = 89;
-  } else if (t >= 88 && t < 89) {
-    s = 70.82;
-    k = -1.4857;
-    t0 = 88;
-  } else if (t >= 87 && t < 88) {
-    s = 72.42;
-    k = -1.6;
-    t0 = 87;
-  } else if (t >= 86 && t < 87) {
-    s = 75.03;
-    k = -2.66;
-    t0 = 86;
-  } else if (t >= 85 && t < 86) {
-    s = 77.21;
-    k = -2.2;
-    t0 = 85;
-  } else if (t >= 84 && t < 85) {
-    s = 79.88;
-    k = -2.67;
-    t0 = 84;
-  } else if (t >= 83 && t < 84) {
-    s = 81.08;
-    k = -1.2;
-    t0 = 83;
-  } else {
-    s = 82;
-    k = -1;
-    t0 = 82;
-  }
-
-  if (t > 100) {
-    r = 0;
-  } else if (t > 99.84) {
-    r = get_alcohol(t1);
-  } else {
-    r = s + k * (t - t0);
-  }
-  if (r < 0) r = 0;
-  return r;
+  return get_alcohol_from_table(t, true);
 }
 
 float get_alcohol(float t) {
-  if (!boil_started) return 100;
-  // [L-6/M-26] avgTemp уже нормализован к 760 мм рт. ст. в DS_getvalue(),
-  // повторный пересчёт по давлению создавал бы двойную коррекцию.
-  float r;
-  float k;
-  k = (t - 89) / 6.49;
-
-  r = 17.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k * (0.8 + 0.05 * k)))))));  // формула Макеода для вычисления крепости
-  if (r < 0) r = 0;
-  r = float(round(r * 10)) / 10;  // округляем до одного знака после запятой
-  return r;
-
-  //reverse
-  //t[град]=85,37 - 3,75 * Ti + 1,48 * Ti ^ 2 - 0,32 * Ti ^ 3 +0,41 * Ti ^ 4 - 0,92 * Ti ^ 5 +0,32 * Ti ^ 6 + 0,1 * Ti ^ 7 - 0,05 * Ti ^ 8
-  //Где  Ti = ( К%об - 43,15 ) / 30,18
-  //более точно
-  // Темп=105.47* крепость^-0.065 - применима для растворов крепче 2%мас.
+  return get_alcohol_from_table(t, false);
 }
 
 void set_boiling() {
@@ -1287,7 +1261,7 @@ void set_boiling() {
     } else {
       //Если датчик куба отсутствует, устанавливаем значения по умолчанию
       boil_temp = 0;
-      alcohol_s = 0;
+      alcohol_s = -1.0f;
     }
 #ifdef USE_WATER_PUMP
     wp_count = -10;
@@ -1408,7 +1382,7 @@ bool check_boiling() {
     record_boiling_evidence(evidence);
     set_boiling();
     if (boil_started) {
-      if (has_tank_sensor) {
+      if (has_tank_sensor && alcohol_estimate_valid(alcohol_s)) {
         SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
       } else {
         SendMsg("Началось кипение в кубе!", WARNING_MSG);

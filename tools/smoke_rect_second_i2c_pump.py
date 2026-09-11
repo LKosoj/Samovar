@@ -38,10 +38,14 @@ require("i2c_stepper_refresh" not in stop,
         "stale pre-refresh must not suppress ten STOP command attempts")
 require("rectSecondPumpRunning = false" not in stop,
         "low-level STOP must not forget rectification running state")
-require("if (!configOwned) return false" not in start and
-        start.index("i2c_stepper_send_confirmed_command") <
-        start.index("return configured && confirmed"),
-        "config busy must still execute ten START command attempts and report failure")
+require("if (!configOwned) return false" in start and
+        start.index("if (!configOwned) return false") <
+        start.index("i2c_stepper_send_confirmed_command"),
+        "busy configuration owner must fail before START")
+require("if (!i2c_stepper_write_config(i2cStepperPump))" in start and
+        start.index("if (!i2c_stepper_write_config(i2cStepperPump))") <
+        start.index("i2c_stepper_send_confirmed_command"),
+        "failed configuration write must fail before START")
 
 apply_row = extract_function_body(LOGIC, "inline bool rect_apply_second_pump_for_row(")
 require("row.WType == 'H'" in apply_row,

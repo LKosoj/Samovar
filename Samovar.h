@@ -733,6 +733,7 @@ bool msgfl;                                                     // Флаг дл
 bool mixer_status;                                              // Статус работы мешалки
 // Пиво: ручная пауза и учёт простоя строки (см. beer.h, Samovar.ino
 // SAMOVAR_PAUSE/SAMOVAR_CONTINUE, logic.h get_beer_status_text)
+bool rectManualPauseActive;            // Только attribution ручной паузы RECT для live UI
 bool beerManualPause;                  // Ручная пауза пива (НЕ PauseOn — тот только для ректификации)
 unsigned long beerStageIdleAccumMs;    // Накопленное время простоя текущей строки (ниже полосы гистерезиса на 'P' и/или ручная пауза)
 unsigned long beerStageIdleSinceMs;    // Момент начала текущего простоя, 0 = простоя нет сейчас

@@ -14,6 +14,7 @@
 
 var is_program = false;
 var program = "";
+var recipeImportGeneration = 0;
 
 /**
    * Корректировка округления десятичных дробей.
@@ -64,43 +65,42 @@ function formatRecipeErrorMessage(err, kind) {
 function loadBeerXML(e) {
 	var file = e;
 	if (!file) return;
-
-	var readtype = new FileReader();
-	readtype.onload = function () {
-	    if (readtype.result.indexOf("namerecipe") > 0){
-			var reader = new FileReader();
-			reader.onload = function () {
-				try {
-					get_brewmate_info(reader.result);
-				} catch (err) {
-					is_program = false;
-					SamovarApp.showRequestError(formatRecipeErrorMessage(err, "BrewMate"));
-				}
-			};
-			reader.onerror = function () {
-				SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
-			};
-			reader.readAsText(file, "windows-1251");
-	    } else {
-    		var reader = new FileReader();
-			reader.onload = function () {
-				try {
-					get_brew_info(reader.result);
-				} catch (err) {
-					is_program = false;
-					SamovarApp.showRequestError(formatRecipeErrorMessage(err, "BeerXML"));
-				}
-			};
-			reader.onerror = function () {
-				SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
-			};
-			reader.readAsText(file, "UTF-8");
-	    }
+	is_program = false;
+	program = "";
+	var generation = ++recipeImportGeneration;
+	var reader = new FileReader();
+	reader.onload = function () {
+		if (generation !== recipeImportGeneration) return;
+		var utf8 = new TextDecoder("utf-8").decode(reader.result);
+		var kind;
+		try {
+			var root = (new DOMParser()).parseFromString(utf8, "text/xml").documentElement;
+			if (root.nodeName === "RECIPES" && root.getElementsByTagName("RECIPE").length) kind = "BeerXML";
+			else if (root.nodeName === "recipe") kind = "BrewMate";
+			else throw new Error("не найден корневой узел RECIPES или recipe.");
+		} catch (err) {
+			if (generation === recipeImportGeneration) SamovarApp.showRequestError(formatRecipeErrorMessage(err, "рецепта"));
+			return;
+		}
+		var textReader = new FileReader();
+		textReader.onload = function () {
+			if (generation !== recipeImportGeneration) return;
+			try {
+				if (kind === "BrewMate") get_brewmate_info(textReader.result);
+				else get_brew_info(textReader.result);
+			} catch (err) {
+				if (generation === recipeImportGeneration) SamovarApp.showRequestError(formatRecipeErrorMessage(err, kind));
+			}
+		};
+		textReader.onerror = function () {
+			if (generation === recipeImportGeneration) SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
+		};
+		textReader.readAsText(file, kind === "BrewMate" ? "windows-1251" : "UTF-8");
 	};
-	readtype.onerror = function () {
-		SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
+	reader.onerror = function () {
+		if (generation === recipeImportGeneration) SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
 	};
-	readtype.readAsText(file, "UTF-8");
+	reader.readAsArrayBuffer(file);
 }
 
 function parseXml(xml, arrayTags) {
@@ -702,7 +702,12 @@ function get_recipe(R){
     });
 
     // [Пиво 02.09 D3] одинаковое TIME сворачивается в одну строку B; хмель с TIME == BOIL_TIME не даёт лишнюю "B;0.00;1"
-    bth = decimalAdjust("round", check_value(get_object_value(R.BOIL_TIME), "bt"));
+    var rawBoilTime = get_object_value(R.BOIL_TIME);
+    if (rawBoilTime !== "Нет в рецепте" &&
+        (!Number.isFinite(Number(rawBoilTime)) || Number(rawBoilTime) < 0)) {
+      throw new Error("некорректное время кипячения BOIL_TIME");
+    }
+    bth = decimalAdjust("round", check_value(rawBoilTime, "bt"));
     boilHop.sort(compare);
     var lastTime = null;
     for (var i = 0; i < boilHop.length; i++) {
@@ -724,6 +729,7 @@ function get_recipe(R){
         throw new Error("рецепт не даёт корректную программу (" + err + ")");
     }
     is_program = true;
+    SamovarApp.markProgramDirty();
 }
 
 // Ограничения соответствуют разбору формата beer на прошивке (program_io.h, program_types.h):
@@ -781,7 +787,7 @@ async function set_program(){
   try {
     let result = await SamovarApp.postProgram(document.forms.mainform);
     if (!result.ok) { alert(result.err || 'Программа не установлена'); return; }
-    alert("Программа сохранена.");
+    alert("Программа применена.");
   } catch (e) {
     alert('Ошибка сети: ' + e);
   }
@@ -905,7 +911,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <div class="program-actions">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
-<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='if (SamovarApp.confirmLeave()) location.href="index.htm"' class="button">
 </div>
 
 

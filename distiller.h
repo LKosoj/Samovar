@@ -45,6 +45,7 @@ bool distBoilStartedPrev = false;
 // Samovar_no_power. Сбрасывается только при (пере)старте дистилляции — НЕ через
 // resetTimePredictor(), иначе флаг обнулялся бы на КАЖДОМ переходе строки.
 bool distBoostGated = false;
+bool distAlcoholEstimateWarningSent = false;
 // Минимальные пороги, чтобы не делить на ноль и не спамить оценками
 static constexpr float MIN_TEMP_RATE = 0.01f;    // °C/мин
 static constexpr float MIN_ALC_RATE  = 0.001f;   // доля/мин
@@ -89,15 +90,37 @@ inline bool dist_plateau_finish_due() {
 // (run_dist_program/run_bk_program), не эта функция.
 inline bool program_threshold_row_done(const WProgram& row) {
   if (row.WType == 'T') return row.Speed <= TankSensor.avgTemp;
-  if (row.WType == 'A') return row.Speed >= get_alcohol(TankSensor.avgTemp);
+  if (!boil_started) return false;
+  const float currentAlcohol = get_alcohol(TankSensor.avgTemp);
+  const float currentSteamAlcohol = get_steam_alcohol(TankSensor.avgTemp);
+  if (row.WType == 'A') {
+    if (!alcohol_estimate_valid(currentAlcohol)) goto alcohol_unavailable;
+    distAlcoholEstimateWarningSent = false;
+    return row.Speed >= currentAlcohol;
+  }
   if (row.WType == 'S') {
     float startAlcohol = get_alcohol(TankSensor.StartProgTemp);
-    return startAlcohol > 0 && row.Speed >= get_alcohol(TankSensor.avgTemp) / startAlcohol;
+    if (startAlcohol <= 0.0f || !alcohol_estimate_valid(startAlcohol) || !alcohol_estimate_valid(currentAlcohol)) goto alcohol_unavailable;
+    distAlcoholEstimateWarningSent = false;
+    return row.Speed >= currentAlcohol / startAlcohol;
   }
-  if (row.WType == 'P') return row.Speed >= get_steam_alcohol(TankSensor.avgTemp);
+  if (row.WType == 'P') {
+    if (!alcohol_estimate_valid(currentSteamAlcohol)) goto alcohol_unavailable;
+    distAlcoholEstimateWarningSent = false;
+    return row.Speed >= currentSteamAlcohol;
+  }
   if (row.WType == 'R') {
     float startSteamAlcohol = get_steam_alcohol(TankSensor.StartProgTemp);
-    return startSteamAlcohol > 0 && row.Speed >= get_steam_alcohol(TankSensor.avgTemp) / startSteamAlcohol;
+    if (startSteamAlcohol <= 0.0f || !alcohol_estimate_valid(startSteamAlcohol) || !alcohol_estimate_valid(currentSteamAlcohol)) goto alcohol_unavailable;
+    distAlcoholEstimateWarningSent = false;
+    return row.Speed >= currentSteamAlcohol / startSteamAlcohol;
+  }
+  return false;
+
+alcohol_unavailable:
+  if (!distAlcoholEstimateWarningSent) {
+    SendMsg("Спиртуозность недоступна: процентная строка продолжается", WARNING_MSG);
+    distAlcoholEstimateWarningSent = true;
   }
   return false;
 }
@@ -149,6 +172,7 @@ void distiller_proc() {
     heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
 #endif
     distBoostGated = false;
+    distAlcoholEstimateWarningSent = false;
     // Инициализируем систему прогнозирования
     distBoilStartedPrev = false;
     resetTimePredictor();
@@ -160,7 +184,7 @@ void distiller_proc() {
   // boil_started, а TankSensor.StartProgTemp по умолчанию захватывается при входе
   // в строку программы (run_dist_program), в т.ч. до закипания. Если кипение
   // началось внутри уже идущей строки (без перехода на новую), перезахватываем
-  // StartProgTemp по фронту boil_started, чтобы полином не считался по холодной температуре.
+  // StartProgTemp по фронту boil_started, чтобы относительные пороги опирались на кипящую смесь.
   if (boil_started && !distBoilStartedPrev) {
     TankSensor.StartProgTemp = TankSensor.avgTemp;
     resetTimePredictor();
@@ -331,9 +355,9 @@ void run_dist_program(uint8_t num) {
   // захваченный по фактическому фронту кипения, сохраняется до конца сессии.
   timePredictor.startTime = millis();
   timePredictor.initialAlcohol =
-      timePredictor.baselineValid ? get_alcohol(TankSensor.avgTemp) : 0.0f;
+      timePredictor.baselineValid ? get_alcohol(TankSensor.avgTemp) : -1.0f;
   timePredictor.initialSteamAlcohol =
-      timePredictor.baselineValid ? get_steam_alcohol(TankSensor.avgTemp) : 0.0f;
+      timePredictor.baselineValid ? get_steam_alcohol(TankSensor.avgTemp) : -1.0f;
   timePredictor.initialTemp = TankSensor.avgTemp;
   timePredictor.lastUpdateTime = millis();
   timePredictor.remainingTime = 0.0f;
@@ -369,9 +393,9 @@ void resetTimePredictor() {
     const unsigned long now = millis();
     timePredictor.startTime = now;
     timePredictor.processStartTime = boil_started ? now : 0;
-    timePredictor.initialAlcohol = boil_started ? get_alcohol(TankSensor.avgTemp) : 0.0f;
+    timePredictor.initialAlcohol = boil_started ? get_alcohol(TankSensor.avgTemp) : -1.0f;
     timePredictor.initialSteamAlcohol =
-        boil_started ? get_steam_alcohol(TankSensor.avgTemp) : 0.0f;
+        boil_started ? get_steam_alcohol(TankSensor.avgTemp) : -1.0f;
     timePredictor.initialTemp = TankSensor.avgTemp;
     timePredictor.processInitialTemp = TankSensor.avgTemp;
     timePredictor.lastUpdateTime = now;
@@ -460,28 +484,38 @@ void updateTimePredictor() {
             remaining = dT / tempChangeRateRow;
         }
     } else if (wtype == 'A' || wtype == 'S') {
-        float targetAlcohol = program[ProgramNum].Speed;
-        if (wtype == 'S') {
-            targetAlcohol *= get_alcohol(TankSensor.StartProgTemp);
-        }
+      float targetAlcohol = program[ProgramNum].Speed;
+      const float startAlcohol = get_alcohol(TankSensor.StartProgTemp);
+      if (wtype == 'S') {
+        targetAlcohol *= startAlcohol;
+      }
+      if (alcohol_estimate_valid(currentAlcohol) &&
+          alcohol_estimate_valid(timePredictor.initialAlcohol) &&
+          (wtype != 'S' || (alcohol_estimate_valid(startAlcohol) && startAlcohol > 0.0f))) {
         float dA = currentAlcohol - targetAlcohol;
         if (dA <= 0) {
-            remaining = 0;
+          remaining = 0;
         } else if (alcoholChangeRate > MIN_ALC_RATE) {
-            remaining = dA / alcoholChangeRate;
+          remaining = dA / alcoholChangeRate;
         }
+      }
     } else if (wtype == 'P' || wtype == 'R') {
-        // Ориентируемся на крепость пара
-        float target = program[ProgramNum].Speed;
-        if (wtype == 'R') {
-            target *= get_steam_alcohol(TankSensor.StartProgTemp);
-        }
+      // Ориентируемся на крепость пара
+      float target = program[ProgramNum].Speed;
+      const float startSteamAlcohol = get_steam_alcohol(TankSensor.StartProgTemp);
+      if (wtype == 'R') {
+        target *= startSteamAlcohol;
+      }
+      if (alcohol_estimate_valid(currentSteamAlcohol) &&
+          alcohol_estimate_valid(timePredictor.initialSteamAlcohol) &&
+          (wtype != 'R' || (alcohol_estimate_valid(startSteamAlcohol) && startSteamAlcohol > 0.0f))) {
         float dS = currentSteamAlcohol - target;
         if (dS <= 0) {
-            remaining = 0;
+          remaining = 0;
         } else if (steamAlcoholChangeRate > MIN_ALC_RATE) {
-            remaining = dS / steamAlcoholChangeRate;
+          remaining = dS / steamAlcoholChangeRate;
         }
+      }
     } else {
         // Для прочих шагов оставляем 0 — нет метрики для прогноза
         remaining = 0;

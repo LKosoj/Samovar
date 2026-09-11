@@ -51,6 +51,7 @@
     "pumppwm.h",
     "runtime_event_log.h",
     "runtime_helpers.h",
+    "runtime_pair_events.h",
     "safety_transition.h",
     "samovar_api.h",
     "samovar_command_queue.h",

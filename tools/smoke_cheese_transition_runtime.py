@@ -35,6 +35,7 @@ String operator+(const String& left, const char* right) { return String((left.va
 String operator+(const String& left, const String& right) { return String((left.value() + right.value()).c_str()); }
 enum MessageType { ALARM_MSG };
 uint8_t ProgramNum = 0;
+bool cheesePairErrorPending = false;
 String message;
 int finishCalls = 0;
 void SendMsg(const String& value, MessageType) { message = value; }
@@ -75,6 +76,11 @@ enum ActuatorCommandResult { ACTUATOR_COMMAND_APPLIED, ACTUATOR_COMMAND_FAILED }
 static const int RELE_CHANNEL2 = 2, RELE_CHANNEL4 = 4;
 static const int SAMOVAR_STARTVAL_CHEESE_START = 42;
 static const int NOTIFY_MSG = 1;
+static const int SAMOVAR_CHEESE_MODE = 7;
+enum UiWaitReason { UI_WAIT_CHEESE_OPERATOR, UI_WAIT_CHEESE_DOSE };
+enum RuntimePairOutcome { RUNTIME_PAIR_ROW_CHANGE };
+static void runtime_pair_begin(UiWaitReason, const char*, int) {}
+static void runtime_pair_close_mode(int, RuntimePairOutcome, const char*, int) {}
 static const uint8_t PROGRAM_END = 20;
 WProgram program[3] = {};
 uint8_t ProgramNum = 0;

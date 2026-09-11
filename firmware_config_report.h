@@ -251,6 +251,11 @@ inline bool write_firmware_config_json(Print& out) {
 #else
   if (!firmware_config_write_null_field(out, first, "USE_ANALOG_EXPANDER")) return false;
 #endif
+#ifdef USE_ADS1115
+  if (!firmware_config_write_string_field(out, first, "USE_ADS1115", FIRMWARE_CONFIG_STRINGIFY(USE_ADS1115))) return false;
+#else
+  if (!firmware_config_write_null_field(out, first, "USE_ADS1115")) return false;
+#endif
 #ifdef I2CStepperStepMl
   if (!firmware_config_write_string_field(out, first, "I2CStepperStepMl", FIRMWARE_CONFIG_STRINGIFY(I2CStepperStepMl))) return false;
 #else

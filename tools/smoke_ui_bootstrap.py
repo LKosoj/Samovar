@@ -116,7 +116,8 @@ def check_static(source: str) -> tuple[str, str, str]:
             '"luaButtonList"', '"steamColor"', '"steamVisible"',
             '"i2cStepperVisible"', '"beerBrewOrder"', '"nbkDp"',
             '"stepperStepsPerMl"', '"calibrationRunning"', '"cheesePhSlope"',
-            '"cheeseCoolingScheme"', '"heaterMaxPower"',
+            '"cheesePhAvailable"', '"cheesePhAds1115Address"',
+            '"cheeseCoolingScheme"', '"heaterMaxPower"', '"timeZone"',
         ):
             require(field in writer, f"/ui-bootstrap не отдаёт обязательное поле {field}")
         cooling = extract_or_error(
@@ -198,12 +199,13 @@ struct SetupEEPROM {
   char SteamColor[20]; char PipeColor[20]; char WaterColor[20]; char TankColor[20]; char ACPColor[20];
   uint8_t BeerBrewOrder; float NbkDP; float ColDiam; float ColHeight; uint8_t PackDens;
   float HeaterResistant; float MainsVoltage; uint16_t StepperStepMl; uint16_t StepperStepMlI2C;
-  float CheesePhSlope; float CheesePhOffset;
+  float CheesePhSlope; float CheesePhOffset; uint8_t TimeZone;
 };
 struct UiBootstrapSnapshot {
   SAMOVAR_MODE mode; SetupEEPROM setup; String program; String description; String luaButtonList; String version; String powerUnit;
   bool steamVisible; bool pipeVisible; bool waterVisible; bool tankVisible; bool pressureVisible; bool programNumberVisible;
   bool i2cStepperVisible; bool i2cPumpVisible; bool calibrationRunning; bool i2cCalibration;
+  bool cheesePhAvailable; int cheesePhAds1115Address;
   int pwmValue; float pwmLow; float heaterMaxPower;
 };
 static const unsigned long STEPPER_MAX_SPEED = 1200;
@@ -229,6 +231,8 @@ static UiBootstrapSnapshot make_snapshot(SAMOVAR_MODE mode, const char* program,
   snapshot.setup.ColHeight = 1.7f; snapshot.setup.PackDens = 80; snapshot.setup.HeaterResistant = 12.3f;
   snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = 123; snapshot.setup.StepperStepMlI2C = 456;
   snapshot.setup.CheesePhSlope = 2.5f; snapshot.setup.CheesePhOffset = -1.0f;
+  snapshot.setup.TimeZone = mode == SAMOVAR_NBK_MODE ? 3 : 5;
+  snapshot.cheesePhAvailable = !i2c; snapshot.cheesePhAds1115Address = i2c ? 0x48 : 0;
   snapshot.steamVisible = true; snapshot.pipeVisible = false; snapshot.waterVisible = true; snapshot.tankVisible = false;
   snapshot.pressureVisible = true; snapshot.programNumberVisible = true; snapshot.i2cStepperVisible = i2c; snapshot.i2cPumpVisible = i2c;
   snapshot.calibrationRunning = i2c; snapshot.i2cCalibration = i2c; snapshot.pwmValue = i2c ? 77 : 11; snapshot.pwmLow = i2c ? 20.0f : 10.0f; snapshot.heaterMaxPower = 1234.0f;
@@ -300,6 +304,12 @@ def check_writer_behavior(writer_scope: str) -> None:
             "признак I2C насоса не сохранил два разных состояния")
     require(isinstance(rect["nbkDp"], (int, float)), "nbkDp должен быть числом")
     require(isinstance(nbk["calibrationRunning"], bool), "calibrationRunning должен быть bool")
+    require(rect["cheesePhAvailable"] is True and nbk["cheesePhAvailable"] is False,
+            "доступность pH не сохранила два разных состояния")
+    require(rect["cheesePhAds1115Address"] == 0 and nbk["cheesePhAds1115Address"] == 0x48,
+            "адрес ADS1115 потерян в bootstrap")
+    require(rect["timeZone"] == 5 and nbk["timeZone"] == 3,
+            "timeZone не сохранил два разных значения SetupEEPROM")
     require(rect["cheeseCoolingScheme"] == "unavailable" and
             nbk["cheeseCoolingScheme"] == "unavailable",
             "сборка без охлаждения должна отдавать unavailable")

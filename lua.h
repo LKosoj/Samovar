@@ -38,8 +38,22 @@ static volatile uint32_t luaHookDeadlineMs;
 static volatile bool luaTimeoutFired;
 static volatile bool luaLastExecutionTimedOut;
 String lua_coroutine_watchdog_error;
+static volatile uint32_t lua_next_execution_ticket = 0;
+static volatile uint32_t lua_active_execution_ticket = 0;
+static volatile uint32_t lua_cancelled_execution_ticket = 0;
+static volatile bool lua_emergency_stop_requested = false;
+
+inline bool lua_active_execution_cancelled() {
+  const uint32_t activeTicket = lua_active_execution_ticket;
+  return activeTicket != 0 &&
+         (lua_emergency_stop_requested ||
+          lua_cancelled_execution_ticket == activeTicket);
+}
 
 static void lua_timeout_hook(lua_State* L, lua_Debug*) {
+  if (lua_active_execution_cancelled()) {
+    luaL_error(L, "Lua execution cancelled by emergency");
+  }
   if (safety_deadline_expired(millis(), luaHookDeadlineMs)) {
     luaTimeoutFired = true;
     luaL_error(L, "chunk timeout");  // longjmp! никаких SendMsg/тяжёлых вызовов здесь
@@ -390,11 +404,26 @@ static volatile bool lua_program_job = false;
 static uint32_t luaSimulationMillis = 0;
 #endif
 
+inline bool lua_claim_execution_locked() {
+  if (lua_emergency_stop_requested) return false;
+  uint32_t ticket = ++lua_next_execution_ticket;
+  if (ticket == 0) ticket = ++lua_next_execution_ticket;
+  lua_active_execution_ticket = ticket;
+  return true;
+}
+
+inline void lua_finish_execution_locked() {
+  lua_active_execution_ticket = 0;
+}
+
 inline bool lua_state_mutation_allowed() {
-  return !mode_switch_in_progress();
+  return !mode_switch_in_progress() && !lua_active_execution_cancelled();
 }
 
 inline int lua_reject_state_mutation(lua_State* lua_state) {
+  if (lua_active_execution_cancelled()) {
+    return luaL_error(lua_state, "Lua execution cancelled by emergency");
+  }
   return luaL_error(lua_state, "mode switch blocks state changes");
 }
 
@@ -417,7 +446,8 @@ inline bool queue_lua_job(LuaJobType type, const String& script) {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
   if (!locked) return false;
   bool queued = false;
-  if (!mode_switch_in_progress() && lua_job_type == LUA_JOB_NONE) {
+  if (!mode_switch_in_progress() && !lua_emergency_stop_requested &&
+      lua_job_type == LUA_JOB_NONE) {
     lua_job_script = script;
     lua_job_type = type;
     queued = true;
@@ -438,7 +468,8 @@ inline bool take_lua_job(String& script, LuaJobType& type) {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (!locked) return false;
   bool hasJob = false;
-  if (!mode_switch_in_progress() && lua_job_type != LUA_JOB_NONE) {
+  if (!mode_switch_in_progress() && !lua_emergency_stop_requested &&
+      lua_job_type != LUA_JOB_NONE && lua_claim_execution_locked()) {
     script = lua_job_script;
     type = lua_job_type;
     lua_job_script = "";
@@ -454,6 +485,7 @@ inline void finish_lua_job() {
   bool locked = runtime_state_lock(portMAX_DELAY);
   if (locked) {
     lua_job_active = false;
+    lua_finish_execution_locked();
     runtime_state_unlock(true);
   }
 }
@@ -464,7 +496,8 @@ inline bool request_lua_periodic_start() {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (!locked) return false;
   bool accepted = false;
-  if (!mode_switch_in_progress() && lua_finished && !lua_start_requested) {
+  if (!mode_switch_in_progress() && !lua_emergency_stop_requested && lua_finished &&
+      !lua_start_requested) {
     lua_start_requested = true;
     accepted = true;
   }
@@ -481,6 +514,23 @@ inline bool request_lua_mode_stop() {
   lua_job_script = "";
   lua_job_type = LUA_JOB_NONE;
   lua_program_job = false;
+  runtime_state_unlock(true);
+  return true;
+}
+
+inline bool request_lua_emergency_stop() {
+  lua_emergency_stop_requested = true;
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  const uint32_t activeTicket = lua_active_execution_ticket;
+  if (activeTicket != 0) lua_cancelled_execution_ticket = activeTicket;
+  SetScriptOff = true;
+  loop_lua_fl = false;
+  lua_start_requested = false;
+  lua_job_script = "";
+  lua_job_type = LUA_JOB_NONE;
+  lua_program_job = false;
+  lua_emergency_stop_requested = false;
   runtime_state_unlock(true);
   return true;
 }
@@ -502,12 +552,12 @@ inline bool consume_lua_periodic_start_request(bool& accepted) {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (!locked) return false;
   accepted = false;
-  if (mode_switch_in_progress()) {
+  if (mode_switch_in_progress() || lua_emergency_stop_requested) {
     lua_start_requested = false;
     if (lua_beer_job_result == LUA_BEER_JOB_QUEUED) {
       lua_beer_job_result = LUA_BEER_JOB_FAILED_RUNTIME;
     }
-  } else if (lua_start_requested && lua_finished) {
+  } else if (lua_start_requested && lua_finished && lua_claim_execution_locked()) {
     lua_start_requested = false;
     lua_finished = false;
     accepted = true;
@@ -531,6 +581,7 @@ inline void finish_lua_periodic_run() {
   bool locked = runtime_state_lock(portMAX_DELAY);
   if (locked) {
     lua_finished = true;
+    lua_finish_execution_locked();
     runtime_state_unlock(true);
   }
 }
@@ -1224,7 +1275,11 @@ inline bool lua_pin_is_heater_channel(int pin) {
 }
 
 inline bool lua_pin_reserved_for_cheese_ph(int pin) {
+#ifdef USE_ADS1115
+  return false;
+#else
   return Samovar_CR_Mode == SAMOVAR_CHEESE_MODE && pin == LUA_PIN;
+#endif
 }
 
 
@@ -1412,11 +1467,29 @@ static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
 
 static int lua_wrapper_delay(lua_State *lua_state) {
   const int32_t a = lua_check_index_arg(lua_state, 1, 0, 1000, "delay");
+  if (lua_active_execution_cancelled()) {
+    return luaL_error(lua_state, "Lua execution cancelled by emergency");
+  }
 #ifdef SAMOVAR_LUA_SIMULATION
   luaSimulationMillis += static_cast<uint32_t>(a);
 #else
-  vTaskDelay(a / portTICK_PERIOD_MS);
+  if (a == 0) {
+    vTaskDelay(0);
+  } else {
+    int32_t remaining = a;
+    while (remaining > 0) {
+      const int32_t slice = remaining > 10 ? 10 : remaining;
+      vTaskDelay(slice / portTICK_PERIOD_MS);
+      remaining -= slice;
+      if (lua_active_execution_cancelled()) {
+        return luaL_error(lua_state, "Lua execution cancelled by emergency");
+      }
+    }
+  }
 #endif
+  if (lua_active_execution_cancelled()) {
+    return luaL_error(lua_state, "Lua execution cancelled by emergency");
+  }
   return 0;
 }
 
@@ -1666,10 +1739,16 @@ static int lua_wrapper_set_lua_status(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   bool statusSet = false;
+  bool statusTooLong = false;
   {
     String Var = lua_to_string_arg(lua_state, 1);
-    statusSet = set_lua_status_value(Var);
+    if (!lua_status_v27_fits(Var)) {
+      statusTooLong = true;
+    } else {
+      statusSet = set_lua_status_value(Var);
+    }
   }
+  if (statusTooLong) return luaL_error(lua_state, "Lua_status too long for V27");
   if (!statusSet) return luaL_error(lua_state, "Lua_status busy");
   return 0;
 }

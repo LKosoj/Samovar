@@ -59,6 +59,10 @@ static String operator+(const char* lhs, const String& rhs) {
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 enum SAMOVAR_MODE { SAMOVAR_RECTIFICATION_MODE = 0, SAMOVAR_BEER_MODE };
+enum UiWaitReason { UI_WAIT_BEER_SKIP_COOL_CONFIRM = 14, UI_WAIT_LUA_KNOWN = 23 };
+enum RuntimePairOutcome { RUNTIME_PAIR_ROW_CHANGE = 1, RUNTIME_PAIR_PROCESS_END = 3, RUNTIME_PAIR_ERROR = 4 };
+static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
+static void runtime_pair_close_mode(SAMOVAR_MODE, RuntimePairOutcome, const char*, MESSAGE_TYPE) {}
 
 using ProgramType = char;
 constexpr ProgramType PROGRAM_TYPE_NONE = '\0';
@@ -178,6 +182,7 @@ static unsigned long beerStageIdleAccumMs = 0;
 static unsigned long beerStageIdleSinceMs = 0;
 static unsigned long beerBoilActiveAccumMs = 0;  // [П13] см. beer.h - таймаут разгона до кипения
 static unsigned long beerMixerPauseSinceMs = 0;  // [Дефект 2 code review] см. beer.h
+static bool beerHoldClockFrozen = false;
 
 static int startAutoTuneCalls = 0;
 void StartAutoTune() { startAutoTuneCalls++; }

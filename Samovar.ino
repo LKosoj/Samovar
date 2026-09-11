@@ -19,7 +19,11 @@
 // он доходит до отдельного TU библиотеки Async_TCP. Локальный #define здесь был мёртвым.
 
 struct AjaxTelemetrySnapshot;
+struct UiEndDescriptor;
+struct UiStateDescriptor;
 struct WifiDisconnectEvent;
+// Конфигурация Blynk подключается ниже; вызов защищён в defer_typed_pair_until_v35().
+bool blynk_session_start_pending();
 // Arduino вставляет автопрототипы сразу после Arduino.h. WebServer.ino объявляет
 // http_sync_complete_get(asyncHTTPrequest&...) — без USE_LUA тип не подтягивается
 // из lua.h, прототип ломает разбор (bool http_sync_complete_get как переменная).
@@ -92,6 +96,8 @@ class asyncHTTPrequest;
 #include "time_utils.h"
 #include "runtime_event_log.h"
 #include "runtime_helpers.h"
+
+static UiControlSource uiWithdrawalControlSource = UI_CONTROL_SOURCE_UNKNOWN;
 
 #include <ArduinoTrace.h>
 
@@ -776,6 +782,93 @@ static uint32_t ntp_snapshot_epoch_now() {
   return epoch + ((millis() - capturedAtMillis) / 1000UL);
 }
 
+static RuntimePairState runtimePairState;
+
+static bool ui_has_active_program_row() {
+  return ProgramNum < ProgramLen && ProgramNum != PROGRAM_END &&
+      !program_type_empty(current_program_type());
+}
+
+static void runtime_pair_report_failure(const char* action, UiWaitReason reason,
+                                        RuntimePairPrepareResult result) {
+  if (result == RUNTIME_PAIR_DUPLICATE) return;
+  WriteConsoleLog(String("runtime_pair_") + action + " q=" +
+                  String(static_cast<uint8_t>(reason)) + " result=" +
+                  String(static_cast<uint8_t>(result)));
+}
+
+static RuntimePairEventFacts runtime_pair_current_facts(UiWaitReason reason,
+                                                         uint32_t localEpoch) {
+  const uint8_t row = PowerOn && Samovar_Mode != SAMOVAR_SUVID_MODE &&
+      Samovar_Mode != SAMOVAR_LUA_MODE && ui_has_active_program_row()
+      ? static_cast<uint8_t>(ProgramNum + 1)
+      : RUNTIME_PAIR_ROW_NONE;
+  return {currentSessionId, static_cast<uint8_t>(Samovar_Mode), row,
+          static_cast<uint8_t>(reason), runtime_pair_monotonic_ms(), localEpoch,
+          static_cast<int8_t>(SamSetup.TimeZone)};  // TimeZone: 0..23
+}
+
+void runtime_pair_begin(UiWaitReason reason, const char* tail, MESSAGE_TYPE level) {
+  const uint32_t localEpoch = ntp_snapshot_epoch_now();
+  RuntimePairPendingEvent pending;
+  if (!runtime_state_lock(pdMS_TO_TICKS(50))) {
+    WriteConsoleLog(F("runtime_pair_begin_lock_busy"));
+    return;
+  }
+  const RuntimePairPrepareResult result = runtime_pair_prepare_begin(
+      runtimePairState, runtime_pair_current_facts(reason, localEpoch), tail, level, pending);
+  runtime_state_unlock(true);
+  if (result != RUNTIME_PAIR_PREPARED) {
+    runtime_pair_report_failure("begin", reason, result);
+    return;
+  }
+  runtime_pair_dispatch(pending);
+}
+
+void runtime_pair_end(UiWaitReason reason, RuntimePairOutcome outcome,
+                      const char* tail, MESSAGE_TYPE level,
+                      uint32_t expectedPairId) {
+  const uint32_t localEpoch = ntp_snapshot_epoch_now();
+  RuntimePairPendingEvent pending;
+  if (!runtime_state_lock(pdMS_TO_TICKS(50))) {
+    WriteConsoleLog(F("runtime_pair_end_lock_busy"));
+    return;
+  }
+  const RuntimePairPrepareResult result = runtime_pair_prepare_end(
+      runtimePairState, runtime_pair_current_facts(reason, localEpoch), outcome, tail, level,
+      pending, expectedPairId);
+  runtime_state_unlock(true);
+  if (result != RUNTIME_PAIR_PREPARED) {
+    runtime_pair_report_failure("end", reason, result);
+    return;
+  }
+  runtime_pair_dispatch(pending);
+}
+
+void runtime_pair_close_mode(SAMOVAR_MODE mode, RuntimePairOutcome outcome,
+                             const char* tail, MESSAGE_TYPE level) {
+  struct ActivePairRef {
+    UiWaitReason reason;
+    uint32_t pairId;
+  } activePairs[RUNTIME_PAIR_CAUSE_MAX] = {};
+  uint8_t activeCount = 0;
+  if (!runtime_state_lock(pdMS_TO_TICKS(50))) {
+    WriteConsoleLog(F("runtime_pair_close_mode_lock_busy"));
+    return;
+  }
+  for (uint8_t cause = RUNTIME_PAIR_CAUSE_MIN; cause <= RUNTIME_PAIR_CAUSE_MAX; cause++) {
+    const RuntimePairState::ActivePair& active = runtimePairState.active[cause - 1];
+    if (active.active && active.mode == static_cast<uint8_t>(mode)) {
+      activePairs[activeCount++] = {static_cast<UiWaitReason>(cause), active.pairId};
+    }
+  }
+  runtime_state_unlock(true);
+  for (uint8_t index = 0; index < activeCount; index++) {
+    runtime_pair_end(activePairs[index].reason, outcome, tail, level,
+                     activePairs[index].pairId);
+  }
+}
+
 static void format_ntp_snapshot(uint32_t epoch, String& date, String& clock) {
   const time_t rawEpoch = static_cast<time_t>(epoch);
   struct tm calendar;
@@ -1408,6 +1501,51 @@ static bool cancel_queued_i2c_operations_locked(bool& cancelled) {
   return true;
 }
 
+static volatile bool pending_emergency_actions_cancel = false;
+
+#ifdef USE_LUA
+static void discard_pending_lua_commands_locked();
+
+static void discard_pending_lua_commands_locked() {
+  pending_lua_start_flag = false;
+  pending_lua_file_flag = false;
+  pending_lua_flag = false;
+  pending_lua_file = "";
+  pending_lua_str = "";
+}
+#endif
+
+inline void cancel_pending_emergency_actions() {
+  pending_emergency_actions_cancel = true;
+  tick_pending_emergency_actions();
+}
+
+inline void tick_pending_emergency_actions() {
+  if (!pending_emergency_actions_cancel) return;
+#ifdef USE_LUA
+  // Этот признак отменяет уже запущенный Lua ещё до попытки взять pending-lock.
+  // Очистка принятых web-команд ниже будет повторена следующим тиком.
+  const bool luaCancelled = request_lua_emergency_stop();
+#endif
+  bool i2cCancelled = false;
+  {
+    PendingCommandLockGuard guard;
+    if (!guard) return;
+    bool cancelled = false;
+    i2cCancelled = cancel_queued_i2c_operations_locked(cancelled);
+#ifdef USE_LUA
+    discard_pending_lua_commands_locked();
+#endif
+  }
+  const bool commandsCancelled = discard_samovar_commands();
+  if (!i2cCancelled || !commandsCancelled
+#ifdef USE_LUA
+      || !luaCancelled
+#endif
+  ) return;
+  pending_emergency_actions_cancel = false;
+}
+
 static void process_pending_i2c_operations() {
   if (pending_i2c_operation_result.pending) {
     PendingCommandLockGuard guard;
@@ -1466,6 +1604,12 @@ static void process_pending_i2c_operations() {
   }
   guard.release();
   if (owner == PENDING_I2C_OPERATION_NONE) return;
+
+  if (pending_emergency_actions_cancel) {
+    publish_pending_i2c_result(
+        operationId, OPERATION_STATE_FAILED, OPERATION_ERROR_CANCELLED);
+    return;
+  }
 
   OperationError result = OPERATION_ERROR_INTERNAL;
   switch (owner) {
@@ -1698,6 +1842,15 @@ static void tick_wifi_disconnect_diagnostics() {
   }
 }
 
+static bool defer_typed_pair_until_v35(const char* message) {
+#ifdef SAMOVAR_USE_BLYNK
+  return strncmp(message, "@P1;", 4) == 0 && blynk_session_start_pending();
+#else
+  (void)message;
+  return false;
+#endif
+}
+
 void triggerGetClock(void *parameter) {
   int counter = 30;
   while (true) {
@@ -1768,7 +1921,9 @@ void triggerGetClock(void *parameter) {
         bool blynkDisconnected = false;
         bool blynkLockBusy = false;
         bool blynkDeliveryAccepted = false;
-        if (!discardQueue && !deliveryExpired && WiFi.status() == WL_CONNECTED && !ota_running) {
+        const bool deferTypedPair = defer_typed_pair_until_v35(c + 1);
+        if (!discardQueue && !deliveryExpired && !deferTypedPair &&
+            WiFi.status() == WL_CONNECTED && !ota_running) {
           vTaskDelay(5 / portTICK_PERIOD_MS);
           // Первый символ записи — тип сообщения (см. SendMsg), текст начинается со второго.
           const char msgLevel = c[0];
@@ -2478,6 +2633,15 @@ static void setup_wifi_stack_defaults() {
   Wire.setClock(100000);
   Wire.setTimeOut(10);
 
+  cheese_ph_init();
+#ifdef USE_ADS1115
+  if (!cheese_ph_available()) {
+    Serial.printf(
+        "WARN: ADS1115 not found at 0x%02X: Cheese mode and pH calibration disabled\n",
+        USE_ADS1115);
+  }
+#endif
+
   lcd_found = (check_I2C_device(LCD_ADDRESS) == LCD_ADDRESS);
 
   stepper.disable();
@@ -2906,9 +3070,14 @@ void setup() {
   Serial.begin(115200);
 
   SetupEEPROM startupProfile{};
-  ProfileLoadResult profileResult = load_profile_nvs(startupProfile);
+  PersistResult profilePersistResult = PERSIST_OK;
+  ProfileLoadResult profileResult = load_profile_nvs(startupProfile, profilePersistResult);
   bool persistStartupProfile = false;
   bool migratedFromLegacy = false;
+  if (profileResult == PROFILE_LOAD_MIGRATION_PERSIST_FAILED) {
+    report_degraded_boot("profile upgrade", persist_result_code(profilePersistResult));
+    profileResult = PROFILE_LOAD_OK;
+  }
   if (profileResult == PROFILE_LOAD_NOT_FOUND) {
     profileResult = migrate_from_eeprom(startupProfile);
     if (profileResult == PROFILE_LOAD_OK) {
@@ -3011,6 +3180,7 @@ void setup() {
   // свободен после создания, лишний Give здесь не нужен.
   xMsgSemaphore = xSemaphoreCreateMutexStatic(&xMsgSemaphoreBuffer);
   setup_create_semaphores_and_queue();
+  runtime_pair_state_init(runtimePairState, esp_random());
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   setup_wifi_stack_defaults();
@@ -3480,7 +3650,7 @@ static void tick_apply_pending_water_auto() {
 static void tick_apply_pending_pump_speed() {
   uint16_t pumpSpeedSteps = 0;
   if (take_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)) {
-    set_pump_speed(pumpSpeedSteps, true);
+    set_pump_speed(pumpSpeedSteps, true, true, UI_CONTROL_SOURCE_MANUAL);
   }
 }
 
@@ -3555,10 +3725,17 @@ static void tick_apply_pending_lua_commands() {
     }
   }
   if (hasPendingLuaStart) {
-    if (start_lua_script()) {
+    bool stillPendingLuaStart = false;
+    {
       PendingCommandLockGuard guard;
-      if (guard && pending_lua_start_flag) {
-        pending_lua_start_flag = false;
+      if (guard && pending_lua_start_flag) stillPendingLuaStart = true;
+    }
+    if (stillPendingLuaStart) {
+      if (start_lua_script()) {
+        PendingCommandLockGuard guard;
+        if (guard && pending_lua_start_flag) {
+          pending_lua_start_flag = false;
+        }
       }
     }
   }
@@ -3573,10 +3750,19 @@ static void tick_apply_pending_lua_commands() {
     }
   }
   if (hasPendingLuaFile) {
-    if (run_lua_script(luaFile)) {
+    bool stillPendingLuaFile = false;
+    {
       PendingCommandLockGuard guard;
       if (guard && pending_lua_file_flag && pending_lua_file == luaFile) {
-        pending_lua_file_flag = false;
+        stillPendingLuaFile = true;
+      }
+    }
+    if (stillPendingLuaFile) {
+      if (run_lua_script(luaFile)) {
+        PendingCommandLockGuard guard;
+        if (guard && pending_lua_file_flag && pending_lua_file == luaFile) {
+          pending_lua_file_flag = false;
+        }
       }
     }
   }
@@ -3592,10 +3778,19 @@ static void tick_apply_pending_lua_commands() {
     }
   }
   if (hasPendingLuaString) {
-    if (run_lua_string(lstr).length() == 0) {
+    bool stillPendingLuaString = false;
+    {
       PendingCommandLockGuard guard;
       if (guard && pending_lua_flag && pending_lua_str == lstr) {
-        pending_lua_flag = false;
+        stillPendingLuaString = true;
+      }
+    }
+    if (stillPendingLuaString) {
+      if (run_lua_string(lstr).length() == 0) {
+        PendingCommandLockGuard guard;
+        if (guard && pending_lua_flag && pending_lua_str == lstr) {
+          pending_lua_flag = false;
+        }
       }
     }
   }
@@ -3738,6 +3933,8 @@ void loop() {
     return;
   }
 
+  tick_pending_emergency_actions();
+
   tick_power_transition();
   cancel_invalid_mode_heating_session();
   tick_self_test();
@@ -3764,7 +3961,15 @@ void loop() {
           menu_samovar_start();
         } else if (startval != SAMOVAR_STARTVAL_IDLE && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
           //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
-          pause_withdrawal(!PauseOn);
+          if (PauseOn) {
+            pause_withdrawal(false);
+          } else {
+            pause_withdrawal(true);
+            if (PauseOn && !program_Wait) {
+              rectManualPauseActive = true;
+              runtime_pair_begin(UI_WAIT_MANUAL_RECT, "Ручная пауза отбора", NOTIFY_MSG);
+            }
+          }
         } else if (startval != SAMOVAR_STARTVAL_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
           //если выполняется программа, и программа - пауза, переходим к следующей программе
           menu_samovar_start();
@@ -3787,7 +3992,9 @@ void loop() {
 #endif
 
   SamovarCommandMsg commandMsg;
-  while (!mode_switch_in_progress() && receive_samovar_command(commandMsg, 0)) {
+  while (!mode_switch_in_progress() && !pending_emergency_actions_cancel &&
+         receive_samovar_command(commandMsg, 0)) {
+    if (pending_emergency_actions_cancel) break;
     switch (commandMsg.command) {
       case SAMOVAR_START:
         mode_apply_power_on_command(commandMsg.command);
@@ -3917,6 +4124,7 @@ void loop() {
   cheese_ph_tick();
   suvid_tick();
   session_checkpoint_tick();
+  publish_ui_state_from_loop();
 
   // Обработка энкодера
   encoder.tick();
@@ -3928,6 +4136,447 @@ void loop() {
 
   process_buzzer();
   vTaskDelay(5 / portTICK_PERIOD_MS);
+}
+
+enum UiStagePhase : uint8_t {
+  UI_PHASE_IDLE = 0,
+  UI_PHASE_ROW,
+  UI_PHASE_HEATING,
+  UI_PHASE_STABILIZING,
+  UI_PHASE_HOLD,
+  UI_PHASE_COOLING,
+  UI_PHASE_OPERATOR_WAIT,
+  UI_PHASE_ACTUATOR_WAIT,
+  UI_PHASE_SAFE_WAIT,
+  UI_PHASE_LUA_KNOWN,
+  UI_PHASE_FINISHING,
+  UI_PHASE_ERROR,
+  UI_PHASE_UNKNOWN,
+};
+
+enum UiEndKind : uint8_t {
+  UI_END_SENSOR_THRESHOLD = 1,
+  UI_END_ALCOHOL = 3,
+  UI_END_ELAPSED = 5,
+  UI_END_ACTUATOR_DONE = 6,
+  UI_END_OPERATOR = 7,
+  UI_END_PLATEAU = 10,
+};
+
+enum UiEndSource : uint8_t {
+  UI_END_SOURCE_STEAM = 1,
+  UI_END_SOURCE_PIPE = 2,
+  UI_END_SOURCE_TANK = 4,
+  UI_END_SOURCE_TIMER = 7,
+  UI_END_SOURCE_ACTUATOR = 9,
+};
+
+enum UiEndOperation : uint8_t {
+  UI_END_OPERATION_GE = 1,
+  UI_END_OPERATION_LE = 2,
+  UI_END_OPERATION_ELAPSED = 3,
+  UI_END_OPERATION_DONE = 4,
+  UI_END_OPERATION_MANUAL = 5,
+};
+
+enum UiUnit : uint8_t {
+  UI_UNIT_C = 1,
+  UI_UNIT_ML = 2,
+  UI_UNIT_L_H = 3,
+  UI_UNIT_PCT = 4,
+  UI_UNIT_PH = 5,
+  UI_UNIT_S = 6,
+  UI_UNIT_MIN = 7,
+  UI_UNIT_BOOL = 8,
+  UI_UNIT_V = 9,
+  UI_UNIT_W = 10,
+  UI_UNIT_PWM = 11,
+};
+
+enum UiContinuation : uint8_t {
+  UI_CONTINUATION_AUTO = 1,
+  UI_CONTINUATION_OPERATOR = 2,
+  UI_CONTINUATION_ACTUATOR = 3,
+};
+
+enum UiControlKind : uint8_t {
+  UI_CONTROL_HEATER = 1,
+  UI_CONTROL_WITHDRAWAL = 2,
+  UI_CONTROL_WATER = 3,
+  UI_CONTROL_MIXER = 4,
+  UI_CONTROL_I2C_PUMP = 5,
+  UI_CONTROL_NBK_FEED = 6,
+};
+
+void ui_note_withdrawal_control_source(uint8_t source) {
+  uiWithdrawalControlSource = static_cast<UiControlSource>(source);
+}
+
+struct UiEndDescriptor {
+  bool present;
+  uint8_t kind;
+  uint8_t source;
+  uint8_t operation;
+  bool hasValue;
+  float value;
+  uint8_t unit;
+  bool hasRemainingSeconds;
+  uint32_t remainingSeconds;
+};
+
+struct UiWaitDescriptor {
+  uint8_t reason;
+  uint8_t continuation;
+};
+
+struct UiControlDescriptor {
+  uint8_t kind;
+  bool hasRequested;
+  float requested;
+  bool hasApplied;
+  float applied;
+  uint8_t unit;
+  uint8_t source;
+};
+
+struct UiStateDescriptor {
+  uint8_t mode;
+  uint8_t phase;
+  bool hasRow;
+  uint8_t row;
+  UiEndDescriptor end;
+  UiEndDescriptor globalEnds[2];
+  uint8_t globalEndCount;
+  UiWaitDescriptor waits[2];
+  uint8_t waitCount;
+  bool hasNextRow;
+  uint8_t nextRow;
+  UiControlDescriptor controls[4];
+  uint8_t controlCount;
+};
+
+static UiStateDescriptor s_uiStateCache = {};
+
+static void ui_add_control(UiStateDescriptor& value, uint8_t kind,
+                           bool hasRequested, float requested,
+                           bool hasApplied, float applied, uint8_t unit,
+                           uint8_t source) {
+  if (value.controlCount >= 4) return;
+  value.controls[value.controlCount++] = {
+      kind, hasRequested, requested, hasApplied, applied, unit, source};
+}
+
+static void ui_add_heater_control(UiStateDescriptor& value) {
+  if (!PowerOn) return;
+#ifdef SAMOVAR_USE_POWER
+#ifdef SAMOVAR_USE_SEM_AVR
+  const uint8_t unit = UI_UNIT_W;
+#else
+  const uint8_t unit = UI_UNIT_V;
+#endif
+  ui_add_control(value, UI_CONTROL_HEATER, true, target_power_volt,
+                 true, current_power_volt, unit, UI_CONTROL_SOURCE_UNKNOWN);
+#else
+  ui_add_control(value, UI_CONTROL_HEATER, true, heater_state ? 1.0f : 0.0f,
+                 true, heater_state ? 1.0f : 0.0f, UI_UNIT_BOOL,
+                 UI_CONTROL_SOURCE_UNKNOWN);
+#endif
+}
+
+static uint8_t ui_end_source_from_program_sensor(uint8_t sensorId) {
+  switch (sensorId) {
+    case 0: return UI_END_SOURCE_TANK;
+    case 1: return 3;  // вода
+    case 2: return UI_END_SOURCE_PIPE;
+    case 3: return UI_END_SOURCE_STEAM;
+    case 4: return 5;  // ТСА
+    default: return 0;
+  }
+}
+
+static UiStateDescriptor build_ui_state_from_loop() {
+  UiStateDescriptor value = {};
+  const SAMOVAR_MODE mode = Samovar_Mode;
+  const ProgramType currentType = current_program_type();
+  const bool hasActiveRow = ui_has_active_program_row();
+  value.mode = static_cast<uint8_t>(mode);
+  value.phase = mode == SAMOVAR_LUA_MODE
+                    ? UI_PHASE_UNKNOWN
+                    : (PowerOn ? UI_PHASE_ROW : UI_PHASE_IDLE);
+  if (PowerOn && hasActiveRow && mode != SAMOVAR_SUVID_MODE &&
+      mode != SAMOVAR_LUA_MODE) {
+    value.hasRow = true;
+    value.row = ProgramNum + 1;
+    if (ProgramNum + 1 < ProgramLen &&
+        !program_type_empty(program[ProgramNum + 1].WType)) {
+      value.hasNextRow = true;
+      value.nextRow = ProgramNum + 2;
+    }
+  }
+  if (mode == SAMOVAR_RECTIFICATION_MODE) {
+    if (PauseOn && rectManualPauseActive && !program_Wait && !program_Pause) {
+      value.waits[value.waitCount++] = {UI_WAIT_MANUAL_RECT, UI_CONTINUATION_OPERATOR};
+      value.phase = UI_PHASE_OPERATOR_WAIT;
+    }
+    if (program_Wait) {
+      uint8_t reason = 0;
+      ProgramWaitType waitType;
+      if (copy_program_wait_type(waitType)) {
+        if (waitType == PROGRAM_WAIT_STEAM) reason = UI_WAIT_RECT_STEAM;
+        if (waitType == PROGRAM_WAIT_PIPE) reason = UI_WAIT_RECT_PIPE;
+        if (waitType == PROGRAM_WAIT_DETECTOR) reason = UI_WAIT_RECT_DETECTOR;
+      }
+      if (reason != 0) {
+        value.waits[value.waitCount++] = {reason, UI_CONTINUATION_AUTO};
+        value.phase = UI_PHASE_SAFE_WAIT;
+      }
+    }
+    if (program_Pause) {
+      value.waits[value.waitCount++] = {UI_WAIT_RECT_PROGRAM_PAUSE, UI_CONTINUATION_AUTO};
+      value.phase = UI_PHASE_HOLD;
+    }
+    if (currentType == 'H') value.phase = UI_PHASE_HEATING;
+    if (currentType == 'P') {
+      value.phase = UI_PHASE_HOLD;
+      value.end = {true, UI_END_ELAPSED, UI_END_SOURCE_TIMER, UI_END_OPERATION_ELAPSED,
+          true, program[ProgramNum].Time, UI_UNIT_S, false, 0};
+    } else if ((currentType == 'B' || currentType == 'C') && program[ProgramNum].Temp > 0) {
+      value.end = {true, UI_END_SENSOR_THRESHOLD,
+          currentType == 'B' ? UI_END_SOURCE_STEAM : UI_END_SOURCE_PIPE,
+          UI_END_OPERATION_GE, true, program[ProgramNum].Temp, UI_UNIT_C, false, 0};
+    } else if (currentType == 'L') {
+      value.phase = UI_PHASE_UNKNOWN;
+    }
+    if (hasActiveRow && program_type_one_of(currentType, "HBTC") &&
+        isfinite(ActualVolumePerHour)) {
+      ui_add_control(value, UI_CONTROL_WITHDRAWAL, true,
+                     program[ProgramNum].Speed, true, ActualVolumePerHour,
+                     UI_UNIT_L_H, uiWithdrawalControlSource);
+    }
+  }
+  if ((mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_BK_MODE) && hasActiveRow) {
+    const WProgram& row = program[ProgramNum];
+    if (currentType == 'L') value.phase = UI_PHASE_UNKNOWN;
+    else if (currentType == 'T') value.end = {true, UI_END_SENSOR_THRESHOLD,
+        UI_END_SOURCE_TANK, UI_END_OPERATION_GE, true, row.Speed, UI_UNIT_C, false, 0};
+    else if (currentType == 'A' || currentType == 'P') value.end = {true, UI_END_ALCOHOL,
+        UI_END_SOURCE_TANK, UI_END_OPERATION_LE, true, row.Speed, UI_UNIT_PCT, false, 0};
+    else if (currentType == 'S' || currentType == 'R') value.end = {true, UI_END_ALCOHOL,
+        UI_END_SOURCE_TANK, UI_END_OPERATION_LE, true, row.Speed * 100.0f, UI_UNIT_PCT, false, 0};
+    if (mode == SAMOVAR_BK_MODE && bk_work_power_pending) {
+      value.waits[value.waitCount++] = {UI_WAIT_NBK_TRANSITION, UI_CONTINUATION_ACTUATOR};
+      value.phase = UI_PHASE_ACTUATOR_WAIT;
+    }
+  }
+  if (mode == SAMOVAR_SUVID_MODE && PowerOn) {
+    value.phase = suvidHold.active ? UI_PHASE_HOLD :
+        (suvidHeaterOn ? UI_PHASE_HEATING : UI_PHASE_ROW);
+    if (SamSetup.SuvidHoldMinutes > 0) {
+      const int32_t remaining = suvid_hold_remaining_sec();
+      value.end = {true, 5, 7, 3, true,
+          static_cast<float>(SamSetup.SuvidHoldMinutes) * 60.0f, UI_UNIT_S,
+          remaining >= 0, remaining >= 0 ? static_cast<uint32_t>(remaining) : 0};
+    }
+    if (suvidHold.active && !suvidHold.inBand) {
+      value.waits[value.waitCount++] = {UI_WAIT_SUVID_HOLD_OUTSIDE_BAND, UI_CONTINUATION_AUTO};
+    }
+  }
+  if (mode == SAMOVAR_NBK_MODE && PowerOn) {
+    if (nbkActuatorCommand.active && nbkActuatorCommand.closeTransitionPair) {
+      value.waits[value.waitCount++] = {UI_WAIT_NBK_TRANSITION,
+                                        UI_CONTINUATION_ACTUATOR};
+    } else if (nbkActuatorCommand.active && nbkActuatorCommand.closeSafeWaitPair) {
+      value.waits[value.waitCount++] = {UI_WAIT_NBK_SAFE,
+                                        UI_CONTINUATION_ACTUATOR};
+    } else if (nbk_transition_active()) {
+      value.waits[value.waitCount++] = {UI_WAIT_NBK_TRANSITION,
+                                        UI_CONTINUATION_ACTUATOR};
+    }
+    if (nbk_safe_waiting && value.waitCount < 2) {
+      value.waits[value.waitCount++] = {UI_WAIT_NBK_SAFE,
+                                        UI_CONTINUATION_ACTUATOR};
+    }
+    if (currentType == 'H') {
+      value.phase = UI_PHASE_HEATING;
+      value.end = {true, UI_END_SENSOR_THRESHOLD, UI_END_SOURCE_STEAM,
+          UI_END_OPERATION_GE, true, 75.0f, UI_UNIT_C, false, 0};
+    } else if (currentType == 'O') {
+      value.phase = UI_PHASE_STABILIZING;
+    }
+    if (nbkUiPowerApplied && isfinite(nbk_M)) {
+#ifdef SAMOVAR_USE_SEM_AVR
+      const uint8_t powerUnit = UI_UNIT_W;
+#else
+      const uint8_t powerUnit = UI_UNIT_V;
+#endif
+      ui_add_control(value, UI_CONTROL_HEATER, false, 0, true,
+                     fromPower(nbk_M), powerUnit, nbkUiPowerSource);
+    }
+    if (nbkUiFeedApplied && isfinite(nbk_P)) {
+      ui_add_control(value, UI_CONTROL_NBK_FEED, false, 0, true, nbk_P,
+                     UI_UNIT_L_H, nbkUiFeedSource);
+    }
+  }
+  if (mode == SAMOVAR_BEER_MODE && PowerOn && ProgramNum != PROGRAM_END) {
+    const WProgram& row = program[ProgramNum];
+    if (beerManualPause) {
+      value.waits[value.waitCount++] = {UI_WAIT_MANUAL_BEER, UI_CONTINUATION_OPERATOR};
+      value.phase = UI_PHASE_OPERATOR_WAIT;
+    }
+    if (currentType == 'C' && beerSkipConfirmProgramNum == ProgramNum) {
+      value.waits[value.waitCount++] = {UI_WAIT_BEER_SKIP_COOL_CONFIRM, UI_CONTINUATION_OPERATOR};
+      value.phase = UI_PHASE_OPERATOR_WAIT;
+    }
+    const DSSensor* sensor = nullptr;
+    const char* sensorName = "";
+    if (currentType == 'P' && begintime > 0 &&
+        beer_control_sensor(row.TempSensor, sensor, sensorName) && sensor_valid(*sensor) &&
+        sensor->avgTemp < row.Temp - BEER_TEMP_HYSTERESIS) {
+      value.waits[value.waitCount++] = {UI_WAIT_BEER_HOLD_CLOCK_FREEZE, UI_CONTINUATION_AUTO};
+      value.phase = UI_PHASE_HOLD;
+    }
+    if (currentType == 'M' && startval == SAMOVAR_STARTVAL_BEER_WAIT_MALT) {
+      value.waits[value.waitCount++] = {UI_WAIT_BEER_MALT, UI_CONTINUATION_OPERATOR};
+      value.phase = UI_PHASE_OPERATOR_WAIT;
+    }
+    if (currentType == 'C') value.phase = UI_PHASE_COOLING;
+    else if (currentType == 'P' || currentType == 'B' || currentType == 'F') {
+      value.phase = currentType == 'B' && begintime == 0 ? UI_PHASE_HEATING : UI_PHASE_HOLD;
+      if ((currentType == 'P' || currentType == 'B') && begintime > 0) {
+        value.end = {true, UI_END_ELAPSED, UI_END_SOURCE_TIMER, UI_END_OPERATION_ELAPSED,
+            true, row.Time * 60.0f, UI_UNIT_S, false, 0};
+      }
+    } else if (currentType == 'M' || currentType == 'W') {
+      value.phase = UI_PHASE_OPERATOR_WAIT;
+      value.end = {true, UI_END_OPERATOR, UI_END_SOURCE_ACTUATOR, UI_END_OPERATION_MANUAL,
+          false, 0, UI_UNIT_S, false, 0};
+    } else if (currentType == 'A') value.phase = UI_PHASE_ACTUATOR_WAIT;
+    else if (currentType == 'L') value.phase = UI_PHASE_UNKNOWN;
+    if (mixer_status) {
+      ui_add_control(value, UI_CONTROL_MIXER, false, 0, true, 1,
+                     UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);
+    }
+    if (valve_status) {
+      ui_add_control(value, UI_CONTROL_WATER, false, 0, true, 1,
+                     UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);
+    }
+  }
+  if (mode == SAMOVAR_BK_MODE && PowerOn) {
+    if (bk_water_auto) {
+#ifdef USE_WATER_PUMP
+      ui_add_control(value, UI_CONTROL_WATER, true, bk_pwm, true,
+                     water_pump_speed, UI_UNIT_PWM,
+                     UI_CONTROL_SOURCE_AUTO_WATER);
+#else
+      ui_add_control(value, UI_CONTROL_WATER, true, 1, true,
+                     valve_status ? 1.0f : 0.0f, UI_UNIT_BOOL,
+                     UI_CONTROL_SOURCE_AUTO_WATER);
+#endif
+    } else if (valve_status) {
+      ui_add_control(value, UI_CONTROL_WATER, false, 0, true, 1,
+                     UI_UNIT_BOOL, UI_CONTROL_SOURCE_UNKNOWN);
+    }
+  }
+  if (mode == SAMOVAR_CHEESE_MODE && PowerOn && hasActiveRow) {
+    const WProgram& row = program[ProgramNum];
+    const CheeseStageKind kind = cheese_stage_kind(currentType);
+    const DSSensor* cheeseSensor = nullptr;
+    const char* cheeseSensorName = "";
+    const bool hasCheeseSensor = beer_control_sensor(
+        row.TempSensor, cheeseSensor, cheeseSensorName);
+    const uint8_t cheeseEndSource = ui_end_source_from_program_sensor(row.TempSensor);
+    if (kind == CHEESE_STAGE_HEAT) {
+      value.phase = UI_PHASE_HEATING;
+      value.end = {hasCheeseSensor && cheeseEndSource != 0, UI_END_SENSOR_THRESHOLD, cheeseEndSource,
+          UI_END_OPERATION_GE, true, row.Temp, UI_UNIT_C, false, 0};
+    } else if (kind == CHEESE_STAGE_HOLD) {
+      value.phase = UI_PHASE_HOLD;
+      const float totalSeconds = row.Time * 60.0f;
+      const float remaining = totalSeconds -
+          static_cast<float>(cheeseRuntime.holdAccumulatedMs) / 1000.0f;
+      value.end = {true, UI_END_ELAPSED, UI_END_SOURCE_TIMER,
+          UI_END_OPERATION_ELAPSED, true, totalSeconds, UI_UNIT_S,
+          remaining >= 0.0f, remaining >= 0.0f ? static_cast<uint32_t>(ceilf(remaining)) : 0};
+      if (hasCheeseSensor &&
+          !cheese_in_temperature_band(cheeseSensor->avgTemp, row.Temp)) {
+        value.waits[value.waitCount++] = {UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE,
+                                          UI_CONTINUATION_AUTO};
+      }
+    } else if (kind == CHEESE_STAGE_COOL) {
+      value.phase = UI_PHASE_COOLING;
+      value.end = {hasCheeseSensor && cheeseEndSource != 0, UI_END_SENSOR_THRESHOLD, cheeseEndSource,
+          UI_END_OPERATION_LE, true, row.Temp, UI_UNIT_C, false, 0};
+    } else if (kind == CHEESE_STAGE_WAIT) {
+      value.phase = UI_PHASE_OPERATOR_WAIT;
+      value.waits[value.waitCount++] = {UI_WAIT_CHEESE_OPERATOR,
+                                        UI_CONTINUATION_OPERATOR};
+    } else if (kind == CHEESE_STAGE_DOSE && cheeseRuntime.doserStarted &&
+               !cheeseRuntime.doserCompleted) {
+      value.phase = UI_PHASE_ACTUATOR_WAIT;
+      value.waits[value.waitCount++] = {UI_WAIT_CHEESE_DOSE,
+                                        UI_CONTINUATION_ACTUATOR};
+    } else if (kind == CHEESE_STAGE_PH) {
+      value.phase = UI_PHASE_HOLD;
+      if (cheese_ph_valid()) {
+        value.end = {true, UI_END_SENSOR_THRESHOLD, 6, UI_END_OPERATION_LE,
+            true, row.Param, UI_UNIT_PH, false, 0};
+      }
+    } else if (kind == CHEESE_STAGE_LUA) {
+      value.phase = UI_PHASE_UNKNOWN;
+    }
+    if ((kind == CHEESE_STAGE_HEAT || kind == CHEESE_STAGE_COOL) &&
+        cheeseRuntime.temperatureConfirmActive && value.waitCount < 2) {
+      value.waits[value.waitCount++] = {UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                                        UI_CONTINUATION_AUTO};
+    }
+    if (kind == CHEESE_STAGE_PH && cheeseRuntime.phReachedActive &&
+        value.waitCount < 2) {
+      value.waits[value.waitCount++] = {UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
+                                        UI_CONTINUATION_AUTO};
+    }
+    if (cheeseRuntime.mixerRunning) {
+      ui_add_control(value, UI_CONTROL_MIXER, false, 0, true, 1,
+                     UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);
+    }
+    if (kind == CHEESE_STAGE_COOL && valve_status) {
+      ui_add_control(value, UI_CONTROL_WATER, false, 0, true, 1,
+                     UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);
+    }
+  }
+  if (mode != SAMOVAR_NBK_MODE) ui_add_heater_control(value);
+  if (value.waitCount > 0) {
+    const uint8_t reason = value.waits[0].reason;
+    if (reason == UI_WAIT_RECT_PROGRAM_PAUSE ||
+        reason == UI_WAIT_BEER_HOLD_CLOCK_FREEZE ||
+        reason == UI_WAIT_SUVID_HOLD_OUTSIDE_BAND ||
+        reason == UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE) value.phase = UI_PHASE_HOLD;
+    else if (reason == UI_WAIT_NBK_TRANSITION || reason == UI_WAIT_CHEESE_DOSE)
+      value.phase = UI_PHASE_ACTUATOR_WAIT;
+    else if (reason == UI_WAIT_RECT_STEAM || reason == UI_WAIT_RECT_PIPE ||
+             reason == UI_WAIT_RECT_DETECTOR || reason == UI_WAIT_NBK_SAFE)
+      value.phase = UI_PHASE_SAFE_WAIT;
+    else value.phase = UI_PHASE_OPERATOR_WAIT;
+  }
+  const bool distLuaRow = mode == SAMOVAR_DISTILLATION_MODE && currentType == 'L';
+  if (PowerOn && !distLuaRow &&
+      (mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_BK_MODE)) {
+    value.globalEnds[value.globalEndCount++] = {true, UI_END_SENSOR_THRESHOLD,
+        UI_END_SOURCE_TANK, UI_END_OPERATION_GE, true, SamSetup.DistTemp,
+        UI_UNIT_C, false, 0};
+    if (TankSensor.avgTemp > 90 && SamSetup.DistTimeF > 0) {
+      value.globalEnds[value.globalEndCount++] = {true, UI_END_PLATEAU,
+          UI_END_SOURCE_TANK, 0, true, static_cast<float>(SamSetup.DistTimeF),
+          UI_UNIT_MIN, false, 0};
+    }
+  }
+  return value;
+}
+
+static void publish_ui_state_from_loop() {
+  const UiStateDescriptor value = build_ui_state_from_loop();
+  if (!runtime_state_lock(0)) return;
+  s_uiStateCache = value;
+  runtime_state_unlock(true);
 }
 
 static inline void jsonAddKey(Print &out, bool &first, const char *key) {
@@ -3962,6 +4611,71 @@ static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool 
 }
 
 #include "json_field_raw.h"
+
+static void writeUiEndFields(Print& out, bool& first, const UiEndDescriptor& value) {
+  jsonFieldRaw(out, first, "e", value.kind);
+  jsonFieldRaw(out, first, "es", value.source);
+  jsonFieldRaw(out, first, "eo", value.operation);
+  if (value.hasValue) {
+    jsonFieldFloat(out, first, "ev", value.value, 3);
+    jsonFieldRaw(out, first, "eu", value.unit);
+  }
+  if (value.hasRemainingSeconds) jsonFieldRaw(out, first, "et", value.remainingSeconds);
+}
+
+static void writeUiStateJson(Print& out, bool& first, const UiStateDescriptor& value,
+                             const String& luaStatus) {
+  jsonAddKey(out, first, "ui");
+  out.print('{');
+  bool uiFirst = true;
+  jsonFieldRaw(out, uiFirst, "m", value.mode);
+  if (value.hasRow) jsonFieldRaw(out, uiFirst, "r", value.row);
+  jsonFieldRaw(out, uiFirst, "p", value.phase);
+  if (value.end.present) writeUiEndFields(out, uiFirst, value.end);
+  if (value.globalEndCount > 0) {
+    jsonAddKey(out, uiFirst, "g");
+    out.print('[');
+    for (uint8_t index = 0; index < value.globalEndCount; index++) {
+      if (index > 0) out.print(',');
+      out.print('{');
+      bool globalFirst = true;
+      writeUiEndFields(out, globalFirst, value.globalEnds[index]);
+      out.print('}');
+    }
+    out.print(']');
+  }
+  jsonAddKey(out, uiFirst, "w");
+  out.print('[');
+  for (uint8_t index = 0; index < value.waitCount; index++) {
+    if (index > 0) out.print(',');
+    out.print("{\"q\":");
+    out.print(value.waits[index].reason);
+    out.print(",\"co\":");
+    out.print(value.waits[index].continuation);
+    out.print('}');
+  }
+  out.print(']');
+  if (value.hasNextRow) jsonFieldRaw(out, uiFirst, "n", value.nextRow);
+  jsonAddKey(out, uiFirst, "c");
+  out.print('[');
+  for (uint8_t index = 0; index < value.controlCount; index++) {
+    if (index > 0) out.print(',');
+    const UiControlDescriptor& control = value.controls[index];
+    out.print("{\"k\":");
+    out.print(control.kind);
+    bool controlFirst = false;
+    if (control.hasRequested) jsonFieldFloat(out, controlFirst, "r", control.requested, 3);
+    if (control.hasApplied) jsonFieldFloat(out, controlFirst, "a", control.applied, 3);
+    jsonFieldRaw(out, controlFirst, "u", control.unit);
+    jsonFieldRaw(out, controlFirst, "s", control.source);
+    out.print('}');
+  }
+  out.print(']');
+  if (value.mode == SAMOVAR_LUA_MODE && luaStatus.length() > 0) {
+    jsonFieldString(out, uiFirst, "ls", luaStatus);
+  }
+  out.print('}');
+}
 
 static bool runtimeEventWrite(Print& out, const char* value, size_t length) {
   return out.write(reinterpret_cast<const uint8_t*>(value), length) == length;
@@ -4196,7 +4910,9 @@ struct AjaxTelemetrySnapshot {
   String heaterAlarmReason;
   bool boilingDetected;
   bool boilingPrecisionSensorConfigured;
+  uint32_t sessionId;
   uint32_t latestMessageSequence;
+  UiStateDescriptor ui;
 };
 
 static_assert(sizeof(AjaxTelemetrySnapshot) <= 960,
@@ -4208,7 +4924,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
       snapshot.crt, snapshot.status, snapshot.luaStatus,
       snapshot.currentPowerMode, messageCursor, snapshot.eventText,
       snapshot.runtimeEvents, snapshot.eventCount,
-      snapshot.latestMessageSequence);
+      snapshot.latestMessageSequence, s_uiStateCache, snapshot.ui);
   if (snapshotResult != RUNTIME_AJAX_SNAPSHOT_OK) return snapshotResult;
 
   snapshot.heaterAlarmLatched = heater_safety_latched();
@@ -4217,6 +4933,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   } else {
     snapshot.heaterAlarmReason = "";
   }
+  snapshot.sessionId = currentSessionId;
   snapshot.bmeTemp = bme_temp;
   snapshot.bmePressure = bme_pressure;
   snapshot.startPressure = start_pressure;
@@ -4287,11 +5004,11 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
 
   const SAMOVAR_MODE mode = Samovar_Mode;
   const int16_t status = SamovarStatusInt;
-  snapshot.statusInt = status;  // [Б6.1] числовой статус в телеметрии
-  snapshot.secondPumpEnabled = mode == SAMOVAR_RECTIFICATION_MODE &&
+  const ProgramType currentType = current_program_type();
+  snapshot.statusInt = SamovarStatusInt;
+  snapshot.secondPumpEnabled = Samovar_Mode == SAMOVAR_RECTIFICATION_MODE &&
                                rect_second_i2c_pump_enabled();
   snapshot.secondPumpRunning = snapshot.secondPumpEnabled && rectSecondPumpRunning;
-  const ProgramType currentType = current_program_type();
   if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
        mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE ||
        mode == SAMOVAR_CHEESE_MODE) &&
@@ -4383,6 +5100,7 @@ static void writeAjaxTelemetryFields(
   out.print('"');
   out.print(SAMOVAR_VERSION);
   out.print('"');
+  jsonFieldRaw(out, first, "sessionId", snapshot.sessionId);
   jsonFieldBool(out, first, "boot_degraded", bootDegraded);
   jsonFieldString(out, first, "boot_degraded_reason", bootDegradedReason);
   jsonFieldRaw(out, first, "VolumeAll", snapshot.volumeAll);
@@ -4482,6 +5200,7 @@ static void writeAjaxTelemetryFields(
     }
   }
 
+  writeUiStateJson(out, first, snapshot.ui, snapshot.luaStatus);
   jsonFieldString(out, first, "Status", snapshot.status);
   jsonFieldString(out, first, "Lstatus", snapshot.luaStatus);
   jsonFieldBool(out, first, "heaterAlarmLatched", snapshot.heaterAlarmLatched);
