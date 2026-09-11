@@ -73,6 +73,7 @@ typedef std::function<void(void *, AsyncClient *, struct pbuf *pb)> AcPacketHand
 typedef std::function<void(void *, AsyncClient *, uint32_t time)> AcTimeoutHandler;
 
 struct tcp_pcb;
+struct lwip_tcp_event_packet_t;
 class AsyncTCP_detail;
 
 class AsyncClient {
@@ -275,6 +276,7 @@ protected:
   friend class AsyncServer;
 
   tcp_pcb *_pcb;
+  lwip_tcp_event_packet_t *_error_event{nullptr};
 
   AcConnectHandler _connect_cb;
   void *_connect_cb_arg;
@@ -302,6 +304,7 @@ protected:
   uint32_t _ack_timeout;
   uint16_t _connect_port;
 
+  bool _reserve_error_event();
   int8_t _close();
   int8_t _connected(tcp_pcb *pcb, int8_t err);
   void _error(int8_t err);

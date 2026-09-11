@@ -506,18 +506,18 @@ int8_t AsyncTCP_detail::tcp_sent(void *arg, struct tcp_pcb *pcb, uint16_t len) {
 void AsyncTCP_detail::tcp_error(void *arg, int8_t err) {
   // ets_printf("+E: 0x%08x\n", arg);
   AsyncClient *client = reinterpret_cast<AsyncClient *>(arg);
-  if (client && client->_pcb) {
+  if (!client) {
+    return;
+  }
+  if (client->_pcb) {
     // The pcb has already been freed by LwIP; do not attempt to clear the callbacks!
     _remove_events_for_client(client);
     client->_pcb = nullptr;
   }
 
-  // enqueue event to be processed in the async task for the user callback
-  lwip_tcp_event_packet_t *e = new (std::nothrow) lwip_tcp_event_packet_t{LWIP_TCP_ERROR, client};
-  if (!e) {
-    async_tcp_log_e("Failed to allocate event packet");
-    return;
-  }
+  // Reserved before binding TCP callbacks: cleanup must not depend on free heap.
+  lwip_tcp_event_packet_t *e = client->_error_event;
+  client->_error_event = nullptr;
   e->error.err = err;
 
   queue_mutex_guard guard;
@@ -778,6 +778,11 @@ AsyncClient::AsyncClient(tcp_pcb *pcb)
     _rx_timeout(0), _rx_last_ack(0), _ack_timeout(CONFIG_ASYNC_TCP_MAX_ACK_TIME), _connect_port(0) {
   _pcb = pcb;
   if (_pcb) {
+    if (!_reserve_error_event()) {
+      tcp_abort(_pcb);
+      _pcb = nullptr;
+      return;
+    }
     _rx_last_packet = millis();
     _bind_tcp_callbacks(_pcb, this);
   }
@@ -786,7 +791,17 @@ AsyncClient::AsyncClient(tcp_pcb *pcb)
 AsyncClient::~AsyncClient() {
   if (_pcb) {
     _close();
+  } else if (_async_queue_mutex) {
+    _remove_events_for_client(this);
   }
+  delete _error_event;
+}
+
+bool AsyncClient::_reserve_error_event() {
+  if (!_error_event) {
+    _error_event = new (std::nothrow) lwip_tcp_event_packet_t{LWIP_TCP_ERROR, this};
+  }
+  return _error_event != nullptr;
 }
 
 /*
@@ -854,6 +869,10 @@ bool AsyncClient::connect(ip_addr_t addr, uint16_t port) {
     async_tcp_log_e("failed to start task");
     return false;
   }
+  if (!_reserve_error_event()) {
+    async_tcp_log_e("failed to allocate error event");
+    return false;
+  }
 
   tcp_pcb *pcb;
   {
@@ -907,6 +926,10 @@ bool AsyncClient::connect(const char *host, uint16_t port) {
 
   if (!_start_async_task()) {
     async_tcp_log_e("failed to start task");
+    return false;
+  }
+  if (!_reserve_error_event()) {
+    async_tcp_log_e("failed to allocate error event");
     return false;
   }
 
@@ -1589,8 +1612,10 @@ int8_t AsyncTCP_detail::tcp_accept(void *arg, tcp_pcb *pcb, int8_t err) {
 
       // Couldn't allocate accept event
       // We can't let the client object call in to close, as we're on the LWIP thread; it could deadlock trying to RPC to itself
+      _reset_tcp_callbacks(pcb, c);
       c->_pcb = nullptr;
       tcp_abort(pcb);
+      delete c;
       async_tcp_log_e("_accept failed: couldn't accept client");
       return ERR_ABRT;
     }

@@ -2,6 +2,8 @@
 
 #ifdef USE_CRASH_HANDLER
 
+#include <esp_core_dump.h>
+
 static bool fs_available = false;
 
 // Функция для получения строки с причиной сбоя
@@ -24,13 +26,59 @@ String get_reset_reason_string() {
   }
 }
 
+static void append_core_dump_to_report(String& crash_log) {
+  crash_log += "\n=== SAVED CORE DUMP ===\n";
+  esp_err_t err = esp_core_dump_image_check();
+  if (err != ESP_OK) {
+    crash_log += "Core dump unavailable: " + String(esp_err_to_name(err)) + "\n";
+    return;
+  }
+
+  esp_core_dump_summary_t summary = {};
+  err = esp_core_dump_get_summary(&summary);
+  if (err != ESP_OK) {
+    crash_log += "Core dump read failed: " + String(esp_err_to_name(err)) + "\n";
+    return;
+  }
+
+  // Снимок не стираем: он нужен для полного разбора и может быть старше последнего сброса.
+  crash_log += "Saved snapshot may predate this reset.\n";
+  char line[96];
+  snprintf(line, sizeof(line), "Crashed Task: %.*s\n", (int)sizeof(summary.exc_task), summary.exc_task);
+  crash_log += line;
+  snprintf(line, sizeof(line), "Exception PC: 0x%08lx\nException Cause: %lu\nException Address: 0x%08lx\n",
+           (unsigned long)summary.exc_pc, (unsigned long)summary.ex_info.exc_cause,
+           (unsigned long)summary.ex_info.exc_vaddr);
+  crash_log += line;
+  snprintf(line, sizeof(line), "Crashed Firmware ELF SHA256: %.*s\n",
+           (int)sizeof(summary.app_elf_sha256), (const char*)summary.app_elf_sha256);
+  crash_log += line;
+  crash_log += "Backtrace:";
+  const uint32_t max_frames = sizeof(summary.exc_bt_info.bt) / sizeof(summary.exc_bt_info.bt[0]);
+  for (uint32_t i = 0; i < summary.exc_bt_info.depth && i < max_frames; ++i) {
+    snprintf(line, sizeof(line), " 0x%08lx", (unsigned long)summary.exc_bt_info.bt[i]);
+    crash_log += line;
+  }
+  if (summary.exc_bt_info.depth == 0) {
+    crash_log += " unavailable (no frames)";
+  }
+  if (summary.exc_bt_info.corrupted) {
+    crash_log += " [CORRUPTED]";
+  } else if (summary.exc_bt_info.depth >= max_frames) {
+    crash_log += " [frame limit reached]";
+  }
+  crash_log += "\n";
+}
+
 // Функция для сохранения диагностического отчета в файл
 void save_stacktrace_to_file(const char* info) {
   // Формируем заголовок с информацией о сбое
   String crash_log = "=== CRASH REPORT ===\n";
-  crash_log += "Time: " + String(millis()) + " ms\n";
+  crash_log += "Boot Uptime: " + String(millis()) + " ms\n";
   crash_log += "Info: " + String(info) + "\n";
   crash_log += "Reset Reason: " + get_reset_reason_string() + "\n";
+  append_core_dump_to_report(crash_log);
+  crash_log += "\n=== CURRENT BOOT DIAGNOSTICS (NOT CRASH-TIME STATE) ===\n";
   crash_log += "Free Heap: " + String(ESP.getFreeHeap()) + " bytes\n";
   crash_log += "Largest Free Block: " + String(ESP.getMaxAllocHeap()) + " bytes\n";
   crash_log += "Chip Model: " + String(ESP.getChipModel()) + "\n";
@@ -133,6 +181,7 @@ void init_crash_handler() {
                     reason != ESP_RST_UNKNOWN);
   
   if (was_crash) {
+    SendMsg("Аварийная перезагрузка", ALARM_MSG);
     Serial.println("[CRASH] Crash detected! Saving log...");
     // Сохраняем информацию о предыдущем сбое
     String crash_info = "Previous crash detected at startup. Reason: " + reasonStr;
