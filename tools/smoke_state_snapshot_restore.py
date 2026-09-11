@@ -212,6 +212,10 @@ enum SAMOVAR_MODE {
 };
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100 };
+enum esp_reset_reason_t { ESP_RST_SW, ESP_RST_PANIC };
+static esp_reset_reason_t resetReason = ESP_RST_SW;
+static esp_reset_reason_t esp_reset_reason() { return resetReason; }
+static bool is_crash_reset_reason(esp_reset_reason_t reason) { return reason == ESP_RST_PANIC; }
 
 #include "string_utils.h"
 #include "program_io.h"
@@ -362,7 +366,7 @@ static void WriteConsoleLog(const String&) { consoleLogCalls++; }
 
 // Отложенный текст предупреждения живёт в Samovar.ino рядом с restore_state_snapshot.
 static String pendingStateSnapshotNotice;
-static bool pendingStateSnapshotAlarm = false;
+static bool pendingStateSnapshotWasRunning = false;
 
 // T2 (blynk-log-channel.md): currentSessionId (Samovar.h) читает
 // state_snapshot_header() (FS.ino), sessionResumeAvailable/sessionResumeId (Samovar.ino,
@@ -450,8 +454,9 @@ static void reset_world() {
   formatUptimeCalls = 0;
   lastMsgText = String();
   pendingStateSnapshotNotice = String();
-  pendingStateSnapshotAlarm = false;
+  pendingStateSnapshotWasRunning = false;
   state_snapshot_program_hash = 0;
+  state_snapshot_last_power_on = false;
   STcnt = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
   PowerOn = false;
@@ -503,8 +508,8 @@ int main() {
   tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
   check(writeSnapshotCalls == 2, "при включённом нагреве снимок обновляется каждый период");
   PowerOn = false;
-  tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
-  check(writeSnapshotCalls == 3, "выключение нагрева обязано один раз обновить снимок");
+  tick_snapshot(1);
+  check(writeSnapshotCalls == 3, "выключение нагрева обязано обновить снимок на ближайшем секундном тике");
   StateSnapshot stopped;
   check(read_state_snapshot(stopped) && !stopped.powerOn,
         "после штатного выключения снимок не должен сохранять H=1");
@@ -541,10 +546,18 @@ int main() {
   check(sendMsgCalls == 0, "предупреждение уходит не из restore, а из отчёта в конце setup");
   state_snapshot_report_pending();
   check(sendMsgCalls == 1, "отчёт обязан отправить предупреждение");
-  check(lastMsgType == ALARM_MSG, "перезагрузка при включённом нагреве - тревога, а не предупреждение");
+  check(lastMsgType == NOTIFY_MSG,
+        "после программного рестарта сообщение о прерванной сессии должно быть обычным");
   check(consoleLogCalls == 1, "предупреждение должно попасть и в журнал");
   state_snapshot_report_pending();
   check(sendMsgCalls == 1, "повторный отчёт не должен дублировать предупреждение");
+
+  pendingStateSnapshotNotice = String("Сессия прервана перезагрузкой");
+  pendingStateSnapshotWasRunning = true;
+  resetReason = ESP_RST_PANIC;
+  state_snapshot_report_pending();
+  check(lastMsgType == ALARM_MSG, "после аварийного сброса сообщение о сессии должно быть тревогой");
+  resetReason = ESP_RST_SW;
 
   // 5. Восстановленная программа считается уже сохранённой: файл не переписывается.
   writeSnapshotCalls = 0;
@@ -815,6 +828,7 @@ def extract_constants(fs_ino: str) -> str:
         r"static const uint8_t STATE_SNAPSHOT_PERIOD_S = \d+;",
         r"static const size_t STATE_SNAPSHOT_MAX_BYTES = \d+;",
         r"static uint32_t state_snapshot_program_hash = \d+;",
+        r"static bool state_snapshot_last_power_on = (?:true|false);",
     ]
     found = []
     for token in tokens:

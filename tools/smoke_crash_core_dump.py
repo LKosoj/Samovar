@@ -9,6 +9,7 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "crash_handler.ino"
+HEADER = ROOT / "crash_handler.h"
 
 PREFIX = r'''
 #include <cstdint>
@@ -188,12 +189,17 @@ int main() {
 
 
 def run(source: str) -> tuple[int, str]:
+    header = HEADER.read_text(encoding="utf-8")
+    classifier_signature = "inline bool is_crash_reset_reason(esp_reset_reason_t reason)"
+    classifier = classifier_signature + " {" + extract_function_body(header, classifier_signature) + "}"
     methods = (
         "void append_core_dump_to_report(String& crash_log)",
         "void save_stacktrace_to_file(const char* info)",
         "void init_crash_handler()",
     )
-    code = PREFIX + "\n".join(sig + " {" + extract_function_body(source, sig) + "}" for sig in methods) + CASES
+    code = PREFIX + classifier + "\n" + "\n".join(
+        sig + " {" + extract_function_body(source, sig) + "}" for sig in methods
+    ) + CASES
     with tempfile.TemporaryDirectory(prefix="samovar-core-dump-") as tmp:
         cpp, exe = Path(tmp) / "test.cpp", Path(tmp) / "test"
         cpp.write_text(code, encoding="utf-8")

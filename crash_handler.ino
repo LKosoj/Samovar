@@ -175,10 +175,7 @@ void init_crash_handler() {
   Serial.print("[CRASH] Reset Reason: "); 
   Serial.println(reasonStr);
   
-  // Считаем сбоем всё, кроме питания, кнопки, программного рестарта и сна
-  bool was_crash = (reason != ESP_RST_POWERON && reason != ESP_RST_EXT && 
-                    reason != ESP_RST_SW && reason != ESP_RST_DEEPSLEEP && 
-                    reason != ESP_RST_BROWNOUT && reason != ESP_RST_UNKNOWN);
+  bool was_crash = is_crash_reset_reason(reason);
   
   if (was_crash) {
     SendMsg("Аварийная перезагрузка", ALARM_MSG);

@@ -2274,8 +2274,7 @@ static void session_checkpoint_report_pending() {
                          F(", программа №") + String(prog) +
                          F("; нагрев НЕ возобновлён автоматически.");
   WriteConsoleLog(notice);
-  // Чекпоинт пишется только при включённом нагреве, значит перезагрузка застала процесс - авария.
-  SendMsg(notice, ALARM_MSG);
+  SendMsg(notice, is_crash_reset_reason(esp_reset_reason()) ? ALARM_MSG : NOTIFY_MSG);
   // [P8 fix#2] Без этого одно и то же предупреждение повторялось бы на каждой
   // перезагрузке (OTA, отладка), пока пользователь не пройдёт полный цикл
   // BEER/SUVID. pendingCheckpoint != 0 гарантирует, что неймспейс существует
@@ -2320,10 +2319,10 @@ static void session_checkpoint_tick() {
 // Снимок /state.csv: после незапланированной перезагрузки возвращаем в рабочий буфер
 // программу, которая шла до сбоя, но нагрев НЕ возобновляем - решает владелец.
 // Текст предупреждения копится здесь и уходит в конце setup(), когда уже подняты
-// семафоры SendMsg/WriteConsoleLog. Перезагрузка при включённом нагреве - авария:
-// такое уведомление уходит как ALARM_MSG (push с сиреной в приложениях), остальное - WARNING_MSG.
+// семафоры SendMsg/WriteConsoleLog. Уровень сообщения определяется реальной причиной
+// перезагрузки, а не сохранённым состоянием нагрева.
 static String pendingStateSnapshotNotice;
-static bool pendingStateSnapshotAlarm = false;
+static bool pendingStateSnapshotWasRunning = false;
 
 // Результат setup_check_ap_button_hold(): нужен и в setup_connect_wifi_and_notify()
 // (решает, поднимать WiFiManager или сразу режим AP), и позже там же перед подключением
@@ -2468,15 +2467,18 @@ static void restore_state_snapshot() {
     notice += F(".");
   }
   pendingStateSnapshotNotice = notice;
-  pendingStateSnapshotAlarm = snapshot.powerOn;
+  pendingStateSnapshotWasRunning = snapshot.powerOn;
 }
 
 static void state_snapshot_report_pending() {
   if (pendingStateSnapshotNotice.length() == 0) return;
   WriteConsoleLog(pendingStateSnapshotNotice);
-  SendMsg(pendingStateSnapshotNotice, pendingStateSnapshotAlarm ? ALARM_MSG : WARNING_MSG);
+  const MESSAGE_TYPE messageType = is_crash_reset_reason(esp_reset_reason())
+      ? ALARM_MSG
+      : (pendingStateSnapshotWasRunning ? NOTIFY_MSG : WARNING_MSG);
+  SendMsg(pendingStateSnapshotNotice, messageType);
   pendingStateSnapshotNotice = "";
-  pendingStateSnapshotAlarm = false;
+  pendingStateSnapshotWasRunning = false;
 }
 
 // Короткая причина перезагрузки для поля resetReason в V35 (session_begin(), ниже).

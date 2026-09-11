@@ -2,13 +2,19 @@
 #define CRASH_HANDLER_H
 
 #include <Arduino.h>
+#include <esp_system.h>
 #include "Samovar.h"
+
+inline bool is_crash_reset_reason(esp_reset_reason_t reason) {
+  return reason != ESP_RST_POWERON && reason != ESP_RST_EXT &&
+         reason != ESP_RST_SW && reason != ESP_RST_DEEPSLEEP &&
+         reason != ESP_RST_BROWNOUT && reason != ESP_RST_UNKNOWN;
+}
 
 #ifdef USE_CRASH_HANDLER
 
 #pragma message "USE_CRASH_HANDLER is ENABLED"
 
-#include <esp_system.h>
 #include <rom/rtc.h>
 
 // Инициализация обработчика сбоев

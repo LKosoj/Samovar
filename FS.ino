@@ -358,6 +358,9 @@ static const size_t STATE_SNAPSHOT_MAX_BYTES = 2048;
 // Подпись последнего снимка программы и нагрева. В простое снимок обновляется только
 // при её изменении: иначе запись каждые 30 секунд жгла бы флеш круглые сутки впустую.
 static uint32_t state_snapshot_program_hash = 0;
+// Спад нагрева не ждёт очередного 30-секундного периода: иначе штатная перезагрузка
+// сразу после остановки увидит в последнем снимке устаревшее H=1.
+static bool state_snapshot_last_power_on = false;
 
 static uint32_t state_snapshot_hash_bytes(uint32_t hash, const void* data, size_t len) {
   const uint8_t* bytes = (const uint8_t*)data;
@@ -406,9 +409,9 @@ static String state_snapshot_header() {
 }
 
 // Неатомарная запись /state.csv - осознанное решение владельца от 24.08.2026: снимок
-// пишется раз в 30 секунд (STATE_SNAPSHOT_PERIOD_S), его потеря не опаснее самого сбоя
-// питания, а временный файл с последующим переименованием удвоил бы износ флеша и время
-// такта.
+// обычно пишется раз в 30 секунд (STATE_SNAPSHOT_PERIOD_S), а при выключении нагрева -
+// на ближайшем секундном такте. Временный файл с последующим переименованием удвоил бы
+// износ флеша и время такта.
 bool write_state_snapshot() {
   const String header = state_snapshot_header();
   const String programText = serialize_program_for_mode(Samovar_Mode);
@@ -438,8 +441,10 @@ bool write_state_snapshot() {
 }
 
 void process_state_snapshot() {
+  const bool powerTurnedOff = state_snapshot_last_power_on && !PowerOn;
+  state_snapshot_last_power_on = PowerOn;
   STcnt++;
-  if (STcnt < STATE_SNAPSHOT_PERIOD_S) return;
+  if (STcnt < STATE_SNAPSHOT_PERIOD_S && !powerTurnedOff) return;
   STcnt = 0;
   const uint32_t signature = state_snapshot_program_signature();
   // PowerOn ловит режимы, которые греют без отбора (Пиво/Сувид на выдержке).

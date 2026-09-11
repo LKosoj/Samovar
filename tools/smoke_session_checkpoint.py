@@ -23,7 +23,7 @@
   писали мы сами (checkpointOwned) - "чужой" чекпоинт (например, оставшийся от
   предыдущей загрузки) переживает цикл включения в режиме, который его не пишет
   (Ректификация).
-- report_pending(): шлёт SendMsg (ALARM_MSG: перезагрузка при нагреве - авария) с текстом, называющим режим и
+- report_pending(): шлёт SendMsg с уровнем по реальной причине перезагрузки и текстом, называющим режим и
   программу, ТОЛЬКО когда pendingCheckpoint != 0; не включает PowerOn (нет
   автозапуска).
 """
@@ -147,6 +147,11 @@ static const nvs_open_mode_t NVS_READWRITE = 1;
 
 @MODE_ENUM@
 @MSG_ENUM@
+
+enum esp_reset_reason_t { ESP_RST_SW, ESP_RST_PANIC };
+static esp_reset_reason_t resetReason = ESP_RST_SW;
+static esp_reset_reason_t esp_reset_reason() { return resetReason; }
+static bool is_crash_reset_reason(esp_reset_reason_t reason) { return reason == ESP_RST_PANIC; }
 
 class String : public std::string {
  public:
@@ -377,10 +382,17 @@ int main() {
   PowerOn = false;
   session_checkpoint_report_pending();
   check(sendMsgCalls == 1, "report_pending() did not send a message for a pending checkpoint");
-  check(lastSendMsgType == ALARM_MSG, "report_pending() must use ALARM_MSG severity (reboot during heating)");
+  check(lastSendMsgType == NOTIFY_MSG,
+        "report_pending() must be a normal notification after a software reset");
   check(lastSendMsgText.find("незавершённая сессия") != std::string::npos,
         "report_pending() message does not mention the unfinished session");
   check(PowerOn == false, "report_pending() must never turn PowerOn on (no auto-start)");
+
+  pendingCheckpoint = (uint16_t(SAMOVAR_BEER_MODE) << 8) | 5;
+  resetReason = ESP_RST_PANIC;
+  session_checkpoint_report_pending();
+  check(lastSendMsgType == ALARM_MSG, "report_pending() must use ALARM_MSG after a crash reset");
+  resetReason = ESP_RST_SW;
 
   // 8) [P8 fix#2] После отчёта чекпоинт обязан быть стёрт из NVS - иначе одно и
   //    то же предупреждение повторялось бы на каждой перезагрузке. Пишем
