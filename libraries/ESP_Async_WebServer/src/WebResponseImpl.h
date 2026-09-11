@@ -8,8 +8,6 @@
 #undef min
 #undef max
 #endif
-#include <cbuf.h>
-
 #include <memory>
 #include <vector>
 
@@ -207,13 +205,16 @@ public:
 
 class AsyncResponseStream : public AsyncAbstractResponse, public Print {
 private:
-  std::unique_ptr<cbuf> _content;
+  std::unique_ptr<uint8_t[]> _content;
+  size_t _capacity{0};
+  size_t _readOffset{0};
+  bool _allocationFailed{false};
 
 public:
   AsyncResponseStream(const char *contentType, size_t bufferSize);
   AsyncResponseStream(const String &contentType, size_t bufferSize) : AsyncResponseStream(contentType.c_str(), bufferSize) {}
   bool _sourceValid() const final {
-    return (_state < RESPONSE_END);
+    return (_state < RESPONSE_END) && !_allocationFailed;
   }
   size_t _fillBuffer(uint8_t *buf, size_t maxLen) final;
   size_t write(const uint8_t *data, size_t len);
@@ -222,7 +223,7 @@ public:
    * @brief Returns the number of bytes available in the stream.
    */
   size_t available() const {
-    return _content->available();
+    return _allocationFailed ? 0 : _contentLength - _readOffset;
   }
   using Print::write;
 };

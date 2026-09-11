@@ -903,34 +903,47 @@ AsyncResponseStream::AsyncResponseStream(const char *contentType, size_t bufferS
   _code = 200;
   _contentLength = 0;
   _contentType = contentType;
-  // internal buffer will be null on allocation failure
-  _content = std::unique_ptr<cbuf>(new cbuf(bufferSize));
-  if (bufferSize && _content->size() < bufferSize) {
-    async_ws_log_e("Failed to allocate");
+  if (bufferSize) {
+    _content.reset(new (std::nothrow) uint8_t[bufferSize]);
+    if (!_content) {
+      _allocationFailed = true;
+      async_ws_log_e("Failed to allocate");
+    } else {
+      _capacity = bufferSize;
+    }
   }
 }
 
 size_t AsyncResponseStream::_fillBuffer(uint8_t *buf, size_t maxLen) {
-  return _content->read((char *)buf, maxLen);
+  const size_t len = std::min(maxLen, available());
+  if (len) {
+    memcpy(buf, _content.get() + _readOffset, len);
+    _readOffset += len;
+  }
+  return len;
 }
 
 size_t AsyncResponseStream::write(const uint8_t *data, size_t len) {
-  if (_started()) {
+  if (_started() || _allocationFailed || !len) {
     return 0;
   }
-  if (len > _content->room()) {
-    size_t needed = len - _content->room();
-    _content->resizeAdd(needed);
-    // log a warning if allocation failed, but do not return: keep writing the bytes we can
-    // with _content->write: if len is more than the available size in the buffer, only
-    // the available size will be written
-    if (len > _content->room()) {
+  if (len > _capacity - _contentLength) {
+    const size_t capacity = _contentLength + len + 1;
+    std::unique_ptr<uint8_t[]> content(new (std::nothrow) uint8_t[capacity]);
+    if (!content) {
+      _allocationFailed = true;
       async_ws_log_e("Failed to allocate");
+      return 0;
     }
+    if (_contentLength) {
+      memcpy(content.get(), _content.get(), _contentLength);
+    }
+    _content = std::move(content);
+    _capacity = capacity;
   }
-  size_t written = _content->write((const char *)data, len);
-  _contentLength += written;
-  return written;
+  memcpy(_content.get() + _contentLength, data, len);
+  _contentLength += len;
+  return len;
 }
 
 size_t AsyncResponseStream::write(uint8_t data) {
