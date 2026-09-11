@@ -285,6 +285,34 @@ async function scenarioBatchDeliversConsecutiveEventsWithoutGap() {
     fetchImpl.calls[2] + ")");
 }
 
+async function scenarioTypedPairDisplaysHumanTextOnly() {
+  const typedResume = "@P1;s=6AA3CDEF;b=54477DF9;p=0000000B;e=E;m=0;r=0D;q=01;o=00;t=0000000001D0619A;u=6AA44E4B|Отбор возобновлён";
+  const typedWarning = "Предупреждение! @P1;s=6AA3CDEF;b=54477DF9;p=0000000C;e=E;m=0;r=0D;q=01;o=01;t=0000000001D0619B|Отбор остановлен";
+  const malformed = "@P1;s=BAD|Не обрезать";
+  const fetchImpl = makeFetch([
+    { heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 },
+    {
+      events: [
+        { messageSequence: 1, Msg: typedResume, msglvl: 2 },
+        { messageSequence: 2, Msg: typedWarning, msglvl: 1 },
+        { messageSequence: 3, Msg: malformed, msglvl: 2 }
+      ],
+      heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 3
+    }
+  ]);
+  const { app, elements } = loadApp(fetchImpl);
+  await app.pollAjax(noopRender);
+  await app.pollAjax(noopRender);
+  check(elements.messages.innerHTML.indexOf("Отбор возобновлён") !== -1,
+    "typed @P1 message must display its human-readable text");
+  check(elements.messages.innerHTML.indexOf("Предупреждение! Отбор остановлен") !== -1,
+    "typed @P1 warning must preserve its visible warning prefix");
+  check(elements.messages.innerHTML.indexOf("@P1;s=6AA3CDEF") === -1,
+    "valid typed @P1 metadata must not be visible in the message list");
+  check(elements.messages.innerHTML.indexOf(malformed) !== -1,
+    "malformed @P1 text must remain unchanged instead of being truncated");
+}
+
 async function scenarioEspRebootDoesNotWarnSequenceGap() {
   const fetchImpl = makeFetch([
     {
@@ -344,6 +372,7 @@ async function main() {
   await scenarioFirstEventEverOnEmptyRingIsNotSwallowed();
   await scenarioDismissingToastKeepsSirenWhileLatched();
   await scenarioBatchDeliversConsecutiveEventsWithoutGap();
+  await scenarioTypedPairDisplaysHumanTextOnly();
   await scenarioEspRebootDoesNotWarnSequenceGap();
   await scenarioConnectionLossSoundsSiren();
 
@@ -351,7 +380,7 @@ async function main() {
     for (const message of failures) console.error("FAIL: " + message);
     process.exit(1);
   }
-  console.log("web alarm cursor bootstrap smoke passed (9 scenarios)");
+  console.log("web alarm cursor bootstrap smoke passed (10 scenarios)");
 }
 
 main().catch(function (err) {

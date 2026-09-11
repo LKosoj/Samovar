@@ -1505,16 +1505,17 @@
               notifyRuntimePairListeners(null, deviceRestarted ? 'reboot' : 'gap');
             }
             if (event.kind === 'message') {
-              activeSinks.message(event.text, event.level);
+              const pair = parseRuntimePair(event.text);
+              const prefix = event.text.indexOf('Тревога! ') === 0
+                ? 'Тревога! '
+                : (event.text.indexOf('Предупреждение! ') === 0 ? 'Предупреждение! ' : '');
+              activeSinks.message(pair ? prefix + pair.text : event.text, event.level);
+              if (pair) notifyRuntimePairListeners(pair, null);
             } else {
               activeSinks.log(
                 event.text,
                 Object.assign({}, data, { messageSequence: event.sequence })
               );
-            }
-            if (event.kind === 'message') {
-              const pair = parseRuntimePair(event.text);
-              if (pair) notifyRuntimePairListeners(pair, null);
             }
             messageCursor = event.sequence;
           }
