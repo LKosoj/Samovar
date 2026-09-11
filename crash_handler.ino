@@ -26,7 +26,7 @@ String get_reset_reason_string() {
   }
 }
 
-static void append_core_dump_to_report(String& crash_log) {
+void append_core_dump_to_report(String& crash_log) {
   crash_log += "\n=== SAVED CORE DUMP ===\n";
   esp_err_t err = esp_core_dump_image_check();
   if (err != ESP_OK) {
@@ -178,7 +178,7 @@ void init_crash_handler() {
   // Считаем сбоем всё, кроме питания, кнопки, программного рестарта и сна
   bool was_crash = (reason != ESP_RST_POWERON && reason != ESP_RST_EXT && 
                     reason != ESP_RST_SW && reason != ESP_RST_DEEPSLEEP && 
-                    reason != ESP_RST_UNKNOWN);
+                    reason != ESP_RST_BROWNOUT && reason != ESP_RST_UNKNOWN);
   
   if (was_crash) {
     SendMsg("Аварийная перезагрузка", ALARM_MSG);

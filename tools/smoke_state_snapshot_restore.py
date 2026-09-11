@@ -502,6 +502,14 @@ int main() {
   tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
   tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
   check(writeSnapshotCalls == 2, "при включённом нагреве снимок обновляется каждый период");
+  PowerOn = false;
+  tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
+  check(writeSnapshotCalls == 3, "выключение нагрева обязано один раз обновить снимок");
+  StateSnapshot stopped;
+  check(read_state_snapshot(stopped) && !stopped.powerOn,
+        "после штатного выключения снимок не должен сохранять H=1");
+  tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
+  check(writeSnapshotCalls == 3, "выключенный нагрев не должен переписывать снимок каждый период");
 
   // 4. Круг "запись - перезагрузка - чтение - восстановление".
   reset_world();

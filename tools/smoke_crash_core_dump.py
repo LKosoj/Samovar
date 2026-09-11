@@ -168,12 +168,12 @@ int main() {
   stored.exc_bt_info.depth=17;
   check(report()==s,"backtrace read beyond SDK array");
   // Старый снимок остаётся: обычный запуск не должен объявляться аварией из-за него.
-  for (auto reason : {ESP_RST_POWERON, ESP_RST_EXT, ESP_RST_SW, ESP_RST_DEEPSLEEP, ESP_RST_UNKNOWN}) {
+  for (auto reason : {ESP_RST_POWERON, ESP_RST_EXT, ESP_RST_SW, ESP_RST_DEEPSLEEP, ESP_RST_BROWNOUT, ESP_RST_UNKNOWN}) {
     reset_reason=reason; notices.clear(); checks=0;
     init_crash_handler();
     check(notices.empty() && checks==0,"normal boot emitted crash notification");
   }
-  for (auto reason : {ESP_RST_PANIC, ESP_RST_INT_WDT, ESP_RST_TASK_WDT, ESP_RST_WDT, ESP_RST_BROWNOUT, ESP_RST_SDIO}) {
+  for (auto reason : {ESP_RST_PANIC, ESP_RST_INT_WDT, ESP_RST_TASK_WDT, ESP_RST_WDT, ESP_RST_SDIO}) {
     reset_reason=reason;
     for (bool available : {true,false}) {
       SPIFFS.mounted=available; present=available; notices.clear();
@@ -189,7 +189,7 @@ int main() {
 
 def run(source: str) -> tuple[int, str]:
     methods = (
-        "static void append_core_dump_to_report(String& crash_log)",
+        "void append_core_dump_to_report(String& crash_log)",
         "void save_stacktrace_to_file(const char* info)",
         "void init_crash_handler()",
     )

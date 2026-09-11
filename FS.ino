@@ -355,8 +355,8 @@ bool create_data() {
 static const char* const STATE_SNAPSHOT_FILE = "/state.csv";
 // Больше этого не читаем: программа ограничена MAX_PROGRAM_INPUT_LEN, остальное - мусор.
 static const size_t STATE_SNAPSHOT_MAX_BYTES = 2048;
-// Подпись последней записанной программы. В простое снимок обновляется только при её
-// изменении: иначе запись каждые 30 секунд жгла бы флеш круглые сутки впустую.
+// Подпись последнего снимка программы и нагрева. В простое снимок обновляется только
+// при её изменении: иначе запись каждые 30 секунд жгла бы флеш круглые сутки впустую.
 static uint32_t state_snapshot_program_hash = 0;
 
 static uint32_t state_snapshot_hash_bytes(uint32_t hash, const void* data, size_t len) {
@@ -372,6 +372,8 @@ static uint32_t state_snapshot_program_signature() {
   uint32_t hash = 2166136261UL;
   const uint8_t mode = (uint8_t)Samovar_Mode;
   hash = state_snapshot_hash_bytes(hash, &mode, sizeof(mode));
+  const uint8_t powerOn = PowerOn ? 1 : 0;
+  hash = state_snapshot_hash_bytes(hash, &powerOn, sizeof(powerOn));
   const uint8_t len = (uint8_t)ProgramLen;
   hash = state_snapshot_hash_bytes(hash, &len, sizeof(len));
   // program[] заполняется целыми структурами из обнулённого черновика (program_commit),
