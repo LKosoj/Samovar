@@ -92,8 +92,20 @@ for global_name in ("SamovarStatusInt", "ProgramNum", "PowerOn", "Samovar_Mode",
 if "writeUiStateJson(out, first, s.ui, s.luaStatus);" not in writer_body:
     errors.append("write_blynk_mode_json must serialize ui from the shared snapshot")
 
-# --- V28..V32: разбор -> отчёт -> return до побочных эффектов ---------------
+# --- V4, V28..V32: разбор -> отчёт -> return до побочных эффектов -----------
 handler_contracts = {
+    "BLYNK_WRITE(V4)": (
+        [
+            "if (mode_switch_in_progress()) return;",
+            "parse_exact_bool(param.asStr(), state)",
+            "if (!result.ok())",
+            "report_blynk_numeric_error(4, result);",
+            "SAMOVAR_POWER_ON",
+            "SAMOVAR_POWER_OFF",
+            "queue_samovar_command(command)",
+        ],
+        ("queue_samovar_command(",),
+    ),
     "BLYNK_WRITE(V28)": (
         [
             "if (mode_switch_in_progress()) return;",
@@ -148,7 +160,7 @@ handler_contracts = {
             "parse_exact_bool(param.asStr(), state)",
             "if (!result.ok())",
             "report_blynk_numeric_error(32, result);",
-            "mode_power_on_command(Samovar_Mode)",
+            "SAMOVAR_POWER_ON",
             "SAMOVAR_POWER_OFF",
             "queue_samovar_command(command)",
         ],
@@ -174,6 +186,12 @@ for signature, (ordered, side_effects) in handler_contracts.items():
         side_effect_index = body.find(side_effect)
         if 0 <= side_effect_index < invalid_end:
             errors.append(f"{signature} side effect occurs before invalid branch returns: {side_effect}")
+
+for signature in ("BLYNK_WRITE(V4)", "BLYNK_WRITE(V32)"):
+    body = function_body(blynk, signature)
+    for forbidden in ("PowerOn", "mode_power_on_command("):
+        if forbidden in body:
+            errors.append(f"{signature} decides explicit power command from stale {forbidden}")
 
 # Отказы по состоянию должны быть видны пользователю (V26), а не теряться молча.
 refusal_body = function_body(blynk, "static inline void report_blynk_refusal(uint8_t virtualPin, const char* reason)")

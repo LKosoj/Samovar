@@ -737,8 +737,8 @@ BROWSER_TEST = r'''async page => {
     '12:00:00', '12:00:01', '12:00:02', '12:00:03', '12:00:04'
   ]), 'render success trace: ' + JSON.stringify(polling.renders));
   expect(polling.messages.includes('first') && polling.messages.includes('third') &&
-    polling.messages.includes('Пропущены сообщения') && polling.logCount === 1 &&
-    polling.history.length === 3,
+    !polling.messages.includes('Пропущены сообщения') && polling.logCount === 1 &&
+    polling.history.length === 2,
     'event/gap/log/history contract mismatch: ' + JSON.stringify(polling));
   await pollPage.close();
 

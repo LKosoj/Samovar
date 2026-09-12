@@ -3913,6 +3913,30 @@ inline void tick_usb_serial_command() {
   }
 }
 
+static void process_explicit_power_on_command() {
+  if (PowerOn) return;
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE &&
+      !rectification_ds_sensors_assigned()) {
+    notify_rectification_sensors_unassigned();
+    return;
+  }
+  SamovarCommands modeCommand = mode_power_on_command(Samovar_Mode);
+  if (modeCommand != SAMOVAR_POWER) {
+#ifndef SAMOVAR_USE_POWER
+    if (modeCommand == SAMOVAR_NBK) {
+      SendMsg("Запуск НБК отклонён: регулятор мощности недоступен в этой сборке.", ALARM_MSG);
+      return;
+    }
+#endif
+    mode_apply_power_on_command(modeCommand);
+    return;
+  }
+  set_power(true);
+  if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
+  }
+}
+
 void loop() {
   tick_usb_serial_command();
   tick_check_stack_headroom();
@@ -4011,6 +4035,9 @@ void loop() {
         if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
           SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
         }
+        break;
+      case SAMOVAR_POWER_ON:
+        process_explicit_power_on_command();
         break;
       case SAMOVAR_POWER_OFF:
         if (!mode_finish_by_status(SamovarStatusInt)) set_power(false);

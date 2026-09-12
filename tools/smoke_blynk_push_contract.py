@@ -9,7 +9,7 @@
   и включён в таблицу kBlynkFastPush; V0/V1/V6/V7/V9/V25/V23 (T2, blynk-log-channel.md)
   из быстрых пинов убраны - те же значения теперь идут 25 полями в V34;
 - быстрые пины шлются порциями (BLYNK_PUSH_PER_TICK), а не все за одну итерацию loop();
-- медленные пины (V3, V4, V13, V15, V20, V19, V16, V24) шлются из blynk_push_slow
+- медленные пины (V3, V4, V32, V13, V15, V20, V19, V16, V24) шлются из blynk_push_slow
   только при изменении/force, V24 - по отпечатку program[] (blynk_program_fingerprint),
   program_io.h при этом не трогается (он заморожен другими smoke-тестами); V5 (T2) тоже
   убран - дублируется в V34;
@@ -31,7 +31,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
+from smoke_helpers import (
+    extract_braced_block_after,
+    extract_function_body,
+    require_ordered_tokens,
+    strip_cpp_comments,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -304,7 +309,9 @@ if blynk:
     for write in [
         "Blynk.virtualWrite(V3, process);",
         "Blynk.virtualWrite(V4, (int)PowerOn);",
-        "Blynk.virtualWrite(V13, (int)PauseOn);",
+        "Blynk.virtualWrite(V32, (int)PowerOn);",
+        "const bool paused = PauseOn || beerManualPause;",
+        "Blynk.virtualWrite(V13, (int)paused);",
         "Blynk.virtualWrite(V15, ip);",
         "Blynk.virtualWrite(V20, Samovar_Mode);",
         "Blynk.virtualWrite(V19, SAMOVAR_VERSION);",
@@ -313,6 +320,16 @@ if blynk:
     ]:
         if slow_body and write not in slow_body:
             errors.append(f"blynk_push_slow must contain: {write}")
+    try:
+        power_publish_body, _ = extract_braced_block_after(
+            slow_body, "if (blynk_changed(lastPower, (int)PowerOn, force))"
+        )
+    except ValueError as exc:
+        errors.append(f"blynk_push_slow power publish: {exc}")
+    else:
+        for write in ("Blynk.virtualWrite(V4, (int)PowerOn);", "Blynk.virtualWrite(V32, (int)PowerOn);"):
+            if write not in power_publish_body:
+                errors.append(f"blynk_push_slow must publish {write} under the shared lastPower gate")
     require_ordered_tokens(
         "blynk_push_slow V15 uses ipst snapshot",
         slow_body,

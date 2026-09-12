@@ -3,12 +3,14 @@
 
 mode_registry.h хранит таблицу powerOnCommand/startCommand только один раз
 (mode_power_on_command(mode) / mode_start_command(mode)). Раньше четыре точки
-входа (Menu.ino menu_get_power, Blynk.ino BLYNK_WRITE(V4)/BLYNK_WRITE(V12),
-lua.h lua_wrapper_set_power/lua_wrapper_set_next_program) дублировали эту
+входа (Menu.ino menu_get_power, обработчик явного включения из Samovar.ino,
+Blynk.ino BLYNK_WRITE(V12), lua.h lua_wrapper_set_power/lua_wrapper_set_next_program) дублировали эту
 таблицу рукописным if/else по Samovar_Mode. Тест вытаскивает РЕАЛЬНЫЕ тела
 этих функций и проверяет:
   1. каждое тело вызывает mode_power_on_command(...) или mode_start_command(...);
-  2. в теле нет рукописных литералов команд конкретных режимов;
+  2. в теле нет рукописных литералов команд конкретных режимов; единственное
+     исключение — SAMOVAR_NBK в обработчике явного ON, потому что это
+     compile-time отказ в сборке без регулятора мощности;
   3. в lua_wrapper_set_next_program гвард "if (!PowerOn) return 0;" стоит
      раньше вызова mode_start_command(...) - иначе Lua-скрипт без активной
      сессии мог бы принудительно переключить Samovar_Mode (см. mode_registry.h
@@ -69,17 +71,24 @@ def check_body(label: str, body: str) -> None:
         # ложно сработать на "SAMOVAR_BEER_NEXT" (тот проверяется отдельным
         # токеном) и не должен сработать на легитимный enum режима вида
         # "SAMOVAR_BEER_MODE".
+        if label == "process_explicit_power_on_command" and token == "SAMOVAR_NBK":
+            continue
         if re.search(r"\b" + re.escape(token) + r"\b", body):
             errors.append(f"{label} contains hand-written command literal: {token}")
 
 
 menu_source = strip_cpp_comments(read_text("Menu.ino"))
+samovar_source = strip_cpp_comments(read_text("Samovar.ino"))
 blynk_source = strip_cpp_comments(read_text("Blynk.ino"))
 lua_source = strip_cpp_comments(read_text("lua.h"))
 
 targets = [
     ("menu_get_power", menu_source, "void menu_get_power()"),
-    ("BLYNK_WRITE(V4)", blynk_source, "BLYNK_WRITE(V4)"),
+    (
+        "process_explicit_power_on_command",
+        samovar_source,
+        "static void process_explicit_power_on_command()",
+    ),
     ("BLYNK_WRITE(V12)", blynk_source, "BLYNK_WRITE(V12)"),
     (
         "lua_wrapper_set_power",

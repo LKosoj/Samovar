@@ -132,7 +132,7 @@ INDEPENDENT_CONTEXT_TEST = r'''async page => {
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
-  const gapWarning = 'Пропущены сообщения: обнаружен разрыв последовательности.';
+  const removedGapWarning = 'Пропущены сообщения: обнаружен разрыв последовательности.';
   const rebootWarning = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const fixture = {
     version: 'test', crnt_tm: '12:00:00', stm: '00:01:00', SteamTemp: 78.1,
@@ -528,7 +528,7 @@ BROWSER_TEST = r'''async page => {
       'commit exact outcomes: ' + JSON.stringify(outcomes));
   }
 
-  async function testGapAndWarningPresentation() {
+  async function testGapIsSilent() {
     const current = await newPage('gap');
     const state = await routeTelemetry(current, async (route, cursor) => {
       if (cursor === 0) {
@@ -552,16 +552,13 @@ BROWSER_TEST = r'''async page => {
         .filter(node => node.textContent.includes(warning)).length,
       retainedCount: Array.from(document.querySelectorAll('#messages .message_2'))
         .filter(node => node.textContent.includes('after-gap')).length,
-      orderedText: document.getElementById('messages').textContent,
       audioPlayCount: window.__audioPlayCount
-    }), gapWarning);
-    expect(presentation.warningCount === 1,
-      'gap warning text/level count: ' + JSON.stringify(presentation));
+    }), removedGapWarning);
+    expect(presentation.warningCount === 0,
+      'removed gap diagnostic is visible: ' + JSON.stringify(presentation));
     expect(presentation.retainedCount === 1,
       'retained event missing after gap: ' + JSON.stringify(presentation));
-    expect(presentation.orderedText.indexOf(gapWarning) < presentation.orderedText.indexOf('after-gap'),
-      'gap warning must precede retained event');
-    expect(presentation.audioPlayCount === 0, 'gap warning triggered alarm audio');
+    expect(presentation.audioPlayCount === 0, 'retained gap event triggered alarm audio');
   }
 
   async function testBatchDelivery() {
@@ -604,7 +601,7 @@ BROWSER_TEST = r'''async page => {
     expect(JSON.stringify(outcomes) === JSON.stringify(expected),
       'batch exact outcomes: ' + JSON.stringify(outcomes));
     const warning = await current.evaluate(text =>
-      document.getElementById('messages').textContent.includes(text), gapWarning);
+      document.getElementById('messages').textContent.includes(text), removedGapWarning);
     expect(!warning, 'consecutive batch must not report a sequence gap');
   }
 
@@ -642,7 +639,7 @@ BROWSER_TEST = r'''async page => {
       await SamovarApp.pollAjax(function () {});
     });
     const wrapWarning = await wrapPage.evaluate(warning =>
-      document.getElementById('messages').textContent.includes(warning), gapWarning);
+      document.getElementById('messages').textContent.includes(warning), removedGapWarning);
     expect(JSON.stringify(wrapState.trace) === JSON.stringify([4294967294, 4294967295]),
       'wrap cursor trace: ' + JSON.stringify(wrapState.trace));
     expect(!wrapWarning, 'UINT32 wrap produced a false gap warning');
@@ -674,7 +671,7 @@ BROWSER_TEST = r'''async page => {
         .filter(node => node.textContent.includes(texts.gap)).length,
       rebootEventCount: Array.from(document.querySelectorAll('#messages .message_2'))
         .filter(node => node.textContent.includes('new-boot-1')).length
-    }), { gap: gapWarning, reboot: rebootWarning });
+    }), { gap: removedGapWarning, reboot: rebootWarning });
     expect(JSON.stringify(discontinuityState.trace) === JSON.stringify([0, 1, 2, 3]),
       'detectable reboot cursor trace: ' + JSON.stringify(discontinuityState.trace));
     expect(discontinuity.warningCount === 1 && discontinuity.gapWarningCount === 0 &&
@@ -700,7 +697,7 @@ BROWSER_TEST = r'''async page => {
       hasWarning: document.getElementById('messages').textContent.includes(warning),
       eventCount: Array.from(document.querySelectorAll('#messages .message_2'))
         .filter(node => node.textContent.includes('new-boot-collision')).length
-    }), gapWarning);
+    }), removedGapWarning);
     expect(JSON.stringify(collisionState.trace) === JSON.stringify([0, 1]),
       'reboot collision cursor trace: ' + JSON.stringify(collisionState.trace));
     expect(!collision.hasWarning && collision.eventCount === 1,
@@ -1021,7 +1018,7 @@ BROWSER_TEST = r'''async page => {
     validation_transport: testValidationTransport,
     validation_schema: testValidationSchema,
     validation_commit: testValidationCommitOrder,
-    gap: testGapAndWarningPresentation,
+    gap: testGapIsSilent,
     batch: testBatchDelivery,
     reload: testReload,
     wrap: testWrap,
@@ -1059,7 +1056,7 @@ CASE_BROWSER_FUNCTIONS = {
     "validation_transport": ("openHarness", "pollWithSinks", "testValidationTransport"),
     "validation_schema": ("openHarness", "pollWithSinks", "testValidationSchema"),
     "validation_commit": ("openHarness", "pollWithSinks", "testValidationCommitOrder"),
-    "gap": ("openHarness", "pollWithSinks", "testGapAndWarningPresentation"),
+    "gap": ("openHarness", "pollWithSinks", "testGapIsSilent"),
     "batch": ("openHarness", "pollWithSinks", "testBatchDelivery"),
     "reload": ("openHarness", "pollWithSinks", "testReload"),
     "wrap": ("openHarness", "testWrap"),
@@ -1080,7 +1077,7 @@ CASE_BROWSER_CALLS = {
     "validation_transport": "await testValidationTransport();",
     "validation_schema": "await testValidationSchema();",
     "validation_commit": "await testValidationCommitOrder();",
-    "gap": "await testGapAndWarningPresentation();",
+    "gap": "await testGapIsSilent();",
     "batch": "await testBatchDelivery();",
     "reload": "await testReload();",
     "wrap": "await testWrap();",

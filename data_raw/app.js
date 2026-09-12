@@ -33,7 +33,6 @@
   const MAX_MESSAGE_SEQUENCE = 0xFFFFFFFF;
   const RUNTIME_EVENT_BATCH_LIMIT = 32;
   const RUNTIME_PAIR_PATTERN = /^(?:(?:Тревога|Предупреждение)! )?@P1;s=([0-9A-F]{8});b=([0-9A-F]{8});p=([0-9A-F]{8});e=([BE]);m=([0-7]);r=([0-9A-F]{2});q=([0-9A-F]{2});o=([0-9A-F]{2});t=([0-9A-F]{16})(?:;u=([0-9A-F]{8}))?\|(.+)$/;
-  const MESSAGE_GAP_WARNING = 'Пропущены сообщения: обнаружен разрыв последовательности.';
   const MESSAGE_REBOOT_WARNING = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
   const TELEMETRY_OPTION_KEYS = [
@@ -1501,7 +1500,7 @@
               // перегонки - это событие, о котором оператор обязан узнать (нагрев
               // снят, программа восстанавливается из снимка). Прошивка сама о старте
               // не сообщает, поэтому единственный признак - именно откат счётчика.
-              activeSinks.message(deviceRestarted ? MESSAGE_REBOOT_WARNING : MESSAGE_GAP_WARNING, 1);
+              if (deviceRestarted) activeSinks.message(MESSAGE_REBOOT_WARNING, 1);
               notifyRuntimePairListeners(null, deviceRestarted ? 'reboot' : 'gap');
             }
             if (event.kind === 'message') {

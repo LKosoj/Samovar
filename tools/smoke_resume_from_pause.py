@@ -334,10 +334,13 @@ def main() -> int:
             "Blynk.ino BLYNK_WRITE(V13)",
             v13_block,
             [
-                "if (PauseOn",
-                "beerManualPause",
-                "resume_from_pause();",
+                "parse_exact_bool(param.asStr(), requestedPause)",
+                "report_blynk_numeric_error(13, result);",
+                "const bool paused = PauseOn || beerManualPause;",
+                "if (requestedPause == paused) return;",
+                "if (requestedPause)",
                 "enter_manual_pause();",
+                "resume_from_pause();",
             ],
             errors,
         )

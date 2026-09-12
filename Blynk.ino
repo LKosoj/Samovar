@@ -110,11 +110,16 @@ BLYNK_WRITE(V12) {
 
 BLYNK_WRITE(V13) {
   if (mode_switch_in_progress()) return;
-  // [P7 п.4][P2 п.6][Ревью] PauseOn (ректификация) ИЛИ beerManualPause (пиво) - см.
-  // Menu.ino menu_pause(). Пауза/возобновление - через общие хелперы enter_manual_pause()/
-  // resume_from_pause() (logic.h), симметрично остальным точкам входа.
-  if (PauseOn || beerManualPause) resume_from_pause();
-  else enter_manual_pause();
+  bool requestedPause = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), requestedPause);
+  if (!result.ok()) {
+    report_blynk_numeric_error(13, result);
+    return;
+  }
+  const bool paused = PauseOn || beerManualPause;
+  if (requestedPause == paused) return;
+  if (requestedPause) enter_manual_pause();
+  else resume_from_pause();
 }
 
 BLYNK_WRITE(V3) {
@@ -133,12 +138,16 @@ BLYNK_WRITE(V3) {
 }
 BLYNK_WRITE(V4) {
   if (mode_switch_in_progress()) return;
-  SamovarCommands command = SAMOVAR_POWER;
-  if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
+  bool state = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), state);
+  if (!result.ok()) {
+    report_blynk_numeric_error(4, result);
+    return;
+  }
+  SamovarCommands command = state ? SAMOVAR_POWER_ON : SAMOVAR_POWER_OFF;
   if (!queue_samovar_command(command)) {
     SendMsg("Очередь команд занята: команда Blynk V4 не поставлена", WARNING_MSG);
   }
-  //set_power(Value4);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,8 +357,8 @@ BLYNK_WRITE(V31) {
   }
 }
 
-// Явное питание: 1 - включить (если выключено), 0 - всегда выключить (= /command power=0|1).
-// В отличие от тумблера V4 направление задано явно - безопасно при потере связи.
+// Явное питание: 1 - включить, 0 - выключить. Состояние проверяется только при
+// исполнении команды из FIFO, чтобы задержанная команда не стала переключателем.
 BLYNK_WRITE(V32) {
   if (mode_switch_in_progress()) return;
   bool state = false;
@@ -358,13 +367,8 @@ BLYNK_WRITE(V32) {
     report_blynk_numeric_error(32, result);
     return;
   }
-  SamovarCommands command = SAMOVAR_NONE;
-  if (state) {
-    if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
-  } else {
-    command = SAMOVAR_POWER_OFF;
-  }
-  if (command != SAMOVAR_NONE && !queue_samovar_command(command)) {
+  SamovarCommands command = state ? SAMOVAR_POWER_ON : SAMOVAR_POWER_OFF;
+  if (!queue_samovar_command(command)) {
     report_blynk_refusal(32, "BUSY");
   }
 }
@@ -696,11 +700,6 @@ static bool blynk_changed(int& last, int now, bool force) {
   last = now;
   return true;
 }
-static bool blynk_changed(float& last, float now, bool force) {
-  if (!force && last == now) return false;
-  last = now;
-  return true;
-}
 static bool blynk_changed(uint32_t& last, uint32_t now, bool force) {
   if (!force && last == now) return false;
   last = now;
@@ -740,9 +739,13 @@ static void blynk_push_slow(bool force) {
   static int lastProgramMode = -1;
 
   const int process = (startval > 0 && startval < 5) ? 1 : 0;
+  const bool paused = PauseOn || beerManualPause;
   if (blynk_changed(lastProcess, process, force)) Blynk.virtualWrite(V3, process);
-  if (blynk_changed(lastPower, (int)PowerOn, force)) Blynk.virtualWrite(V4, (int)PowerOn);
-  if (blynk_changed(lastPause, (int)PauseOn, force)) Blynk.virtualWrite(V13, (int)PauseOn);
+  if (blynk_changed(lastPower, (int)PowerOn, force)) {
+    Blynk.virtualWrite(V4, (int)PowerOn);
+    Blynk.virtualWrite(V32, (int)PowerOn);
+  }
+  if (blynk_changed(lastPause, (int)paused, force)) Blynk.virtualWrite(V13, (int)paused);
   // V5 (давление) убран - дублируется в V34 (25-е поле), см. blynk_stage_log_line ниже.
   char ip[sizeof(ipst)] = {};
   ipst_copy(ip);
@@ -751,7 +754,10 @@ static void blynk_push_slow(bool force) {
   if (force) Blynk.virtualWrite(V19, SAMOVAR_VERSION);
 #ifdef SAMOVAR_USE_POWER
   static float lastTarget = -1e9f;
-  if (blynk_changed(lastTarget, (float)target_power_volt, force)) Blynk.virtualWrite(V16, target_power_volt);
+  if (force || lastTarget != target_power_volt) {
+    lastTarget = target_power_volt;
+    Blynk.virtualWrite(V16, target_power_volt);
+  }
 #endif
   // Программа: сериализация недешёвая, поэтому только по отпечатку program[] и при смене
   // режима (формат строк зависит от режима).

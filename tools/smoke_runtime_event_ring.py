@@ -1168,12 +1168,13 @@ def run_source_contracts() -> None:
         "let telemetryRequestInFlight = false;",
         "async function pollAjax(renderFn, sinks)",
         "fetch('/ajax?messageCursor=' + String(messageCursor)",
-        "Пропущены сообщения: обнаружен разрыв последовательности.",
         "const RUNTIME_EVENT_BATCH_LIMIT = 32;",
         "function validateRuntimeEvents(data)",
     ):
         if token not in app:
             errors.append(f"shared UI cursor contract token missing: {token}")
+    if "Пропущены сообщения: обнаружен разрыв последовательности." in app:
+        errors.append("app.js must not show the removed sequence-gap diagnostic")
     if app.count("async function pollAjax(renderFn, sinks)") != 1:
         errors.append("app.js must own exactly one cursor-aware pollAjax")
     if "messageCursor" in app and re.search(

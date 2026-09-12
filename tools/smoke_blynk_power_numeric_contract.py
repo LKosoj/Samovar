@@ -64,6 +64,16 @@ handler_contracts = {
         "if (state)",
         "queue_samovar_command(command)",
     ],
+    "BLYNK_WRITE(V13)": [
+        "parse_exact_bool(param.asStr(), requestedPause)",
+        "if (!result.ok())",
+        "report_blynk_numeric_error(13, result);",
+        "const bool paused = PauseOn || beerManualPause;",
+        "if (requestedPause == paused) return;",
+        "if (requestedPause)",
+        "enter_manual_pause();",
+        "resume_from_pause();",
+    ],
     "BLYNK_WRITE(V3)": [
         "parse_exact_bool(param.asStr(), value)",
         "if (!result.ok())",
@@ -91,6 +101,7 @@ for signature, ordered in handler_contracts.items():
         "BLYNK_WRITE(V16)": ("set_current_power(",),
         "BLYNK_WRITE(V17)": ("set_pump_speed(",),
         "BLYNK_WRITE(V12)": ("queue_samovar_command(",),
+        "BLYNK_WRITE(V13)": ("enter_manual_pause(", "resume_from_pause("),
         "BLYNK_WRITE(V3)": ("menu_samovar_start(", "queue_samovar_reset_command("),
     }[signature]
     for side_effect in side_effects:
