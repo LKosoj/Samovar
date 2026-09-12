@@ -765,11 +765,14 @@ BROWSER_TEST = r'''async page => {
     const nativeNow = Date.now;
     let now = 20000;
     Date.now = function () { return now; };
+    const sessionData = Object.assign({}, data, { sessionId: 1 });
+    chartSessionId = sessionData.sessionId;
+    chartCsvSessionId = sessionData.sessionId;
     chartLastAppendMs = 0;
-    renderTelemetry(Object.assign({}, data, { crnt_tm: '12:01:00' }));
-    renderTelemetry(Object.assign({}, data, { crnt_tm: '12:01:01' }));
+    renderTelemetry(Object.assign({}, sessionData, { crnt_tm: '12:01:00' }));
+    renderTelemetry(Object.assign({}, sessionData, { crnt_tm: '12:01:01' }));
     now = 35000;
-    renderTelemetry(Object.assign({}, data, { crnt_tm: '12:01:15' }));
+    renderTelemetry(Object.assign({}, sessionData, { crnt_tm: '12:01:15' }));
     Date.now = nativeNow;
     return { refresh, appends };
   }, fixture);

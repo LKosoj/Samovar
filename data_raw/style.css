@@ -1224,7 +1224,6 @@ select {
 /* Подпись поля в телефонной раскладке строки программы (app.js, alignProgramHeader). */
 .prg-col-label {
   font-size: 0.85em;
-  color: var(--text-main);
   white-space: nowrap;
 }
 

@@ -410,8 +410,8 @@ static String state_snapshot_header() {
 
 // Неатомарная запись /state.csv - осознанное решение владельца от 24.08.2026: снимок
 // обычно пишется раз в 30 секунд (STATE_SNAPSHOT_PERIOD_S), а при выключении нагрева -
-// на ближайшем секундном такте. Временный файл с последующим переименованием удвоил бы
-// износ флеша и время такта.
+// на ближайшем секундном такте. Потеря снимка не опаснее самого сбоя, а временный файл
+// с последующим переименованием удвоил бы износ флеша и время такта.
 bool write_state_snapshot() {
   const String header = state_snapshot_header();
   const String programText = serialize_program_for_mode(Samovar_Mode);

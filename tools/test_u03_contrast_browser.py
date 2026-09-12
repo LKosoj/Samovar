@@ -152,7 +152,7 @@ BROWSER_TEST = r'''async page => {
     PrgType: "", Status: "Готов", Lstatus: "", TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
-    PowerOn: 0, StepperStepMl: 111,
+    PowerOn: 0, StepperStepMl: 111, sessionId: 1,
     heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
   const i2cMixer = {
@@ -626,6 +626,7 @@ BROWSER_TEST = r'''async page => {
     for (const detectorState of [0, 1, 2]) {
       const result = await page.evaluate(({ fixture, state }) => {
         const value = JSON.parse(JSON.stringify(fixture));
+        value.useDetector = true;
         value.useautospeed = true;
         value.DetectorStatus = state;
         renderTelemetry(value);

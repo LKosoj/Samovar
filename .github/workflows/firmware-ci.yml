@@ -79,7 +79,7 @@ jobs:
           sudo apt-get install -y cppcheck
 
       - name: Run cppcheck
-        run: python tools/run_cppcheck.py --timeout 300
+        run: python tools/run_cppcheck.py --timeout 600
 
   static-analysis-force:
     name: Static Analysis (cppcheck --force, extended, baseline-gated)

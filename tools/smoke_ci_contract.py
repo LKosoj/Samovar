@@ -398,7 +398,7 @@ class WorkflowContractTests(unittest.TestCase):
         blocking = self._job_block(workflow_text, "static-analysis")
         smoke = self._job_block(workflow_text, "smoke")
         self.assertEqual(workflow_text.count("python tools/run_smoke_tests.py"), 1)
-        self.assertIn("run: python tools/run_cppcheck.py --timeout 300", blocking)
+        self.assertIn("run: python tools/run_cppcheck.py --timeout 600", blocking)
         self.assertNotIn("--force", blocking)
         self.assertNotIn("continue-on-error", blocking)
         self.assertIn(

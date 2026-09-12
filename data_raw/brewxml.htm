@@ -74,7 +74,13 @@ function loadBeerXML(e) {
 		var utf8 = new TextDecoder("utf-8").decode(reader.result);
 		var kind;
 		try {
-			var root = (new DOMParser()).parseFromString(utf8, "text/xml").documentElement;
+			var parsed = (new DOMParser()).parseFromString(utf8, "text/xml");
+			if (parsed.getElementsByTagName("parsererror").length) {
+				var syntaxError = new Error("файл повреждён, это не корректный XML.");
+				syntaxError.xmlSyntaxError = true;
+				throw syntaxError;
+			}
+			var root = parsed.documentElement;
 			if (root.nodeName === "RECIPES" && root.getElementsByTagName("RECIPE").length) kind = "BeerXML";
 			else if (root.nodeName === "recipe") kind = "BrewMate";
 			else throw new Error("не найден корневой узел RECIPES или recipe.");
