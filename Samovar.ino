@@ -349,6 +349,11 @@ static OperationError queue_profile_operation(
     OperationId& operationId);
 static OperationError commit_profile_operation();
 static void process_profile_operation();
+static void tick_wifi_reconnect(void);
+static void publish_ui_state_from_loop(void);
+#ifdef SAMOVAR_USE_BLYNK
+void blynk_stage_session_start(const String&);
+#endif
 // Явные объявления: PlatformIO генерирует прототипы для всех функций .ino без учёта #ifdef,
 // а при выключенной опции такой прототип остаётся без определения (-Wunused-function).
 #ifdef USE_WATERSENSOR

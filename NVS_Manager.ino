@@ -35,6 +35,8 @@ static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
               "profile v1 requires IEEE-754 binary32 float");
 static_assert(sizeof(int) == 4, "profile v1 requires 32-bit int");
 
+static void set_profile_version_defaults(SetupEEPROM&, uint8_t);
+
 using ProfileCodec = ProfileBlobCodec<
     SAMOVAR_PROFILE_PAYLOAD_SIZE_V7,
     SAMOVAR_PROFILE_FORMAT_VERSION>;
