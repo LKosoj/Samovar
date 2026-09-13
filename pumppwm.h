@@ -5,6 +5,9 @@
 #include <Arduino.h>
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
+#if USE_ADAPTIVE_PID
+#include "adaptive_pid.h"
+#endif
 
 #ifndef PUMP_PWM_FREQ
 #define PUMP_PWM_FREQ 15
@@ -14,6 +17,9 @@
 
 static ESP32PWM pump_pwm;
 static GyverPID pump_regulator(6.5, 0.3, 30, 1023);
+#if USE_ADAPTIVE_PID
+static AdaptivePumpState adaptivePumpState = {};
+#endif
 
 void init_pump_pwm(uint8_t pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
@@ -22,6 +28,9 @@ void init_pump_pwm(uint8_t pin, int freq) {
   //pump_regulator.setMode(ON_RATE);
   pump_regulator.setpoint = SamSetup.SetWaterTemp;     // сообщаем регулятору температуру, которую он должен поддерживать
   pump_started = false;
+#if USE_ADAPTIVE_PID
+  adaptive_pump_reset(adaptivePumpState, PWM_LOW_VALUE / 100.0f);
+#endif
 }
 
 ActuatorCommandResult set_pump_pwm(float duty) {
@@ -63,9 +72,30 @@ ActuatorCommandResult set_pump_pwm(float duty) {
   return ACTUATOR_COMMAND_APPLIED;
 }
 
-	void set_pump_speed_pid(float temp) {
-	  pump_regulator.setpoint = SamSetup.SetWaterTemp;
-	  pump_regulator.input = temp;
-	  set_pump_pwm(pump_regulator.getResultNow());
-	}
+#if USE_ADAPTIVE_PID
+inline void set_pump_speed_pid_control(
+    float controlTemp, float measuredTemp, bool learningAllowed) {
+  const float minimumDuty = PWM_LOW_VALUE / 100.0f;
+  if (!pump_started) adaptive_pump_reset(adaptivePumpState, minimumDuty);
+  const bool canLearn = learningAllowed && pump_started && wp_count >= 10;
+  const uint32_t nowMs = millis();
+  const float duty = adaptive_pump_step(
+      adaptivePumpState, SamSetup.SetWaterTemp, controlTemp, measuredTemp,
+      minimumDuty, nowMs, canLearn);
+  const ActuatorCommandResult result = set_pump_pwm(duty * 1023.0f);
+  adaptive_pump_note_command(
+      adaptivePumpState, nowMs,
+      canLearn && result == ACTUATOR_COMMAND_APPLIED);
+}
+
+inline void set_pump_speed_pid(float temp) {
+  set_pump_speed_pid_control(temp, temp, true);
+}
+#else
+void set_pump_speed_pid(float temp) {
+  pump_regulator.setpoint = SamSetup.SetWaterTemp;
+  pump_regulator.input = temp;
+  set_pump_pwm(pump_regulator.getResultNow());
+}
+#endif
 #endif

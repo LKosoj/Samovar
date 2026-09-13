@@ -34,7 +34,7 @@ PARTIALS_DIR = SOURCE / "partials"
 COMPRESS = (
     "app.js", "chart.js", "edit.htm", "i2cstepper.htm", "brewxml.htm", "style.css",
     "index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm", "nbk.htm",
-    "chart.htm", "program.htm", "calibrate.htm", "calibrate_ph.htm",
+    "chart.htm", "program.htm", "cheese-recipes.htm", "calibrate.htm", "calibrate_ph.htm",
 )
 
 PLACEHOLDER = re.compile(r"%[A-Za-z_][A-Za-z0-9_.]*%")

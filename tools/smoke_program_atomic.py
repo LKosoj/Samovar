@@ -125,7 +125,10 @@ struct WProgram {
   float Power;
   uint8_t TempSensor;
   float Time;
-  float Param;
+  union {
+    float Param;
+    uint32_t FlocMultiplierMilli;
+  };
   uint16_t LuaTextOffset;
 };
 
@@ -211,11 +214,14 @@ void check_round_trip(
   for (uint8_t i = 0; i < expected_len; i++) {
     const WProgram& expected = program[i];
     const WProgram& actual = reparsed.rows[i];
+    const bool paramMatches = actual.WType == 'F'
+        ? program_load_cheese_f_multiplier(actual) == program_load_cheese_f_multiplier(expected)
+        : same_serialized_float(actual.Param, expected.Param);
     check(actual.WType == expected_types[i] && actual.WType == expected.WType &&
         actual.Volume == expected.Volume && same_serialized_float(actual.Speed, expected.Speed) &&
         actual.capacity_num == expected.capacity_num && same_serialized_float(actual.Temp, expected.Temp) &&
         same_serialized_float(actual.Power, expected.Power) && actual.TempSensor == expected.TempSensor &&
-        same_serialized_float(actual.Time, expected.Time) && same_serialized_float(actual.Param, expected.Param),
+        same_serialized_float(actual.Time, expected.Time) && paramMatches,
         "round-trip fields mismatch");
   }
 }
@@ -435,11 +441,11 @@ void test_blank_lines_and_all_formats_round_trip() {
       2,
       "MP");
   check_round_trip(
-      "H;63.333;90.125;0.125;1^0^0^0;0\nP;63;30;45;1^0^0^0;0\nC;34;45;0;1^0^0^0;0\nM;0;1;0;1^0^30^0;0\nD;100;15;2;0^0^0^0;1\nN;34;60;5.25;2^-120^30^10;0\nW;0;15;1;0^0^0^0;0\nS;0;15;0;0^0^0^0;0\nL;0;15;0;cycle.lua;0\n",
+      "H;63.333;90.125;0.125;1^0^0^0;0\nP;63;30;45;1^0^0^0;0\nC;34;45;0;1^0^0^0;0\nM;0;1;0;1^0^30^0;0\nD;100;15;2;0^0^0^0;1\nN;34;60;5.25;2^-120^30^10;0\nW;0;15;1;0^0^0^0;0\nS;0;15;0;0^0^0^0;0\nF;32;60;2.5005;0^0^0^0;0\nL;0;15;0;cycle.lua;0\n",
       cheese_program_parse_spec(),
       program_append_cheese_row,
-      9,
-      "HPCMDNWSL");
+      10,
+      "HPCMDNWSFL");
   check_round_trip(
       "H;0;0\nS;1;10\nO;2;20\nW;3;30\n",
       nbk_program_parse_spec(),
@@ -539,6 +545,8 @@ void test_cheese_row_semantics() {
       {"N;34;60;5.25;2^-120^30^10;0\n", true},
       {"W;0;15;1;0^0^0^0;0\n", true},
       {"S;0;15;0;0^0^0^0;0\n", true},
+      {"F;32;60;2.5;0^0^0^0;0\n", true},
+      {"F;150;1440;4294967.295;2^-120^30^10;4\n", true},
       {"L;0;15;0;cycle.lua;0\n", true},
       {"P;63;30;29;1^0^0^0;0\n", false},
       {"H;63;90;0;1^0^0^0;0\n", false},
@@ -548,6 +556,14 @@ void test_cheese_row_semantics() {
       {"N;34;60;14.1;0^0^0^0;0\n", false},
       {"W;0;15;9;0^0^0^0;0\n", false},
       {"S;0;15;0;1^0^0^0;0\n", false},
+      {"F;0;60;2.5;0^0^0^0;0\n", false},
+      {"F;150.1;60;2.5;0^0^0^0;0\n", false},
+      {"F;32;0;2.5;0^0^0^0;0\n", false},
+      {"F;32;1440.1;2.5;0^0^0^0;0\n", false},
+      {"F;32;60;0.999;0^0^0^0;0\n", false},
+      {"F;32;60;4294967.296;0^0^0^0;0\n", false},
+      {"F;32;60;2.5;1^10^0^0;0\n", false},
+      {"F;32;60;2.5;0^0^0^0;5\n", false},
       {"L;0;0;0;0^0^0^0;0\n", false},
       {"H;63;90;1;1^1^0^0;0\n", false},
       {"H;63;90;1;2^0^0^0;0\n", false},
@@ -578,6 +594,30 @@ void test_cheese_field_mapping() {
   check(draft.rows[0].capacity_num == 2 && draft.rows[0].Speed == -120.0f &&
       draft.rows[0].Volume == 30 && draft.rows[0].Power == 10.0f &&
       draft.rows[0].TempSensor == 0, "cheese mixer or sensor fields were mapped incorrectly");
+
+  result = program_parse_lines(
+      String("F;32;60;2.5005;2^-90^20^5;4\n"), cheese_program_parse_spec(), draft);
+  check(result.ok(), "valid F row was rejected");
+  uint32_t multiplierMilli = 0;
+  check(program_load_cheese_f_multiplier(draft.rows[0]) == 2501,
+      "F multiplier was not normalized with round-half-up");
+  check(!program_cheese_f_multiplier_milli(0.9996, multiplierMilli),
+      "F multiplier below one was accepted");
+  check(draft.rows[0].Temp == 32.0f && draft.rows[0].Time == 60.0f &&
+      draft.rows[0].capacity_num == 2 && draft.rows[0].Speed == -90.0f &&
+      draft.rows[0].Volume == 20 && draft.rows[0].Power == 5.0f &&
+      draft.rows[0].TempSensor == 4, "F fields were mapped incorrectly");
+
+  result = program_parse_lines(
+      String("F;150;1440;4294967.295;0^0^0^0;4\n"), cheese_program_parse_spec(), draft);
+  check(result.ok(), "F uint32 maximum multiplier was rejected");
+  check(program_load_cheese_f_multiplier(draft.rows[0]) == UINT32_MAX,
+      "F uint32 maximum multiplier was not preserved");
+  String maxSerialized;
+  program_append_cheese_row(maxSerialized, draft.rows[0], draft.textPool);
+  check(std::strcmp(maxSerialized.c_str(),
+      "F;150.000000;1440.000000;4294967.295;0^0^0^0;4\n") == 0,
+      "F uint32 maximum multiplier did not round-trip exactly");
 }
 
 void test_mode_mapping_and_defaults() {
@@ -797,6 +837,37 @@ def main() -> int:
         if run_result.returncode != 0:
             return run_result.returncode
 
+        mutated_round_trip = HARNESS.replace(
+            "program_load_cheese_f_multiplier(actual) == program_load_cheese_f_multiplier(expected)",
+            "false",
+            1,
+        )
+        if mutated_round_trip == HARNESS:
+            sys.stderr.write("FAIL: F round-trip branch mutation target not found\n")
+            return 1
+        round_trip_harness = temp / "program_atomic_f_round_trip_mutation_test.cpp"
+        round_trip_harness.write_text(mutated_round_trip, encoding="utf-8")
+        round_trip_binary = temp / "program_atomic_f_round_trip_mutation_test"
+        round_trip_compile = subprocess.run(
+            [
+                "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(temp), "-I", str(ROOT), str(round_trip_harness),
+                "-o", str(round_trip_binary),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if round_trip_compile.returncode != 0:
+            sys.stderr.write("FAIL: F round-trip branch mutation did not compile\n")
+            sys.stderr.write(round_trip_compile.stderr)
+            return 1
+        round_trip_run = subprocess.run(
+            [str(round_trip_binary)], capture_output=True, text=True, check=False
+        )
+        if round_trip_run.returncode == 0:
+            sys.stderr.write("FAIL: F round-trip branch was not exercised\n")
+            return 1
+        print("F round-trip accessor branch mutation was rejected as expected")
+
         # Mutation proof: a nonzero mixer schedule without a selected device
         # must not become accepted. Compile the altered production header in a
         # temporary include directory; the repository source itself is never
@@ -857,6 +928,37 @@ def main() -> int:
             sys.stderr.write("FAIL: cheese Param test did not catch the mutation\n")
             return 1
         print("Cheese Param mutation was rejected as expected")
+
+        mutated_f_multiplier = (ROOT / "program_io.h").read_text(encoding="utf-8")
+        mutated_f_multiplier = mutated_f_multiplier.replace(
+            "multiplier < 1.0",
+            "multiplier < 0.0",
+            1,
+        )
+        if mutated_f_multiplier == (ROOT / "program_io.h").read_text(encoding="utf-8"):
+            sys.stderr.write("FAIL: F multiplier mutation target not found\n")
+            return 1
+        (temp / "program_io.h").write_text(mutated_f_multiplier, encoding="utf-8")
+        f_multiplier_binary = temp / "program_atomic_f_multiplier_mutation_test"
+        f_multiplier_compile = subprocess.run(
+            [
+                "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(temp), "-I", str(ROOT), str(harness),
+                "-o", str(f_multiplier_binary),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if f_multiplier_compile.returncode != 0:
+            sys.stderr.write("FAIL: F multiplier mutation did not compile\n")
+            sys.stderr.write(f_multiplier_compile.stderr)
+            return 1
+        f_multiplier_run = subprocess.run(
+            [str(f_multiplier_binary)], capture_output=True, text=True, check=False
+        )
+        if f_multiplier_run.returncode == 0:
+            sys.stderr.write("FAIL: F multiplier test did not catch the mutation\n")
+            return 1
+        print("F multiplier mutation was rejected as expected")
 
         mutated_serializer = (ROOT / "program_io.h").read_text(encoding="utf-8")
         mutated_serializer = mutated_serializer.replace(

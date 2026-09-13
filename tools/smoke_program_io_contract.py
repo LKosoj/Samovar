@@ -204,7 +204,7 @@ if program_io:
         "cheese_program_parse_spec": [
             "Ошибка программы: слишком длинная строка (cheese)",
             "Ошибка программы: неверный формат строки cheese",
-            '"HPCMDNWSL"',
+            '"HPCMDNWSFL"',
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_TEMP",
             "PROGRAM_FIELD_TIME",

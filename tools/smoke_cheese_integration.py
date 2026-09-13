@@ -27,7 +27,7 @@ typedef char ProgramType;
 enum CheeseStageKind : uint8_t {
   CHEESE_STAGE_INVALID = 0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD,
   CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH,
-  CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA,
+  CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA, CHEESE_STAGE_FLOC,
 };
 struct WProgram { ProgramType WType; float Time; float Param; };
 struct CheeseRuntimeState { uint32_t enteredMs; uint32_t holdAccumulatedMs; } cheeseRuntime = {};
@@ -116,7 +116,7 @@ typedef char ProgramType;
 enum CheeseStageKind : uint8_t {
   CHEESE_STAGE_INVALID = 0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD,
   CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH,
-  CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA,
+  CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA, CHEESE_STAGE_FLOC,
 };
 struct WProgram {
   ProgramType WType; uint16_t Volume; float Speed; uint8_t capacity_num;
@@ -136,6 +136,7 @@ static bool luaPresent = true;
 bool program_validate_cheese_row_semantics(
     ProgramType, float, float, long, long, long, long, long, float,
     const char*& error) { error = "semantic"; return true; }
+uint32_t program_load_cheese_f_multiplier(const WProgram&) { return UINT32_MAX; }
 bool beer_control_sensor(uint8_t, const DSSensor*& sensor, const char*&) {
   static DSSensor value;
   sensor = &value;
@@ -264,7 +265,8 @@ def static_checks() -> list[str]:
     validate = extract_function_body(CHEESE, "inline bool cheese_validate_program(String& error)")
     for token in ("for (uint8_t i = 0; i < ProgramLen; i++)", "i2c_stepper_mixer_present()",
                   "cheese_local_doser_motion(row, targetSteps, speed)",
-                  "exists(\"/cheese.lua\")"):
+                  "exists(\"/cheese.lua\")",
+                  "row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 : row.Param"):
         if token not in validate:
             errors.append(f"Cheese preflight is missing {token}")
 

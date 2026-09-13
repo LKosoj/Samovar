@@ -105,7 +105,7 @@ BROWSER_TEST = r'''async page => {
 
   await page.getByRole("button", {name:"Программа"}).click();
   const types = await page.locator(".cheese-type option").evaluateAll(nodes => nodes.map(node => node.value));
-  expect(types.join("") === "HPCMDNWSL", "editor offers obsolete Cheese types: " + types);
+  expect(types.join("") === "HPCMDNWSFL", "editor offers wrong Cheese types: " + types);
   for (let index = 0; index < types.length; index++) {
     if (index) await page.locator(".cheese-row").last().locator(".cheese-add").click();
     const row = page.locator(".cheese-row").last();
@@ -116,8 +116,8 @@ BROWSER_TEST = r'''async page => {
     const visible = await row.locator(".cheese-field").evaluateAll(nodes => nodes.filter(node => !node.hidden).map(node => node.querySelector("label").textContent));
     expect(visible.every(text => text && !text.includes("VALUE")), "technical field name is visible for " + types[index]);
   }
-  expect(await page.locator(".cheese-row").count() === 9, "all nine types were not created");
-  expect((await page.locator(".cheese-row-number").allTextContents()).join(",") === "01,02,03,04,05,06,07,08,09", "rows were not renumbered");
+  expect(await page.locator(".cheese-row").count() === 10, "all ten types were not created");
+  expect((await page.locator(".cheese-row-number").allTextContents()).join(",") === "01,02,03,04,05,06,07,08,09,10", "rows were not renumbered");
 
   const heat = page.locator(".cheese-row").filter({has: page.locator(".cheese-type")}).first();
   await heat.locator(".cheese-type").selectOption("H");
@@ -136,19 +136,41 @@ BROWSER_TEST = r'''async page => {
   await action.locator(".cheese-type").selectOption("W");
   expect(await action.locator(".cheese-action-code").isVisible(), "manual action has no action selector");
   await action.locator(".cheese-action-code").selectOption("7");
+  const floc = page.locator(".cheese-row").nth(8);
+  await floc.locator(".cheese-type").selectOption("F");
+  const flocLabels = await floc.locator(".cheese-field").evaluateAll(nodes =>
+    nodes.filter(node => !node.hidden).map(node => node.querySelector("label").textContent));
+  expect(flocLabels.join("|") === "Рабочая температура, °C|Тайм-аут, мин|Множитель флока|Датчик",
+    "F fields are wrong: " + flocLabels);
+  await floc.locator(".cheese-value3").fill("4294967.295");
 
   await page.locator("#setprogram").click();
   await page.waitForFunction(() => document.getElementById("request_error").style.display === "none");
   expect(posts.length === 1, "valid program was not posted once");
   const serialized = await page.locator("#WProgram").inputValue();
   const lines = serialized.trim().split("\n");
-  expect(lines.length === 9 && lines.every(line => line.split(";").length === 6), "program is not six-field: " + serialized);
+  expect(lines.length === 10 && lines.every(line => line.split(";").length === 6), "program is not six-field: " + serialized);
   expect(lines[0].split(";")[4] === "2^-120^0^0", "I2C mixer was not serialized");
   expect(lines[4] === "D;10;30;2;0^0^0^0;1", "manual dosing serialization is wrong: " + lines[4]);
   expect(lines[6] === "W;0;30;7;0^0^0^0;0", "manual action serialization is wrong: " + lines[6]);
+  expect(lines[8] === "F;32;60;4294967.295;0^0^0^0;0", "F serialization is wrong: " + lines[8]);
 
   await page.getByRole("button", {name:"Процесс"}).click();
+  await page.evaluate(data => renderTelemetry(data), {...telemetry(9),
+    CheeseFlocActive:true, CheeseFlocFixed:false, CheeseFlocMultiplierMilli:2500,
+    CheeseFlocRemainingSeconds:47});
+  expect(await page.locator("#stageTarget").textContent() === "32", "active F target temperature is hidden");
+  expect(await page.locator("#stageCurrent").textContent() === "31.25", "active F sensor temperature is hidden");
+  expect(await page.locator("#stageFlocMeta").textContent() === "Ожидание фиксации, до тайм-аута 0 мин 47 с",
+    "F before fixation is not shown");
+  await page.evaluate(data => renderTelemetry(data), {...telemetry(9),
+    CheeseFlocActive:true, CheeseFlocFixed:true, CheeseFlocActualSeconds:12,
+    CheeseFlocMultiplierMilli:2500, CheeseFlocCutSeconds:30, CheeseFlocRemainingSeconds:18});
+  expect(await page.locator("#stageFlocMeta").textContent() === "Флок 0 мин 12 с, до резки 0 мин 18 с",
+    "F after fixation is not shown");
   await page.evaluate(data => renderTelemetry(data), telemetry(7));
+  expect(await page.locator("#stageFlocMeta").evaluate(node => node.hidden),
+    "F state remains visible outside F");
   expect(await page.locator("#start").inputValue() === "Подтвердить", "W is not a confirmation");
   await page.locator("#start").click();
   await page.evaluate(data => renderTelemetry(data), telemetry(8));
@@ -177,7 +199,7 @@ BROWSER_TEST = r'''async page => {
 
   await page.getByRole("button", {name:"Программа"}).click();
   await page.locator(".cheese-row").last().locator(".cheese-remove").click();
-  await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 8);
+  await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 9);
   const remainingTypes = await page.locator(".cheese-type").evaluateAll(nodes => nodes.map(node => node.value));
   expect(!remainingTypes.includes("L"), "remove did not delete the selected row");
 
@@ -226,6 +248,25 @@ BROWSER_TEST = r'''async page => {
   await page.locator("#setprogram").click();
   expect(posts.length === beforeInvalid, "P with total timeout shorter than hold reached server");
   await hold.locator(".cheese-value3").fill("60");
+
+  const invalidFlocRows = [
+    ["0", "60", "2.5", "0^0^0^0", "0"],
+    ["32", "0", "2.5", "0^0^0^0", "0"],
+    ["32", "60", "0.999", "0^0^0^0", "0"],
+    ["32", "60", "4294967.296", "0^0^0^0", "0"],
+    ["32", "60", "2.5", "1^10^0^0", "0"],
+    ["32", "60", "2.5", "0^0^0^0", "5"]
+  ];
+  for (const values of invalidFlocRows) {
+    expect(!await page.evaluate(row => validateCheeseRow(["F", ...row]), values),
+      "invalid F row was accepted: " + values.join(";"));
+  }
+  expect(await page.evaluate(() => cheeseFlocMultiplierMilli(2.5005)) === 2501,
+    "F multiplier does not use round-half-up");
+  expect(await page.evaluate(() => cheeseFlocMultiplierMilli(4294967.295)) === 0xFFFFFFFF,
+    "F uint32 maximum multiplier is rejected");
+  expect(await page.evaluate(() => cheeseFlocMultiplierMilli(4294967.296)) === null,
+    "F multiplier above uint32 maximum is accepted");
 
   const beforeBadMixerImport = await page.evaluate(() => serializeCheeseRows());
   const beforeBadMixerDraft = await page.locator("#WProgram").inputValue();

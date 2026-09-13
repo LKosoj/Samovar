@@ -58,6 +58,7 @@
       N:{name:'Ожидание pH', labels:['Температура, °C','Тайм-аут, мин','Целевой pH','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['30','120','5.2','0']},
       W:{name:'Ручное действие', labels:['','Тайм-аут, мин','Действие',''], visible:[0,1,1,0], mixer:true, defaults:['0','30','1','0']},
       S:{name:'Слив', labels:['','Тайм-аут, мин','',''], visible:[0,1,0,0], mixer:false, defaults:['0','30','0','0']},
+      F:{name:'Флокуляция', labels:['Рабочая температура, °C','Тайм-аут, мин','Множитель флока','Датчик'], visible:[1,1,1,1], mixer:true, defaults:['32','60','2.5','0']},
       L:{name:'Lua', labels:['','Тайм-аут, сек','',''], visible:[0,1,0,0], mixer:false, lua:true, defaults:['0','1','0','0']}
     };
     var SENSOR_NAMES = ['Куб','Вода','Царга','Пар','ТСА'];
@@ -70,6 +71,12 @@
 
     function positive(value, max) { return Number.isFinite(value) && value > 0 && value <= max; }
     function integer(value, min, max) { return Number.isInteger(value) && value >= min && value <= max; }
+    function cheeseFlocMultiplierMilli(value) {
+      if (!Number.isFinite(value) || value < 1) return null;
+      var milli = Math.floor(value * 1000 + 0.5);
+      if (!Number.isSafeInteger(milli) || milli < 1000 || milli > 0xFFFFFFFF) return null;
+      return milli;
+    }
 
     function mixerValues(row) {
       var speed = Number(row.mixerSpeed.value);
@@ -125,8 +132,9 @@
       if (type === 'D' && four === 1 && !integer(three, 1, 8)) return false;
       if (type === 'D' && four === 2 && !positive(three, 65535)) return false;
       if (type === 'N' && !positive(three, 14)) return false;
+      if (type === 'F' && cheeseFlocMultiplierMilli(three) === null) return false;
       if (type === 'W' && !integer(three, 1, 8)) return false;
-      if ((type === 'H' || type === 'P' || type === 'C' || type === 'N') && !integer(four, 0, 4)) return false;
+      if ((type === 'H' || type === 'P' || type === 'C' || type === 'N' || type === 'F') && !integer(four, 0, 4)) return false;
       return true;
     }
 
@@ -177,6 +185,9 @@
       for (var index = 0; index < 4; index++) setField(row, index, rule.labels[index], !!rule.visible[index]);
       row.value3.hidden = row.type.value === 'W';
       row.actionCode.hidden = row.type.value !== 'W';
+      row.value3.min = row.type.value === 'F' ? '1' : '0';
+      row.value3.max = row.type.value === 'F' ? '4294967.295' : '65535';
+      row.value3.step = row.type.value === 'F' ? '0.001' : '0.1';
       if (row.type.value === 'W' && !integer(Number(row.actionCode.value), 1, 8)) row.actionCode.value = '1';
       row.mixer.hidden = !rule.mixer && !rule.lua;
       row.luaCall.hidden = !rule.lua;
@@ -342,13 +353,23 @@
       document.getElementById('stageType').textContent = current ? CHEESE_TYPES[current[0]].name : '—';
       document.getElementById('stageProgress').textContent = Number(data.WthdrwlProgress || 0).toFixed(0) + '\u0025';
       document.getElementById('cheesePh').textContent = data.CheesePhValid ? Number(data.CheesePh).toFixed(2) : 'нет данных';
-      var hasTemperature = current && ['H','P','C','N'].indexOf(current[0]) >= 0;
+      var hasTemperature = current && ['H','P','C','N','F'].indexOf(current[0]) >= 0;
       document.getElementById('stageTarget').textContent = hasTemperature ? current[1] : '—';
       document.getElementById('stageCurrent').textContent = hasTemperature ? currentSensorTemperature(current, data) : '—';
       document.getElementById('stageWorkTime').textContent = secondsText(data.CheeseWorkSeconds);
       document.getElementById('stageTimeout').textContent = secondsText(data.CheeseTimeoutRemainingSeconds);
       document.getElementById('stageWorkTimeCard').textContent = secondsText(data.CheeseWorkSeconds);
       document.getElementById('stageTimeoutCard').textContent = secondsText(data.CheeseTimeoutRemainingSeconds);
+      var flocMeta = document.getElementById('stageFlocMeta');
+      var flocActive = data.CheeseFlocActive === true;
+      flocMeta.hidden = !flocActive;
+      if (flocActive) {
+        flocMeta.textContent = data.CheeseFlocFixed === true
+          ? 'Флок ' + secondsText(data.CheeseFlocActualSeconds) +
+            ', до резки ' + secondsText(data.CheeseFlocRemainingSeconds)
+          : 'Ожидание фиксации, до тайм-аута ' +
+            secondsText(data.CheeseFlocRemainingSeconds);
+      }
       document.getElementById('stageNumber').textContent = current ? (Number(data.ProgramNum) + ' из ' + acceptedRows.length) : '—';
       document.getElementById('stageLineOf').textContent = document.getElementById('stageNumber').textContent;
       document.getElementById('stageLineName').textContent = current ? CHEESE_TYPES[current[0]].name : '—';
@@ -458,6 +479,7 @@
           <span>Этап <b id="stageType">—</b></span>
           <span>pH <b id="cheesePh">нет данных</b></span>
           <span>Охлаждение <b id="cheeseCoolingScheme">—</b></span>
+          <span id="stageFlocMeta" hidden></span>
           <span>Прогресс <b id="stageProgress">0&#37;</b></span>
         </div>
       </div>
@@ -532,7 +554,7 @@
         <div class="prgline cheese-row">
           <label class="prglabel cheese-row-number"></label>
           <select class="cheese-type" aria-label="Тип этапа">
-            <option value="H">Нагрев</option><option value="P">Выдержка</option><option value="C">Охлаждение</option><option value="M">Перемешивание</option><option value="D">Дозирование</option><option value="N">Ожидание pH</option><option value="W">Ручное действие</option><option value="S">Слив</option><option value="L">Lua</option>
+            <option value="H">Нагрев</option><option value="P">Выдержка</option><option value="C">Охлаждение</option><option value="M">Перемешивание</option><option value="D">Дозирование</option><option value="N">Ожидание pH</option><option value="W">Ручное действие</option><option value="S">Слив</option><option value="F">Флокуляция</option><option value="L">Lua</option>
           </select>
           <div class="cheese-field"><label></label><input class="cheese-value1" type="number" min="0" max="150" step="0.1"></div>
           <div class="cheese-field"><label></label><input class="cheese-value2" type="number" min="0" max="1440" step="0.1"></div>

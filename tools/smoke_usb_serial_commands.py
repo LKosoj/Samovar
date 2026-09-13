@@ -86,6 +86,7 @@ def matrix_defines(name: str) -> str:
 #define BK_WATER_ADJUST_PERIOD_MS 60000
 #define BK_WATER_DEADBAND 0.2f
 #define BK_WATER_PWM_STEP 30
+#define USE_ADAPTIVE_PID 1
 int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 '''
     if name == "default":
@@ -108,6 +109,8 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #define SAMOVAR_USE_SEM_AVR
 #define SAMOVAR_USE_RMVK
 #define USE_LUA
+#undef USE_ADAPTIVE_PID
+#define USE_ADAPTIVE_PID 0
 #define USE_ALARM_BTN
 #define USE_UPDATE_OTA
 #define USE_STEPPER_ACCELERATION
@@ -359,14 +362,16 @@ def check_matrix(matrix: str, parsed: dict) -> list[str]:
         expected = {
             "board": "DEVKIT", "regulator": "kvic", "atmospheric_sensor": "bme680",
             "column_pressure_sensor": "none", "SAMOVAR_USE_BLYNK": True,
-            "USE_WATER_PUMP": True, "USE_LUA": False, "USE_EXPANDER": None,
+            "USE_ADAPTIVE_PID": True, "USE_WATER_PUMP": True,
+            "USE_LUA": False, "USE_EXPANDER": None,
             "USE_PRESSURE_XGZ": None, "wifi_ssid": None, "wifi_password": None,
         }
     else:
         expected = {
             "board": "ESP32S3", "regulator": "sem_avr", "atmospheric_sensor": "bmp280_alt",
             "column_pressure_sensor": "onewire", "SAMOVAR_USE_BLYNK": False,
-            "USE_WATER_PUMP": False, "USE_LUA": True, "USE_EXPANDER": "0x20",
+            "USE_ADAPTIVE_PID": False, "USE_WATER_PUMP": False,
+            "USE_LUA": True, "USE_EXPANDER": "0x20",
             "USE_ADS1115": "0x49",
             "USE_WATER_VALVE": "LOW", "USE_PRESSURE_XGZ": None,
             "USE_PRESSURE_1WIRE": "{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x55}",

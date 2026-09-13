@@ -130,7 +130,12 @@ inline void mode_update_water_pump_pid(float acpBoostThreshold) {
 #ifdef USE_WATER_PUMP
   if (!valve_status) return;
   if (sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp) {
+#if USE_ADAPTIVE_PID
+    set_pump_speed_pid_control(
+        SamSetup.SetWaterTemp + 3, WaterSensor.avgTemp, false);
+#else
     set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
+#endif
   } else {
     set_pump_speed_pid(WaterSensor.avgTemp);
   }

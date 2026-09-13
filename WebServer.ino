@@ -970,6 +970,7 @@ void WebServerInit(void) {
   // вырезает этот заголовок из запроса, так и не подключённый к обработчикам изначально.
   // На /style.css и прочую статику (js/css/картинки) он НЕ вешается - их кэшировать нужно.
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
+  server.serveStatic("/cheese-recipes.htm", SPIFFS, "/cheese-recipes.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
   server.serveStatic("/calibrate_ph.htm", SPIFFS, "/calibrate_ph.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
@@ -1045,6 +1046,25 @@ void WebServerInit(void) {
       send_no_store_response(request, 503, "text/plain", "BUSY");
       return;
     }
+    request->send(response);
+  });
+  server.on("/cheese-recipes-bootstrap", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (request->params() != 0) {
+      send_no_store_response(request, 400, "text/plain", "BAD_REQUEST");
+      return;
+    }
+    char token[sizeof(SamSetup.blynkauth)];
+    portENTER_CRITICAL(&configMux);
+    memcpy(token, SamSetup.blynkauth, sizeof(token));
+    portEXIT_CRITICAL(&configMux);
+    token[sizeof(token) - 1] = '\0';
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    response->addHeader("Cache-Control", "no-store");
+    response->print(F("{\"mode\":"));
+    response->print(static_cast<int>(Samovar_Mode));
+    response->print(F(",\"blynkToken\":\""));
+    json_write_escaped(*response, token, strnlen(token, sizeof(token)));
+    response->print(F("\"}"));
     request->send(response);
   });
   server.on("/firmware-config", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -2963,6 +2983,7 @@ static bool cleanup_legacy_raw_web_page(const char* downloadedFile) {
       {"nbk.htm.gz", "nbk.htm"},
       {"chart.htm.gz", "chart.htm"},
       {"program.htm.gz", "program.htm"},
+      {"cheese-recipes.htm.gz", "cheese-recipes.htm"},
       {"calibrate.htm.gz", "calibrate.htm"},
       {"calibrate_ph.htm.gz", "calibrate_ph.htm"},
   };
@@ -3024,7 +3045,7 @@ void get_web_interface() {
         "minus.png", "plus.png",
         "style.css.gz", "app.js.gz", "chart.js.gz",
         "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz",
-        "bk.htm.gz", "nbk.htm.gz", "chart.htm.gz", "program.htm.gz",
+        "bk.htm.gz", "nbk.htm.gz", "chart.htm.gz", "program.htm.gz", "cheese-recipes.htm.gz",
         "calibrate.htm.gz", "calibrate_ph.htm.gz", "brewxml.htm.gz",
         "i2cstepper.htm.gz", "edit.htm.gz", "setup.htm",
     };

@@ -567,6 +567,19 @@ uint32_t cheese_timeout_remaining_seconds() {
   return fakeCheeseTimeoutRemainingSeconds;
 }
 
+struct CheeseFlocTelemetry {
+  bool active;
+  bool fixed;
+  uint32_t actualSeconds;
+  uint32_t multiplierMilli;
+  uint32_t cutSeconds;
+  uint32_t remainingSeconds;
+};
+
+void cheese_capture_floc_telemetry(uint32_t, CheeseFlocTelemetry& value) {
+  value = {};
+}
+
 String format_uptime(unsigned long seconds) {
   std::ostringstream out;
   out << std::setfill('0') << std::setw(2) << seconds / 3600UL << ':'
@@ -837,6 +850,8 @@ EXPECTED_DEFAULT = (
     '"PipeTemp":77.250,"WaterTemp":20.500,"TankTemp":89.750,'
     '"ACPTemp":30.000,"CheesePhRaw":2048,"CheesePhRawValid":1,"CheesePh":5.250,"CheesePhValid":1,'
     '"CheeseWorkSeconds":75,"CheeseTimeoutRemainingSeconds":1725,'
+    '"CheeseFlocActive":0,"CheeseFlocFixed":0,"CheeseFlocActualSeconds":0,'
+    '"CheeseFlocMultiplierMilli":0,"CheeseFlocCutSeconds":0,"CheeseFlocRemainingSeconds":0,'
     '"DetectorTrend":0.125,"DetectorStatus":2,'
     '"DetectorIdle":5,"DetectorWaitSpan":0.125,"DetectorWaitLeft":321,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
@@ -1018,6 +1033,9 @@ def main() -> int:
         "bool heaterAlarmLatched", "String heaterAlarmReason", "uint32_t latestMessageSequence",
         "UiStateDescriptor ui",
         "uint32_t cheeseWorkSeconds", "uint32_t cheeseTimeoutRemainingSeconds",
+        "bool cheeseFlocActive", "bool cheeseFlocFixed",
+        "uint32_t cheeseFlocActualSeconds", "uint32_t cheeseFlocMultiplierMilli",
+        "uint32_t cheeseFlocCutSeconds", "uint32_t cheeseFlocRemainingSeconds",
     )
     for token in required_snapshot_members:
         if token not in snapshot:

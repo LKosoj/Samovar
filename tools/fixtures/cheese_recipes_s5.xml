@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CHEESEXML version="1.00" xmlns="https://www.samovar-tool.ru/cheesexml/ns/1.0">
+  <RECIPES>
+    <RECIPE id="s5-fixture" version="1">
+      <META><SCHEMA_VERSION>1.00</SCHEMA_VERSION><TYPE>home</TYPE><DIFFICULTY>1</DIFFICULTY><LICENSE>CC-BY-4.0</LICENSE></META>
+      <NAME><T xml:lang="ru">Тестовый сыр</T></NAME>
+      <DESCRIPTION><T xml:lang="ru">Тест преобразования программы.</T></DESCRIPTION>
+      <STYLE family="fresh" code="fresh.test"/>
+      <BATCH><MILK_VOLUME value="1" unit="l" si="1"/><SCALE base="milk_volume" base_value="1" base_unit="l"/></BATCH>
+      <MILK species="bos_taurus" treatment="pasteurized" homogenization="none"/>
+      <INGREDIENTS><INGREDIENT id="milk" role="base"><NAME><T xml:lang="ru">Молоко</T></NAME><AMOUNT value="1" unit="l" si="1"/></INGREDIENT></INGREDIENTS>
+      <PROCESS>
+        <STEP n="1" phase="milk_prep" code="heat">
+          <NAME><T xml:lang="ru">Нагрев</T></NAME><INSTRUCTION><T xml:lang="ru">Нагреть молоко</T></INSTRUCTION>
+          <PARAMS><TEMP value="32" min="31" max="33" unit="C" si="32"/></PARAMS>
+        </STEP>
+        <STEP n="2" phase="coagulation" code="culture">
+          <NAME><T xml:lang="ru">Закваска до pH</T></NAME><INSTRUCTION><T xml:lang="ru">Дождаться pH</T></INSTRUCTION>
+          <PARAMS><TEMP value="32" unit="C" si="32"/><TIME value="60" unit="min"/><PH value="6.4"/></PARAMS>
+        </STEP>
+        <STEP n="3" phase="coagulation" code="rennet">
+          <NAME><T xml:lang="ru">Флок</T></NAME><INSTRUCTION><T xml:lang="ru">Зафиксировать флок</T></INSTRUCTION>
+          <PARAMS><TEMP value="32" unit="C" si="32"/><TIME value="20" unit="min"/><PH value="6.35"/><FLOC time="8" unit="min" multiplier="2.5"/></PARAMS>
+        </STEP>
+        <STEP n="4" phase="pressing" code="press">
+          <NAME><T xml:lang="ru">Прессование</T></NAME><INSTRUCTION><T xml:lang="ru">Переложить под пресс</T></INSTRUCTION>
+          <PARAMS><TIME value="30" unit="min"/></PARAMS>
+        </STEP>
+      </PROCESS>
+      <AGING><STAGE n="1"><DURATION value="7" unit="d"/><TEMP value="12" unit="C" si="12"/></STAGE></AGING>
+    </RECIPE>
+  </RECIPES>
+</CHEESEXML>

@@ -54,6 +54,26 @@ except ValueError as exc:
     pid_body = ""
 
 try:
+    adaptive_pid_body = extract_function_body(
+        pwm,
+        "inline void set_pump_speed_pid_control(\n"
+        "    float controlTemp, float measuredTemp, bool learningAllowed)",
+    )
+except ValueError as exc:
+    errors.append(str(exc))
+    adaptive_pid_body = ""
+
+legacy_pid_offset = pwm.find("#else\nvoid set_pump_speed_pid(float temp)")
+try:
+    legacy_pid_body = extract_function_body(
+        pwm[legacy_pid_offset:] if legacy_pid_offset >= 0 else "",
+        "void set_pump_speed_pid(float temp)",
+    )
+except ValueError as exc:
+    errors.append(str(exc))
+    legacy_pid_body = ""
+
+try:
     bk_alarm_body = extract_function_body(bk, "void check_alarm_bk()")
 except ValueError as exc:
     errors.append(str(exc))
@@ -99,9 +119,33 @@ if pwm_body:
 
 if pid_body:
     forbid_blocking_delay("set_pump_speed_pid", pid_body)
-    require_ordered_tokens(
-        "set_pump_speed_pid setpoint before PID result",
+    require_token(
+        "set_pump_speed_pid adaptive wrapper",
         pid_body,
+        "set_pump_speed_pid_control(temp, temp, true);",
+    )
+
+if adaptive_pid_body:
+    forbid_blocking_delay("set_pump_speed_pid_control", adaptive_pid_body)
+    require_ordered_tokens(
+        "adaptive pump calculation before PWM write",
+        adaptive_pid_body,
+        [
+            "if (!pump_started) adaptive_pump_reset(adaptivePumpState, minimumDuty);",
+            "const bool canLearn = learningAllowed && pump_started && wp_count >= 10;",
+            "adaptive_pump_step(",
+            "const ActuatorCommandResult result = set_pump_pwm(duty * 1023.0f);",
+            "adaptive_pump_note_command(",
+            "canLearn && result == ACTUATOR_COMMAND_APPLIED",
+        ],
+        errors,
+    )
+
+if legacy_pid_body:
+    forbid_blocking_delay("legacy set_pump_speed_pid", legacy_pid_body)
+    require_ordered_tokens(
+        "legacy set_pump_speed_pid setpoint before PID result",
+        legacy_pid_body,
         [
             "pump_regulator.setpoint = SamSetup.SetWaterTemp;",
             "pump_regulator.input = temp;",

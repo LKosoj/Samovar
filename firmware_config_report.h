@@ -134,6 +134,11 @@ inline bool write_firmware_config_json(Print& out) {
   if (!firmware_config_write_null_field(out, first, "BLYNK_SAMOVAR_TOOL")) return false;
 #endif
 
+#if USE_ADAPTIVE_PID
+  if (!firmware_config_write_bool_field(out, first, "USE_ADAPTIVE_PID", true)) return false;
+#else
+  if (!firmware_config_write_bool_field(out, first, "USE_ADAPTIVE_PID", false)) return false;
+#endif
 #ifdef SAMOVAR_USE_BLYNK
   if (!firmware_config_write_bool_field(out, first, "SAMOVAR_USE_BLYNK", true)) return false;
 #else

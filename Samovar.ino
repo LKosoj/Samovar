@@ -22,8 +22,10 @@ struct AjaxTelemetrySnapshot;
 struct UiEndDescriptor;
 struct UiStateDescriptor;
 struct WifiDisconnectEvent;
+class String;
 // Конфигурация Blynk подключается ниже; вызов защищён в defer_typed_pair_until_v35().
 bool blynk_session_start_pending();
+void blynk_stage_floc_event(const String& line);
 // Arduino вставляет автопрототипы сразу после Arduino.h. WebServer.ino объявляет
 // http_sync_complete_get(asyncHTTPrequest&...) — без USE_LUA тип не подтягивается
 // из lua.h, прототип ломает разбор (bool http_sync_complete_get как переменная).
@@ -4855,6 +4857,10 @@ struct AjaxTelemetrySnapshot {
   float cheesePh;
   uint32_t cheeseWorkSeconds;
   uint32_t cheeseTimeoutRemainingSeconds;
+  uint32_t cheeseFlocActualSeconds;
+  uint32_t cheeseFlocMultiplierMilli;
+  uint32_t cheeseFlocCutSeconds;
+  uint32_t cheeseFlocRemainingSeconds;
   float detectorTrend;
   float detectorWaitSpan;      // размах окна при ожидании стабилизации пара, °C
   uint16_t detectorWaitLeftSec; // сколько секунд осталось держать стабильность пара
@@ -4922,6 +4928,8 @@ struct AjaxTelemetrySnapshot {
   bool beerPaused;  // [Пиво 02.09 C2] Ручная пауза пива (зеркалит beerManualPause) для /ajax
   bool cheesePhValid;
   bool cheesePhRawValid;
+  bool cheeseFlocActive;
+  bool cheeseFlocFixed;
   bool useBrowserBuzzer;
   bool mixer;
   // [9b] Флаг автоводы БК для /ajax - ВСЕГДА в снимке (false без USE_WATER_PUMP).
@@ -4983,6 +4991,14 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.cheesePhRawValid = cheese_ph_raw_valid();
   snapshot.cheeseWorkSeconds = cheese_work_seconds();
   snapshot.cheeseTimeoutRemainingSeconds = cheese_timeout_remaining_seconds();
+  CheeseFlocTelemetry flocTelemetry{};
+  cheese_capture_floc_telemetry(millis(), flocTelemetry);
+  snapshot.cheeseFlocActive = flocTelemetry.active;
+  snapshot.cheeseFlocFixed = flocTelemetry.fixed;
+  snapshot.cheeseFlocActualSeconds = flocTelemetry.actualSeconds;
+  snapshot.cheeseFlocMultiplierMilli = flocTelemetry.multiplierMilli;
+  snapshot.cheeseFlocCutSeconds = flocTelemetry.cutSeconds;
+  snapshot.cheeseFlocRemainingSeconds = flocTelemetry.remainingSeconds;
   snapshot.detectorTrend = impurityDetector.currentTrend;
   snapshot.detectorStatus = impurityDetector.detectorStatus;
   snapshot.detectorIdle = detector_idle_reason_code();
@@ -5120,6 +5136,12 @@ static void writeAjaxTelemetryFields(
   jsonFieldBool(out, first, "CheesePhValid", snapshot.cheesePhValid);
   jsonFieldRaw(out, first, "CheeseWorkSeconds", snapshot.cheeseWorkSeconds);
   jsonFieldRaw(out, first, "CheeseTimeoutRemainingSeconds", snapshot.cheeseTimeoutRemainingSeconds);
+  jsonFieldBool(out, first, "CheeseFlocActive", snapshot.cheeseFlocActive);
+  jsonFieldBool(out, first, "CheeseFlocFixed", snapshot.cheeseFlocFixed);
+  jsonFieldRaw(out, first, "CheeseFlocActualSeconds", snapshot.cheeseFlocActualSeconds);
+  jsonFieldRaw(out, first, "CheeseFlocMultiplierMilli", snapshot.cheeseFlocMultiplierMilli);
+  jsonFieldRaw(out, first, "CheeseFlocCutSeconds", snapshot.cheeseFlocCutSeconds);
+  jsonFieldRaw(out, first, "CheeseFlocRemainingSeconds", snapshot.cheeseFlocRemainingSeconds);
   jsonFieldFloat(out, first, "DetectorTrend", snapshot.detectorTrend, 3);
   jsonFieldRaw(out, first, "DetectorStatus", snapshot.detectorStatus);
   jsonFieldRaw(out, first, "DetectorIdle", snapshot.detectorIdle);
@@ -5507,7 +5529,10 @@ static void printRuntimeEventPublishFailure(
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   if (m.length() < 5) return;
 #ifdef SAMOVAR_USE_BLYNK
-  if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid()) {
+  const bool flocEvent = m.startsWith("@F1;");
+  if (flocEvent) {
+    blynk_stage_floc_event(m);
+  } else if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid()) {
     // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),
     // дальше сам текст. Заголовок для Blynk добавляет потребитель в triggerGetClock().
     String MsgPl = String((char)('0' + (msg_type == NONE_MSG ? NOTIFY_MSG : msg_type))) + m;

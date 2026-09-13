@@ -24,6 +24,8 @@ require("function parseCheeseProgram(program)", "missing Cheese parser")
 require("function applyRowRules(row, reset)", "type change does not reset a row")
 require("applyRowRules(row, true)", "type change can inherit previous row state")
 require("function validateMixer(row, allowed)", "missing dedicated mixer validation")
+require("function cheeseFlocMultiplierMilli(value)", "missing F multiplier wire validation")
+require("type === 'F' && cheeseFlocMultiplierMilli(three) === null", "F multiplier is not validated")
 require("type === 'P' && (!positive(three, 1440) || three < two)", "P permits a total timeout shorter than its hold")
 require("value.trim() === ''", "empty mixer component is converted to zero")
 require("NONE", "mixer has no NONE selection")
@@ -33,6 +35,10 @@ require("manualConfirmationRequired", "manual confirmation is missing")
 require("SamovarApp.sendCommand('start=1')", "confirmation does not use existing next command")
 require("CheeseWorkSeconds", "UI does not reserve work-time telemetry")
 require("CheeseTimeoutRemainingSeconds", "UI does not reserve timeout telemetry")
+require("CheeseFlocActive", "UI does not reserve F activity telemetry")
+require("CheeseFlocFixed", "UI does not reserve F fixation telemetry")
+require("CheeseFlocRemainingSeconds", "UI does not reserve F remaining-time telemetry")
+require("stageFlocMeta", "UI does not show F before/after fixation")
 require("SamovarApp.loadUiBootstrap(applyCheeseBootstrap)", "bootstrap lifecycle was removed")
 require("cheeseCoolingScheme", "Cheese UI does not show the cooling scheme")
 require("two-valves", "Cheese UI does not localize two-valve cooling")
@@ -41,9 +47,9 @@ require("acceptedCheeseProgram", "telemetry still reads an unsaved editor draft"
 require("function acceptedCheeseRows()", "missing accepted-program telemetry state")
 require("row[0] === 'W' || row[0] === 'S'", "W and S do not require confirmation")
 
-options = re.findall(r'<option value="([A-Za-z])">(?:Нагрев|Выдержка|Охлаждение|Перемешивание|Дозирование|Ожидание pH|Ручное действие|Слив|Lua)</option>', source)
-if options != list("HPCMDNWSL"):
-    errors.append(f"Cheese types are {options}, expected HPCMDNWSL")
+options = re.findall(r'<option value="([A-Za-z])">(?:Нагрев|Выдержка|Охлаждение|Перемешивание|Дозирование|Ожидание pH|Ручное действие|Слив|Флокуляция|Lua)</option>', source)
+if options != list("HPCMDNWSFL"):
+    errors.append(f"Cheese types are {options}, expected HPCMDNWSFL")
 
 for forbidden in (
     'id="Descr"', 'name="Descr"', "PROGRAM_BACKUP_VERSION", "device_schedule_modal.htm",

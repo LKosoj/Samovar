@@ -638,6 +638,25 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   return true;
 }
 
+inline bool program_cheese_f_multiplier_milli(double multiplier, uint32_t& milli) {
+  const double rounded = floor(multiplier * 1000.0 + 0.5);
+  if (!isfinite(multiplier) || multiplier < 1.0 || rounded < 1000.0 ||
+      rounded > static_cast<double>(UINT32_MAX)) return false;
+  milli = static_cast<uint32_t>(rounded);
+  return true;
+}
+
+inline void program_store_cheese_f_multiplier(WProgram& row, uint32_t milli) {
+  static_assert(sizeof(row.Param) == sizeof(milli), "F multiplier storage must stay 4 bytes");
+  memcpy(&row.Param, &milli, sizeof(milli));
+}
+
+inline uint32_t program_load_cheese_f_multiplier(const WProgram& row) {
+  uint32_t milli = 0;
+  memcpy(&milli, &row.Param, sizeof(milli));
+  return milli;
+}
+
 inline bool program_validate_cheese_row_semantics(
     ProgramType type,
     float temp,
@@ -647,7 +666,7 @@ inline bool program_validate_cheese_row_semantics(
     long onTime,
     long offTime,
     long sensor,
-    float param,
+    double param,
     const char*& errorMessage) {
   // Сыр: TYPE;VALUE1;VALUE2;VALUE3;MIXER;VALUE4.
   //
@@ -662,6 +681,8 @@ inline bool program_validate_cheese_row_semantics(
   //    скорость мл/мин (локальное), TempSensor=1 (ручное) или 2 (локальное).
   // N: Temp=температура °C, Time=тайм-аут мин, Param=целевой pH,
   //    TempSensor=датчик температуры.
+  // F: Temp=рабочая температура °C, Time=тайм-аут мин,
+  //    FlocMultiplierMilli=round-half-up(множитель * 1000), TempSensor=датчик.
   // W: Temp=0, Time=тайм-аут мин, Param=код ручного действия, TempSensor=0.
   // S/L: Temp=0, Time=тайм-аут мин, Param=0, TempSensor=0.
   // Во всех строках MIXER переводится одинаково: capacity_num=устройство,
@@ -707,6 +728,15 @@ inline bool program_validate_cheese_row_semantics(
           param > 0.0f && param <= 14.0f && sensor >= 0 && sensor <= 4) return true;
       errorMessage = "Ошибка программы: для N нужны Temp, Time, pH 0..14 и датчик";
       return false;
+    case 'F': {
+      uint32_t multiplierMilli = 0;
+      if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX &&
+          timeMin > 0.0f && timeMin <= PROGRAM_TIME_MAX &&
+          program_cheese_f_multiplier_milli(param, multiplierMilli) &&
+          sensor >= 0 && sensor <= 4) return true;
+      errorMessage = "Ошибка программы: для F нужны Temp, Time, множитель не меньше 1 и датчик";
+      return false;
+    }
     case 'W':
       if (temp == 0.0f && timeMin > 0.0f && param >= 1.0f && param <= 8.0f &&
           param == (float)(uint8_t)param && sensor == 0) return true;
@@ -740,15 +770,18 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   float temp = 0.0f;
   float timeMin = 0.0f;
   float param = 0.0f;
+  double flocMultiplier = 0.0;
+  uint32_t flocMultiplierMilli = 0;
   long sensor = 0;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
             tokTemp && tokTime && tokDevice && tokSensor && tokParam && !tokExtra;
   if (ok && parsedType == 'L') {
     long timeout = 0;
+    float zeroParam = 0.0f;
     ok = row.LuaTextOffset > 0 &&
          parse_bounded_float(tokTemp, 0.0f, 0.0f, temp).ok() &&
          parse_bounded_long(tokTime, 1, UINT16_MAX, timeout).ok() &&
-         parse_bounded_float(tokParam, 0.0f, 0.0f, param).ok() &&
+         parse_bounded_float(tokParam, 0.0f, 0.0f, zeroParam).ok() &&
          parse_bounded_long(tokSensor, 0, 0, sensor).ok();
     if (!ok) {
       errorMessage = "Ошибка программы: для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
@@ -761,8 +794,25 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   ok = ok &&
             parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, (float)UINT16_MAX, temp).ok() &&
             parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
-            parse_bounded_long(tokSensor, 0, 4, sensor).ok() &&
-            parse_bounded_float(tokParam, 0.0f, PROGRAM_TIME_MAX, param).ok();
+            parse_bounded_long(tokSensor, 0, 4, sensor).ok();
+  if (ok && parsedType == 'F') {
+    ok = parse_finite_double(tokParam, flocMultiplier).ok() && flocMultiplier >= 1.0;
+    if (ok) {
+      const double requestedMilli = floor(flocMultiplier * 1000.0 + 0.5);
+      ok = requestedMilli >= 1000.0 && requestedMilli <= static_cast<double>(UINT32_MAX);
+      if (ok) {
+        ok = program_cheese_f_multiplier_milli(flocMultiplier, flocMultiplierMilli) &&
+            flocMultiplierMilli == static_cast<uint32_t>(requestedMilli);
+      }
+    }
+    if (!ok) {
+      errorMessage = "Ошибка программы: множитель F не представим как m=round(MULTIPLIER*1000)";
+    }
+  } else if (ok) {
+    float parsedParam = 0.0f;
+    ok = parse_bounded_float(tokParam, 0.0f, PROGRAM_TIME_MAX, parsedParam).ok();
+    param = parsedParam;
+  }
 
   long devType = 0;
   long speed = 0;
@@ -774,7 +824,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   }
   if (ok && !program_validate_cheese_row_semantics(
       parsedType, temp, timeMin, devType, speed, onTime, offTime,
-      sensor, param, errorMessage)) {
+      sensor, parsedType == 'F' ? flocMultiplier : param, errorMessage)) {
     ok = false;
   }
   if (!ok) return false;
@@ -787,7 +837,8 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   row.Volume = (uint16_t)onTime;
   row.Power = (float)offTime;
   row.TempSensor = (uint8_t)sensor;
-  row.Param = param;
+  if (parsedType == 'F') program_store_cheese_f_multiplier(row, flocMultiplierMilli);
+  else row.Param = param;
   return true;
 }
 
@@ -1017,7 +1068,16 @@ inline void program_append_cheese_row(String& out, const WProgram& row, const ch
   out += ";";
   out += String(row.Temp, 6) + ";";
   out += String(row.Time, 6) + ";";
-  out += String(row.Param, 6) + ";";
+  if (row.WType == 'F') {
+    const uint32_t multiplierMilli = program_load_cheese_f_multiplier(row);
+    const uint32_t fraction = multiplierMilli % 1000UL;
+    out += String(multiplierMilli / 1000UL) + ".";
+    if (fraction < 100) out += "0";
+    if (fraction < 10) out += "0";
+    out += String(fraction) + ";";
+  } else {
+    out += String(row.Param, 6) + ";";
+  }
   out += (String)row.capacity_num + "^" + (int)row.Speed + "^" + row.Volume + "^" + (int)row.Power + ";";
   out += (String)row.TempSensor + "\n";
 }
@@ -1165,7 +1225,7 @@ inline const ProgramParseSpec& cheese_program_parse_spec() {
     "Ошибка программы: неверный формат строки cheese",
     "Ошибка программы: слишком много строк cheese",
     nullptr,
-    "HPCMDNWSL",
+    "HPCMDNWSFL",
     fields,
     static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
     PROGRAM_END,

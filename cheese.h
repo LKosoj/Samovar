@@ -27,6 +27,7 @@ enum CheeseStageKind : uint8_t {
   CHEESE_STAGE_WAIT,
   CHEESE_STAGE_DRAIN,
   CHEESE_STAGE_LUA,
+  CHEESE_STAGE_FLOC,
 };
 
 enum CheeseLuaStagePhase : uint8_t {
@@ -61,6 +62,20 @@ struct CheeseRuntimeState {
   bool temperatureConfirmActive;
   bool phReachedActive;
   bool phInvalidActive;
+  bool flocFixed;
+  uint32_t flocActualSeconds;
+  uint32_t flocMultiplierMilli;
+  uint32_t flocCutSeconds;
+  uint32_t flocTimeoutSeconds;
+};
+
+struct CheeseFlocTelemetry {
+  bool active;
+  bool fixed;
+  uint32_t actualSeconds;
+  uint32_t multiplierMilli;
+  uint32_t cutSeconds;
+  uint32_t remainingSeconds;
 };
 
 static CheeseLuaStageState cheeseLuaStage = {
@@ -90,6 +105,7 @@ inline CheeseStageKind cheese_stage_kind(ProgramType type) {
     case 'W': return CHEESE_STAGE_WAIT;
     case 'S': return CHEESE_STAGE_DRAIN;
     case 'L': return CHEESE_STAGE_LUA;
+    case 'F': return CHEESE_STAGE_FLOC;
     default: return CHEESE_STAGE_INVALID;
   }
 }
@@ -415,6 +431,9 @@ inline void cheese_reset_stage_state() {
   cheesePhLastAttemptMs = 0;
   cheeseFinishPending = false;
   cheese_reset_lua_stage();
+#if USE_ADAPTIVE_PID
+  reset_adaptive_heater_controller();
+#endif
 }
 
 inline bool cheese_request_lua_exit(uint8_t targetProgram) {
@@ -451,6 +470,7 @@ inline const char* cheese_stage_name(ProgramType type) {
     case 'N': return "Ожидание pH";
     case 'W': return "Ручное действие";
     case 'S': return "Слив";
+    case 'F': return "Флокуляция";
     case 'L': return "Lua";
     default: return "Неизвестная операция";
   }
@@ -467,7 +487,8 @@ inline void cheese_abort(const String& reason) {
 
 inline bool cheese_row_needs_sensor(CheeseStageKind kind) {
   return kind == CHEESE_STAGE_HEAT || kind == CHEESE_STAGE_HOLD ||
-      kind == CHEESE_STAGE_COOL || kind == CHEESE_STAGE_PH;
+      kind == CHEESE_STAGE_COOL || kind == CHEESE_STAGE_PH ||
+      kind == CHEESE_STAGE_FLOC;
 }
 
 inline bool cheese_local_doser_motion(const WProgram& row,
@@ -498,7 +519,8 @@ inline bool cheese_validate_program(String& error) {
         !program_validate_cheese_row_semantics(
             row.WType, row.Temp, row.Time, row.capacity_num,
             static_cast<long>(row.Speed), row.Volume,
-            static_cast<long>(row.Power), row.TempSensor, row.Param,
+            static_cast<long>(row.Power), row.TempSensor,
+            row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 : row.Param,
             semanticError)) {
       error = String(semanticError ? semanticError : "Ошибка программы") +
           " в строке " + String(i + 1);
@@ -584,6 +606,9 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
   beerMixerPauseSinceMs = 0;
   const uint32_t nowMs = millis();
   ProgramNum = targetProgram;
+#if USE_ADAPTIVE_PID
+  reset_adaptive_heater_controller();
+#endif
   begintime = nowMs;
   msgfl = true;
   cheeseRuntime = {};
@@ -621,7 +646,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
   return true;
 }
 
-void run_cheese_program(uint8_t num) {
+inline void cheese_run_program_direct(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_CHEESE_MODE || !PowerOn) return;
   const uint8_t targetProgram = num < ProgramLen && num < PROGRAM_END
       ? num : PROGRAM_END;
@@ -638,6 +663,132 @@ void run_cheese_program(uint8_t num) {
   if (!cheese_prepare_stage(targetProgram)) {
     cheese_abort("Ошибка перехода к строке сырной программы");
   }
+}
+
+inline uint32_t cheese_f_elapsed_seconds(uint32_t nowMs) {
+  const uint32_t elapsedMs = nowMs - cheeseRuntime.enteredMs;
+  return elapsedMs / 1000UL + (elapsedMs % 1000UL != 0 ? 1UL : 0UL);
+}
+
+inline uint32_t cheese_f_timeout_seconds(const WProgram& row) {
+  return static_cast<uint32_t>(ceil(static_cast<double>(row.Time) * 60.0));
+}
+
+inline uint32_t cheese_f_remaining_seconds(uint32_t deadlineSeconds, uint32_t nowMs) {
+  const uint32_t elapsedMs = nowMs - cheeseRuntime.enteredMs;
+  const uint32_t deadlineMs = deadlineSeconds * 1000UL;
+  if (elapsedMs >= deadlineMs) return 0;
+  const uint32_t remainingMs = deadlineMs - elapsedMs;
+  return remainingMs / 1000UL + (remainingMs % 1000UL != 0 ? 1UL : 0UL);
+}
+
+inline void cheese_capture_floc_telemetry(uint32_t nowMs, CheeseFlocTelemetry& value) {
+  value = {};
+  if (!cheese_runtime_active() || program[ProgramNum].WType != 'F') return;
+
+  const WProgram& row = program[ProgramNum];
+  value.active = true;
+  value.fixed = cheeseRuntime.flocFixed;
+  value.multiplierMilli = value.fixed ? cheeseRuntime.flocMultiplierMilli :
+                                       program_load_cheese_f_multiplier(row);
+  if (value.fixed) {
+    value.actualSeconds = cheeseRuntime.flocActualSeconds;
+    value.cutSeconds = cheeseRuntime.flocCutSeconds;
+    value.remainingSeconds = cheese_f_remaining_seconds(value.cutSeconds, nowMs);
+  } else {
+    value.remainingSeconds =
+        cheese_f_remaining_seconds(cheese_f_timeout_seconds(row), nowMs);
+  }
+}
+
+inline bool cheese_f_cut_seconds(uint32_t actualSeconds, uint32_t multiplierMilli,
+                                 uint32_t& cutSeconds) {
+  if (actualSeconds == 0 || multiplierMilli < 1000) return false;
+  const uint64_t product = static_cast<uint64_t>(actualSeconds) * multiplierMilli;
+  const uint64_t rounded = product / 1000ULL + (product % 1000ULL != 0 ? 1ULL : 0ULL);
+  if (rounded < actualSeconds || rounded > UINT32_MAX) return false;
+  cutSeconds = static_cast<uint32_t>(rounded);
+  return true;
+}
+
+inline void cheese_f_append_hex(String& out, uint32_t value, uint8_t width) {
+  static const char digits[] = "0123456789ABCDEF";
+  for (int8_t shift = static_cast<int8_t>((width - 1) * 4); shift >= 0; shift -= 4) {
+    out += digits[(value >> shift) & 0x0F];
+  }
+}
+
+inline String cheese_f_event_payload(uint32_t sessionId, uint8_t row,
+                                     uint32_t actualSeconds, uint32_t multiplierMilli,
+                                     uint32_t cutSeconds, uint32_t timeoutSeconds) {
+  String payload;
+  payload.reserve(128);
+  payload += "@F1;s=";
+  cheese_f_append_hex(payload, sessionId, 8);
+  payload += ";r=";
+  cheese_f_append_hex(payload, row, 2);
+  payload += ";a=";
+  cheese_f_append_hex(payload, actualSeconds, 8);
+  payload += ";m=";
+  cheese_f_append_hex(payload, multiplierMilli, 8);
+  payload += ";c=";
+  cheese_f_append_hex(payload, cutSeconds, 8);
+  payload += ";x=";
+  cheese_f_append_hex(payload, timeoutSeconds, 8);
+  payload += "|Флок зафиксирован: " + String(actualSeconds) + " с";
+  return payload;
+}
+
+inline void cheese_handle_next() {
+  if (Samovar_Mode != SAMOVAR_CHEESE_MODE || !PowerOn ||
+      ProgramNum >= ProgramLen || ProgramNum >= PROGRAM_END) return;
+  const WProgram& row = program[ProgramNum];
+  if (row.WType != 'F') {
+    cheese_run_program_direct(ProgramNum + 1);
+    return;
+  }
+  if (cheeseRuntime.flocFixed) {
+    cheese_run_program_direct(ProgramNum + 1);
+    return;
+  }
+
+  const uint32_t actualSeconds = cheese_f_elapsed_seconds(millis());
+  const uint32_t timeoutSeconds = cheese_f_timeout_seconds(row);
+  if (actualSeconds == 0) return;
+  if (actualSeconds >= timeoutSeconds) {
+    cheese_abort("Тайм-аут флокуляции");
+    return;
+  }
+  const uint32_t multiplierMilli = program_load_cheese_f_multiplier(row);
+  uint32_t cutSeconds = 0;
+  if (!cheese_f_cut_seconds(actualSeconds, multiplierMilli, cutSeconds) ||
+      cutSeconds > timeoutSeconds) {
+    cheese_abort("Расчётный момент резки позже тайм-аута флокуляции");
+    return;
+  }
+  if (currentSessionId == 0) {
+    cheese_abort("Сессия флокуляции не создана");
+    return;
+  }
+
+  cheeseRuntime.flocActualSeconds = actualSeconds;
+  cheeseRuntime.flocMultiplierMilli = multiplierMilli;
+  cheeseRuntime.flocCutSeconds = cutSeconds;
+  cheeseRuntime.flocTimeoutSeconds = timeoutSeconds;
+  cheeseRuntime.flocFixed = true;
+  SendMsg(cheese_f_event_payload(currentSessionId, ProgramNum + 1,
+                                 actualSeconds, multiplierMilli,
+                                 cutSeconds, timeoutSeconds), NOTIFY_MSG);
+}
+
+inline void run_cheese_program(uint8_t num) {
+  if (Samovar_Mode == SAMOVAR_CHEESE_MODE && PowerOn &&
+      ProgramNum < ProgramLen && ProgramNum < PROGRAM_END &&
+      num == static_cast<uint8_t>(ProgramNum + 1)) {
+    cheese_handle_next();
+    return;
+  }
+  cheese_run_program_direct(num);
 }
 
 inline bool cheese_lua_stage_tick(uint32_t nowMs, const WProgram& row) {
@@ -687,7 +838,7 @@ void cheese_stage_tick() {
   if (kind == CHEESE_STAGE_LUA) { cheese_lua_stage_tick(nowMs, row); return; }
   const bool sensorRequired = kind == CHEESE_STAGE_HEAT ||
       kind == CHEESE_STAGE_HOLD || kind == CHEESE_STAGE_COOL ||
-      kind == CHEESE_STAGE_PH;
+      kind == CHEESE_STAGE_PH || kind == CHEESE_STAGE_FLOC;
   const DSSensor* sensor = nullptr;
   const char* sensorName = "";
   if (sensorRequired && (!beer_control_sensor(row.TempSensor, sensor, sensorName) ||
@@ -701,7 +852,8 @@ void cheese_stage_tick() {
   }
   if (cheese_time_elapsed(nowMs, cheeseRuntime.enteredMs,
       cheese_stage_timeout_minutes(row)) &&
-      kind != CHEESE_STAGE_HOLD && kind != CHEESE_STAGE_MIX) {
+      kind != CHEESE_STAGE_HOLD && kind != CHEESE_STAGE_MIX &&
+      kind != CHEESE_STAGE_FLOC) {
     cheese_abort("Тайм-аут операции сырной программы");
     return;
   }
@@ -712,7 +864,7 @@ void cheese_stage_tick() {
       }
       const float target = min(row.Temp, cheeseRuntime.heatStartSetpoint +
           row.Param * static_cast<float>(nowMs - cheeseRuntime.enteredMs) / 60000.0f);
-      set_heater_state(target, sensor->avgTemp);
+      set_heater_state(target, sensor->avgTemp, row.Temp);
       if (cheese_temperature_confirmed(nowMs,
           cheese_in_temperature_band(sensor->avgTemp, row.Temp))) {
         runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
@@ -790,6 +942,18 @@ void cheese_stage_tick() {
         run_cheese_program(ProgramNum + 1);
       }
       return;
+    case CHEESE_STAGE_FLOC: {
+      set_heater_state(row.Temp, sensor->avgTemp);
+      const uint32_t elapsedSeconds = (nowMs - cheeseRuntime.enteredMs) / 1000UL;
+      if (cheeseRuntime.flocFixed) {
+        if (elapsedSeconds >= cheeseRuntime.flocCutSeconds) {
+          run_cheese_program(ProgramNum + 1);
+        }
+      } else if (elapsedSeconds >= cheese_f_timeout_seconds(row)) {
+        cheese_abort("Тайм-аут флокуляции");
+      }
+      return;
+    }
     case CHEESE_STAGE_WAIT:
       return;
     case CHEESE_STAGE_DRAIN:

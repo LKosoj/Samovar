@@ -39,10 +39,10 @@ enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED, RUNTIME_PAIR_ROW_CHANGE,
 enum { ALARM_MSG=0, WARNING_MSG=1, NOTIFY_MSG=2 };
 static void runtime_pair_begin(UiWaitReason, const char*, int) {}
 static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, int) {}
-enum CheeseStageKind : uint8_t { CHEESE_STAGE_INVALID=0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD, CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH, CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA };
+enum CheeseStageKind : uint8_t { CHEESE_STAGE_INVALID=0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD, CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH, CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA, CHEESE_STAGE_FLOC };
 struct WProgram { ProgramType WType; float Temp; float Time; float Param; uint8_t TempSensor; };
 struct DSSensor { float avgTemp; } sensor;
-struct CheeseRuntimeState { uint32_t enteredMs,lastTickMs,temperatureConfirmSinceMs,holdAccumulatedMs,mixerDeadlineMs,phReachedSinceMs,phInvalidSinceMs; float heatStartSetpoint; uint8_t mixerDevice; bool mixerRunning,mixerOneShotComplete,doserStarted,doserCompleted,drainOpen,temperatureConfirmActive,phReachedActive,phInvalidActive; } cheeseRuntime = {};
+struct CheeseRuntimeState { uint32_t enteredMs,lastTickMs,temperatureConfirmSinceMs,holdAccumulatedMs,mixerDeadlineMs,phReachedSinceMs,phInvalidSinceMs; float heatStartSetpoint; uint8_t mixerDevice; bool mixerRunning,mixerOneShotComplete,doserStarted,doserCompleted,drainOpen,temperatureConfirmActive,phReachedActive,phInvalidActive,flocFixed; uint32_t flocActualSeconds,flocMultiplierMilli,flocCutSeconds,flocTimeoutSeconds; } cheeseRuntime = {};
 enum CheeseLuaStagePhase : uint8_t { CHEESE_LUA_STAGE_IDLE=0, CHEESE_LUA_STAGE_ENTER_QUEUED, CHEESE_LUA_STAGE_RUNNING, CHEESE_LUA_STAGE_EXIT_REQUESTED, CHEESE_LUA_STAGE_EXIT_QUEUED };
 struct CheeseLuaStageState { CheeseLuaStagePhase phase; uint32_t ticket; uint8_t nextProgram; } cheeseLuaStage = {CHEESE_LUA_STAGE_IDLE, 0, 20};
 enum LuaBeerJobResult : uint8_t { LUA_BEER_JOB_LOCK_BUSY, LUA_BEER_JOB_QUEUED, LUA_BEER_JOB_RUNNING, LUA_BEER_JOB_SUCCEEDED, LUA_BEER_JOB_FAILED };
@@ -54,6 +54,7 @@ static LuaBeerJobResult luaResult=LUA_BEER_JOB_RUNNING;
 inline CheeseStageKind cheese_stage_kind(ProgramType type) { @KIND@ }
 inline bool cheese_time_elapsed(uint32_t nowMs, uint32_t startedMs, float minutes) { @ELAPSED@ }
 inline float cheese_stage_timeout_minutes(const WProgram& row) { @TIMEOUT@ }
+inline uint32_t cheese_f_timeout_seconds(const WProgram& row) { @F_TIMEOUT@ }
 inline bool cheese_in_temperature_band(float temperature, float target) { @BAND@ }
 inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand) { @TEMP_CONFIRM@ }
 inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached) { @PH_CONFIRM@ }
@@ -66,7 +67,7 @@ bool cheese_set_cooling_outputs(bool, bool) { ++coolingCalls; return coolingOk; 
 bool cheese_local_doser_complete() { return cheeseRuntime.doserStarted && localDone; }
 void stepper_safe_stop() {}
 void setHeaterPosition(bool) { ++heaterCalls; }
-void set_heater_state(float, float) { ++heaterCalls; }
+void set_heater_state(float, float, float = NAN) { ++heaterCalls; }
 void cheese_ph_tick() {}
 bool cheese_ph_valid() { return phOk; }
 void cheese_abort(const char*) { ++aborts; }
@@ -98,6 +99,8 @@ int main() {
   reset('N'); program[0].Param=6.5f; cheesePhValue=6.5f; sensor.avgTemp=20; for(int i=0;i<15;i++) tick(); cheesePhValue=7.0f; tick(); cheesePhValue=6.5f; for(int i=0;i<31;i++) tick(); tick(); check(transitions==1,"N resets the 30-second pH window");
   reset('N'); phOk=false; sensor.avgTemp=20; for(int i=0;i<11;i++) tick(); check(aborts==1,"N invalid pH failure");
   reset('N'); program[0].Param=6.5f; cheesePhValue=7.0f; sensor.avgTemp=20; program[0].Time=.001f; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"N overall timeout");
+  reset('F'); program[0].Time=1.0f; sensor.avgTemp=20; cheeseRuntime.flocFixed=true; cheeseRuntime.flocCutSeconds=2; tick(); check(transitions==0 && heaterCalls>0,"F advanced before cut or did not maintain temperature"); tick(); check(transitions==1 && aborts==0,"F did not auto-advance at cut");
+  reset('F'); program[0].Time=.02f; sensor.avgTemp=20; tick(); check(aborts==0,"F timed out before x"); tick(); check(aborts==1 && transitions==0,"F did not abort at timeout before fixation");
   reset('W'); tick(); check(transitions==0 && aborts==0,"W advanced without manual confirmation"); run_cheese_program(1); tick(); check(transitions==1,"W manual confirmation did not transition");
   reset('S'); tick(); check(transitions==0 && aborts==0,"S advanced without manual confirmation"); run_cheese_program(1); tick(); check(transitions==1,"S manual confirmation did not transition");
   reset('L'); program[0].Time=.001f; cheeseRuntime.enteredMs=fakeMs-1000; cheeseLuaStage.phase=CHEESE_LUA_STAGE_RUNNING; tick(); check(aborts==1,"L timeout");
@@ -115,6 +118,7 @@ def build(tick_body: str, lua_body: str) -> str:
         "@KIND@": extracted("inline CheeseStageKind cheese_stage_kind(ProgramType type)"),
         "@ELAPSED@": extracted("inline bool cheese_time_elapsed(uint32_t nowMs, uint32_t startedMs,"),
         "@TIMEOUT@": extracted("inline float cheese_stage_timeout_minutes(const WProgram& row)"),
+        "@F_TIMEOUT@": extracted("inline uint32_t cheese_f_timeout_seconds(const WProgram& row)"),
         "@BAND@": extracted("inline bool cheese_in_temperature_band(float temperature, float target)"),
         "@TEMP_CONFIRM@": extracted("inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand)"),
         "@PH_CONFIRM@": extracted("inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached)"),
@@ -162,6 +166,8 @@ def main() -> int:
         ("case CHEESE_STAGE_WAIT:\n      return;", "case CHEESE_STAGE_WAIT:\n      run_cheese_program(ProgramNum + 1); return;", "W manual transition"),
         ("case CHEESE_STAGE_DRAIN:\n      return;", "case CHEESE_STAGE_DRAIN:\n      run_cheese_program(ProgramNum + 1); return;", "S manual transition"),
         ("cheesePhValue <= row.Param", "cheesePhValue < row.Param", "N inclusive threshold"),
+        ("elapsedSeconds >= cheeseRuntime.flocCutSeconds", "false", "F automatic cut"),
+        ("elapsedSeconds >= cheese_f_timeout_seconds(row)", "false", "F timeout"),
     ]:
         mutant = tick_body.replace(old, new, 1)
         if mutant == tick_body or not run(build(mutant, lua_body), f"mutation {label}", False):
@@ -173,7 +179,7 @@ def main() -> int:
         mutant = lua_body.replace(old, new, 1)
         if mutant == lua_body or not run(build(tick_body, mutant), f"mutation {label}", False):
             return 1
-    print("OK: source-derived Cheese stage tick covers H/P/C/M/D/N/W/S/L and mutations")
+    print("OK: source-derived Cheese stage tick covers H/P/C/M/D/N/W/S/F/L and mutations")
     return 0
 
 

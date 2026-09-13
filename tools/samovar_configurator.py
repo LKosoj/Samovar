@@ -124,6 +124,7 @@ VALUE_SPECS = (
 )
 
 BOOL_SPECS = (
+    BoolSpec("USE_ADAPTIVE_PID", "Адаптивный PI нагрева и охлаждения", "Основные"),
     BoolSpec("SAMOVAR_USE_BLYNK", "Использовать Blynk", "Сеть"),
     BoolSpec("NOT_USE_INTERFACE_UPDATE", "Не обновлять веб-интерфейс автоматически", "Сеть"),
     BoolSpec("USE_UPDATE_OTA", "Разрешить обновление по Wi-Fi", "Сеть"),

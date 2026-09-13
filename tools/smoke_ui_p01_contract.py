@@ -141,7 +141,10 @@ struct AjaxTelemetrySnapshot {{
   bool boilingDetected; uint8_t boilingEvidence; bool boilingPrecisionSensorConfigured; bool bkWaterAuto;
   float bkSteamSetpoint; bool valveOpen; uint16_t waterPumpSpeed; float waterFlowRate; uint32_t waterFlowTotalMl;
   float pressure; float i2cStepperSpeed; bool secondPumpEnabled; bool secondPumpRunning; bool beerPaused;
-  uint8_t beerBrewOrder; bool mixer; float cheesePh; bool cheesePhValid; UiStateDescriptor ui; String luaStatus;
+  uint8_t beerBrewOrder; bool mixer; float cheesePh; bool cheesePhValid;
+  uint32_t cheeseFlocActualSeconds; uint32_t cheeseFlocMultiplierMilli;
+  uint32_t cheeseFlocCutSeconds; uint32_t cheeseFlocRemainingSeconds;
+  bool cheeseFlocActive; bool cheeseFlocFixed; UiStateDescriptor ui; String luaStatus;
 }};
 
 static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {{

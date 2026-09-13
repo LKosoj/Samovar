@@ -6,6 +6,9 @@
 #include "runtime_helpers.h"
 #include "program_io.h"
 #include "pumppwm.h"
+#if USE_ADAPTIVE_PID
+#include "adaptive_pid.h"
+#endif
 
 #define TEMP_HISTORY_SIZE 7  // [Пиво B1] Размер децимированной истории температур (точек), было 10 точек по 1 Гц
 #define BOILING_HISTORY_INTERVAL_MS 10000UL  // [Пиво B1] Интервал между точками децимированной истории, мс - 7 точек перекрывают ~60 с при минимуме памяти
@@ -34,6 +37,20 @@
 static unsigned long beerMixerPauseSinceMs = 0;
 static bool beerHoldClockFrozen = false;
 static bool beerPairErrorPending = false;
+
+#if USE_ADAPTIVE_PID
+static AdaptiveHeaterState adaptiveHeaterState = {};
+#ifdef SAMOVAR_USE_POWER
+static uint64_t adaptiveHeaterPowerGeneration = 0;
+#endif
+
+inline void reset_adaptive_heater_controller() {
+  adaptive_heater_reset(adaptiveHeaterState);
+#ifdef SAMOVAR_USE_POWER
+  adaptiveHeaterPowerGeneration = 0;
+#endif
+}
+#endif
 
 struct BoilingDetector {
     float tempHistory[TEMP_HISTORY_SIZE];
@@ -194,6 +211,9 @@ inline void beer_reset_stage_state() {
   beerHoldClockFrozen = false;
   beerPairErrorPending = false;
   beerSkipConfirmProgramNum = 0xFF;
+#if USE_ADAPTIVE_PID
+  reset_adaptive_heater_controller();
+#endif
 }
 
 /**
@@ -506,6 +526,9 @@ void run_beer_program(uint8_t num) {
   // не только старт программы - иначе beer_stage_tick/статус не увидят "нагрев".
   if (startval == SAMOVAR_STARTVAL_BEER_START || program[targetProgram].WType == 'M') startval = SAMOVAR_STARTVAL_BEER_HEATING;
   ProgramNum = targetProgram;
+#if USE_ADAPTIVE_PID
+  reset_adaptive_heater_controller();
+#endif
   begintime = 0;
   msgfl = true;
 
@@ -1227,8 +1250,66 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
  * @brief Управляет состоянием нагревателя по ПИД-регулятору и логике разгона.
  * @param setpoint Целевая температура
  * @param temp Текущая температура
+ * @param boostTarget Конечная температура для отсечки разгонного ТЭНа
  */
-void set_heater_state(float setpoint, float temp) {
+void set_heater_state(float setpoint, float temp, float boostTarget) {
+#if USE_ADAPTIVE_PID
+  if (tuning) {
+#ifdef SAMOVAR_USE_POWER
+    if (acceleration_heater) {
+      heater_boost_output_off();
+      acceleration_heater = false;
+    }
+#endif
+    heaterPID.SetMode(AUTOMATIC);
+    Setpoint = setpoint;
+    Input = temp;
+    if (aTune.Runtime()) FinishAutoTune();
+    const double dutyCycle = constrain(Output / 100.0, 0.0, 1.0);
+#ifdef SAMOVAR_USE_POWER
+    set_heater_regulator(dutyCycle);
+#else
+    set_heater(dutyCycle);
+#endif
+    return;
+  }
+
+  const uint32_t nowMs = millis();
+  if (!isfinite(boostTarget)) boostTarget = setpoint;
+#ifdef SAMOVAR_USE_POWER
+  adaptiveHeaterState.lastCommandApplied =
+      adaptiveHeaterPowerGeneration != 0 &&
+      current_power_command_status(adaptiveHeaterPowerGeneration) ==
+          ACTUATOR_COMMAND_APPLIED;
+#endif
+  const AdaptiveHeaterResult adaptiveResult = adaptive_heater_step(
+      adaptiveHeaterState, setpoint, boostTarget, temp,
+      ACCELERATION_HEATER_DELTA, nowMs);
+#ifdef SAMOVAR_USE_POWER
+  if (adaptiveResult.boost) {
+    if (!acceleration_heater) {
+      acceleration_heater = heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
+    }
+  } else if (acceleration_heater) {
+    heater_boost_output_off();
+    acceleration_heater = false;
+  }
+  uint64_t generation = 0;
+  set_heater_regulator(adaptiveResult.duty, SamSetup.BVolt, &generation);
+  adaptiveHeaterPowerGeneration = generation;
+#else
+  if (adaptiveResult.boost) {
+    set_heater_state_flag(true);
+    const bool modeApplied = set_current_power_mode_value(POWER_WORK_MODE);
+    adaptiveHeaterState.lastCommandApplied = modeApplied &&
+        heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN | SAFETY_HEATER_OUTPUT_BOOST);
+  } else {
+    set_heater(adaptiveResult.duty);
+    adaptiveHeaterState.lastCommandApplied = true;
+  }
+#endif
+#else
+  (void)boostTarget;
 #ifdef SAMOVAR_USE_POWER
   //Если дельта большая и не тюнинг, включаем разгонный тэн, иначе выключаем
   if (setpoint - temp > ACCELERATION_HEATER_DELTA && !tuning) {
@@ -1274,34 +1355,41 @@ void set_heater_state(float setpoint, float temp) {
     set_heater(dutyCycle);
 #endif
   }
+#endif
 }
 
 #ifdef SAMOVAR_USE_POWER
 /**
  * @brief Управляет UART-регулятором по доле мощности PID без медленного on/off ШИМ.
  * @param dutyCycle Доля мощности (0.0 - 1.0)
+ * @param maximumTarget Максимальная уставка регулятора для доли 1.0
+ * @param generation Номер запроса для последующей проверки выполнения
+ * @return Результат постановки или выполнения команды регулятора
  */
-inline void set_heater_regulator(double dutyCycle) {
+inline ActuatorCommandResult set_heater_regulator(
+    double dutyCycle, float maximumTarget, uint64_t* generation) {
   dutyCycle = constrain(dutyCycle, 0.0, 1.0);
-  if (dutyCycle <= 0.0 || SamSetup.StbVoltage <= 0) {
+  if (dutyCycle <= 0.0 || maximumTarget <= 0) {
+    if (generation != nullptr) *generation = 0;
     setHeaterPosition(false);
-    return;
+    return ACTUATOR_COMMAND_APPLIED;
   }
 
 #ifdef SAMOVAR_USE_SEM_AVR
-  float regulatorTarget = SamSetup.StbVoltage * dutyCycle;
+  float regulatorTarget = maximumTarget * dutyCycle;
 #else
   // PID задает долю мощности; для регулятора напряжения P ~= V^2 / R.
-  float regulatorTarget = SamSetup.StbVoltage * sqrtf((float)dutyCycle);
+  float regulatorTarget = maximumTarget * sqrtf((float)dutyCycle);
 #endif
 
   set_heater_state_flag(true);
-  set_current_power(regulatorTarget);
+  const ActuatorCommandResult result = set_current_power(regulatorTarget, generation);
   if (current_power_mode_is(POWER_SLEEP_MODE)) {
     set_heater_state_flag(false);
-    return;
+    return result;
   }
   check_power_error();
+  return result;
 }
 #endif
 

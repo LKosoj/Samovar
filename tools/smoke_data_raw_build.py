@@ -25,7 +25,7 @@ from build_web_assets import (
 
 GZIP_PAGES = (
     "index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm",
-    "nbk.htm", "chart.htm", "program.htm", "calibrate.htm",
+    "nbk.htm", "chart.htm", "program.htm", "cheese-recipes.htm", "calibrate.htm",
     "calibrate_ph.htm",
 )
 

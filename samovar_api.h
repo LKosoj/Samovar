@@ -283,10 +283,12 @@ String get_beer_program();
 void check_mixer_state();
 ActuatorCommandResult set_mixer_state(bool state, bool dir);
 ActuatorCommandResult set_mixer(bool On);
-void set_heater_state(float setpoint, float temp);
+void set_heater_state(float setpoint, float temp, float boostTarget = NAN);
 void set_heater(double dutyCycle);
 #ifdef SAMOVAR_USE_POWER
-inline void set_heater_regulator(double dutyCycle);
+inline ActuatorCommandResult set_heater_regulator(
+    double dutyCycle, float maximumTarget = SamSetup.StbVoltage,
+    uint64_t* generation = nullptr);
 #endif
 void setHeaterPosition(bool state);
 void set_heater_state_flag(bool state);
@@ -344,6 +346,10 @@ void get_task_stack_usage();
 void init_pump_pwm(uint8_t pin, int freq);
 ActuatorCommandResult set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
+#if USE_ADAPTIVE_PID
+inline void set_pump_speed_pid_control(
+    float controlTemp, float measuredTemp, bool learningAllowed);
+#endif
 void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true,
                     UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 

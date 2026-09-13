@@ -36,7 +36,7 @@
   8. гейт свободного места проверяется до начала закачки набора, а в kWebOverrideFiles[]
      общие ресурсы (картинки/звук/стили/скрипты) идут раньше HTML-страниц - при обрыве
      связи риск нерабочей одной страницы ниже риска нерабочего общего ресурса.
-  9. после подтверждённой загрузки каждой из десяти gzip-страниц удаляется только её
+  9. после подтверждённой загрузки каждой из одиннадцати gzip-страниц удаляется только её
      legacy raw-файл; ошибка удаления останавливает обновление до записи версии.
 """
 import re
@@ -51,7 +51,7 @@ DATA = ROOT / "data"
 
 LEGACY_RAW_PAGES = (
     "index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm",
-    "nbk.htm", "chart.htm", "program.htm", "calibrate.htm", "calibrate_ph.htm",
+    "nbk.htm", "chart.htm", "program.htm", "cheese-recipes.htm", "calibrate.htm", "calibrate_ph.htm",
 )
 
 
@@ -132,15 +132,15 @@ static void expect(bool value, const char *message) {{
 int main() {{
   const char *rawPages[] = {{
     "/index.htm", "/beer.htm", "/cheese.htm", "/distiller.htm", "/bk.htm",
-    "/nbk.htm", "/chart.htm", "/program.htm", "/calibrate.htm", "/calibrate_ph.htm"
+    "/nbk.htm", "/chart.htm", "/program.htm", "/cheese-recipes.htm", "/calibrate.htm", "/calibrate_ph.htm"
   }};
   const char *gzipPages[] = {{
     "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz", "bk.htm.gz",
-    "nbk.htm.gz", "chart.htm.gz", "program.htm.gz", "calibrate.htm.gz", "calibrate_ph.htm.gz"
+    "nbk.htm.gz", "chart.htm.gz", "program.htm.gz", "cheese-recipes.htm.gz", "calibrate.htm.gz", "calibrate_ph.htm.gz"
   }};
   SPIFFS.files = {{"/setup.htm"}};
   for (const char *rawPage : rawPages) SPIFFS.files.insert(rawPage);
-  for (size_t i = 0; i < 10; i++) {{
+  for (size_t i = 0; i < 11; i++) {{
     expect(cleanup_legacy_raw_web_page(gzipPages[i]), "legacy cleanup failed");
     expect(!SPIFFS.exists(String(rawPages[i])), "legacy raw survived cleanup");
   }}
@@ -234,7 +234,7 @@ def main() -> int:
         }
         if cleanup_names != set(LEGACY_RAW_PAGES):
             errors.append(
-                "cleanup_legacy_raw_web_page: mapping must cover exactly the ten legacy raw pages"
+                "cleanup_legacy_raw_web_page: mapping must cover exactly the eleven legacy raw pages"
             )
         cleanup_open = cleanup.find("SPIFFS.exists(rawPath)")
         cleanup_remove = cleanup.find("SPIFFS.remove(rawPath)")

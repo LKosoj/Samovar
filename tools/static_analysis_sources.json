@@ -13,6 +13,7 @@
     "Samovar_ini.h",
     "Samovar_pin.h",
     "WebServer.ino",
+    "adaptive_pid.h",
     "alarm.h",
     "beer.h",
     "bmp180_pressure_filter.h",

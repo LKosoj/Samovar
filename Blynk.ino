@@ -213,6 +213,15 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   jsonFieldBool(out, first, "mixer", s.mixer);
   jsonFieldFloat(out, first, "ph", s.cheesePh, 2);
   jsonFieldBool(out, first, "phv", s.cheesePhValid);
+  if (s.cheeseFlocActive) {
+    jsonFieldBool(out, first, "ff", s.cheeseFlocFixed);
+    jsonFieldRaw(out, first, "fm", s.cheeseFlocMultiplierMilli);
+    if (s.cheeseFlocFixed) {
+      jsonFieldRaw(out, first, "fa", s.cheeseFlocActualSeconds);
+      jsonFieldRaw(out, first, "fc", s.cheeseFlocCutSeconds);
+    }
+    jsonFieldRaw(out, first, "fr", s.cheeseFlocRemainingSeconds);
+  }
   writeUiStateJson(out, first, s.ui, s.luaStatus);
   out.print('}');
 }
@@ -441,6 +450,20 @@ static char s_pendingV35Line[320];
 static volatile bool s_pendingV35Ready = false;
 static uint32_t s_pendingV35Revision = 0;
 
+// F1 не проходит через общую очередь уведомлений: она ограничена по времени и может
+// быть очищена при недействительном токене. Слот хранит один факт текущей F-строки
+// до принятой Blynk отправки; S2 не создаёт второй F1 для той же строки.
+static portMUX_TYPE s_blynkFlocMux = portMUX_INITIALIZER_UNLOCKED;
+static char s_pendingF1Line[512];
+static volatile bool s_pendingF1Ready = false;
+static uint32_t s_pendingF1Revision = 0;
+// Если F1 возник, пока его V35 ещё не ушёл, этот снимок не даёт следующей
+// офлайн-сессии заменить старт нужной F1 сессии.
+static char s_pendingF1SessionLine[sizeof(s_pendingV35Line)];
+static bool s_pendingF1SessionReady = false;
+static uint32_t s_pendingF1SessionRevision = 0;
+static uint32_t s_pendingF1SessionV35Revision = 0;
+
 // Вызывается из Samovar.ino (SysTicker, tick_publish_log_line) - некрупная, без
 // библиотечных вызовов Blynk и без BlynkLockGuard. Буфер посчитан на честный худший
 // случай (см. комментарий у s_pendingV34Line) - переполнение означает не рост
@@ -528,6 +551,31 @@ bool blynk_session_start_pending() {
   return pending;
 }
 
+void blynk_stage_floc_event(const String& line) {
+  char sessionLine[sizeof(s_pendingV35Line)];
+  bool sessionReady;
+  uint32_t sessionRevision = 0;
+  portENTER_CRITICAL(&s_blynkSessionMux);
+  sessionReady = s_pendingV35Ready;
+  if (sessionReady) {
+    strlcpy(sessionLine, s_pendingV35Line, sizeof(sessionLine));
+    sessionRevision = s_pendingV35Revision;
+  }
+  portEXIT_CRITICAL(&s_blynkSessionMux);
+
+  portENTER_CRITICAL(&s_blynkFlocMux);
+  if (!s_pendingF1Ready) {
+    strlcpy(s_pendingF1Line, line.c_str(), sizeof(s_pendingF1Line));
+    s_pendingF1Revision++;
+    s_pendingF1SessionReady = sessionReady;
+    s_pendingF1SessionRevision = s_pendingF1Revision;
+    s_pendingF1SessionV35Revision = sessionRevision;
+    if (sessionReady) strlcpy(s_pendingF1SessionLine, sessionLine, sizeof(s_pendingF1SessionLine));
+    s_pendingF1Ready = true;
+  }
+  portEXIT_CRITICAL(&s_blynkFlocMux);
+}
+
 // Вызывается только из blynk_push_tick(). Возвращает false, если V35 остался pending: V34
 // в таком тике нельзя отправлять раньше начала сессии. Перед самой отправкой V35 форсирует немедленный
 // полный resend медленных пинов (blynk_push_slow(true)) -V24 (программа) сервер должен
@@ -557,6 +605,70 @@ static bool blynk_push_pending_session_start() {
   }
   portEXIT_CRITICAL(&s_blynkSessionMux);
   return sentCurrent;
+}
+
+// Если F1 успел зафиксироваться до V35, сначала отправляем его сохранённый V35.
+// В этот момент общий слот может уже содержать старт следующей офлайн-сессии.
+static bool blynk_push_pending_floc_session_start() {
+  bool ready;
+  char line[sizeof(s_pendingF1SessionLine)];
+  uint32_t revision = 0;
+  uint32_t sessionRevision = 0;
+  portENTER_CRITICAL(&s_blynkFlocMux);
+  ready = s_pendingF1SessionReady;
+  if (ready) {
+    strlcpy(line, s_pendingF1SessionLine, sizeof(line));
+    revision = s_pendingF1SessionRevision;
+    sessionRevision = s_pendingF1SessionV35Revision;
+  }
+  portEXIT_CRITICAL(&s_blynkFlocMux);
+  if (!ready) return true;
+  if (!Blynk.connected()) return false;
+  blynk_push_slow(true);
+  if (!Blynk.connected()) return false;
+  Blynk.virtualWrite(V35, line);
+  if (!Blynk.connected()) return false;
+  bool sentCurrent = false;
+  portENTER_CRITICAL(&s_blynkFlocMux);
+  if (s_pendingF1Ready && s_pendingF1Revision == revision &&
+      s_pendingF1SessionReady && s_pendingF1SessionRevision == revision) {
+    s_pendingF1SessionReady = false;
+    sentCurrent = true;
+  }
+  portEXIT_CRITICAL(&s_blynkFlocMux);
+  if (sentCurrent) {
+    portENTER_CRITICAL(&s_blynkSessionMux);
+    if (s_pendingV35Ready && s_pendingV35Revision == sessionRevision &&
+        strcmp(s_pendingV35Line, line) == 0) {
+      s_pendingV35Ready = false;
+    }
+    portEXIT_CRITICAL(&s_blynkSessionMux);
+  }
+  return sentCurrent;
+}
+
+// Вызывается из blynk_push_tick() только после V35. При потере соединения слот
+// остаётся pending и повторяется после переподключения; после успешной отправки
+// очищается только неизменённая ревизия.
+static void blynk_push_pending_floc_event() {
+  bool ready;
+  char line[sizeof(s_pendingF1Line)];
+  uint32_t revision = 0;
+  portENTER_CRITICAL(&s_blynkFlocMux);
+  ready = s_pendingF1Ready;
+  if (ready) {
+    strlcpy(line, s_pendingF1Line, sizeof(line));
+    revision = s_pendingF1Revision;
+  }
+  portEXIT_CRITICAL(&s_blynkFlocMux);
+  if (!ready || !Blynk.connected()) return;
+
+  Blynk.virtualWrite(V26, line);
+  if (!Blynk.connected()) return;
+
+  portENTER_CRITICAL(&s_blynkFlocMux);
+  if (s_pendingF1Ready && s_pendingF1Revision == revision) s_pendingF1Ready = false;
+  portEXIT_CRITICAL(&s_blynkFlocMux);
 }
 
 BLYNK_CONNECTED() {
@@ -778,6 +890,8 @@ void blynk_push_tick() {
   char pendingV34Line[sizeof(s_pendingV34Line)];
   uint32_t pendingV34Revision = 0;
   const bool pendingV34Ready = blynk_snapshot_pending_log_line(pendingV34Line, pendingV34Revision);
+  const bool canPushF1 = blynk_push_pending_floc_session_start();
+  if (canPushF1) blynk_push_pending_floc_event();
   const bool canPushV34 = blynk_push_pending_session_start();  // V35, см. session_begin() (Samovar.ino)
   if (canPushV34) blynk_push_pending_log_line(pendingV34Line, pendingV34Revision, pendingV34Ready);
 

@@ -1,0 +1,14 @@
+{
+  "id": 17,
+  "slug": "s5-fixture",
+  "name": "Тестовый сыр",
+  "content": {
+    "process": [
+      {"n": 1, "phase": "milk_prep", "code": "heat", "name": "Нагрев", "temp": {"min": 31, "max": 33, "unit": "C"}},
+      {"n": 2, "phase": "coagulation", "code": "culture", "name": "Закваска до pH", "temp": {"value": 32, "unit": "C", "si": 32}, "time": {"value": 60, "unit": "min"}, "pH": {"value": 6.4}},
+      {"n": 3, "phase": "coagulation", "code": "rennet", "name": "Флок", "temp": {"value": 32, "unit": "C", "si": 32}, "time": {"value": 20, "unit": "min"}, "pH": {"value": 6.35}, "floc": {"time": 8, "unit": "min", "multiplier": 2.5}},
+      {"n": 4, "phase": "forming", "code": "press", "name": "Прессование", "time": {"value": 30, "unit": "min"}}
+    ],
+    "aging": [{"n": 1, "duration": {"value": 7, "unit": "d"}}]
+  }
+}
