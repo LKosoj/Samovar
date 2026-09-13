@@ -33,6 +33,21 @@ HARNESS_TEMPLATE = r'''
 #define SAMOVAR_USE_POWER
 
 using TaskHandle_t = void*;
+using UBaseType_t = uint32_t;
+
+#define F(value) value
+
+struct SerialStub {
+  std::string output;
+
+  void print(const char* value) { output += value ? value : ""; }
+  void print(uint32_t value) { output += std::to_string(value); }
+  void println(const char* value) {
+    print(value);
+    output += '\n';
+  }
+};
+static SerialStub Serial;
 
 class String {
  public:
@@ -100,6 +115,7 @@ static ESPClassStub ESP;
 // NULL - для текущей задачи), что позволяет доказать, что nullptr-хэндлы из
 // таблицы (GetBMPTask) реально пропускаются, а не тихо проходят проверку с
 // безопасным значением по умолчанию.
+static uint32_t loopHeadroom = 100000;
 static uint32_t sysTickerHeadroom = 100000;
 static uint32_t getClockHeadroom = 100000;
 #ifdef SAMOVAR_USE_POWER
@@ -109,6 +125,7 @@ static int totalQueryCalls = 0;
 
 static uint32_t uxTaskGetStackHighWaterMark(TaskHandle_t handle) {
   totalQueryCalls++;
+  if (handle == nullptr) return loopHeadroom;
   if (handle == SysTickerTask1) return sysTickerHeadroom;
   if (handle == GetClockTask1) return getClockHeadroom;
 #ifdef SAMOVAR_USE_POWER
@@ -131,6 +148,7 @@ static void check(bool condition, const char* message) {
 }
 
 static void reset_fixture() {
+  loopHeadroom = 100000;
   sysTickerHeadroom = 100000;
   getClockHeadroom = 100000;
 #ifdef SAMOVAR_USE_POWER
@@ -142,6 +160,7 @@ static void reset_fixture() {
   vTaskDelayCalls = 0;
   espRestartCalls = 0;
   totalQueryCalls = 0;
+  Serial.output.clear();
 }
 
 // Все задачи в норме -> тишина. Заодно доказывает, что GetBMPTask (хэндл всегда
@@ -153,9 +172,26 @@ static void test_all_healthy_is_silent() {
   tick_check_stack_headroom();
   check(emergencyStopCalls == 0, "здоровые задачи ошибочно вызвали request_emergency_stop");
   check(espRestartCalls == 0, "здоровые задачи ошибочно вызвали ESP.restart");
+  check(Serial.output.empty(), "здоровые задачи ошибочно напечатали критическую диагностику");
   check(totalQueryCalls == 4,
         "REGRESS: число опросов uxTaskGetStackHighWaterMark изменилось - "
         "похоже, nullptr-хэндл (GetBMPTask) больше не пропускается");
+}
+
+// Мало места у loopTask -> перед аварийными действиями порт получает имя задачи,
+// измеренный минимум и порог срабатывания.
+static void test_low_loop_prints_details() {
+  reset_fixture();
+  loopHeadroom = 500;
+  tick_check_stack_headroom();
+  check(Serial.output.find("task=loopTask") != std::string::npos,
+        "диагностика низкого стека не называет loopTask");
+  check(Serial.output.find("min_free=500") != std::string::npos,
+        "диагностика loopTask не содержит измеренный остаток стека");
+  check(Serial.output.find("threshold=1024 bytes") != std::string::npos,
+        "диагностика loopTask не содержит порог срабатывания");
+  check(emergencyStopCalls == 1, "низкий стек loopTask не вызвал request_emergency_stop ровно один раз");
+  check(espRestartCalls == 1, "низкий стек loopTask не вызвал ESP.restart");
 }
 
 // Мало место только у SysTicker -> отсечка сработала один раз, причина называет
@@ -172,6 +208,10 @@ static void test_low_systicker_names_systicker() {
   check(sendMsgAlarmCalls == 1, "SendMsg(..., ALARM_MSG) не вызван при низком стеке SysTicker");
   check(vTaskDelayCalls == 1, "vTaskDelay не вызван при низком стеке SysTicker");
   check(espRestartCalls == 1, "ESP.restart не вызван при низком стеке SysTicker");
+  check(Serial.output.find("task=SysTicker") != std::string::npos,
+        "диагностика низкого стека не называет SysTicker");
+  check(Serial.output.find("min_free=500") != std::string::npos,
+        "диагностика SysTicker не содержит измеренный остаток стека");
 }
 
 // Мало место только у PowerStatusTask (самый маленький рабочий стек,
@@ -192,6 +232,7 @@ static void test_low_power_status_names_power_status() {
 
 int main() {
   test_all_healthy_is_silent();
+  test_low_loop_prints_details();
   test_low_systicker_names_systicker();
   test_low_power_status_names_power_status();
 

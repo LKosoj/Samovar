@@ -265,6 +265,11 @@ require(
     ),
 )
 loop = function_body(samovar, "void loop()")
+# Расширение программы до 30 строк увеличило локальный ProgramDraft в пути setup().
+# Штатный макрос Arduino-ESP32 увеличивает стек loopTask и одинаково работает в
+# PlatformIO и Arduino IDE.
+if "SET_LOOP_TASK_STACK_SIZE(9 * 1024);" not in samovar:
+    errors.append("loopTask stack size: отсутствует штатный размер стека 9 КБ")
 # P8: сторож стека вынесен из loop() в tick_check_stack_headroom() (Samovar.ino), вызываемую
 # первой же строкой loop(). Конкатенация сохраняет прежний порядок проверяемых токенов,
 # но сама по себе не докажет, что loop() эту функцию вызывает, поэтому вызов проверяем явно.
@@ -282,7 +287,9 @@ require_ordered_tokens(
     [
         # Порог в байтах: uxTaskGetStackHighWaterMark в ESP-IDF считает байты, и прежние
         # 325 не оставляли места самому аварийному пути (отсечка + SendMsg ≈ 200 байт).
-        "if (uxTaskGetStackHighWaterMark(NULL) < 1024)",
+        "const UBaseType_t loopStackFree = uxTaskGetStackHighWaterMark(NULL)",
+        "if (loopStackFree < 1024)",
+        "print_critical_stack_details(\"loopTask\", loopStackFree)",
         "request_emergency_stop(\"Аварийное отключение: критически малый остаток стека\")",
         "SendMsg(\"Стек переполнился. Перезагрузка\"",
         "vTaskDelay(5000)",
@@ -291,7 +298,9 @@ require_ordered_tokens(
         # GetClockTicker, PowerStatusTask, ...), см. tools/smoke_stack_headroom_all_tasks.py.
         "for (size_t i = 0; i < sizeof(stackWatchTable) / sizeof(stackWatchTable[0]); i++)",
         "if (handle == nullptr) continue;",
-        "if (uxTaskGetStackHighWaterMark(handle) < 1024)",
+        "const UBaseType_t stackFree = uxTaskGetStackHighWaterMark(handle)",
+        "if (stackFree < 1024)",
+        "print_critical_stack_details(stackWatchTable[i].name, stackFree)",
     ],
     errors,
 )

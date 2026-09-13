@@ -34,6 +34,8 @@ class asyncHTTPrequest;
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
+SET_LOOP_TASK_STACK_SIZE(9 * 1024);
+
 #include <esp_wifi.h>
 
 #if defined(ARDUINO_ESP32S3_DEV)
@@ -3375,12 +3377,22 @@ static const StackWatchEntry stackWatchTable[] = {
 #endif
 };
 
+static void print_critical_stack_details(const char* taskName, UBaseType_t stackFree) {
+  Serial.print(F("CRITICAL STACK: task="));
+  Serial.print(taskName);
+  Serial.print(F(", min_free="));
+  Serial.print(stackFree);
+  Serial.println(F(", threshold=1024 bytes"));
+}
+
 static void tick_check_stack_headroom() {
   // Проверка переполнения стека. Порог в БАЙТАХ: uxTaskGetStackHighWaterMark в ESP-IDF
   // считает байты, поэтому прежние 325 срабатывали тогда, когда на отсечку нагрева и
   // отправку сообщения (их кадры плюс временные String — около 200 байт) стека уже не
   // хватало, и сторож падал раньше, чем успевал погасить ТЭН.
-  if (uxTaskGetStackHighWaterMark(NULL) < 1024) {
+  const UBaseType_t loopStackFree = uxTaskGetStackHighWaterMark(NULL);
+  if (loopStackFree < 1024) {
+    print_critical_stack_details("loopTask", loopStackFree);
     request_emergency_stop("Аварийное отключение: критически малый остаток стека");
     SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
     vTaskDelay(5000);
@@ -3396,7 +3408,9 @@ static void tick_check_stack_headroom() {
   for (size_t i = 0; i < sizeof(stackWatchTable) / sizeof(stackWatchTable[0]); i++) {
     TaskHandle_t handle = *stackWatchTable[i].handle;
     if (handle == nullptr) continue;
-    if (uxTaskGetStackHighWaterMark(handle) < 1024) {
+    const UBaseType_t stackFree = uxTaskGetStackHighWaterMark(handle);
+    if (stackFree < 1024) {
+      print_critical_stack_details(stackWatchTable[i].name, stackFree);
       request_emergency_stop(String("Аварийное отключение: критически малый остаток стека задачи ") + stackWatchTable[i].name);
       SendMsg(String("Стек задачи ") + stackWatchTable[i].name + " переполнился. Перезагрузка", ALARM_MSG);
       vTaskDelay(5000);
