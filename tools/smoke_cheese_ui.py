@@ -43,6 +43,7 @@ require("SamovarApp.loadUiBootstrap(applyCheeseBootstrap)", "bootstrap lifecycle
 require("cheeseCoolingScheme", "Cheese UI does not show the cooling scheme")
 require("two-valves", "Cheese UI does not localize two-valve cooling")
 require("SamovarApp.postProgram(document.forms.mainform)", "program save does not use existing endpoint")
+require("location.href='/cheese-recipes.htm'", "Cheese header has no recipes navigation")
 require("acceptedCheeseProgram", "telemetry still reads an unsaved editor draft")
 require("function acceptedCheeseRows()", "missing accepted-program telemetry state")
 require("row[0] === 'W' || row[0] === 'S'", "W and S do not require confirmation")

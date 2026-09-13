@@ -52,6 +52,12 @@ BROWSER_TEST = r'''async page => {
   await page.route("**/ui-bootstrap", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(bootstrap)
   }));
+  await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({blynkToken:"", mode:7})
+  }));
+  await page.route("https://www.samovar-tool.ru/cheesexml/v1/**", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({page:1,perPage:10,total:0,items:[]})
+  }));
   await page.route("**/ajax*", async route => {
     const match = route.request().url().match(/[?&]operationId=(\d+)/);
     if (match) {
@@ -76,6 +82,15 @@ BROWSER_TEST = r'''async page => {
     return route.fulfill({status:200, contentType:"text/plain",body:"OK"});
   });
 
+  await page.goto(baseUrl + "/cheese.htm", {waitUntil:"load"});
+  const recipesTab = page.getByRole("button", {name:"Рецепты"});
+  expect(await recipesTab.isVisible(), "Cheese recipes tab is not visible");
+  await Promise.all([
+    page.waitForURL(baseUrl + "/cheese-recipes.htm"),
+    recipesTab.click()
+  ]);
+  expect(await page.evaluate(() => location.pathname) === "/cheese-recipes.htm",
+    "Cheese recipes tab opened the wrong page");
   await page.goto(baseUrl + "/cheese.htm", {waitUntil:"load"});
   await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 1);
   await page.waitForFunction(() => document.getElementById("stageNumber").textContent === "1 из 1");
