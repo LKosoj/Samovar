@@ -122,15 +122,17 @@
       var fakeRow = {mixerDevice:{value:mixer[0]}, mixerSpeed:{value:Math.abs(mixer[1])},
         mixerDirection:{value:mixer[1] < 0 ? '-1' : '1'}, mixerOn:{value:mixer[2]}, mixerOff:{value:mixer[3]}};
       if (!validateMixer(fakeRow, rule.mixer)) return false;
-      if ((rule.visible[0] ? !positive(one, 150) : one !== 0) ||
+      if ((rule.visible[0] ? (type === 'D' && four === 3
+            ? !integer(one, 1, 2147483647) : !positive(one, 150)) : one !== 0) ||
           (rule.visible[1] ? !positive(two, 1440) : two !== 0) ||
           (!rule.visible[2] && three !== 0) || (!rule.visible[3] && four !== 0)) return false;
       if (type === 'H' && !positive(three, 150)) return false;
       if (type === 'P' && (!positive(three, 1440) || three < two)) return false;
-      if (type === 'D' && !(positive(three, 65535) || integer(three, 1, 8)) ||
-          (type === 'D' && !integer(four, 1, 2))) return false;
+      if (type === 'D' && !(positive(three, 65535) || integer(three, 0, 8)) ||
+          (type === 'D' && !integer(four, 1, 3))) return false;
       if (type === 'D' && four === 1 && !integer(three, 1, 8)) return false;
       if (type === 'D' && four === 2 && !positive(three, 65535)) return false;
+      if (type === 'D' && four === 3 && three !== 0) return false;
       if (type === 'N' && !positive(three, 14)) return false;
       if (type === 'F' && cheeseFlocMultiplierMilli(three) === null) return false;
       if (type === 'W' && !integer(three, 1, 8)) return false;
@@ -147,7 +149,7 @@
 
     function setValue4Options(row) {
       var type = row.type.value;
-      var options = type === 'D' ? [['1','Вручную'],['2','Локальный шаговый двигатель']]
+      var options = type === 'D' ? [['1','Вручную'],['2','Локальный шаговый двигатель'],['3','По шагам']]
         : SENSOR_NAMES.map(function(name, index) { return [String(index), name]; });
       var previous = row.value4.value;
       row.value4.textContent = '';
@@ -160,14 +162,21 @@
 
     function updateDosingField(row) {
       var manual = row.value4.value === '1';
+      var directSteps = row.value4.value === '3';
+      row.fields[0].querySelector('label').textContent = directSteps ? 'Количество шагов' : 'Объём, мл';
+      row.value1.min = directSteps ? '1' : '0.01';
+      row.value1.max = directSteps ? '2147483647' : '150';
+      row.value1.step = directSteps ? '1' : '0.1';
       row.fields[2].querySelector('label').textContent = manual ? 'Компонент' : 'Скорость, мл/мин';
-      row.value3.hidden = manual;
+      row.fields[2].hidden = directSteps;
+      row.value3.hidden = manual || directSteps;
       row.actionCode.hidden = !manual;
       row.value3.min = '0.01';
       row.value3.max = '65535';
       row.value3.step = '0.1';
       if (manual && !integer(Number(row.actionCode.value), 1, 8)) row.actionCode.value = '1';
-      if (!manual && !positive(Number(row.value3.value), 65535)) row.value3.value = '10';
+      if (directSteps) row.value3.value = '0';
+      else if (!manual && !positive(Number(row.value3.value), 65535)) row.value3.value = '10';
     }
 
     function applyRowRules(row, reset) {

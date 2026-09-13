@@ -69,9 +69,12 @@ DOSER = r'''
 #include <cmath>
 #include <cstdint>
 #include <climits>
+#include <cstring>
 #include <iostream>
 using std::isfinite;
-struct WProgram { float Temp; float Param; };
+struct WProgram { float Temp; uint8_t TempSensor; float Param; };
+uint32_t program_load_cheese_doser_steps(const WProgram& row) { uint32_t steps = 0; std::memcpy(&steps, &row.Param, sizeof(steps)); return steps; }
+void program_store_cheese_doser_steps(WProgram& row, uint32_t steps) { std::memcpy(&row.Param, &steps, sizeof(steps)); }
 struct Setup { uint16_t StepperStepMl; } SamSetup = {4};
 struct Runtime { bool doserStarted; } cheeseRuntime = {};
 unsigned int TargetStepps = 0; bool StepperMoving = false;
@@ -81,16 +84,25 @@ float motionSpeed = 0; int32_t motionTarget = 0;
 void stepper_safe_set_motion(float speed, int32_t, int32_t target) { motionSpeed = speed; motionTarget = target; }
 struct Stepper { void enable() {} } stepper;
 #define STEPPER_REVERSE
+#define CHEESE_DOSER_STEP_SPEED 3200
 inline bool cheese_local_doser_motion(const WProgram& row,
                                       uint32_t& targetSteps, float& speed) { @MOTION@ }
 inline bool cheese_start_local_doser(const WProgram& row) { @DOSE@ }
 int failures = 0; void check(bool value, const char* text) { if (!value) { std::cerr << text << '\n'; ++failures; } }
 int main() {
-  check(!cheese_start_local_doser({0.24f, 60.0f}), "fractional dose below one step was accepted");
-  check(cheese_start_local_doser({2.5f, 60.0f}), "valid local dose was rejected");
+  WProgram dose = {}; dose.TempSensor = 2; dose.Temp = 0.24f; dose.Param = 60.0f;
+  check(!cheese_start_local_doser(dose), "fractional dose below one step was accepted");
+  dose.Temp = 2.5f;
+  check(cheese_start_local_doser(dose), "valid local dose was rejected");
   check(TargetStepps == 10 && motionTarget == 10 && motionSpeed == 4.0f && cheeseRuntime.doserStarted,
         "local dose ml-to-steps or rate conversion changed");
-  check(!cheese_start_local_doser({2.5f, 0.0f}), "zero local dose speed was accepted");
+  dose.Param = 0.0f;
+  check(!cheese_start_local_doser(dose), "zero local dose speed was accepted");
+  WProgram steps = {}; steps.TempSensor = 3; program_store_cheese_doser_steps(steps, 20000000UL);
+  SamSetup.StepperStepMl = 0;
+  check(cheese_start_local_doser(steps), "valid direct-step dose was rejected");
+  check(TargetStepps == 20000000UL && motionTarget == 20000000 && motionSpeed == 3200.0f,
+        "direct-step dose did not use its exact target and configured speed");
   return failures;
 }
 '''
@@ -162,7 +174,7 @@ def main() -> int:
     except (AssertionError, ValueError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    print("OK: Cheese relay/I2C mixer, local D, and both cooling builds")
+    print("OK: Cheese relay/I2C mixer, volume/direct-step D, and both cooling builds")
     return 0
 
 

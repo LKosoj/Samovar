@@ -25,7 +25,7 @@ struct WifiDisconnectEvent;
 class String;
 // Конфигурация Blynk подключается ниже; вызов защищён в defer_typed_pair_until_v35().
 bool blynk_session_start_pending();
-void blynk_stage_floc_event(const String& line);
+bool blynk_stage_floc_event(const String& line);
 // Arduino вставляет автопрототипы сразу после Arduino.h. WebServer.ino объявляет
 // http_sync_complete_get(asyncHTTPrequest&...) — без USE_LUA тип не подтягивается
 // из lua.h, прототип ломает разбор (bool http_sync_complete_get как переменная).
@@ -5553,7 +5553,10 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
 #ifdef SAMOVAR_USE_BLYNK
   const bool flocEvent = m.startsWith("@F1;");
   if (flocEvent) {
-    blynk_stage_floc_event(m);
+    if (!blynk_stage_floc_event(m)) {
+      WriteConsoleLog(F("F1: очередь фактов переполнена, сырная программа остановлена"));
+      if (Samovar_Mode == SAMOVAR_CHEESE_MODE && PowerOn) cheese_abort("Не удалось сохранить факт флокуляции");
+    }
   } else if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid()) {
     // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),
     // дальше сам текст. Заголовок для Blynk добавляет потребитель в triggerGetClock().

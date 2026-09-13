@@ -657,6 +657,17 @@ inline uint32_t program_load_cheese_f_multiplier(const WProgram& row) {
   return milli;
 }
 
+inline void program_store_cheese_doser_steps(WProgram& row, uint32_t steps) {
+  static_assert(sizeof(row.Param) == sizeof(steps), "D step target storage must stay 4 bytes");
+  memcpy(&row.Param, &steps, sizeof(steps));
+}
+
+inline uint32_t program_load_cheese_doser_steps(const WProgram& row) {
+  uint32_t steps = 0;
+  memcpy(&steps, &row.Param, sizeof(steps));
+  return steps;
+}
+
 inline bool program_validate_cheese_row_semantics(
     ProgramType type,
     float temp,
@@ -679,6 +690,7 @@ inline bool program_validate_cheese_row_semantics(
   // M: Temp=0, Time=длительность мин, Param=0, TempSensor=0.
   // D: Temp=объём мл, Time=тайм-аут мин, Param=код компонента (ручное) либо
   //    скорость мл/мин (локальное), TempSensor=1 (ручное) или 2 (локальное).
+  //    Для TempSensor=3 точное число шагов хранится в 4 байтах Param, Temp равна 0.
   // N: Temp=температура °C, Time=тайм-аут мин, Param=целевой pH,
   //    TempSensor=датчик температуры.
   // F: Temp=рабочая температура °C, Time=тайм-аут мин,
@@ -717,11 +729,12 @@ inline bool program_validate_cheese_row_semantics(
       errorMessage = "Ошибка программы: для M нужны Time, мешалка и нулевые Temp/Param/датчик";
       return false;
     case 'D':
-      if (temp > 0.0f && timeMin > 0.0f && param > 0.0f &&
-          (sensor == 1 || sensor == 2) &&
-          (sensor == 2 || param == (float)(uint8_t)param) &&
-          (sensor == 2 || param <= 8.0f)) return true;
-      errorMessage = "Ошибка программы: для D нужны объём, Time, способ и код 1..8 либо скорость";
+      if (timeMin > 0.0f &&
+          ((sensor == 1 && temp > 0.0f && param >= 1.0f && param <= 8.0f &&
+            param == (float)(uint8_t)param) ||
+           (sensor == 2 && temp > 0.0f && param > 0.0f) ||
+           (sensor == 3 && temp == 0.0f && param == 0.0f))) return true;
+      errorMessage = "Ошибка программы: для D нужны Time, способ и параметры ручного, объёмного либо шагового дозирования";
       return false;
     case 'N':
       if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
@@ -772,6 +785,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   float param = 0.0f;
   double flocMultiplier = 0.0;
   uint32_t flocMultiplierMilli = 0;
+  uint32_t doserSteps = 0;
   long sensor = 0;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
             tokTemp && tokTime && tokDevice && tokSensor && tokParam && !tokExtra;
@@ -791,10 +805,19 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
     row.Time = static_cast<float>(timeout);
     return true;
   }
-  ok = ok &&
-            parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, (float)UINT16_MAX, temp).ok() &&
-            parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
-            parse_bounded_long(tokSensor, 0, 4, sensor).ok();
+  ok = ok && parse_bounded_long(tokSensor, 0, 4, sensor).ok();
+  if (ok && parsedType == 'D' && sensor == 3) {
+    long parsedSteps = 0;
+    float zeroParam = 0.0f;
+    ok = parse_bounded_long(tokTemp, 1, INT32_MAX, parsedSteps).ok() &&
+         parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
+         parse_bounded_float(tokParam, 0.0f, 0.0f, zeroParam).ok();
+    if (ok) doserSteps = static_cast<uint32_t>(parsedSteps);
+  } else {
+    ok = ok &&
+         parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, (float)UINT16_MAX, temp).ok() &&
+         parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok();
+  }
   if (ok && parsedType == 'F') {
     ok = parse_finite_double(tokParam, flocMultiplier).ok() && flocMultiplier >= 1.0;
     if (ok) {
@@ -838,6 +861,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   row.Power = (float)offTime;
   row.TempSensor = (uint8_t)sensor;
   if (parsedType == 'F') program_store_cheese_f_multiplier(row, flocMultiplierMilli);
+  else if (parsedType == 'D' && sensor == 3) program_store_cheese_doser_steps(row, doserSteps);
   else row.Param = param;
   return true;
 }
@@ -1066,7 +1090,8 @@ inline void program_append_cheese_row(String& out, const WProgram& row, const ch
     return;
   }
   out += ";";
-  out += String(row.Temp, 6) + ";";
+  if (row.WType == 'D' && row.TempSensor == 3) out += String(program_load_cheese_doser_steps(row)) + ";";
+  else out += String(row.Temp, 6) + ";";
   out += String(row.Time, 6) + ";";
   if (row.WType == 'F') {
     const uint32_t multiplierMilli = program_load_cheese_f_multiplier(row);
@@ -1075,6 +1100,8 @@ inline void program_append_cheese_row(String& out, const WProgram& row, const ch
     if (fraction < 100) out += "0";
     if (fraction < 10) out += "0";
     out += String(fraction) + ";";
+  } else if (row.WType == 'D' && row.TempSensor == 3) {
+    out += "0;";
   } else {
     out += String(row.Param, 6) + ";";
   }

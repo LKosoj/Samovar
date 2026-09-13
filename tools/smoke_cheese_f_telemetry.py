@@ -24,7 +24,7 @@ def source_errors(cheese: str, samovar: str, blynk: str) -> list[str]:
         capture = body(samovar, "static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(")
         ajax = body(samovar, "static void writeAjaxTelemetryFields(")
         v27 = body(blynk, "static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s)")
-        f1_stage = body(blynk, "void blynk_stage_floc_event(const String& line)")
+        f1_stage = body(blynk, "bool blynk_stage_floc_event(const String& line)")
         f1_session = body(blynk, "static bool blynk_push_pending_floc_session_start()")
         f1_push = body(blynk, "static void blynk_push_pending_floc_event()")
         tick = body(blynk, "void blynk_push_tick()")
@@ -88,12 +88,13 @@ def source_errors(cheese: str, samovar: str, blynk: str) -> list[str]:
     for token in (
         "sessionReady = s_pendingV35Ready;",
         "strlcpy(sessionLine, s_pendingV35Line, sizeof(sessionLine));",
-        "if (!s_pendingF1Ready)",
-        "strlcpy(s_pendingF1Line, line.c_str(), sizeof(s_pendingF1Line));",
-        "s_pendingF1SessionReady = sessionReady;",
-        "s_pendingF1SessionRevision = s_pendingF1Revision;",
-        "s_pendingF1SessionV35Revision = sessionRevision;",
-        "s_pendingF1Ready = true;",
+        "if (s_pendingF1Count >= PROGRAM_MAX)",
+        "PendingFlocEvent& event = s_pendingF1Queue[(s_pendingF1Head + s_pendingF1Count) % PROGRAM_MAX];",
+        "event.sessionReady = sessionReady;",
+        "event.sessionRevision = sessionRevision;",
+        "s_pendingF1Count++;",
+        "return false;",
+        "return true;",
     ):
         if token not in f1_stage:
             errors.append(f"F1 не ставится в pending-слот: {token}")
@@ -103,11 +104,11 @@ def source_errors(cheese: str, samovar: str, blynk: str) -> list[str]:
         [
             "if (!ready) return true;",
             "if (!Blynk.connected()) return false;",
-            "Blynk.virtualWrite(V35, line);",
+            "Blynk.virtualWrite(V35, event.sessionLine);",
             "if (!Blynk.connected()) return false;",
-            "s_pendingF1SessionReady = false;",
-            "s_pendingV35Revision == sessionRevision",
-            "strcmp(s_pendingV35Line, line) == 0",
+            "s_pendingF1Queue[s_pendingF1Head].sessionReady = false;",
+            "s_pendingV35Revision == event.sessionRevision",
+            "strcmp(s_pendingV35Line, event.sessionLine) == 0",
             "s_pendingV35Ready = false;",
         ],
         errors,
@@ -117,9 +118,11 @@ def source_errors(cheese: str, samovar: str, blynk: str) -> list[str]:
         f1_push,
         [
             "if (!ready || !Blynk.connected()) return;",
-            "Blynk.virtualWrite(V26, line);",
+            "Blynk.virtualWrite(V26, event.line);",
             "if (!Blynk.connected()) return;",
-            "if (s_pendingF1Ready && s_pendingF1Revision == revision) s_pendingF1Ready = false;",
+            "if (s_pendingF1Count && s_pendingF1Queue[s_pendingF1Head].revision == event.revision) {",
+            "s_pendingF1Head = (s_pendingF1Head + 1) % PROGRAM_MAX;",
+            "s_pendingF1Count--;",
         ],
         errors,
     )
@@ -198,11 +201,15 @@ int main() {{
 
 
 def delivery_harness(blynk: str) -> str:
-    stage = body(blynk, "void blynk_stage_floc_event(const String& line)")
+    stage = body(blynk, "bool blynk_stage_floc_event(const String& line)")
     v35_push = body(blynk, "static bool blynk_push_pending_session_start()")
     session = body(blynk, "static bool blynk_push_pending_floc_session_start()")
     push = body(blynk, "static void blynk_push_pending_floc_event()")
     tick = body(blynk, "void blynk_push_tick()")
+    capacity_stages = "\n".join(
+        f'  stage_session("S{i}"); check(blynk_stage_floc_event(String("@F1;c={i}")), "F1 до границы очереди");'
+        for i in range(30)
+    )
     return f'''#include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -213,9 +220,10 @@ size_t strlcpy(char* dst, const char* src, size_t size) {{ size_t length = std::
 struct Mux {{}}; static Mux s_blynkFlocMux, s_blynkSessionMux;
 #define portENTER_CRITICAL(x) do {{ (void)(x); }} while (0)
 #define portEXIT_CRITICAL(x) do {{ (void)(x); }} while (0)
+#define PROGRAM_MAX 30
 static char s_pendingV35Line[320] = {{}}; static bool s_pendingV35Ready = false; static uint32_t s_pendingV35Revision = 0;
-static char s_pendingF1Line[512] = {{}}; static bool s_pendingF1Ready = false; static uint32_t s_pendingF1Revision = 0;
-static char s_pendingF1SessionLine[320] = {{}}; static bool s_pendingF1SessionReady = false; static uint32_t s_pendingF1SessionRevision = 0; static uint32_t s_pendingF1SessionV35Revision = 0;
+struct PendingFlocEvent {{ char line[512]; char sessionLine[sizeof(s_pendingV35Line)]; uint32_t revision; uint32_t sessionRevision; bool sessionReady; }};
+static PendingFlocEvent s_pendingF1Queue[PROGRAM_MAX] = {{}}; static uint8_t s_pendingF1Head = 0, s_pendingF1Count = 0; static uint32_t s_pendingF1Revision = 0;
 static char s_pendingV34Line[288] = {{}}; static bool s_pendingV34Ready = false; static uint32_t s_pendingV34Revision = 0;
 static const int V26 = 26, V34 = 34, V35 = 35;
 struct FakeBlynk {{ bool online = false; std::vector<std::string> writes; bool connected() const {{ return online; }} void virtualWrite(int pin, const char* value) {{ if (pin == V26 || pin == V35) writes.push_back(std::to_string(pin) + ":" + value); }} void virtualWrite(int pin, const String& value) {{ virtualWrite(pin, value.c_str()); }} }} Blynk;
@@ -227,28 +235,42 @@ static String build_idle_v34_line() {{ return String(""); }}
 static unsigned long fakeMillis = 10000; static unsigned long millis() {{ return fakeMillis; }}
 static const int SAMOVAR_STARTVAL_IDLE = 0; static int startval = 1;
 static bool s_blynkPushResendAll = false; static const uint8_t kBlynkFastPushCount = 0; static const unsigned long BLYNK_PUSH_PERIOD_MS = 5000, BLYNK_PUSH_SLOW_PERIOD_MS = 60000; static const uint8_t BLYNK_PUSH_PER_TICK = 3; typedef void (*PushFn)(); static PushFn kBlynkFastPush[1] = {{nullptr}};
-void blynk_stage_floc_event(const String& line) {{ {stage} }}
+bool blynk_stage_floc_event(const String& line) {{ {stage} }}
 static bool blynk_push_pending_session_start() {{ {v35_push} }}
 static bool blynk_push_pending_floc_session_start() {{ {session} }}
 static void blynk_push_pending_floc_event() {{ {push} }}
 void blynk_push_tick() {{ {tick} }}
 static int failures = 0; static void check(bool ok, const char* text) {{ if (!ok) {{ std::cerr << text << '\\n'; ++failures; }} }}
-static void reset_pending() {{ s_pendingV35Line[0] = s_pendingF1Line[0] = s_pendingF1SessionLine[0] = 0; s_pendingV35Ready = s_pendingF1Ready = s_pendingF1SessionReady = false; s_pendingV35Revision = s_pendingF1Revision = s_pendingF1SessionRevision = s_pendingF1SessionV35Revision = 0; Blynk.writes.clear(); Blynk.online = true; }}
+static void reset_pending() {{ s_pendingV35Line[0] = 0; s_pendingV35Ready = false; s_pendingV35Revision = 0; std::memset(s_pendingF1Queue, 0, sizeof(s_pendingF1Queue)); s_pendingF1Head = s_pendingF1Count = 0; s_pendingF1Revision = 0; Blynk.writes.clear(); Blynk.online = true; }}
 int main() {{
   reset_pending(); stage_session("A");
-  blynk_stage_floc_event(String("@F1;s=00000001"));
-  check(s_pendingF1SessionReady && std::string(s_pendingF1SessionLine) == "A" && s_pendingF1SessionV35Revision == s_pendingV35Revision, "F1 не сохранил свой V35 и его ревизию");
+  check(blynk_stage_floc_event(String("@F1;s=00000001")), "первый F1 не поставлен в очередь");
+  check(s_pendingF1Count == 1 && s_pendingF1Queue[0].sessionReady && std::string(s_pendingF1Queue[0].sessionLine) == "A" && s_pendingF1Queue[0].sessionRevision == s_pendingV35Revision, "F1 не сохранил свой V35 и его ревизию");
   blynk_push_tick();
-  check(!s_pendingV35Ready && !s_pendingF1Ready && Blynk.writes.size() == 2 && Blynk.writes[0] == "35:A" && Blynk.writes[1] == "26:@F1;s=00000001", "A-only повторно отправил V35 или нарушил V35->F1");
+  check(!s_pendingV35Ready && s_pendingF1Count == 0 && Blynk.writes.size() == 2 && Blynk.writes[0] == "35:A" && Blynk.writes[1] == "26:@F1;s=00000001", "A-only повторно отправил V35 или нарушил V35->F1");
 
   reset_pending(); stage_session("A");
-  blynk_stage_floc_event(String("@F1;s=00000001"));
-  blynk_stage_floc_event(String("@F1;s=00000002"));
-  check(s_pendingF1Ready && s_pendingF1Revision == 1, "повтор создал второй pending F1");
+  check(blynk_stage_floc_event(String("@F1;s=00000001")), "первый из трёх F1 не поставлен в очередь");
   stage_session("B");
-  check(std::string(s_pendingV35Line) == "B", "новая офлайн-сессия не сменила общий V35");
-  blynk_push_tick();
-  check(!s_pendingV35Ready && std::string(s_pendingV35Line) == "B" && !s_pendingF1Ready && Blynk.writes.size() == 3 && Blynk.writes[0] == "35:A" && Blynk.writes[1] == "26:@F1;s=00000001" && Blynk.writes[2] == "35:B", "A->F1-A->B нарушен или B потерян");
+  check(blynk_stage_floc_event(String("@F1;s=00000002")), "второй из трёх F1 не поставлен в очередь");
+  stage_session("C");
+  check(blynk_stage_floc_event(String("@F1;s=00000003")), "третий F1 не поставлен в очередь");
+  check(s_pendingF1Count == 3, "три F1 не сохранены в FIFO");
+  for (int i = 0; i < 3; ++i) blynk_push_tick();
+  const char* f1s[] = {{"26:@F1;s=00000001", "26:@F1;s=00000002", "26:@F1;s=00000003"}};
+  const char* sessions[] = {{"35:A", "35:B", "35:C"}};
+  int seen = 0;
+  for (size_t i = 0; i < Blynk.writes.size(); ++i) if (Blynk.writes[i].rfind("26:", 0) == 0) {{ check(seen < 3 && i > 0 && Blynk.writes[i] == f1s[seen] && Blynk.writes[i - 1] == sessions[seen], "каждый из трёх F1 должен сразу следовать за своим V35"); ++seen; }}
+  check(seen == 3 && s_pendingF1Count == 0, "FIFO из трёх F1 не очищена после принятой отправки");
+
+  reset_pending();
+{capacity_stages}
+  stage_session("OVER"); check(!blynk_stage_floc_event(String("@F1;c=overflow")), "переполнение FIFO должно быть явной ошибкой");
+  check(s_pendingF1Count == PROGRAM_MAX, "граница FIFO F1 изменилась");
+  for (int i = 0; i < PROGRAM_MAX; ++i) blynk_push_tick();
+  seen = 0;
+  for (size_t i = 0; i < Blynk.writes.size(); ++i) if (Blynk.writes[i].rfind("26:", 0) == 0) {{ check(i > 0 && Blynk.writes[i] == "26:@F1;c=" + std::to_string(seen) && Blynk.writes[i - 1] == "35:S" + std::to_string(seen), "F1 на границе FIFO нарушил V35->F1"); ++seen; }}
+  check(seen == PROGRAM_MAX && s_pendingF1Count == 0, "FIFO на границе потеряла или не сняла F1");
   return failures;
 }}
 '''
@@ -266,11 +288,11 @@ def main() -> int:
         ("V27 ff", blynk.replace('jsonFieldBool(out, first, "ff", s.cheeseFlocFixed);', "", 1)),
         ("F1 после V35", blynk.replace("if (canPushF1) blynk_push_pending_floc_event();", "", 1)),
         ("V35 A перед F1", blynk.replace("const bool canPushF1 = blynk_push_pending_floc_session_start();", "const bool canPushF1 = true;", 1)),
-        ("F1 без V35 A", blynk.replace("s_pendingF1SessionReady = sessionReady;", "s_pendingF1SessionReady = false;", 1)),
-        ("разные ревизии V35/F1", blynk.replace("s_pendingF1SessionRevision = s_pendingF1Revision;", "s_pendingF1SessionRevision = s_pendingV35Revision;", 1)),
+        ("F1 без V35 A", blynk.replace("event.sessionReady = sessionReady;", "event.sessionReady = false;", 1)),
+        ("граница FIFO F1", blynk.replace("if (s_pendingF1Count >= PROGRAM_MAX)", "if (false)", 1)),
+        ("снятие F1 из FIFO", blynk.replace("s_pendingF1Count--;", "", 1)),
         ("очистка F1 до отправки", blynk.replace("if (!Blynk.connected()) return;\n\n  portENTER_CRITICAL(&s_blynkFlocMux);", "portENTER_CRITICAL(&s_blynkFlocMux);", 1)),
-        ("очистка A-only V35", blynk.replace("s_pendingV35Revision == sessionRevision", "false", 1)),
-        ("ревизия V35 для F1", blynk.replace("s_pendingF1SessionV35Revision = sessionRevision;", "s_pendingF1SessionV35Revision = 0;", 1)),
+        ("очистка A-only V35", blynk.replace("s_pendingV35Revision == event.sessionRevision", "false", 1)),
         ("снимок без fm", cheese.replace("                                       program_load_cheese_f_multiplier(row);", "                                       0;", 1)),
     )
     for label, mutated in mutations:

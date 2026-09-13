@@ -138,6 +138,10 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //#define USE_STEPPER_ACCELERATION              //использовать плавный старт и торможение шагового двигателя
 //#define STEPPER_REVERSE                       //изменить направление врашения шагового двигателя
 
+#ifndef CHEESE_DOSER_STEP_SPEED
+#define CHEESE_DOSER_STEP_SPEED 8000            //скорость локального шагового двигателя для дозирования «По шагам», шагов/с
+#endif
+
 //#define I2CStepperStepMl 16000                //количество шагов на мл для I2CStepper
 
 //#define COLUMN_WETTING                          //если установлен датчик уровня флегмы, при старте ректификации довести колонну до предзахлеба для смачивания насадки

@@ -69,6 +69,7 @@ def matrix_defines(name: str) -> str:
 #define DEFAULT_DIST_TEMP 99.9
 #define WF_CALIBRATION 98
 #define WATER_FLOW_MIN_PULSES 7
+#define CHEESE_DOSER_STEP_SPEED 8000
 #define NBK_MULT_PAUSE_OVERFLOW 2
 #define NBK_PUMP_LIMIT 30
 #define NBK_WORK_PRESSURE_RATIO 0.5f

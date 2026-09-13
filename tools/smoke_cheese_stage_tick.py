@@ -94,6 +94,7 @@ int main() {
   reset('M'); program[0].Time=.001f; tick(); tick(); check(transitions==1 && aborts==0,"M duration transition");
   reset('M'); mixerOk=false; tick(); check(aborts==1,"M mixer-device failure");
   reset('D'); program[0].TempSensor=2; cheeseRuntime.doserStarted=true; tick(); check(transitions==0 && aborts==0,"D moved before local doser completion"); localDone=true; tick(); tick(); check(transitions==1,"D local post-start completion");
+  reset('D'); program[0].TempSensor=3; cheeseRuntime.doserStarted=true; localDone=true; tick(); tick(); check(transitions==1,"D direct-step completion");
   reset('D'); program[0].TempSensor=2; cheeseRuntime.doserStarted=true; program[0].Time=.001f; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"D local timeout after start");
   reset('D'); program[0].TempSensor=1; program[0].Time=.001f; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"D manual timeout");
   reset('N'); program[0].Param=6.5f; cheesePhValue=6.5f; sensor.avgTemp=20; for(int i=0;i<15;i++) tick(); cheesePhValue=7.0f; tick(); cheesePhValue=6.5f; for(int i=0;i<31;i++) tick(); tick(); check(transitions==1,"N resets the 30-second pH window");
@@ -161,7 +162,7 @@ def main() -> int:
     for old, new, label in [
         ("cheese_temperature_confirmed(nowMs,", "false && cheese_temperature_confirmed(nowMs,", "H/C confirmation"),
         ("cheeseRuntime.holdAccumulatedMs += elapsed;", "cheeseRuntime.holdAccumulatedMs -= elapsed;", "P accumulation"),
-        ("if (row.TempSensor == 2 && cheese_local_doser_complete())", "if (false)", "D completion"),
+        ("if ((row.TempSensor == 2 || row.TempSensor == 3) && cheese_local_doser_complete())", "if (false)", "D completion"),
         ("kind != CHEESE_STAGE_HOLD && kind != CHEESE_STAGE_MIX", "false", "C timeout"),
         ("case CHEESE_STAGE_WAIT:\n      return;", "case CHEESE_STAGE_WAIT:\n      run_cheese_program(ProgramNum + 1); return;", "W manual transition"),
         ("case CHEESE_STAGE_DRAIN:\n      return;", "case CHEESE_STAGE_DRAIN:\n      run_cheese_program(ProgramNum + 1); return;", "S manual transition"),

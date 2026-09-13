@@ -143,6 +143,11 @@ BROWSER_TEST = r'''async page => {
   await heat.locator(".cheese-mixer-off").fill("0");
   const manualDose = page.locator(".cheese-row").nth(4);
   await manualDose.locator(".cheese-type").selectOption("D");
+  const dosingMethods = await manualDose.locator(".cheese-value4 option").evaluateAll(nodes =>
+    nodes.map(node => [node.value, node.textContent]));
+  expect(JSON.stringify(dosingMethods) === JSON.stringify([
+    ["1", "Вручную"], ["2", "Локальный шаговый двигатель"], ["3", "По шагам"]
+  ]), "D methods are wrong: " + JSON.stringify(dosingMethods));
   await manualDose.locator(".cheese-value4").selectOption("1");
   await manualDose.locator(".cheese-action-code").selectOption("2");
   expect(await manualDose.locator(".cheese-field").nth(2).locator("label").textContent() === "Компонент", "manual dose component label is wrong");
@@ -169,6 +174,14 @@ BROWSER_TEST = r'''async page => {
   expect(lines[4] === "D;10;30;2;0^0^0^0;1", "manual dosing serialization is wrong: " + lines[4]);
   expect(lines[6] === "W;0;30;7;0^0^0^0;0", "manual action serialization is wrong: " + lines[6]);
   expect(lines[8] === "F;32;60;4294967.295;0^0^0^0;0", "F serialization is wrong: " + lines[8]);
+
+  await manualDose.locator(".cheese-value4").selectOption("3");
+  await manualDose.locator(".cheese-value1").fill("20000000");
+  expect(await manualDose.locator(".cheese-field").first().locator("label").textContent() === "Количество шагов",
+    "direct-step D has the wrong target label");
+  expect(await manualDose.locator(".cheese-value3").isHidden(), "direct-step D still shows rate input");
+  expect((await page.evaluate(() => serializeCheeseRows())).split("\n")[4] ===
+    "D;20000000;30;0;0^0^0^0;3", "direct-step D serialization is wrong");
 
   await page.getByRole("button", {name:"Процесс"}).click();
   await page.evaluate(data => renderTelemetry(data), {...telemetry(9),

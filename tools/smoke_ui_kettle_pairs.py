@@ -200,7 +200,7 @@ def main() -> int:
         "!cheese_start_local_doser(row)) return false;",
         "row.WType == 'W'",
         "runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR",
-        "row.WType == 'D' && row.TempSensor == 2",
+        "row.WType == 'D' && (row.TempSensor == 2 || row.TempSensor == 3)",
         "runtime_pair_begin(UI_WAIT_CHEESE_DOSE",
     ], errors)
     require("Cheese q18 q20 q21 outcomes", cheese_tick, [

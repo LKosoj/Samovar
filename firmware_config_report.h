@@ -110,6 +110,7 @@ inline bool write_firmware_config_json(Print& out) {
       !firmware_config_write_float_field(out, first, "DEFAULT_DIST_TEMP", DEFAULT_DIST_TEMP) ||
       !firmware_config_write_long_field(out, first, "WF_CALIBRATION", WF_CALIBRATION) ||
       !firmware_config_write_long_field(out, first, "WATER_FLOW_MIN_PULSES", WATER_FLOW_MIN_PULSES) ||
+      !firmware_config_write_long_field(out, first, "CHEESE_DOSER_STEP_SPEED", CHEESE_DOSER_STEP_SPEED) ||
       !firmware_config_write_long_field(out, first, "NBK_MULT_PAUSE_OVERFLOW", NBK_MULT_PAUSE_OVERFLOW) ||
       !firmware_config_write_long_field(out, first, "NBK_PUMP_LIMIT", NBK_PUMP_LIMIT) ||
       !firmware_config_write_float_field(out, first, "NBK_WORK_PRESSURE_RATIO", NBK_WORK_PRESSURE_RATIO) ||

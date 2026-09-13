@@ -12,6 +12,7 @@ from smoke_helpers import extract_function_body, require_ordered_tokens, strip_c
 ROOT = Path(__file__).resolve().parents[1]
 CHEESE = (ROOT / "cheese.h").read_text(encoding="utf-8")
 SAMOVAR = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+SAMOVAR_INI = (ROOT / "Samovar_ini.h").read_text(encoding="utf-8")
 
 
 def body(signature: str) -> str:
@@ -21,6 +22,7 @@ def body(signature: str) -> str:
 HARNESS = r'''
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 
 typedef char ProgramType;
@@ -93,6 +95,7 @@ PREFLIGHT_HARNESS = r'''
 #include <cmath>
 #include <cstdint>
 #include <climits>
+#include <cstring>
 #include <iostream>
 #include <string>
 @USE_LUA@
@@ -120,8 +123,10 @@ enum CheeseStageKind : uint8_t {
 };
 struct WProgram {
   ProgramType WType; uint16_t Volume; float Speed; uint8_t capacity_num;
-  float Temp; float Power; uint8_t TempSensor; float Time; float Param;
+  float Temp; float Power; uint8_t TempSensor; float Time;
+  float Param;
 };
+#define CHEESE_DOSER_STEP_SPEED 3200
 struct DSSensor {};
 struct Setup { uint16_t StepperStepMl; float CheesePhSlope; float CheesePhOffset; };
 static Setup SamSetup = {4, 1.0f, 0.0f};
@@ -137,6 +142,8 @@ bool program_validate_cheese_row_semantics(
     ProgramType, float, float, long, long, long, long, long, float,
     const char*& error) { error = "semantic"; return true; }
 uint32_t program_load_cheese_f_multiplier(const WProgram&) { return UINT32_MAX; }
+uint32_t program_load_cheese_doser_steps(const WProgram& row) { uint32_t steps = 0; std::memcpy(&steps, &row.Param, sizeof(steps)); return steps; }
+void program_store_cheese_doser_steps(WProgram& row, uint32_t steps) { std::memcpy(&row.Param, &steps, sizeof(steps)); }
 bool beer_control_sensor(uint8_t, const DSSensor*& sensor, const char*&) {
   static DSSensor value;
   sensor = &value;
@@ -182,6 +189,11 @@ int main() {
   program[0].Temp = 65535.0f; program[0].Param = 1440.0f;
   SamSetup.StepperStepMl = 65535;
   check(!cheese_validate_program(error), "overflowing local D conversion passed preflight");
+  reset('D'); program[0].TempSensor = 3; program[0].Temp = 0.0f;
+  program_store_cheese_doser_steps(program[0], 20000000UL); SamSetup.StepperStepMl = 0;
+  check(cheese_validate_program(error), "valid direct-step D failed preflight");
+  program_store_cheese_doser_steps(program[0], 0);
+  check(!cheese_validate_program(error), "zero direct-step D passed preflight");
 
   reset('L');
 #ifdef USE_LUA
@@ -244,6 +256,8 @@ def run(source: str, label: str, expect_success: bool) -> None:
 
 def static_checks() -> list[str]:
     errors: list[str] = []
+    if "#define CHEESE_DOSER_STEP_SPEED 8000" not in SAMOVAR_INI:
+        errors.append("Samovar_ini.h has no direct-step Cheese doser speed")
     cheese_proc = extract_function_body(CHEESE, "void cheese_proc()")
     require_ordered_tokens(
         "Cheese preflight/session start order",
@@ -266,7 +280,7 @@ def static_checks() -> list[str]:
     for token in ("for (uint8_t i = 0; i < ProgramLen; i++)", "i2c_stepper_mixer_present()",
                   "cheese_local_doser_motion(row, targetSteps, speed)",
                   "exists(\"/cheese.lua\")",
-                  "row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 : row.Param"):
+                  "row.WType == 'D' && row.TempSensor == 3 ? 0.0 : row.Param"):
         if token not in validate:
             errors.append(f"Cheese preflight is missing {token}")
 

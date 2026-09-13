@@ -493,9 +493,12 @@ inline bool cheese_row_needs_sensor(CheeseStageKind kind) {
 
 inline bool cheese_local_doser_motion(const WProgram& row,
                                       uint32_t& targetSteps, float& speed) {
-  const double target = static_cast<double>(row.Temp) * SamSetup.StepperStepMl;
-  const double requestedSpeed =
-      static_cast<double>(row.Param) * SamSetup.StepperStepMl / 60.0;
+  const double target = row.TempSensor == 3
+      ? static_cast<double>(program_load_cheese_doser_steps(row))
+      : static_cast<double>(row.Temp) * SamSetup.StepperStepMl;
+  const double requestedSpeed = row.TempSensor == 3
+      ? static_cast<double>(CHEESE_DOSER_STEP_SPEED)
+      : static_cast<double>(row.Param) * SamSetup.StepperStepMl / 60.0;
   if (!isfinite(target) || !isfinite(requestedSpeed) || target <= 0.0 ||
       target > INT32_MAX || requestedSpeed <= 0.0 || requestedSpeed > UINT16_MAX) {
     return false;
@@ -520,7 +523,8 @@ inline bool cheese_validate_program(String& error) {
             row.WType, row.Temp, row.Time, row.capacity_num,
             static_cast<long>(row.Speed), row.Volume,
             static_cast<long>(row.Power), row.TempSensor,
-            row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 : row.Param,
+            row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 :
+            row.WType == 'D' && row.TempSensor == 3 ? 0.0 : row.Param,
             semanticError)) {
       error = String(semanticError ? semanticError : "Ошибка программы") +
           " в строке " + String(i + 1);
@@ -538,7 +542,7 @@ inline bool cheese_validate_program(String& error) {
       error = "I2C-мешалка недоступна в строке " + String(i + 1);
       return false;
     }
-    if (kind == CHEESE_STAGE_DOSE && row.TempSensor == 2) {
+    if (kind == CHEESE_STAGE_DOSE && (row.TempSensor == 2 || row.TempSensor == 3)) {
       uint32_t targetSteps = 0;
       float speed = 0.0f;
       if (!cheese_local_doser_motion(row, targetSteps, speed)) {
@@ -626,7 +630,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
 #endif
   } else {
     if (row.WType != 'S' && !cheese_configure_mixer(row, nowMs)) return false;
-    if (row.WType == 'D' && row.TempSensor == 2 &&
+    if (row.WType == 'D' && (row.TempSensor == 2 || row.TempSensor == 3) &&
         !cheese_start_local_doser(row)) return false;
     if (row.WType == 'S') cheese_set_drain(true);
   }
@@ -638,7 +642,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
                           "Переход к следующей строке", NOTIFY_MSG);
   if (row.WType == 'W') {
     runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR, "Ожидание действия оператора", NOTIFY_MSG);
-  } else if (row.WType == 'D' && row.TempSensor == 2) {
+  } else if (row.WType == 'D' && (row.TempSensor == 2 || row.TempSensor == 3)) {
     runtime_pair_begin(UI_WAIT_CHEESE_DOSE, "Дозатор запущен", NOTIFY_MSG);
   }
   SendMsg("Строка " + String(ProgramNum + 1) + "; " +
@@ -917,7 +921,7 @@ void cheese_stage_tick() {
           cheese_time_elapsed(nowMs, cheeseRuntime.enteredMs, row.Time)) run_cheese_program(ProgramNum + 1);
       return;
     case CHEESE_STAGE_DOSE:
-      if (row.TempSensor == 2 && cheese_local_doser_complete()) {
+      if ((row.TempSensor == 2 || row.TempSensor == 3) && cheese_local_doser_complete()) {
         stepper_safe_stop();
         cheeseRuntime.doserCompleted = true;
         runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED,

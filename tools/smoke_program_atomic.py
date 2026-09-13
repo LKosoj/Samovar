@@ -217,7 +217,9 @@ void check_round_trip(
     const WProgram& actual = reparsed.rows[i];
     const bool paramMatches = actual.WType == 'F'
         ? program_load_cheese_f_multiplier(actual) == program_load_cheese_f_multiplier(expected)
-        : same_serialized_float(actual.Param, expected.Param);
+        : actual.WType == 'D' && actual.TempSensor == 3
+            ? program_load_cheese_doser_steps(actual) == program_load_cheese_doser_steps(expected)
+            : same_serialized_float(actual.Param, expected.Param);
     check(actual.WType == expected_types[i] && actual.WType == expected.WType &&
         actual.Volume == expected.Volume && same_serialized_float(actual.Speed, expected.Speed) &&
         actual.capacity_num == expected.capacity_num && same_serialized_float(actual.Temp, expected.Temp) &&
@@ -442,11 +444,11 @@ void test_blank_lines_and_all_formats_round_trip() {
       2,
       "MP");
   check_round_trip(
-      "H;63.333;90.125;0.125;1^0^0^0;0\nP;63;30;45;1^0^0^0;0\nC;34;45;0;1^0^0^0;0\nM;0;1;0;1^0^30^0;0\nD;100;15;2;0^0^0^0;1\nN;34;60;5.25;2^-120^30^10;0\nW;0;15;1;0^0^0^0;0\nS;0;15;0;0^0^0^0;0\nF;32;60;2.5005;0^0^0^0;0\nL;0;15;0;cycle.lua;0\n",
+      "H;63.333;90.125;0.125;1^0^0^0;0\nP;63;30;45;1^0^0^0;0\nC;34;45;0;1^0^0^0;0\nM;0;1;0;1^0^30^0;0\nD;100;15;2;0^0^0^0;1\nD;20000000;15;0;0^0^0^0;3\nN;34;60;5.25;2^-120^30^10;0\nW;0;15;1;0^0^0^0;0\nS;0;15;0;0^0^0^0;0\nF;32;60;2.5005;0^0^0^0;0\nL;0;15;0;cycle.lua;0\n",
       cheese_program_parse_spec(),
       program_append_cheese_row,
-      10,
-      "HPCMDNWSFL");
+      11,
+      "HPCMDDNWSFL");
   check_round_trip(
       "H;0;0\nS;1;10\nO;2;20\nW;3;30\n",
       nbk_program_parse_spec(),
@@ -543,6 +545,7 @@ void test_cheese_row_semantics() {
       {"M;0;1;0;1^0^30^0;0\n", true},
       {"D;100;15;2;0^0^0^0;1\n", true},
       {"D;100;15;25;0^0^0^0;2\n", true},
+      {"D;20000000;15;0;0^0^0^0;3\n", true},
       {"N;34;60;5.25;2^-120^30^10;0\n", true},
       {"W;0;15;1;0^0^0^0;0\n", true},
       {"S;0;15;0;0^0^0^0;0\n", true},
@@ -554,6 +557,10 @@ void test_cheese_row_semantics() {
       {"C;34;45;1;1^0^0^0;0\n", false},
       {"M;0;1;0;0^0^0^0;0\n", false},
       {"D;100;15;9;0^0^0^0;1\n", false},
+      {"D;0;15;0;0^0^0^0;3\n", false},
+      {"D;1.5;15;0;0^0^0^0;3\n", false},
+      {"D;100;15;1;0^0^0^0;3\n", false},
+      {"D;2147483648;15;0;0^0^0^0;3\n", false},
       {"N;34;60;14.1;0^0^0^0;0\n", false},
       {"W;0;15;9;0^0^0^0;0\n", false},
       {"S;0;15;0;1^0^0^0;0\n", false},
@@ -619,6 +626,17 @@ void test_cheese_field_mapping() {
   check(std::strcmp(maxSerialized.c_str(),
       "F;150.000000;1440.000000;4294967.295;0^0^0^0;4\n") == 0,
       "F uint32 maximum multiplier did not round-trip exactly");
+
+  result = program_parse_lines(
+      String("D;2147483647;15;0;0^0^0^0;3\n"), cheese_program_parse_spec(), draft);
+  check(result.ok() && draft.rows[0].Temp == 0.0f &&
+      program_load_cheese_doser_steps(draft.rows[0]) == 2147483647UL,
+      "D direct-step target was not stored exactly");
+  String stepsSerialized;
+  program_append_cheese_row(stepsSerialized, draft.rows[0], draft.textPool);
+  check(std::strcmp(stepsSerialized.c_str(),
+      "D;2147483647;15.000000;0;0^0^0^0;3\n") == 0,
+      "D direct-step target did not round-trip exactly");
 }
 
 void test_mode_mapping_and_defaults() {

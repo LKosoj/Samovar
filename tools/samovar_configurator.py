@@ -103,6 +103,7 @@ VALUE_SPECS = (
     ValueSpec("PWM_START_VALUE", "Стартовая мощность насоса, %", "Насосы"),
     ValueSpec("WF_CALIBRATION", "Калибровка датчика потока", "Насосы"),
     ValueSpec("WATER_FLOW_MIN_PULSES", "Минимум импульсов потока", "Насосы"),
+    ValueSpec("CHEESE_DOSER_STEP_SPEED", "Скорость дозирования по шагам, шагов/с", "Шаговый двигатель"),
     ValueSpec("NBK_MULT_PAUSE_OVERFLOW", "Пауза после захлёба, инерций", "НБК"),
     ValueSpec("NBK_PUMP_LIMIT", "Предельная подача насоса, л/ч", "НБК"),
     ValueSpec("NBK_WORK_PRESSURE_RATIO", "Доля рабочего давления", "НБК"),

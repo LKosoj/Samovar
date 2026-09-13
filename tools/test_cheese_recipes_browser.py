@@ -45,8 +45,28 @@ BROWSER_TEST = r'''async page => {
   });
   await page.route('**/command*', route => { commands.push(route.request().url()); return route.fulfill({status:200,body:'OK'}); });
 
+  await page.emulateMedia({colorScheme:'dark'});
   await page.goto(baseUrl + '/cheese-recipes.htm', {waitUntil:'load'});
   await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
+  expect(await page.locator('html').getAttribute('data-theme') === null, 'automatic dark theme must remain inherited from the system');
+  expect((await page.locator('#themeToggle').getAttribute('aria-pressed')) === 'true', 'automatic dark theme was not reflected by the standard toggle');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-page').trim()) === '#16130f', 'system dark palette was not applied');
+  await page.evaluate(() => localStorage.setItem('theme', 'light'));
+  await page.reload({waitUntil:'load'});
+  await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
+  expect(await page.locator('html').getAttribute('data-theme') === 'light', 'saved light theme was not restored');
+  await page.locator('#themeToggle').click();
+  expect(await page.locator('html').getAttribute('data-theme') === 'dark', 'standard theme toggle did not enable dark theme');
+  expect(await page.evaluate(() => localStorage.getItem('theme')) === 'dark', 'selected dark theme was not saved');
+  await page.reload({waitUntil:'load'});
+  await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
+  expect(await page.locator('html').getAttribute('data-theme') === 'dark', 'saved dark theme was not restored after reload');
+  await page.evaluate(() => localStorage.removeItem('theme'));
+  await page.emulateMedia({colorScheme:'light'});
+  await page.reload({waitUntil:'load'});
+  await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
+  expect(await page.locator('html').getAttribute('data-theme') === null, 'automatic light theme must remain inherited from the system');
+  expect((await page.locator('#themeToggle').getAttribute('aria-pressed')) === 'false', 'automatic light theme was not reflected by the standard toggle');
   expect(apiRequests[0].url.includes('/recipes?catalog=main&page=1&perPage=10'), 'main catalogue URL differs from OpenAPI: ' + apiRequests[0].url);
   expect(!apiRequests[0].authorization, 'public catalogue received Authorization');
   expect(await page.locator('#recipeList small').textContent() === 'Кислотный · Адыгейский · Россия', 'raw catalogue metadata was not localized to Russian');
@@ -101,7 +121,7 @@ BROWSER_TEST = r'''async page => {
   await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
   expect(await page.locator('html').getAttribute('lang') === 'en', 'English browser language did not select English UI');
   expect(await page.locator('.recipes-page h1').textContent() === 'Cheese recipes', 'English page heading was not localized');
-  expect(await page.locator('[data-theme-choice="light"]').getAttribute('title') === 'Light theme', 'English theme title was not localized');
+  expect(await page.locator('#themeToggle').count() === 1, 'standard theme toggle is missing');
   const englishMeta = await page.locator('#recipeList small').textContent();
   expect(englishMeta === 'Acid-set · Russia' && !englishMeta.includes('unknown_style'), 'unknown catalogue style leaked: ' + englishMeta);
   await page.locator('#recipeList button').click();

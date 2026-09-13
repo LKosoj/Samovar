@@ -659,7 +659,7 @@ struct WProgram {
   uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
   float Time;                                                  //время, необходимое для отбора программы
   union {
-    float Param;                                               //параметр программы для типов, кроме F
+    float Param;                                               //параметр программы для типов, кроме F и шагового D
     uint32_t FlocMultiplierMilli;                              //F: round-half-up(множитель * 1000)
   };
   uint16_t LuaTextOffset;                                      //смещение текста строки L в общем буфере программы

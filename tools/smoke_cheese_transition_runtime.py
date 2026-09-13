@@ -19,6 +19,7 @@ def body(signature: str) -> str:
 
 ERROR_HARNESS = r'''
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <string>
 class String {
@@ -53,6 +54,7 @@ int main() {
 TRANSITION_HARNESS = r'''
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -70,6 +72,8 @@ class String {
 String operator+(const char* left, const String& right) { return String((std::string(left) + right.value()).c_str()); }
 String operator+(const String& left, const char* right) { return String((left.value() + right).c_str()); }
 struct WProgram { char WType; float Temp; float Time; uint8_t capacity_num; float Speed; uint16_t Volume; float Power; uint8_t TempSensor; float Param; };
+uint32_t program_load_cheese_doser_steps(const WProgram& row) { uint32_t steps = 0; std::memcpy(&steps, &row.Param, sizeof(steps)); return steps; }
+#define CHEESE_DOSER_STEP_SPEED 3200
 struct Setup { bool rele2; bool rele4; uint16_t StepperStepMl; } SamSetup = {true, true, 4};
 struct Runtime { uint8_t mixerDevice; bool mixerRunning; bool mixerOneShotComplete; uint32_t mixerDeadlineMs; bool doserStarted; bool doserCompleted; bool drainOpen; uint32_t enteredMs; uint32_t lastTickMs; float heatStartSetpoint; } cheeseRuntime = {};
 enum ActuatorCommandResult { ACTUATOR_COMMAND_APPLIED, ACTUATOR_COMMAND_FAILED };

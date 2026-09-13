@@ -25,6 +25,9 @@ for token in (
     "new DOMParser()",
     "new FileReader()",
     "fetch('/program', { method: 'POST'",
+    'id="themeToggle"',
+    'onclick="SamovarApp.toggleTheme()"',
+    "SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });",
 ):
     if token not in page:
         errors.append("cheese-recipes.htm missing " + token)
