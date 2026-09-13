@@ -24,16 +24,20 @@ def forbid_direct_current_wtype(name: str, body: str) -> None:
 
 
 program_types = read_text("program_types.h")
+samovar_h = read_text("Samovar.h")
 runtime_helpers = read_text("runtime_helpers.h")
 
 if program_types:
     for token in [
         "using ProgramType = char;",
         "constexpr ProgramType PROGRAM_TYPE_NONE = '\\0';",
-        "constexpr uint8_t PROGRAM_MAX = CAPACITY_NUM * 2;",
     ]:
         if token not in program_types:
             errors.append(f"program_types.h missing ProgramType source-of-truth token: {token}")
+
+if samovar_h and not re.search(
+        r"^\s*#define\s+PROGRAM_MAX\s+30\s*(?://.*)?$", samovar_h, re.MULTILINE):
+    errors.append("Samovar.h must define PROGRAM_MAX as fixed value 30")
 
 if runtime_helpers:
     try:

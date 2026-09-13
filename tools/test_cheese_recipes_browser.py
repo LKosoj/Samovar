@@ -14,14 +14,16 @@ from test_accessibility_ui_browser import QuietHandler, render_site, run_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_JSON = json.loads((ROOT / "tools/fixtures/cheese_recipes_s5.json").read_text(encoding="utf-8"))
 FIXTURE_XML = ROOT / "tools/fixtures/cheese_recipes_s5.xml"
+FIXTURE_JSON = json.loads((ROOT / "tools/fixtures/cheese_recipes_s5.json").read_text(encoding="utf-8"))
+FIXTURE_JSON["content"] = {"xml": FIXTURE_XML.read_text(encoding="utf-8")}
 TOKEN = "0123456789abcdef0123456789abcdef"
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__, recipe = __RECIPE__, xmlPath = __XML_PATH__, badXmlPath = __BAD_XML_PATH__, token = __TOKEN__;
   const apiRequests = [], programPosts = [], commands = [], errors = [];
   const expect = (condition, message) => { if (!condition) throw new Error(message); };
+  await page.addInitScript(() => Object.defineProperty(navigator, 'language', {configurable:true, get:() => new URL(location.href).searchParams.get('lang') === 'en' ? 'en-US' : 'ru-RU'}));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/cheese-recipes-bootstrap', route => route.fulfill({
@@ -29,10 +31,11 @@ BROWSER_TEST = r'''async page => {
   }));
   await page.route('https://www.samovar-tool.ru/cheesexml/v1/**', route => {
     const request = route.request(), url = request.url();
+    const catalogStyle = page.url().includes('?lang=en') ? 'acid_set.unknown_style' : 'acid_set.adygei';
     apiRequests.push({url:request.url(), authorization:request.headers().authorization || ''});
-    if (/\/me\/recipes\?/.test(url)) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({page:1,perPage:10,total:1,items:[{id:17,slug:'s5-fixture',name:'Тестовый сыр',catalog:'user',visibility:'private',revision:1}]})});
+    if (/\/me\/recipes\?/.test(url)) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({page:1,perPage:10,total:1,items:[{id:17,slug:'s5-fixture',name:'Тестовый сыр',catalog:'user',visibility:'private',revision:1,family:'acid_set',style:catalogStyle,country:'RU'}]})});
     if (url.includes('/me/recipes/17')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(recipe)});
-    if (/\/recipes\?/.test(url)) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({page:Number((url.match(/[?&]page=(\d+)/)||[])[1]||1),perPage:10,total:21,items:[{id:17,slug:'s5-fixture',name:'Тестовый сыр',catalog:url.includes('catalog=user')?'user':'main',visibility:'public',revision:1}]})});
+    if (/\/recipes\?/.test(url)) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({page:Number((url.match(/[?&]page=(\d+)/)||[])[1]||1),perPage:10,total:21,items:[{id:17,slug:'s5-fixture',name:'Тестовый сыр',catalog:url.includes('catalog=user')?'user':'main',visibility:'public',revision:1,family:'acid_set',style:catalogStyle,country:'RU'}]})});
     if (url.includes('/recipes/s5-fixture')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(recipe)});
     return route.fulfill({status:404,contentType:'application/json',body:'{"message":"not found"}'});
   });
@@ -46,6 +49,7 @@ BROWSER_TEST = r'''async page => {
   await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
   expect(apiRequests[0].url.includes('/recipes?catalog=main&page=1&perPage=10'), 'main catalogue URL differs from OpenAPI: ' + apiRequests[0].url);
   expect(!apiRequests[0].authorization, 'public catalogue received Authorization');
+  expect(await page.locator('#recipeList small').textContent() === 'Кислотный · Адыгейский · Россия', 'raw catalogue metadata was not localized to Russian');
 
   await page.locator('#recipeQuery').fill('сыр');
   await page.locator('#recipeSearch button').click();
@@ -70,10 +74,7 @@ BROWSER_TEST = r'''async page => {
   await page.waitForFunction(() => document.getElementById('recipeName').textContent === 'Тестовый сыр');
   expect(apiRequests.at(-1).url.includes('/me/recipes/17') && apiRequests.at(-1).authorization === 'Bearer ' + token, 'owned recipe detail differs from OpenAPI');
   await page.locator('#convertRecipe').click();
-  expect(await page.locator('#applyRecipe').isDisabled(), 'range-only temperature did not block apply');
-  expect((await page.locator('#recipeWarnings').textContent()).includes('выберите одно значение температуры'), 'missing temperature warning');
-  await page.locator('[data-step="1"]').fill('32');
-  await page.locator('#convertRecipe').click();
+  expect(!(await page.locator('#applyRecipe').isDisabled()), 'API content.xml recipe did not produce an applicable program');
   const jsonProgram = await page.locator('#programPreview').inputValue();
 
   await page.locator('#recipeFile').setInputFiles(xmlPath);
@@ -96,6 +97,19 @@ BROWSER_TEST = r'''async page => {
   await page.locator('#recipeFile').setInputFiles(badXmlPath);
   await page.waitForFunction(() => document.getElementById('recipeStatus').textContent.includes('1.x'));
   expect(programPosts.length === 1, 'invalid XML triggered another /program POST');
+  await page.goto(baseUrl + '/cheese-recipes.htm?lang=en', {waitUntil:'load'});
+  await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
+  expect(await page.locator('html').getAttribute('lang') === 'en', 'English browser language did not select English UI');
+  expect(await page.locator('.recipes-page h1').textContent() === 'Cheese recipes', 'English page heading was not localized');
+  expect(await page.locator('[data-theme-choice="light"]').getAttribute('title') === 'Light theme', 'English theme title was not localized');
+  const englishMeta = await page.locator('#recipeList small').textContent();
+  expect(englishMeta === 'Acid-set · Russia' && !englishMeta.includes('unknown_style'), 'unknown catalogue style leaked: ' + englishMeta);
+  await page.locator('#recipeList button').click();
+  await page.waitForFunction(() => document.getElementById('recipeName').textContent === 'Тестовый сыр');
+  await page.locator('#convertRecipe').click();
+  expect((await page.locator('#recipeWarnings').textContent()).includes('Aging stages are excluded'), 'English conversion warning was not localized');
+  await page.locator('#recipeFile').setInputFiles(badXmlPath);
+  await page.waitForFunction(() => document.getElementById('recipeStatus').textContent.includes('Only CheeseXML 1.x is supported.'));
   expect(errors.length === 0, 'console/page errors: ' + errors.join('; '));
   return 'ok';
 }'''

@@ -182,8 +182,8 @@ expected_hashes = {
     # 13.09.2026: добавлен строгий тип F программы Cheese; точный множитель F
     # хранится в той же 4-байтовой ячейке строки и коммитится только со всем
     # черновиком, поэтому изоляция A-09 сохранена.
-    "program_io.h": "65a585f1762416bbae192dc9cf101cc43d1967e914710a1210ad9eab74c7f688",
-    "program_types.h": "cb420431876edb569b84018dabdf2e2519de7559ec445130ffc80ec1b1140759",
+    "program_io.h": "089d58596478e2ab62a5e3a53aea7ed606ad54a9cfbcb044fd1e55dd73a29831",
+    "program_types.h": "93b085c108487dc89b221156f91112b898a7a554fb21713a4dac4e4e48f5f96a",
 }
 for name, expected in expected_hashes.items():
     actual = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()

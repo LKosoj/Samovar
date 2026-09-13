@@ -104,6 +104,7 @@ static_assert(sizeof(MQTT_TOPIC) > 1, "MQTT_TOPIC must not be empty");
 #endif
 
 #include "Samovar_pin.h"
+#define PROGRAM_MAX 30                    // максимальное количество строк программы
 #include "program_types.h"
 
 

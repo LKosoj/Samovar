@@ -66,6 +66,7 @@ HARNESS_TEMPLATE = r'''
 #define SAMOVAR_USE_POWER
 
 #define CAPACITY_NUM 10
+#define PROGRAM_MAX 30
 #include "program_types.h"
 
 struct WProgram {

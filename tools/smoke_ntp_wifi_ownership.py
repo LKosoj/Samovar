@@ -147,7 +147,7 @@ def ntp_errors(source: str, ntp_client_source: str | None = None) -> list[str]:
         "session snapshot epoch",
         session,
         "const uint32_t epoch = ntp_snapshot_epoch_now();",
-        "(epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : esp_random();",
+        "(epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : new_random_session_id();",
     )
     for token in ("xNtpSemaphore", "NtpLockGuard", "ntp_lock(", "LOCK_ORDER: 19  NTP"):
         if token in source or token in helpers or token in shared_state:

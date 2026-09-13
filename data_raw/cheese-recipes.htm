@@ -1,6 +1,6 @@
 <!--#include head_boilerplate.htm-->
   <link rel="stylesheet" href="style.css?v=7.00u7">
-  <title>Самовар — рецепты сыра</title>
+  <title></title>
   <script src="app.js"></script>
   <style>
     .recipes-page { max-width: 1180px; margin: 1.25rem auto; padding: 0 1rem 2rem; }
@@ -25,49 +25,49 @@
 </head>
 <body>
 <!--#include ui_page_header.htm-->
-    <div class="theme-switch" aria-label="Тема">
-      <button type="button" class="theme-btn" data-theme-choice="light" title="Светлая тема">☀</button>
-      <button type="button" class="theme-btn" data-theme-choice="dark" title="Тёмная тема">☾</button>
+    <div class="theme-switch" aria-label="">
+      <button type="button" class="theme-btn" data-theme-choice="light" title="">☀</button>
+      <button type="button" class="theme-btn" data-theme-choice="dark" title="">☾</button>
     </div>
   </header>
   <main class="recipes-page">
     <h1>Рецепты сыра</h1>
-    <p>Выберите рецепт с samovar-tool.ru или откройте локальный файл <code>cheesexml.xml</code>. Файл и токен обрабатываются только в памяти браузера.</p>
+    <p id="recipeIntro"></p>
     <div class="recipes-grid">
       <section class="card" aria-labelledby="catalog-title">
-        <h2 id="catalog-title">Каталог</h2>
-        <div class="recipes-tabs" role="group" aria-label="Источник рецептов">
-          <button type="button" class="button" data-catalog="main" aria-pressed="true">Основные</button>
-          <button type="button" class="button secondary" data-catalog="user" aria-pressed="false">Пользовательские</button>
-          <button type="button" class="button secondary" data-catalog="my" aria-pressed="false">Мои</button>
+        <h2 id="catalog-title"></h2>
+        <div class="recipes-tabs" role="group" aria-label="">
+          <button type="button" class="button" data-catalog="main" aria-pressed="true"></button>
+          <button type="button" class="button secondary" data-catalog="user" aria-pressed="false"></button>
+          <button type="button" class="button secondary" data-catalog="my" aria-pressed="false"></button>
         </div>
         <form id="recipeSearch" class="recipes-toolbar">
-          <input id="recipeQuery" type="search" maxlength="200" placeholder="Поиск рецепта" aria-label="Поиск рецепта">
-          <button class="button secondary" type="submit">Найти</button>
+          <input id="recipeQuery" type="search" maxlength="200" placeholder="" aria-label="">
+          <button class="button secondary" type="submit"></button>
         </form>
-        <label class="button secondary" for="recipeFile">Открыть CheeseXML</label>
+        <label class="button secondary" for="recipeFile"></label>
         <input id="recipeFile" type="file" accept=".xml,application/xml,text/xml">
         <div id="recipeList" class="recipe-list"></div>
         <div class="recipes-pager">
-          <button id="recipePrev" class="button secondary" type="button">Назад</button>
+          <button id="recipePrev" class="button secondary" type="button"></button>
           <span id="recipePage">—</span>
-          <button id="recipeNext" class="button secondary" type="button">Вперёд</button>
+          <button id="recipeNext" class="button secondary" type="button"></button>
         </div>
       </section>
 
       <section class="card" aria-labelledby="preview-title">
-        <h2 id="preview-title">Программа</h2>
-        <h3 id="recipeName">Рецепт не выбран</h3>
+        <h2 id="preview-title"></h2>
+        <h3 id="recipeName"></h3>
         <p id="recipeMeta" class="recipe-meta"></p>
         <div id="temperatureChoices" class="temperature-choices"></div>
         <div class="recipes-actions">
-          <button id="convertRecipe" class="button secondary" type="button" disabled>Преобразовать</button>
+          <button id="convertRecipe" class="button secondary" type="button" disabled></button>
         </div>
         <ul id="recipeWarnings" class="warnings"></ul>
-        <textarea id="programPreview" class="program-preview" readonly aria-label="Предварительный просмотр программы"></textarea>
+        <textarea id="programPreview" class="program-preview" readonly aria-label=""></textarea>
         <div class="recipes-actions">
-          <button id="applyRecipe" class="button primary" type="button" disabled>Применить программу</button>
-          <a class="button secondary" href="/cheese.htm">Открыть редактор</a>
+          <button id="applyRecipe" class="button primary" type="button" disabled></button>
+          <a class="button secondary" href="/cheese.htm"></a>
         </div>
         <p id="recipeStatus" class="recipe-status" role="status"></p>
       </section>
@@ -81,8 +81,47 @@
   var API_BASE = 'https://www.samovar-tool.ru/cheesexml/v1/';
   var PROGRAM_MAX = 20;
   var state = { catalog: 'main', page: 1, perPage: 10, total: 0, query: '', recipe: null, conversion: null, token: '', mode: null, applying: false };
+  var language = /(^|-)en(?:-|$)/i.test(document.documentElement.lang) || /(^|-)en(?:-|$)/i.test(navigator.language || '') ? 'en' : 'ru';
+  var text = {
+    ru: {
+      title: 'Самовар — рецепты сыра', heading: 'Рецепты сыра', intro: 'Выберите рецепт с samovar-tool.ru или откройте локальный файл cheesexml.xml. Файл и токен обрабатываются только в памяти браузера.',
+      catalog: 'Каталог', source: 'Источник рецептов', main: 'Основные', user: 'Пользовательские', mine: 'Мои', search: 'Поиск рецепта', find: 'Найти', open: 'Открыть CheeseXML', previous: 'Назад', next: 'Вперёд', program: 'Программа', none: 'Рецепт не выбран', convert: 'Преобразовать', preview: 'Предварительный просмотр программы', apply: 'Применить программу', editor: 'Открыть редактор',
+      loading: 'Загрузка…', loadingRecipe: 'Загрузка рецепта…', found: 'Найдено: {count}', empty: 'Рецепты не найдены.', noToken: 'Для списка «Мои» в устройстве не задан токен Blynk.', catalogPrefix: 'Каталог: ', recipePrefix: 'Рецепт: ', notApplied: 'Программа не применена: ', recipe: 'Рецепт {id}', myRecipe: 'Мой рецепт', catalogSource: 'Каталог {catalog}', steps: 'этапов: {count}', check: 'Проверьте температуры и нажмите «Преобразовать».', temperature: 'выберите температуру', ready: 'Предпросмотр готов. Программа ещё не применена.', mode: 'Для применения переключите Самовар в режим «Сыр».', invalid: 'Преобразование нельзя применить.', applying: 'Применение…', accepted: 'Программа принята устройством. Запуск не выполнялся.', local: 'Локальный CheeseXML', theme: 'Тема', themeLight: 'Светлая тема', themeDark: 'Тёмная тема', stage: 'Этап {count}', unnamed: 'Без названия', noSteps: 'В рецепте нет технологических этапов.', xmlSyntax: 'XML содержит синтаксическую ошибку.', xmlRoot: 'Ожидается корень CHEESEXML.', xmlVersion: 'Поддерживается только CheeseXML 1.x.', xmlRecipe: 'В CheeseXML нет RECIPE.', manualTimeout: 'Этап «{name}»: для ручного действия установлен тайм-аут 30 мин.', manual: 'Этап «{name}» не поддерживается автоматикой и преобразован в ручное действие.', chooseRange: 'Этап «{name}»: выберите одно значение температуры из диапазона.', previousTemp: 'Этап «{name}»: используется температура предыдущего этапа {temp} °C.', phTimeout: 'Этап «{name}»: установлен тайм-аут pH 120 мин.', phHold: 'Этап «{name}»: условие pH ≤ {value} удерживается 30 с.', flocTimeout: 'Этап «{name}»: тайм-аут флока рассчитан из ожидаемого времени либо установлен 60 мин.', coolingTimeout: 'Этап «{name}»: установлен тайм-аут охлаждения 60 мин.', holdTimeout: 'Этап «{name}»: к выдержке добавлен запас тайм-аута 60 мин.', heatTimeout: 'Этап «{name}»: для нагрева установлены тайм-аут 60 мин и скорость 1 °C/мин.', aging: 'Стадии созревания исключены из программы Самовара.', rowLimit: 'В программе больше {count} этапов; применение недоступно.', fileRead: 'Не удалось прочитать файл.',
+      family: {acid_set: 'Кислотный', blue: 'С голубой плесенью', brined: 'Рассольный', fresh: 'Свежий', hard: 'Твёрдый', pasta_filata: 'Вытяжной', semi_hard: 'Полутвёрдый', soft_ripened: 'Мягкий созревающий', washed_rind: 'С мытой коркой', whey: 'Сывороточный'},
+      style: {adygei: 'Адыгейский', bleu_dauvergne: 'Блё д\'Овернь', brynza: 'Брынза', feta_bulgarian: 'Болгарская фета', belper_knolle: 'Бельпер Кнолле', alpine: 'Альпийский', asiago: 'Азиаго', beaufort: 'Бофор', burrata: 'Буррата', alpine_tomme: 'Альпийская томма', bel_paese: 'Бель паэзе', tomme: 'Томм', brie: 'Бри', brie_nuit: 'Бри нюи', appenzeller: 'Аппенцеллер', brick: 'Брик'},
+      country: {RU: 'Россия', IT: 'Италия', FR: 'Франция', CH: 'Швейцария', BG: 'Болгария', US: 'США'}
+    },
+    en: {
+      title: 'Samovar — cheese recipes', heading: 'Cheese recipes', intro: 'Choose a recipe from samovar-tool.ru or open a local cheesexml.xml file. The file and token stay only in browser memory.',
+      catalog: 'Catalogue', source: 'Recipe source', main: 'Main', user: 'User', mine: 'Mine', search: 'Search recipes', find: 'Search', open: 'Open CheeseXML', previous: 'Previous', next: 'Next', program: 'Program', none: 'No recipe selected', convert: 'Convert', preview: 'Program preview', apply: 'Apply program', editor: 'Open editor',
+      loading: 'Loading…', loadingRecipe: 'Loading recipe…', found: 'Found: {count}', empty: 'No recipes found.', noToken: 'No Blynk token is configured for Mine.', catalogPrefix: 'Catalogue: ', recipePrefix: 'Recipe: ', notApplied: 'Program was not applied: ', recipe: 'Recipe {id}', myRecipe: 'My recipe', catalogSource: '{catalog} catalogue', steps: 'steps: {count}', check: 'Check temperatures and select “Convert”.', temperature: 'choose a temperature', ready: 'Preview is ready. The program has not been applied.', mode: 'Switch Samovar to Cheese mode to apply.', invalid: 'The conversion cannot be applied.', applying: 'Applying…', accepted: 'The program was accepted by the device. It was not started.', local: 'Local CheeseXML', theme: 'Theme', themeLight: 'Light theme', themeDark: 'Dark theme', stage: 'Step {count}', unnamed: 'Untitled', noSteps: 'The recipe has no process steps.', xmlSyntax: 'XML has a syntax error.', xmlRoot: 'CHEESEXML root is required.', xmlVersion: 'Only CheeseXML 1.x is supported.', xmlRecipe: 'CHEESEXML has no RECIPE.', manualTimeout: 'Step “{name}”: a 30 min timeout was set for the manual action.', manual: 'Step “{name}” is not supported by automation and was converted to a manual action.', chooseRange: 'Step “{name}”: choose one temperature from the range.', previousTemp: 'Step “{name}”: the previous step temperature {temp} °C is used.', phTimeout: 'Step “{name}”: a 120 min pH timeout was set.', phHold: 'Step “{name}”: the pH ≤ {value} condition is held for 30 s.', flocTimeout: 'Step “{name}”: the flocculation timeout was calculated from the expected time or set to 60 min.', coolingTimeout: 'Step “{name}”: a 60 min cooling timeout was set.', holdTimeout: 'Step “{name}”: a 60 min timeout margin was added to the hold.', heatTimeout: 'Step “{name}”: a 60 min timeout and 1 °C/min rate were set for heating.', aging: 'Aging stages are excluded from the Samovar program.', rowLimit: 'The program has more than {count} steps and cannot be applied.', fileRead: 'The file could not be read.',
+      family: {acid_set: 'Acid-set', blue: 'Blue', brined: 'Brined', fresh: 'Fresh', hard: 'Hard', pasta_filata: 'Pasta filata', semi_hard: 'Semi-hard', soft_ripened: 'Soft-ripened', washed_rind: 'Washed-rind', whey: 'Whey'},
+      style: {adygei: 'Adyghe', bleu_dauvergne: 'Bleu d\'Auvergne', brynza: 'Bryndza', feta_bulgarian: 'Bulgarian feta', belper_knolle: 'Belper Knolle', alpine: 'Alpine', asiago: 'Asiago', beaufort: 'Beaufort', burrata: 'Burrata', alpine_tomme: 'Alpine tomme', bel_paese: 'Bel Paese', tomme: 'Tomme', brie: 'Brie', brie_nuit: 'Brie nuit', appenzeller: 'Appenzeller', brick: 'Brick'},
+      country: {RU: 'Russia', IT: 'Italy', FR: 'France', CH: 'Switzerland', BG: 'Bulgaria', US: 'United States'}
+    }
+  };
 
   function byId(id) { return document.getElementById(id); }
+  function t(key, values) {
+    var value = text[language][key] || text.ru[key] || key;
+    return values ? value.replace(/\{(\w+)\}/g, function (_, name) { return values[name] === undefined ? '' : values[name]; }) : value;
+  }
+  function catalogLabel(group, value) {
+    var key = group === 'style' ? String(value || '').split('.').pop() : String(value || '');
+    return text[language][group][key] || text.ru[group][key] || '';
+  }
+  function localizePage() {
+    document.documentElement.lang = language; document.title = t('title');
+    byId('recipeIntro').textContent = t('intro');
+    var labels = {'.recipes-page h1': 'heading', '#catalog-title': 'catalog', '#preview-title': 'program', '[data-catalog="main"]': 'main', '[data-catalog="user"]': 'user', '[data-catalog="my"]': 'mine', '#recipeSearch button': 'find', 'label[for="recipeFile"]': 'open', '#recipePrev': 'previous', '#recipeNext': 'next', '#recipeName': 'none', '#convertRecipe': 'convert', '#applyRecipe': 'apply', 'a[href="/cheese.htm"]': 'editor'};
+    Object.keys(labels).forEach(function (selector) { document.querySelector(selector).textContent = t(labels[selector]); });
+    byId('recipeQuery').placeholder = byId('recipeQuery').setAttribute('aria-label', t('search')) || t('search');
+    document.querySelector('.recipes-tabs').setAttribute('aria-label', t('source'));
+    byId('programPreview').setAttribute('aria-label', t('preview'));
+    document.querySelector('.theme-switch').setAttribute('aria-label', t('theme'));
+    document.querySelector('[data-theme-choice="light"]').setAttribute('title', t('themeLight'));
+    document.querySelector('[data-theme-choice="dark"]').setAttribute('title', t('themeDark'));
+  }
   function finite(value) {
     if (value === null || value === undefined || value === '') return null;
     var number = Number(value);
@@ -92,7 +131,8 @@
   function localized(value) {
     if (typeof value === 'string') return value;
     if (!Array.isArray(value)) return '';
-    var item = value.find(function (entry) { return entry && entry.lang === 'ru'; }) ||
+    var item = value.find(function (entry) { return entry && entry.lang === language; }) ||
+      value.find(function (entry) { return entry && entry.lang === 'ru'; }) ||
       value.find(function (entry) { return entry && entry.primary; }) || value[0];
     return item && typeof item.text === 'string' ? item.text : '';
   }
@@ -102,7 +142,8 @@
   function directChild(node, name) { return directChildren(node, name)[0] || null; }
   function xmlLocalized(node) {
     var values = directChildren(node, 'T');
-    var chosen = values.find(function (entry) { return entry.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'lang') === 'ru'; }) ||
+    var chosen = values.find(function (entry) { return entry.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'lang') === language; }) ||
+      values.find(function (entry) { return entry.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'lang') === 'ru'; }) ||
       values.find(function (entry) { return entry.getAttribute('primary') === 'true'; }) || values[0];
     return chosen ? chosen.textContent.trim() : '';
   }
@@ -126,7 +167,7 @@
       n: finite(step.n) || index + 1,
       phase: String(step.phase || ''),
       code: String(step.code || ''),
-      name: localized(step.name) || String(step.name || ('Этап ' + (index + 1))),
+      name: localized(step.name) || String(step.name || t('stage', {count: index + 1})),
       instruction: localized(step.instruction) || String(step.instruction || ''),
       temp: normalizeQuantity(step.temp),
       time: normalizeQuantity(step.time),
@@ -139,24 +180,30 @@
   function normalizeJson(payload) {
     var outer = payload && payload.content ? payload : { content: payload || {} };
     var content = outer.content || {};
-    if (!Array.isArray(content.process)) throw new Error('В рецепте нет технологических этапов.');
+    if (typeof content.xml === 'string') {
+      var parsed = normalizeXml(content.xml);
+      if (outer.id) parsed.id = outer.id;
+      if (outer.name) parsed.name = outer.name;
+      return parsed;
+    }
+    if (!Array.isArray(content.process)) throw new Error(t('noSteps'));
     return {
       id: outer.id || content.id || '',
-      name: outer.name || localized(content.name) || 'Без названия',
+      name: outer.name || localized(content.name) || t('unnamed'),
       process: content.process.map(normalizeStep),
       aging: Array.isArray(content.aging) ? content.aging.slice() : []
     };
   }
   function normalizeXml(text) {
     var documentXml = new DOMParser().parseFromString(String(text || ''), 'application/xml');
-    if (documentXml.querySelector('parsererror')) throw new Error('XML содержит синтаксическую ошибку.');
+    if (documentXml.querySelector('parsererror')) throw new Error(t('xmlSyntax'));
     var root = documentXml.documentElement;
-    if (!root || root.localName !== 'CHEESEXML') throw new Error('Ожидается корень CHEESEXML.');
+    if (!root || root.localName !== 'CHEESEXML') throw new Error(t('xmlRoot'));
     var version = root.getAttribute('version') || '';
-    if (!/^1(?:\.|$)/.test(version)) throw new Error('Поддерживается только CheeseXML 1.x.');
+    if (!/^1(?:\.|$)/.test(version)) throw new Error(t('xmlVersion'));
     var recipes = directChild(root, 'RECIPES');
     var recipe = directChild(recipes, 'RECIPE');
-    if (!recipe) throw new Error('В CheeseXML нет RECIPE.');
+    if (!recipe) throw new Error(t('xmlRecipe'));
     var process = directChild(recipe, 'PROCESS');
     var steps = directChildren(process, 'STEP').map(function (step, index) {
       var params = directChild(step, 'PARAMS');
@@ -164,7 +211,7 @@
       var flocNode = directChild(params, 'FLOC');
       return normalizeStep({
         n: step.getAttribute('n'), phase: step.getAttribute('phase'), code: step.getAttribute('code'),
-        name: xmlLocalized(directChild(step, 'NAME')) || ('Этап ' + (index + 1)),
+        name: xmlLocalized(directChild(step, 'NAME')) || t('stage', {count: index + 1}),
         instruction: xmlLocalized(directChild(step, 'INSTRUCTION')),
         temp: xmlQuantity(directChild(params, 'TEMP')),
         time: xmlQuantity(directChild(params, 'TIME')),
@@ -172,8 +219,8 @@
         floc: flocNode ? { time: finite(flocNode.getAttribute('time')), unit: flocNode.getAttribute('unit'), multiplier: finite(flocNode.getAttribute('multiplier')) } : null
       }, index);
     });
-    if (!steps.length) throw new Error('В рецепте нет технологических этапов.');
-    return { id: recipe.getAttribute('id') || '', name: xmlLocalized(directChild(recipe, 'NAME')) || 'Без названия', process: steps, aging: directChildren(directChild(recipe, 'AGING'), 'STAGE') };
+    if (!steps.length) throw new Error(t('noSteps'));
+    return { id: recipe.getAttribute('id') || '', name: xmlLocalized(directChild(recipe, 'NAME')) || t('unnamed'), process: steps, aging: directChildren(directChild(recipe, 'AGING'), 'STAGE') };
   }
 
   function toCelsius(value, unit) {
@@ -229,8 +276,8 @@
   }
   function makeManual(step, warnings) {
     var timeout = timeMinutes(step.time, true);
-    if (!validMinutes(timeout)) { timeout = 30; warnings.push('Этап «' + step.name + '»: для ручного действия установлен тайм-аут 30 мин.'); }
-    warnings.push('Этап «' + step.name + '» не поддерживается автоматикой и преобразован в ручное действие.');
+    if (!validMinutes(timeout)) { timeout = 30; warnings.push(t('manualTimeout', {name: step.name})); }
+    warnings.push(t('manual', {name: step.name}));
     return 'W;0;' + compactNumber(timeout) + ';' + manualAction(step) + ';0^0^0^0;0';
   }
   function convertRecipe(recipe, choices) {
@@ -239,7 +286,7 @@
       var bounds = temperatureBounds(step.temp);
       var directTemperature = selectedTemperature(step, choices || {});
       if (bounds && bounds.value === null && (bounds.min !== null || bounds.max !== null) && directTemperature === null) {
-        warnings.push('Этап «' + step.name + '»: выберите одно значение температуры из диапазона.');
+        warnings.push(t('chooseRange', {name: step.name}));
         blocked = true;
       }
       if (directTemperature !== null) lastTemperature = directTemperature;
@@ -250,10 +297,10 @@
 
       if (step.pH && Number.isFinite(step.pH.value) && step.pH.value > 0 && step.pH.value <= 14 && validTemperature(target)) {
         var phTimeout = timeout;
-        if (directTemperature === null) warnings.push('Этап «' + step.name + '»: используется температура предыдущего этапа ' + compactNumber(target) + ' °C.');
-        if (!validMinutes(phTimeout)) { phTimeout = 120; warnings.push('Этап «' + step.name + '»: установлен тайм-аут pH 120 мин.'); }
+        if (directTemperature === null) warnings.push(t('previousTemp', {name: step.name, temp: compactNumber(target)}));
+        if (!validMinutes(phTimeout)) { phTimeout = 120; warnings.push(t('phTimeout', {name: step.name})); }
         rows.push({ source: step.name, line: 'N;' + compactNumber(target) + ';' + compactNumber(phTimeout) + ';' + compactNumber(step.pH.value) + ';0^0^0^0;0' });
-        warnings.push('Этап «' + step.name + '»: условие pH ≤ ' + compactNumber(step.pH.value) + ' удерживается 30 с.');
+        warnings.push(t('phHold', {name: step.name, value: compactNumber(step.pH.value)}));
         handled = true;
       }
       if (step.floc) {
@@ -265,7 +312,7 @@
           if (!validMinutes(flocTimeout)) {
             var flocTime = timeMinutes({ value: step.floc.time, min: null, max: null, si: null, unit: step.floc.unit }, false);
             flocTimeout = flocTime && validMinutes(flocTime * multiplier) ? flocTime * multiplier : 60;
-            warnings.push('Этап «' + step.name + '»: тайм-аут флока рассчитан из ожидаемого времени либо установлен 60 мин.');
+            warnings.push(t('flocTimeout', {name: step.name}));
           }
           rows.push({ source: step.name, line: 'F;' + compactNumber(target) + ';' + compactNumber(flocTimeout) + ';' + compactNumber(multiplier) + ';0^0^0^0;0' });
         }
@@ -273,25 +320,25 @@
       }
       if (!handled && directTemperature !== null) {
         if (/cool|chill/.test(code)) {
-          if (!validMinutes(timeout)) { timeout = 60; warnings.push('Этап «' + step.name + '»: установлен тайм-аут охлаждения 60 мин.'); }
+          if (!validMinutes(timeout)) { timeout = 60; warnings.push(t('coolingTimeout', {name: step.name})); }
           rows.push({ source: step.name, line: 'C;' + compactNumber(directTemperature) + ';' + compactNumber(timeout) + ';0;0^0^0^0;0' });
         } else {
           var hold = timeMinutes(step.time, false);
           if (validMinutes(hold) && hold < 1440) {
             var totalTimeout = Math.min(1440, hold + 60);
             rows.push({ source: step.name, line: 'P;' + compactNumber(directTemperature) + ';' + compactNumber(hold) + ';' + compactNumber(totalTimeout) + ';0^0^0^0;0' });
-            warnings.push('Этап «' + step.name + '»: к выдержке добавлен запас тайм-аута 60 мин.');
+            warnings.push(t('holdTimeout', {name: step.name}));
           } else {
             rows.push({ source: step.name, line: 'H;' + compactNumber(directTemperature) + ';60;1;0^0^0^0;0' });
-            warnings.push('Этап «' + step.name + '»: для нагрева установлены тайм-аут 60 мин и скорость 1 °C/мин.');
+            warnings.push(t('heatTimeout', {name: step.name}));
           }
         }
       } else if (!handled) {
         rows.push({ source: step.name, line: makeManual(step, warnings) });
       }
     });
-    if (recipe.aging && recipe.aging.length) warnings.push('Стадии созревания исключены из программы Самовара.');
-    if (rows.length > PROGRAM_MAX) warnings.push('В программе больше ' + PROGRAM_MAX + ' этапов; применение недоступно.');
+    if (recipe.aging && recipe.aging.length) warnings.push(t('aging'));
+    if (rows.length > PROGRAM_MAX) warnings.push(t('rowLimit', {count: PROGRAM_MAX}));
     return { rows: rows, warnings: warnings, program: rows.map(function (row) { return row.line; }).join('\n') + (rows.length ? '\n' : ''), valid: !blocked && rows.length > 0 && rows.length <= PROGRAM_MAX };
   }
 
@@ -315,8 +362,8 @@
     return url.toString();
   }
   async function loadCatalog() {
-    if (state.catalog === 'my' && !state.token) { status('Для списка «Мои» в устройстве не задан токен Blynk.', 'error'); renderList([]); return; }
-    status('Загрузка…');
+    if (state.catalog === 'my' && !state.token) { status(t('noToken'), 'error'); renderList([]); return; }
+    status(t('loading'));
     try {
       var page = await jsonRequest(catalogUrl(), state.catalog === 'my' ? { headers: authHeaders() } : {});
       state.total = Number(page.total) || 0;
@@ -326,46 +373,46 @@
         items = items.filter(function (item) { return String(item.name || '').toLocaleLowerCase('ru').indexOf(query) !== -1; });
       }
       renderList(items);
-      status('Найдено: ' + state.total, 'ok');
-    } catch (error) { renderList([]); status('Каталог: ' + error.message, 'error'); }
+      status(t('found', {count: state.total}), 'ok');
+    } catch (error) { renderList([]); status(t('catalogPrefix') + error.message, 'error'); }
   }
   function renderList(items) {
     var list = byId('recipeList'); list.textContent = '';
     items.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button';
-      button.textContent = item.name || item.slug || ('Рецепт ' + item.id);
-      var meta = document.createElement('small'); meta.textContent = [item.family, item.style, item.country].filter(Boolean).join(' · ');
+      button.textContent = item.name || item.slug || t('recipe', {id: item.id});
+      var meta = document.createElement('small'); meta.textContent = [catalogLabel('family', item.family), catalogLabel('style', item.style), catalogLabel('country', item.country)].filter(Boolean).join(' · ');
       button.appendChild(meta);
       button.addEventListener('click', function () { selectRemoteRecipe(item, button); });
       list.appendChild(button);
     });
-    if (!items.length) { var empty = document.createElement('p'); empty.className = 'recipe-empty'; empty.textContent = 'Рецепты не найдены.'; list.appendChild(empty); }
+    if (!items.length) { var empty = document.createElement('p'); empty.className = 'recipe-empty'; empty.textContent = t('empty'); list.appendChild(empty); }
     var pages = Math.max(1, Math.ceil(state.total / state.perPage));
     byId('recipePage').textContent = state.page + ' / ' + pages;
     byId('recipePrev').disabled = state.page <= 1;
     byId('recipeNext').disabled = state.page >= pages;
   }
   async function selectRemoteRecipe(item, button) {
-    status('Загрузка рецепта…');
+    status(t('loadingRecipe'));
     try {
       var isMine = state.catalog === 'my';
       var path = isMine ? 'me/recipes/' + encodeURIComponent(item.id) : 'recipes/' + encodeURIComponent(item.slug);
       var payload = await jsonRequest(new URL(path, API_BASE).toString(), isMine ? { headers: authHeaders() } : {});
       Array.prototype.forEach.call(byId('recipeList').querySelectorAll('button'), function (entry) { entry.removeAttribute('aria-current'); });
       button.setAttribute('aria-current', 'true');
-      setRecipe(normalizeJson(payload), isMine ? 'Мой рецепт' : 'Каталог ' + state.catalog);
-    } catch (error) { status('Рецепт: ' + error.message, 'error'); }
+      setRecipe(normalizeJson(payload), isMine ? t('myRecipe') : t('catalogSource', {catalog: t(state.catalog)}));
+    } catch (error) { status(t('recipePrefix') + error.message, 'error'); }
   }
   function setRecipe(recipe, source) {
     state.recipe = recipe; state.conversion = null;
     byId('recipeName').textContent = recipe.name;
-    byId('recipeMeta').textContent = source + ' · этапов: ' + recipe.process.length;
+    byId('recipeMeta').textContent = source + ' · ' + t('steps', {count: recipe.process.length});
     byId('programPreview').value = '';
     byId('recipeWarnings').textContent = '';
     renderTemperatureChoices(recipe);
     byId('convertRecipe').disabled = false;
     byId('applyRecipe').disabled = true;
-    status('Проверьте температуры и нажмите «Преобразовать».');
+    status(t('check'));
   }
   function renderTemperatureChoices(recipe) {
     var host = byId('temperatureChoices'); host.textContent = '';
@@ -373,7 +420,7 @@
       var bounds = temperatureBounds(step.temp);
       if (!bounds || bounds.value !== null || (bounds.min === null && bounds.max === null)) return;
       var label = document.createElement('label'); label.className = 'temperature-choice';
-      var caption = document.createElement('span'); caption.textContent = step.name + ': выберите температуру' +
+      var caption = document.createElement('span'); caption.textContent = step.name + ': ' + t('temperature') +
         (bounds.min !== null || bounds.max !== null ? ' (' + (bounds.min === null ? '…' : compactNumber(bounds.min)) + '–' + (bounds.max === null ? '…' : compactNumber(bounds.max)) + ' °C)' : '');
       var input = document.createElement('input'); input.type = 'number'; input.step = '0.1'; input.min = bounds.min === null ? '0.1' : compactNumber(bounds.min); input.max = bounds.max === null ? '150' : compactNumber(bounds.max); input.dataset.step = String(step.n);
       label.appendChild(caption); label.appendChild(input); host.appendChild(label);
@@ -392,25 +439,25 @@
     var warnings = byId('recipeWarnings'); warnings.textContent = '';
     conversion.warnings.forEach(function (message) { var item = document.createElement('li'); item.textContent = message; warnings.appendChild(item); });
     byId('applyRecipe').disabled = !conversion.valid || state.mode !== 7;
-    status(conversion.valid ? (state.mode === 7 ? 'Предпросмотр готов. Программа ещё не применена.' : 'Для применения переключите Самовар в режим «Сыр».') : 'Преобразование нельзя применить.', conversion.valid ? '' : 'error');
+    status(conversion.valid ? (state.mode === 7 ? t('ready') : t('mode')) : t('invalid'), conversion.valid ? '' : 'error');
   }
   async function applyProgram() {
     if (state.applying || !state.conversion || !state.conversion.valid || state.mode !== 7) return;
-    state.applying = true; byId('applyRecipe').disabled = true; status('Применение…');
+    state.applying = true; byId('applyRecipe').disabled = true; status(t('applying'));
     try {
       var body = new FormData(); body.append('WProgram', state.conversion.program);
       var response = await fetch('/program', { method: 'POST', body: body });
       var result = await response.json().catch(function () { return {}; });
       if (!response.ok || result.ok === false) throw new Error(result.err || result.error || ('HTTP ' + response.status));
-      status('Программа принята устройством. Запуск не выполнялся.', 'ok');
-    } catch (error) { status('Программа не применена: ' + error.message, 'error'); byId('applyRecipe').disabled = false; }
+      status(t('accepted'), 'ok');
+    } catch (error) { status(t('notApplied') + error.message, 'error'); byId('applyRecipe').disabled = false; }
     finally { state.applying = false; }
   }
   async function readLocalFile(file) {
     var text = await new Promise(function (resolve, reject) {
-      var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); }; reader.onerror = function () { reject(new Error('Не удалось прочитать файл.')); }; reader.readAsText(file, 'UTF-8');
+      var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); }; reader.onerror = function () { reject(new Error(t('fileRead'))); }; reader.readAsText(file, 'UTF-8');
     });
-    setRecipe(normalizeXml(text), 'Локальный CheeseXML');
+    setRecipe(normalizeXml(text), t('local'));
   }
 
   document.querySelectorAll('[data-catalog]').forEach(function (button) {
@@ -427,6 +474,7 @@
   byId('applyRecipe').addEventListener('click', applyProgram);
   byId('recipeFile').addEventListener('change', function () { if (this.files[0]) readLocalFile(this.files[0]).catch(function (error) { status(error.message, 'error'); }); });
 
+  localizePage();
   jsonRequest('/cheese-recipes-bootstrap', { cache: 'no-store' }).then(function (bootstrap) {
     state.token = typeof bootstrap.blynkToken === 'string' ? bootstrap.blynkToken : '';
     state.mode = Number(bootstrap.mode);

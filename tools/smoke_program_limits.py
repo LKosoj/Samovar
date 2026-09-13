@@ -109,7 +109,6 @@ if program_types:
     for token in [
         "using ProgramType = char;",
         "constexpr ProgramType PROGRAM_TYPE_NONE = '\\0';",
-        "constexpr uint8_t PROGRAM_MAX = CAPACITY_NUM * 2;",
         "constexpr uint8_t PROGRAM_END = PROGRAM_MAX;",
         "constexpr uint8_t NBK_PROGRAM_MAX = 4;",
         "static_assert(PROGRAM_MAX > 0 && PROGRAM_MAX < 255",
@@ -119,6 +118,8 @@ if program_types:
             errors.append(f"program_types.h missing contract token: {token}")
 
 if samovar_h:
+    if not re.search(r"^\s*#define\s+PROGRAM_MAX\s+30\s*(?://.*)?$", samovar_h, re.MULTILINE):
+        errors.append("Samovar.h must define PROGRAM_MAX as fixed value 30")
     if not re.search(r"\bWProgram\s+program\s*\[\s*PROGRAM_MAX\s*\]\s*;", samovar_h):
         errors.append("Samovar.h must declare program as WProgram program[PROGRAM_MAX]")
     if "String WType" in samovar_h:

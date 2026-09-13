@@ -114,6 +114,7 @@ HARNESS = r'''
 
 #define __SAMOVAR_H_
 #define CAPACITY_NUM 10
+#define PROGRAM_MAX 30
 // [БК п.9] program_io.h безусловно читает границы уставки пара (Samovar_ini.h).
 #define BK_STEAM_SETPOINT_MIN 30
 #define BK_STEAM_SETPOINT_MAX 100

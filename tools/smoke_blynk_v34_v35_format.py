@@ -168,7 +168,7 @@ if samovar:
             "sessionResumeAvailable = false;",
             "currentSessionId = sessionResumeId;",
             "const uint32_t epoch = ntp_snapshot_epoch_now();",
-            "(epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : esp_random();",
+            "(epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : new_random_session_id();",
             "blynk_stage_session_start(line);",
         ],
         errors,

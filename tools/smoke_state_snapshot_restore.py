@@ -173,6 +173,7 @@ HARNESS = r'''
 
 #define __SAMOVAR_H_
 #define CAPACITY_NUM 10
+#define PROGRAM_MAX 30
 
 // [БК п.9] program_io.h::program_parse_bk_row требует эти границы (обычно из
 // Samovar_ini.h) безусловно, не под #ifdef - минимальные значения только для

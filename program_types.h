@@ -4,7 +4,6 @@
 using ProgramType = char;
 
 constexpr ProgramType PROGRAM_TYPE_NONE = '\0';
-constexpr uint8_t PROGRAM_MAX = CAPACITY_NUM * 2;
 constexpr uint8_t PROGRAM_END = PROGRAM_MAX;
 constexpr uint8_t NBK_PROGRAM_MAX = 4;
 constexpr size_t PROGRAM_TEXT_POOL_SIZE = 1025;

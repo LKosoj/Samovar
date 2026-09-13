@@ -60,7 +60,7 @@ struct ProgramDraft {
   char textPool[PROGRAM_TEXT_POOL_SIZE];
 };
 
-constexpr size_t PROGRAM_DRAFT_MAX_BYTES = 1800;
+constexpr size_t PROGRAM_DRAFT_MAX_BYTES = 2112;
 static_assert(std::is_trivially_copyable<WProgram>::value, "WProgram must remain safe for fixed draft copies");
 static_assert(sizeof(ProgramDraft) <= PROGRAM_DRAFT_MAX_BYTES, "ProgramDraft exceeds the firmware stack budget");
 

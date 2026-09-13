@@ -101,6 +101,7 @@ HARNESS = r'''
 
 #define __SAMOVAR_H_
 #define CAPACITY_NUM 10
+#define PROGRAM_MAX 30
 
 // [Б7.2] Без этого define ветвь проверки первой строки в
 // prepare_program_for_mode() (program_io.h) вырезается препроцессором.

@@ -296,7 +296,7 @@ static_assert(sizeof(ProfileOperationPhase) == sizeof(uint8_t),
               "ProfileOperationPhase must remain byte-sized");
 static_assert(std::is_trivially_copyable<ProfileOperationSlot>::value,
               "ProfileOperationSlot must remain safe for fixed slot copies");
-static_assert(sizeof(ProfileOperationSlot) <= 2600,
+static_assert(sizeof(ProfileOperationSlot) <= 2872,
               "ProfileOperationSlot exceeds replaced pending storage");
 
 static inline ProfileOperationPhase profile_operation_phase_load() {
@@ -2520,6 +2520,14 @@ static String get_reset_reason_short() {
 // Blynk.virtualWrite напрямую - только формирует строку и кладёт её в staging-буфер
 // (blynk_stage_session_start(), Blynk.ino), отправка - из blynk_push_pending_session_start()
 // на очередном тике blynk_push_tick().
+static uint32_t new_random_session_id() {
+  uint32_t sessionId = 0;
+  do {
+    sessionId = esp_random();
+  } while (sessionId == 0);
+  return sessionId;
+}
+
 void session_begin(const String& sessionDescription) {
   const bool resume = sessionResumeAvailable && (millis() / 1000UL < SESSION_RESUME_WINDOW_S);
   sessionResumeAvailable = false;  // одноразово, как и modeHeatingStartRequested
@@ -2529,7 +2537,7 @@ void session_begin(const String& sessionDescription) {
     const uint32_t epoch = ntp_snapshot_epoch_now();
     // Нулевой снимок означает, что NTP ещё не синхронизировалось; тогда
     // берём аппаратный ГСЧ ESP32, чтобы sessionId был уникален и без времени.
-    currentSessionId = (epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : esp_random();
+    currentSessionId = (epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : new_random_session_id();
   }
   const String line = String(currentSessionId) + "," + (resume ? "1" : "0") + "," +
                        String(chipId) + "," + String(SamSetup.TimeZone) + "," +
