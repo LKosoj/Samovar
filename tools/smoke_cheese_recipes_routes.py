@@ -21,6 +21,13 @@ for token in (
 
 for token in (
     "https://www.samovar-tool.ru/cheesexml/v1/",
+    "new URL('recipes/filters', API_BASE)",
+    'id="recipeFamily"',
+    'id="recipeStyle"',
+    'id="recipeCountry"',
+    'id="recipeSpecies"',
+    'id="recipeDifficulty"',
+    "url.searchParams.set(key, state.filters[key])",
     "Authorization: 'Bearer ' + state.token",
     "new DOMParser()",
     "new FileReader()",

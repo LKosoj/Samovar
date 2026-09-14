@@ -7,6 +7,7 @@
     .recipes-grid { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.4fr); gap: 1rem; align-items: start; }
     .recipes-toolbar, .recipes-tabs, .recipes-pager, .recipes-actions { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
     .recipes-toolbar input { flex: 1 1 14rem; }
+    .recipes-toolbar select { flex: 1 1 10rem; }
     .recipes-tabs button[aria-pressed="true"] { background: var(--accent-hover); color: var(--text-on-accent); }
     .recipe-list { display: grid; gap: .55rem; margin-top: 1rem; }
     .recipe-list button { width: 100%; text-align: left; background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border-card); border-radius: var(--radius-sm); padding: .75rem; cursor: pointer; }
@@ -40,6 +41,11 @@
         </div>
         <form id="recipeSearch" class="recipes-toolbar">
           <input id="recipeQuery" type="search" maxlength="200" placeholder="" aria-label="">
+          <select id="recipeFamily" aria-label=""></select>
+          <select id="recipeStyle" aria-label=""></select>
+          <select id="recipeCountry" aria-label=""></select>
+          <select id="recipeSpecies" aria-label=""></select>
+          <select id="recipeDifficulty" aria-label=""></select>
           <button class="button secondary" type="submit"></button>
         </form>
         <label class="button secondary" for="recipeFile"></label>
@@ -77,24 +83,26 @@
 
   var API_BASE = 'https://www.samovar-tool.ru/cheesexml/v1/';
   var PROGRAM_MAX = 20;
-  var state = { catalog: 'main', page: 1, perPage: 10, total: 0, query: '', recipe: null, conversion: null, token: '', mode: null, applying: false };
+  var state = { catalog: 'main', page: 1, perPage: 10, total: 0, query: '', filters: {family: '', style: '', country: '', species: '', difficulty: ''}, recipe: null, conversion: null, token: '', mode: null, applying: false };
   var language = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ru';
   var text = {
     ru: {
       title: 'Самовар — рецепты сыра', heading: 'Рецепты сыра', intro: 'Выберите рецепт с samovar-tool.ru или откройте локальный файл cheesexml.xml. Файл и токен обрабатываются только в памяти браузера.',
-      catalog: 'Каталог', source: 'Источник рецептов', main: 'Основные', user: 'Пользовательские', mine: 'Мои', search: 'Поиск рецепта', find: 'Найти', open: 'Открыть CheeseXML', previous: 'Назад', next: 'Вперёд', program: 'Программа', none: 'Рецепт не выбран', convert: 'Преобразовать', preview: 'Предварительный просмотр программы', apply: 'Применить программу', editor: 'Открыть редактор',
+      catalog: 'Каталог', source: 'Источник рецептов', main: 'Основные', user: 'Пользовательские', mine: 'Мои', search: 'Поиск рецепта', find: 'Найти', open: 'Открыть CheeseXML', previous: 'Назад', next: 'Вперёд', program: 'Программа', none: 'Рецепт не выбран', convert: 'Преобразовать', preview: 'Предварительный просмотр программы', apply: 'Применить программу', editor: 'Открыть редактор', allFamilies: 'Все семейства', allStyles: 'Все стили', allCountries: 'Все страны', allSpecies: 'Любое молоко', allDifficulties: 'Любая сложность', familyFilter: 'Семейство сыра', styleFilter: 'Стиль сыра', countryFilter: 'Страна', speciesFilter: 'Вид молока', difficultyFilter: 'Сложность', difficulty: 'Сложность {value}',
       loading: 'Загрузка…', loadingRecipe: 'Загрузка рецепта…', found: 'Найдено: {count}', empty: 'Рецепты не найдены.', noToken: 'Для списка «Мои» в устройстве не задан токен Blynk.', catalogPrefix: 'Каталог: ', recipePrefix: 'Рецепт: ', notApplied: 'Программа не применена: ', recipe: 'Рецепт {id}', myRecipe: 'Мой рецепт', catalogSource: 'Каталог {catalog}', steps: 'этапов: {count}', check: 'Проверьте температуры и нажмите «Преобразовать».', temperature: 'выберите температуру', ready: 'Предпросмотр готов. Программа ещё не применена.', mode: 'Для применения переключите Самовар в режим «Сыр».', invalid: 'Преобразование нельзя применить.', applying: 'Применение…', accepted: 'Программа принята устройством. Запуск не выполнялся.', local: 'Локальный CheeseXML', stage: 'Этап {count}', unnamed: 'Без названия', noSteps: 'В рецепте нет технологических этапов.', xmlSyntax: 'XML содержит синтаксическую ошибку.', xmlRoot: 'Ожидается корень CHEESEXML.', xmlVersion: 'Поддерживается только CheeseXML 1.x.', xmlRecipe: 'В CheeseXML нет RECIPE.', manualTimeout: 'Этап «{name}»: для ручного действия установлен тайм-аут 30 мин.', manual: 'Этап «{name}» не поддерживается автоматикой и преобразован в ручное действие.', chooseRange: 'Этап «{name}»: выберите одно значение температуры из диапазона.', previousTemp: 'Этап «{name}»: используется температура предыдущего этапа {temp} °C.', phTimeout: 'Этап «{name}»: установлен тайм-аут pH 120 мин.', phHold: 'Этап «{name}»: условие pH ≤ {value} удерживается 30 с.', flocTimeout: 'Этап «{name}»: тайм-аут флока рассчитан из ожидаемого времени либо установлен 60 мин.', coolingTimeout: 'Этап «{name}»: установлен тайм-аут охлаждения 60 мин.', holdTimeout: 'Этап «{name}»: к выдержке добавлен запас тайм-аута 60 мин.', heatTimeout: 'Этап «{name}»: для нагрева установлены тайм-аут 60 мин и скорость 1 °C/мин.', aging: 'Стадии созревания исключены из программы Самовара.', rowLimit: 'В программе больше {count} этапов; применение недоступно.', fileRead: 'Не удалось прочитать файл.',
       family: {acid_set: 'Кислотный', blue: 'С голубой плесенью', brined: 'Рассольный', fresh: 'Свежий', hard: 'Твёрдый', pasta_filata: 'Вытяжной', semi_hard: 'Полутвёрдый', soft_ripened: 'Мягкий созревающий', washed_rind: 'С мытой коркой', whey: 'Сывороточный'},
       style: {adygei: 'Адыгейский', bleu_dauvergne: 'Блё д\'Овернь', brynza: 'Брынза', feta_bulgarian: 'Болгарская фета', belper_knolle: 'Бельпер Кнолле', alpine: 'Альпийский', asiago: 'Азиаго', beaufort: 'Бофор', burrata: 'Буррата', alpine_tomme: 'Альпийская томма', bel_paese: 'Бель паэзе', tomme: 'Томм', brie: 'Бри', brie_nuit: 'Бри нюи', appenzeller: 'Аппенцеллер', brick: 'Брик'},
-      country: {RU: 'Россия', IT: 'Италия', FR: 'Франция', CH: 'Швейцария', BG: 'Болгария', US: 'США'}
+      species: {bos_taurus: 'Коровье молоко', capra_hircus: 'Козье молоко', ovis_aries: 'Овечье молоко', bubalus_bubalis: 'Буйволиное молоко', mixed: 'Смешанное молоко'},
+      country: {BE: 'Бельгия', BG: 'Болгария', CA: 'Канада', CH: 'Швейцария', CY: 'Кипр', DE: 'Германия', DK: 'Дания', ES: 'Испания', FR: 'Франция', GB: 'Великобритания', GE: 'Грузия', GR: 'Греция', IN: 'Индия', IT: 'Италия', LB: 'Ливан', MX: 'Мексика', NL: 'Нидерланды', NO: 'Норвегия', PT: 'Португалия', RO: 'Румыния', RU: 'Россия', US: 'США'}
     },
     en: {
       title: 'Samovar — cheese recipes', heading: 'Cheese recipes', intro: 'Choose a recipe from samovar-tool.ru or open a local cheesexml.xml file. The file and token stay only in browser memory.',
-      catalog: 'Catalogue', source: 'Recipe source', main: 'Main', user: 'User', mine: 'Mine', search: 'Search recipes', find: 'Search', open: 'Open CheeseXML', previous: 'Previous', next: 'Next', program: 'Program', none: 'No recipe selected', convert: 'Convert', preview: 'Program preview', apply: 'Apply program', editor: 'Open editor',
+      catalog: 'Catalogue', source: 'Recipe source', main: 'Main', user: 'User', mine: 'Mine', search: 'Search recipes', find: 'Search', open: 'Open CheeseXML', previous: 'Previous', next: 'Next', program: 'Program', none: 'No recipe selected', convert: 'Convert', preview: 'Program preview', apply: 'Apply program', editor: 'Open editor', allFamilies: 'All families', allStyles: 'All styles', allCountries: 'All countries', allSpecies: 'Any milk', allDifficulties: 'Any difficulty', familyFilter: 'Cheese family', styleFilter: 'Cheese style', countryFilter: 'Country', speciesFilter: 'Milk species', difficultyFilter: 'Difficulty', difficulty: 'Difficulty {value}',
       loading: 'Loading…', loadingRecipe: 'Loading recipe…', found: 'Found: {count}', empty: 'No recipes found.', noToken: 'No Blynk token is configured for Mine.', catalogPrefix: 'Catalogue: ', recipePrefix: 'Recipe: ', notApplied: 'Program was not applied: ', recipe: 'Recipe {id}', myRecipe: 'My recipe', catalogSource: '{catalog} catalogue', steps: 'steps: {count}', check: 'Check temperatures and select “Convert”.', temperature: 'choose a temperature', ready: 'Preview is ready. The program has not been applied.', mode: 'Switch Samovar to Cheese mode to apply.', invalid: 'The conversion cannot be applied.', applying: 'Applying…', accepted: 'The program was accepted by the device. It was not started.', local: 'Local CheeseXML', stage: 'Step {count}', unnamed: 'Untitled', noSteps: 'The recipe has no process steps.', xmlSyntax: 'XML has a syntax error.', xmlRoot: 'CHEESEXML root is required.', xmlVersion: 'Only CheeseXML 1.x is supported.', xmlRecipe: 'CHEESEXML has no RECIPE.', manualTimeout: 'Step “{name}”: a 30 min timeout was set for the manual action.', manual: 'Step “{name}” is not supported by automation and was converted to a manual action.', chooseRange: 'Step “{name}”: choose one temperature from the range.', previousTemp: 'Step “{name}”: the previous step temperature {temp} °C is used.', phTimeout: 'Step “{name}”: a 120 min pH timeout was set.', phHold: 'Step “{name}”: the pH ≤ {value} condition is held for 30 s.', flocTimeout: 'Step “{name}”: the flocculation timeout was calculated from the expected time or set to 60 min.', coolingTimeout: 'Step “{name}”: a 60 min cooling timeout was set.', holdTimeout: 'Step “{name}”: a 60 min timeout margin was added to the hold.', heatTimeout: 'Step “{name}”: a 60 min timeout and 1 °C/min rate were set for heating.', aging: 'Aging stages are excluded from the Samovar program.', rowLimit: 'The program has more than {count} steps and cannot be applied.', fileRead: 'The file could not be read.',
       family: {acid_set: 'Acid-set', blue: 'Blue', brined: 'Brined', fresh: 'Fresh', hard: 'Hard', pasta_filata: 'Pasta filata', semi_hard: 'Semi-hard', soft_ripened: 'Soft-ripened', washed_rind: 'Washed-rind', whey: 'Whey'},
       style: {adygei: 'Adyghe', bleu_dauvergne: 'Bleu d\'Auvergne', brynza: 'Bryndza', feta_bulgarian: 'Bulgarian feta', belper_knolle: 'Belper Knolle', alpine: 'Alpine', asiago: 'Asiago', beaufort: 'Beaufort', burrata: 'Burrata', alpine_tomme: 'Alpine tomme', bel_paese: 'Bel Paese', tomme: 'Tomme', brie: 'Brie', brie_nuit: 'Brie nuit', appenzeller: 'Appenzeller', brick: 'Brick'},
-      country: {RU: 'Russia', IT: 'Italy', FR: 'France', CH: 'Switzerland', BG: 'Bulgaria', US: 'United States'}
+      species: {bos_taurus: 'Cow milk', capra_hircus: 'Goat milk', ovis_aries: 'Sheep milk', bubalus_bubalis: 'Buffalo milk', mixed: 'Mixed milk'},
+      country: {BE: 'Belgium', BG: 'Bulgaria', CA: 'Canada', CH: 'Switzerland', CY: 'Cyprus', DE: 'Germany', DK: 'Denmark', ES: 'Spain', FR: 'France', GB: 'United Kingdom', GE: 'Georgia', GR: 'Greece', IN: 'India', IT: 'Italy', LB: 'Lebanon', MX: 'Mexico', NL: 'Netherlands', NO: 'Norway', PT: 'Portugal', RO: 'Romania', RU: 'Russia', US: 'United States'}
     }
   };
 
@@ -105,7 +113,9 @@
   }
   function catalogLabel(group, value) {
     var key = group === 'style' ? String(value || '').split('.').pop() : String(value || '');
-    return text[language][group][key] || text.ru[group][key] || '';
+    var label = text[language][group][key] || text.ru[group][key];
+    if (label) return label;
+    return key ? key.replace(/_/g, ' ').replace(/(^|\s)\S/g, function (letter) { return letter.toUpperCase(); }) : '';
   }
   function localizePage() {
     document.documentElement.lang = language; document.title = t('title');
@@ -113,6 +123,8 @@
     var labels = {'.recipes-page h1': 'heading', '#catalog-title': 'catalog', '#preview-title': 'program', '[data-catalog="main"]': 'main', '[data-catalog="user"]': 'user', '[data-catalog="my"]': 'mine', '#recipeSearch button': 'find', 'label[for="recipeFile"]': 'open', '#recipePrev': 'previous', '#recipeNext': 'next', '#recipeName': 'none', '#convertRecipe': 'convert', '#applyRecipe': 'apply', 'a[href="/cheese.htm"]': 'editor'};
     Object.keys(labels).forEach(function (selector) { document.querySelector(selector).textContent = t(labels[selector]); });
     byId('recipeQuery').placeholder = byId('recipeQuery').setAttribute('aria-label', t('search')) || t('search');
+    var filters = {Family: ['familyFilter', 'allFamilies'], Style: ['styleFilter', 'allStyles'], Country: ['countryFilter', 'allCountries'], Species: ['speciesFilter', 'allSpecies'], Difficulty: ['difficultyFilter', 'allDifficulties']};
+    Object.keys(filters).forEach(function (name) { var select = byId('recipe' + name); select.setAttribute('aria-label', t(filters[name][0])); select.appendChild(new Option(t(filters[name][1]), '')); });
     document.querySelector('.recipes-tabs').setAttribute('aria-label', t('source'));
     byId('programPreview').setAttribute('aria-label', t('preview'));
   }
@@ -350,11 +362,27 @@
     if (state.catalog !== 'my') {
       url.searchParams.set('catalog', state.catalog);
       if (state.query) url.searchParams.set('q', state.query);
+      Object.keys(state.filters).forEach(function (key) { if (state.filters[key]) url.searchParams.set(key, state.filters[key]); });
     }
 	url.searchParams.set('page', state.page);
 	url.searchParams.set('perPage', state.perPage);
 	url.searchParams.set('lang', language);
     return url.toString();
+  }
+  async function loadFilters() {
+    try {
+      var options = await jsonRequest(new URL('recipes/filters', API_BASE).toString());
+      Object.keys(state.filters).forEach(function (key) {
+        var select = byId('recipe' + key.charAt(0).toUpperCase() + key.slice(1));
+        (Array.isArray(options[key]) ? options[key] : []).forEach(function (value) {
+          var label = key === 'difficulty' ? t('difficulty', {value: value}) : catalogLabel(key, value);
+          select.appendChild(new Option(label, value));
+        });
+      });
+    } catch (_) {}
+  }
+  function setPublicFiltersEnabled(enabled) {
+    Object.keys(state.filters).forEach(function (key) { byId('recipe' + key.charAt(0).toUpperCase() + key.slice(1)).disabled = !enabled; });
   }
   async function loadCatalog() {
     if (state.catalog === 'my' && !state.token) { status(t('noToken'), 'error'); renderList([]); return; }
@@ -459,11 +487,16 @@
   document.querySelectorAll('[data-catalog]').forEach(function (button) {
     button.addEventListener('click', function () {
       state.catalog = button.dataset.catalog; state.page = 1;
+      setPublicFiltersEnabled(state.catalog !== 'my');
       document.querySelectorAll('[data-catalog]').forEach(function (entry) { entry.setAttribute('aria-pressed', entry === button ? 'true' : 'false'); });
       loadCatalog();
     });
   });
-  byId('recipeSearch').addEventListener('submit', function (event) { event.preventDefault(); state.query = byId('recipeQuery').value.trim(); state.page = 1; loadCatalog(); });
+  byId('recipeSearch').addEventListener('submit', function (event) {
+    event.preventDefault(); state.query = byId('recipeQuery').value.trim();
+    Object.keys(state.filters).forEach(function (key) { state.filters[key] = byId('recipe' + key.charAt(0).toUpperCase() + key.slice(1)).value; });
+    state.page = 1; loadCatalog();
+  });
   byId('recipePrev').addEventListener('click', function () { if (state.page > 1) { state.page--; loadCatalog(); } });
   byId('recipeNext').addEventListener('click', function () { if (state.page * state.perPage < state.total) { state.page++; loadCatalog(); } });
   byId('convertRecipe').addEventListener('click', renderConversion);
@@ -472,6 +505,7 @@
 
   SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
   localizePage();
+  loadFilters();
   jsonRequest('/cheese-recipes-bootstrap', { cache: 'no-store' }).then(function (bootstrap) {
     state.token = typeof bootstrap.blynkToken === 'string' ? bootstrap.blynkToken : '';
     state.mode = Number(bootstrap.mode);
