@@ -20,10 +20,12 @@ SIGNATURES = {
     "ph_confirm": "inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached)",
     "ph_invalid": "inline bool cheese_ph_invalid_too_long(uint32_t nowMs, bool valid)",
     "median": "inline int cheese_median3(int a, int b, int c)",
+    "ph_median": "inline int cheese_ph_median()",
     "calibrate": "inline float cheese_calibrated_ph(int raw, float slope, float offset)",
     "calibration_valid": "inline bool cheese_ph_calibration_valid(float slope, float offset)",
     "read": "inline bool cheese_read_ph_raw(int& raw)",
     "sample": "inline void cheese_sample_ph(uint32_t nowMs)",
+    "reset": "inline void cheese_reset_stage_state()",
 }
 
 HARNESS = r'''
@@ -40,8 +42,8 @@ static void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) {}
 #define CHEESE_TEMPERATURE_CONFIRM_MS 10000UL
 #define CHEESE_PH_CONFIRM_MS 30000UL
 #define CHEESE_PH_INVALID_MS 10000UL
-#define CHEESE_PH_SAMPLE_INTERVAL_MS 1000UL
 #define LUA_PIN 0
+@CONSTANTS@
 
 typedef char ProgramType;
 enum CheeseStageKind : uint8_t {
@@ -66,9 +68,33 @@ static bool cheesePhSampled = false;
 static uint32_t cheesePhSampleMs = 0;
 static bool cheesePhSampleAttempted = false;
 static uint32_t cheesePhLastAttemptMs = 0;
+static bool cheesePairErrorPending = false;
+static bool cheeseFinishPending = false;
+static void cheese_reset_lua_stage() {}
 static int analogValue = 0;
+static int adsValue = 0;
 static int analogReads = 0;
 int analogRead(int) { ++analogReads; return analogValue; }
+@FILTER_STATE@
+
+#ifdef USE_ADS1115
+static bool adsPrepareResult = true;
+static bool adsReadResult = true;
+static int adsPrepareCalls = 0;
+static int adsReadCalls = 0;
+inline bool cheese_ph_prepare() { ++adsPrepareCalls; return adsPrepareResult; }
+inline bool cheese_ads1115_read_raw(int& raw) {
+  ++adsReadCalls;
+  if (!adsReadResult) return false;
+  raw = adsValue;
+  return true;
+}
+#endif
+
+static void set_raw(int raw) {
+  analogValue = raw;
+  adsValue = raw;
+}
 
 @KIND@
 @ELAPSED@
@@ -77,10 +103,12 @@ int analogRead(int) { ++analogReads; return analogValue; }
 @PH_CONFIRM@
 @PH_INVALID@
 @MEDIAN@
+@PH_MEDIAN@
 @CALIBRATE@
 @CALIBRATION_VALID@
 @READ@
 @SAMPLE@
+@RESET@
 
 static int failures = 0;
 static void check(bool value, const char* text) {
@@ -149,20 +177,160 @@ int main() {
             !cheese_ph_calibration_valid(NAN, 7.0f) &&
             !cheese_ph_calibration_valid(0.003f, INFINITY),
         "zero or non-finite pH calibration must be invalid");
-  cheesePhSampled = false; analogReads = 0; analogValue = 1000;
+  cheese_reset_stage_state();
+  SamSetup.CheesePhSlope = 0.01f; SamSetup.CheesePhOffset = 0.0f;
+#ifdef USE_ADS1115
+  adsPrepareResult = true; adsReadResult = true;
+#endif
+  set_raw(100);
   cheese_sample_ph(0);
-  check(analogReads == 3 && cheesePhRaw == 1000 && cheesePhValue == 1.0f,
-        "pH sample at millis zero was not taken");
-  analogValue = 900; cheese_sample_ph(500);
-  check(analogReads == 3, "pH interval sampled too early after millis zero");
+  check(cheesePhRaw == 100 && !cheesePhValid && cheesePhFilter.count == 1,
+        "pH warmup accepted the first sample");
+  check(cheesePhValue == 0.0f, "pH value changed before filter warmup");
+  const int warmup[] = {200, 300, 400, 500};
+  for (int i = 0; i < 4; ++i) {
+    set_raw(warmup[i]);
+    cheese_sample_ph(static_cast<uint32_t>(i + 1) * 1000U);
+    check(cheesePhValid == (i == 3), "pH became ready before five samples");
+  }
+  check(cheesePhValid && cheesePhValue == 3.0f && cheese_ph_median() == 300,
+        "five-sample pH median did not become ready");
+  check(cheesePhRaw == 500, "raw pH did not remain the newest sample");
+
+  cheese_reset_stage_state();
+  const int outliers[] = {500, 900, 510, 520, 530};
+  for (int i = 0; i < 5; ++i) {
+    set_raw(outliers[i]);
+    cheese_sample_ph(static_cast<uint32_t>(i) * 1000U);
+  }
+  check(cheesePhValid && cheese_ph_median() == 520 && cheesePhValue == 5.2f,
+        "pH median did not reject an isolated outlier");
+  cheese_reset_stage_state();
+  const int twoOutliers[] = {500, 900, 510, 800, 520};
+  for (int i = 0; i < 5; ++i) {
+    set_raw(twoOutliers[i]);
+    cheese_sample_ph(static_cast<uint32_t>(i) * 1000U);
+  }
+  check(cheesePhValid && cheese_ph_median() == 520 && cheesePhValue == 5.2f,
+        "pH median did not reject two outliers");
+  cheese_reset_stage_state();
+  const int rollover[] = {540, 550, 560, 570, 580};
+  for (int i = 0; i < 5; ++i) {
+    set_raw(rollover[i]);
+    cheese_sample_ph(5000U + static_cast<uint32_t>(i) * 1000U);
+  }
+  check(cheese_ph_median() == 560 && cheesePhValue == 5.6f,
+        "pH ring buffer did not roll over");
+  const int stepped[] = {800, 800, 800};
+  for (int i = 0; i < 3; ++i) {
+    const int raw = stepped[i];
+    set_raw(raw);
+    cheese_sample_ph(10000U + static_cast<uint32_t>(i) * 1000U);
+  }
+  check(cheese_ph_median() == 800 && cheesePhValue == 8.0f,
+        "pH step did not reach the median after three new samples");
+
+  cheese_reset_stage_state();
+  SamSetup.CheesePhSlope = -0.01f; SamSetup.CheesePhOffset = 10.0f;
+  const int negative[] = {500, 510, 520, 530, 540};
+  for (int i = 0; i < 5; ++i) {
+    set_raw(negative[i]);
+    cheese_sample_ph(static_cast<uint32_t>(i) * 1000U);
+  }
+  check(cheesePhValid && cheesePhValue == 4.8f,
+        "negative pH calibration slope was not filtered");
+
+  cheese_reset_stage_state();
+  SamSetup.CheesePhSlope = 0.01f; SamSetup.CheesePhOffset = 0.0f;
+  analogReads = 0;
+#ifdef USE_ADS1115
+  adsReadCalls = 0;
+#endif
+  set_raw(500);
+  cheese_sample_ph(0); cheese_sample_ph(500);
+  check(cheesePhRaw == 500, "pH sampled before one second elapsed");
+#ifdef USE_ADS1115
+  check(adsReadCalls == 1, "ADS1115 pH interval sampled too early");
+#else
+  check(analogReads == 3, "analog pH interval sampled too early");
+#endif
+  set_raw(510);
   cheese_sample_ph(1000);
-  check(analogReads == 6 && cheesePhRaw == 900,
-        "pH interval did not resume after millis zero");
-  cheesePhSampled = false; analogReads = 0; analogValue = 800;
-  cheese_sample_ph(0xfffffff0U); cheese_sample_ph(500);
-  check(analogReads == 3, "pH interval broke before millis wrap elapsed");
-  cheese_sample_ph(1000);
-  check(analogReads == 6, "pH interval did not resume across millis wrap");
+  check(cheesePhRaw == 510, "pH did not sample at one-second interval");
+#ifdef USE_ADS1115
+  check(adsReadCalls == 2, "ADS1115 pH interval did not resume");
+#else
+  check(analogReads == 6, "analog pH interval did not resume");
+#endif
+  cheese_reset_stage_state();
+  analogReads = 0;
+#ifdef USE_ADS1115
+  adsReadCalls = 0;
+#endif
+  set_raw(500);
+  cheese_sample_ph(0xfffffff0U); cheese_sample_ph(0x000001d8U);
+  check(cheesePhRaw == 500, "pH interval broke across millis wrap");
+#ifdef USE_ADS1115
+  check(adsReadCalls == 1, "ADS1115 sampled too early across millis wrap");
+#else
+  check(analogReads == 3, "analog pH sampled too early across millis wrap");
+#endif
+  cheese_sample_ph(0x000003e8U);
+  check(cheesePhRaw == 500, "pH sampled too early across millis wrap");
+#ifdef USE_ADS1115
+  check(adsReadCalls == 2, "ADS1115 did not sample after millis wrap interval");
+#else
+  check(analogReads == 6, "analog pH did not sample after millis wrap interval");
+#endif
+
+  cheese_reset_stage_state();
+  SamSetup.CheesePhSlope = 0.01f; SamSetup.CheesePhOffset = 0.0f;
+  set_raw(500);
+  for (int i = 0; i < 5; ++i) cheese_sample_ph(static_cast<uint32_t>(i) * 1000U);
+  SamSetup.CheesePhSlope = 0.02f;
+  cheese_sample_ph(5000);
+  check(!cheesePhValid && cheesePhRaw == 500,
+        "slope change did not restart pH warmup");
+  for (int i = 0; i < 4; ++i) cheese_sample_ph(6000U + static_cast<uint32_t>(i) * 1000U);
+  SamSetup.CheesePhOffset = 1.0f;
+  cheese_sample_ph(10000);
+  check(!cheesePhValid, "offset change did not restart pH warmup");
+  for (int i = 0; i < 4; ++i) cheese_sample_ph(11000U + static_cast<uint32_t>(i) * 1000U);
+  cheese_sample_ph(20001);
+  check(!cheesePhValid, "stale pH sample did not restart warmup");
+
+  SamSetup.CheesePhSlope = 0.0f;
+  cheese_sample_ph(21001);
+  check(!cheesePhValid && cheesePhFilter.count == 0,
+        "invalid pH calibration was not rejected");
+  SamSetup.CheesePhSlope = 0.01f; SamSetup.CheesePhOffset = 0.0f;
+  set_raw(500);
+  for (int i = 0; i < 5; ++i) cheese_sample_ph(22001U + static_cast<uint32_t>(i) * 1000U);
+  set_raw(2000);
+  cheese_sample_ph(27001);
+  check(!cheesePhValid && cheesePhFilter.count == 0,
+        "out-of-range pH was not rejected");
+#ifdef USE_ADS1115
+  adsReadResult = true; set_raw(500);
+  for (int i = 0; i < 5; ++i) cheese_sample_ph(28000U + static_cast<uint32_t>(i) * 1000U);
+  adsReadResult = false;
+  cheese_sample_ph(33000);
+  check(!cheesePhValid && cheesePhFilter.count == 0 && adsReadCalls > 0,
+        "ADS1115 read failure did not reset pH");
+  adsReadResult = true;
+  for (int i = 0; i < 5; ++i) {
+    cheese_sample_ph(34000U + static_cast<uint32_t>(i) * 1000U);
+    check(cheesePhValid == (i == 4),
+          "pH filter did not require five samples after ADS1115 recovery");
+  }
+#endif
+  SamSetup.CheesePhSlope = 0.01f; SamSetup.CheesePhOffset = 0.0f;
+  set_raw(500);
+  for (int i = 0; i < 5; ++i) cheese_sample_ph(40000U + static_cast<uint32_t>(i) * 1000U);
+  check(cheesePhValid, "pH setup for stage reset did not become ready");
+  cheese_reset_stage_state();
+  check(cheesePhFilter.count == 0 && !cheesePhValid,
+        "stage reset did not reset pH filter");
   check(CHEESE_PH_CONFIRM_MS == 30000UL, "pH confirmation is not 30 seconds");
   check(CHEESE_PH_INVALID_MS == 10000UL, "pH invalid timeout is not 10 seconds");
   return failures == 0 ? 0 : 1;
@@ -170,7 +338,9 @@ int main() {
 '''
 
 
-def compile_and_run(harness: str, label: str, expected_success: bool) -> bool:
+def compile_and_run(
+    harness: str, label: str, expected_success: bool, expected_fail_text: str = ""
+) -> bool:
     with tempfile.TemporaryDirectory(prefix="samovar-cheese-runtime-") as tmp:
         source = Path(tmp) / "runtime.cpp"
         binary = Path(tmp) / "runtime"
@@ -183,9 +353,20 @@ def compile_and_run(harness: str, label: str, expected_success: bool) -> bool:
             print(f"FAIL: {label} did not compile\n{built.stderr}", file=sys.stderr)
             return False
         ran = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
-        if (ran.returncode == 0) != expected_success:
+        if expected_success and ran.returncode != 0:
             print(f"FAIL: {label}\n{ran.stdout}{ran.stderr}", file=sys.stderr)
             return False
+        if not expected_success:
+            if ran.returncode == 0:
+                print(f"FAIL: {label} survived", file=sys.stderr)
+                return False
+            if expected_fail_text not in ran.stderr:
+                print(
+                    f"FAIL: {label} failed without expected assertion {expected_fail_text!r}\n"
+                    f"{ran.stdout}{ran.stderr}", file=sys.stderr,
+                )
+                return False
+            print(f"CONFIRMED FAIL: {label}: {expected_fail_text}")
         return True
 
 
@@ -202,6 +383,20 @@ def main() -> int:
         print("\n".join(f"FAIL: {error}" for error in errors), file=sys.stderr)
         return 1
 
+    constant_names = (
+        "CHEESE_PH_SAMPLE_INTERVAL_MS", "CHEESE_PH_STALE_MS",
+    )
+    constants = "\n".join(
+        line for line in source.splitlines()
+        if any(line.startswith(f"#define {name} ") for name in constant_names)
+    )
+    filter_start = source.find("static struct {\n  int samples[5];")
+    filter_end = source.find(";", source.find("} cheesePhFilter", filter_start))
+    if filter_start < 0 or filter_end < 0:
+        print("FAIL: pH filter state declaration not found", file=sys.stderr)
+        return 1
+    filter_state = source[filter_start:filter_end + 1]
+
     definitions = {
         "kind": "inline CheeseStageKind cheese_stage_kind(ProgramType type) {\n" + bodies["kind"] + "\n}",
         "elapsed": "inline bool cheese_time_elapsed(uint32_t nowMs, uint32_t startedMs, float minutes) {\n" + bodies["elapsed"] + "\n}",
@@ -210,33 +405,54 @@ def main() -> int:
         "ph_confirm": "inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached) {\n" + bodies["ph_confirm"] + "\n}",
         "ph_invalid": "inline bool cheese_ph_invalid_too_long(uint32_t nowMs, bool valid) {\n" + bodies["ph_invalid"] + "\n}",
         "median": "inline int cheese_median3(int a, int b, int c) {\n" + bodies["median"] + "\n}",
+        "ph_median": "inline int cheese_ph_median() {\n" + bodies["ph_median"] + "\n}",
         "calibrate": "inline float cheese_calibrated_ph(int raw, float slope, float offset) {\n" + bodies["calibrate"] + "\n}",
         "calibration_valid": "inline bool cheese_ph_calibration_valid(float slope, float offset) {\n" + bodies["calibration_valid"] + "\n}",
         "read": "inline bool cheese_read_ph_raw(int& raw) {\n" + bodies["read"] + "\n}",
         "sample": "inline void cheese_sample_ph(uint32_t nowMs) {\n" + bodies["sample"] + "\n}",
+        "reset": "inline void cheese_reset_stage_state() {\n" + bodies["reset"] + "\n}",
     }
     harness = HARNESS
+    harness = harness.replace("@CONSTANTS@", constants)
+    harness = harness.replace("@FILTER_STATE@", filter_state)
     for name, definition in definitions.items():
         harness = harness.replace(f"@{name.upper()}@", definition)
-    if not compile_and_run(harness, "universal Cheese decisions", True):
-        return 1
-
     mutations = [
-        ("CHEESE_TEMPERATURE_CONFIRM_MS 10000UL", "CHEESE_TEMPERATURE_CONFIRM_MS 9000UL", "10-second temperature confirmation"),
-        ("CHEESE_TEMPERATURE_DELTA 0.3f", "CHEESE_TEMPERATURE_DELTA 0.2f", "temperature band"),
-        ("CHEESE_PH_CONFIRM_MS 30000UL", "CHEESE_PH_CONFIRM_MS 29000UL", "30-second pH confirmation"),
-        ("CHEESE_PH_INVALID_MS 10000UL", "CHEESE_PH_INVALID_MS 9000UL", "10-second invalid pH"),
-        ("return b;", "return a;", "median pH"),
-        ("cheesePhSampleAttempted &&", "false &&", "pH sample interval"),
-        ("slope != 0.0f", "true", "zero pH slope"),
+        ("CHEESE_TEMPERATURE_CONFIRM_MS 10000UL", "CHEESE_TEMPERATURE_CONFIRM_MS 9000UL", "10-second temperature confirmation", "9.5 seconds confirmed early"),
+        ("CHEESE_TEMPERATURE_DELTA 0.3f", "CHEESE_TEMPERATURE_DELTA 0.2f", "temperature band", "plus delta was excluded"),
+        ("CHEESE_PH_CONFIRM_MS 30000UL", "CHEESE_PH_CONFIRM_MS 29000UL", "30-second pH confirmation", "29.5 pH seconds confirmed early"),
+        ("CHEESE_PH_INVALID_MS 10000UL", "CHEESE_PH_INVALID_MS 9000UL", "10-second invalid pH", "9.5 invalid pH seconds failed early"),
+        ("return b;", "return a;", "median pH", "median did not select middle value"),
+        ("cheesePhSampleAttempted &&", "false &&", "pH sample interval", "pH interval sampled too early"),
+        ("cheesePhFilter.slope != SamSetup.CheesePhSlope", "false", "slope pH reset", "slope change did not restart pH warmup"),
+        ("slope != 0.0f", "true", "zero pH slope", "zero or non-finite pH calibration must be invalid"),
+        ("return sorted[2];", "return sorted[1];", "five-sample median", "five-sample pH median did not become ready"),
+        ("cheesePhFilter.count == 5", "cheesePhFilter.count == 4", "five-sample readiness", "pH became ready before five samples"),
+        ("cheese_ph_median(), SamSetup.CheesePhSlope", "cheesePhRaw, SamSetup.CheesePhSlope", "filtered pH value", "pH median did not reject an isolated outlier"),
+        ("nowMs - cheesePhSampleMs > CHEESE_PH_STALE_MS", "false", "stale pH reset", "stale pH sample did not restart warmup"),
+        ("cheesePhFilter.offset != SamSetup.CheesePhOffset", "false", "offset pH reset", "offset change did not restart pH warmup"),
+        ("if (!cheesePhValid) {\n    cheesePhFilter = {};", "if (!cheesePhValid) {", "invalid pH reset", "out-of-range pH was not rejected"),
+        ("cheesePhLastAttemptMs = 0;\n  cheesePhFilter = {};", "cheesePhLastAttemptMs = 0;", "stage pH reset", "stage reset did not reset pH filter"),
+        ("cheesePhFilter = {};\n    return;", "return;", "read failure pH reset", "ADS1115 read failure did not reset pH"),
     ]
-    for old, new, label in mutations:
-        mutant = harness.replace(old, new, 1)
-        if mutant == harness:
-            print(f"FAIL: mutation anchor missing: {label}", file=sys.stderr)
+    for use_ads in (False, True):
+        mode_harness = harness
+        if use_ads:
+            mode_harness = "#define USE_ADS1115 0x48\n" + mode_harness
+        if not compile_and_run(mode_harness, "ADS1115" if use_ads else "analog pH", True):
             return 1
-        if not compile_and_run(mutant, f"mutation survived: {label}", False):
-            return 1
+        for old, new, label, expected_fail_text in mutations:
+            if label == "read failure pH reset" and not use_ads:
+                continue
+            mutant = mode_harness.replace(old, new, 1)
+            if mutant == mode_harness:
+                print(f"FAIL: mutation anchor missing: {label}", file=sys.stderr)
+                return 1
+            if not compile_and_run(
+                mutant, f"mutation survived ({'ADS1115' if use_ads else 'analog'}): {label}",
+                False, expected_fail_text,
+            ):
+                return 1
 
     print("OK: universal Cheese runtime decisions and mutations")
     return 0

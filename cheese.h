@@ -90,6 +90,13 @@ static bool cheesePhSampled = false;
 static uint32_t cheesePhSampleMs = 0;
 static bool cheesePhSampleAttempted = false;
 static uint32_t cheesePhLastAttemptMs = 0;
+static struct {
+  int samples[5];
+  uint8_t count;
+  uint8_t next;
+  float slope;
+  float offset;
+} cheesePhFilter = {};
 #ifdef USE_ADS1115
 static bool cheesePhAds1115Ready = false;
 #endif
@@ -250,15 +257,36 @@ inline bool cheese_read_ph_raw(int& raw) {
 #endif
 }
 
+inline int cheese_ph_median() {
+  int sorted[5];
+  for (uint8_t i = 0; i < 5; ++i) {
+    sorted[i] = cheesePhFilter.samples[i];
+    for (uint8_t j = i; j > 0 && sorted[j] < sorted[j - 1]; --j) {
+      const int value = sorted[j];
+      sorted[j] = sorted[j - 1];
+      sorted[j - 1] = value;
+    }
+  }
+  return sorted[2];
+}
+
 inline void cheese_sample_ph(uint32_t nowMs) {
   if (cheesePhSampleAttempted &&
       nowMs - cheesePhLastAttemptMs < CHEESE_PH_SAMPLE_INTERVAL_MS) return;
   cheesePhSampleAttempted = true;
   cheesePhLastAttemptMs = nowMs;
+  if (!cheesePhSampled || nowMs - cheesePhSampleMs > CHEESE_PH_STALE_MS ||
+      cheesePhFilter.slope != SamSetup.CheesePhSlope ||
+      cheesePhFilter.offset != SamSetup.CheesePhOffset) {
+    cheesePhFilter = {};
+  }
+  cheesePhFilter.slope = SamSetup.CheesePhSlope;
+  cheesePhFilter.offset = SamSetup.CheesePhOffset;
   int raw = 0;
   if (!cheese_read_ph_raw(raw)) {
     cheesePhSampled = false;
     cheesePhValid = false;
+    cheesePhFilter = {};
     return;
   }
   cheesePhRaw = raw;
@@ -269,7 +297,18 @@ inline void cheese_sample_ph(uint32_t nowMs) {
   cheesePhValid = cheese_ph_calibration_valid(
       SamSetup.CheesePhSlope, SamSetup.CheesePhOffset) &&
       isfinite(measured) && measured >= 0.0f && measured <= 14.0f;
-  if (cheesePhValid) cheesePhValue = measured;
+  if (!cheesePhValid) {
+    cheesePhFilter = {};
+    return;
+  }
+  cheesePhFilter.samples[cheesePhFilter.next] = raw;
+  cheesePhFilter.next = (cheesePhFilter.next + 1) % 5;
+  if (cheesePhFilter.count < 5) ++cheesePhFilter.count;
+  cheesePhValid = cheesePhFilter.count == 5;
+  if (cheesePhValid) {
+    cheesePhValue = cheese_calibrated_ph(
+        cheese_ph_median(), SamSetup.CheesePhSlope, SamSetup.CheesePhOffset);
+  }
 }
 
 inline void cheese_ph_tick() {
@@ -429,6 +468,7 @@ inline void cheese_reset_stage_state() {
   cheesePhSampleMs = 0;
   cheesePhSampleAttempted = false;
   cheesePhLastAttemptMs = 0;
+  cheesePhFilter = {};
   cheeseFinishPending = false;
   cheese_reset_lua_stage();
 #if USE_ADAPTIVE_PID
