@@ -78,7 +78,7 @@
   var API_BASE = 'https://www.samovar-tool.ru/cheesexml/v1/';
   var PROGRAM_MAX = 20;
   var state = { catalog: 'main', page: 1, perPage: 10, total: 0, query: '', recipe: null, conversion: null, token: '', mode: null, applying: false };
-  var language = /(^|-)en(?:-|$)/i.test(document.documentElement.lang) || /(^|-)en(?:-|$)/i.test(navigator.language || '') ? 'en' : 'ru';
+  var language = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ru';
   var text = {
     ru: {
       title: 'Самовар — рецепты сыра', heading: 'Рецепты сыра', intro: 'Выберите рецепт с samovar-tool.ru или откройте локальный файл cheesexml.xml. Файл и токен обрабатываются только в памяти браузера.',
@@ -351,8 +351,9 @@
       url.searchParams.set('catalog', state.catalog);
       if (state.query) url.searchParams.set('q', state.query);
     }
-    url.searchParams.set('page', state.page);
-    url.searchParams.set('perPage', state.perPage);
+	url.searchParams.set('page', state.page);
+	url.searchParams.set('perPage', state.perPage);
+	url.searchParams.set('lang', language);
     return url.toString();
   }
   async function loadCatalog() {
@@ -391,7 +392,8 @@
     try {
       var isMine = state.catalog === 'my';
       var path = isMine ? 'me/recipes/' + encodeURIComponent(item.id) : 'recipes/' + encodeURIComponent(item.slug);
-      var payload = await jsonRequest(new URL(path, API_BASE).toString(), isMine ? { headers: authHeaders() } : {});
+		var url = new URL(path, API_BASE); url.searchParams.set('lang', language);
+		var payload = await jsonRequest(url.toString(), isMine ? { headers: authHeaders() } : {});
       Array.prototype.forEach.call(byId('recipeList').querySelectorAll('button'), function (entry) { entry.removeAttribute('aria-current'); });
       button.setAttribute('aria-current', 'true');
       setRecipe(normalizeJson(payload), isMine ? t('myRecipe') : t('catalogSource', {catalog: t(state.catalog)}));

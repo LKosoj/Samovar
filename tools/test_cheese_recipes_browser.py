@@ -23,7 +23,7 @@ BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__, recipe = __RECIPE__, xmlPath = __XML_PATH__, badXmlPath = __BAD_XML_PATH__, token = __TOKEN__;
   const apiRequests = [], programPosts = [], commands = [], errors = [];
   const expect = (condition, message) => { if (!condition) throw new Error(message); };
-  await page.addInitScript(() => Object.defineProperty(navigator, 'language', {configurable:true, get:() => new URL(location.href).searchParams.get('lang') === 'en' ? 'en-US' : 'ru-RU'}));
+  await page.addInitScript(() => Object.defineProperty(navigator, 'language', {configurable:true, get:() => 'en-US'}));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/cheese-recipes-bootstrap', route => route.fulfill({
@@ -68,6 +68,7 @@ BROWSER_TEST = r'''async page => {
   expect(await page.locator('html').getAttribute('data-theme') === null, 'automatic light theme must remain inherited from the system');
   expect((await page.locator('#themeToggle').getAttribute('aria-pressed')) === 'false', 'automatic light theme was not reflected by the standard toggle');
   expect(apiRequests[0].url.includes('/recipes?catalog=main&page=1&perPage=10'), 'main catalogue URL differs from OpenAPI: ' + apiRequests[0].url);
+  expect(apiRequests[0].url.includes('lang=ru'), 'Russian is not the default language: ' + apiRequests[0].url);
   expect(!apiRequests[0].authorization, 'public catalogue received Authorization');
   expect(await page.locator('#recipeList small').textContent() === 'Кислотный · Адыгейский · Россия', 'raw catalogue metadata was not localized to Russian');
 
@@ -119,7 +120,8 @@ BROWSER_TEST = r'''async page => {
   expect(programPosts.length === 1, 'invalid XML triggered another /program POST');
   await page.goto(baseUrl + '/cheese-recipes.htm?lang=en', {waitUntil:'load'});
   await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
-  expect(await page.locator('html').getAttribute('lang') === 'en', 'English browser language did not select English UI');
+  expect(await page.locator('html').getAttribute('lang') === 'en', 'explicit English query did not select English UI');
+  expect(apiRequests.at(-1).url.includes('lang=en'), 'explicit English language was not sent to the API');
   expect(await page.locator('.recipes-page h1').textContent() === 'Cheese recipes', 'English page heading was not localized');
   expect(await page.locator('#themeToggle').count() === 1, 'standard theme toggle is missing');
   const englishMeta = await page.locator('#recipeList small').textContent();
