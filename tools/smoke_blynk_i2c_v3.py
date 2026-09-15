@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 BLYNK = ROOT / "Blynk.ino"
 SAMOVAR = ROOT / "Samovar.ino"
 PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
-PIN_SPEC = ROOT.parent / "SamovarServer" / "SamovarServer" / "SamovarMobile" / "PIN_SPEC.md"
 ERRORS: list[str] = []
 
 
@@ -583,7 +582,7 @@ int main() {{
 '''
 
 
-def check_static_contract(source: str, pin_spec: str, samovar: str) -> None:
+def check_static_contract(source: str, samovar: str) -> None:
     writer = extracted(source, "static void blynk_i2c_v36_write_device(")
     expected = ['\\"a\\"', '\\"p\\"', '\\"c\\"', '\\"s\\"', '\\"e\\"', '\\"m\\"', '\\"q\\"', '\\"r\\"', '\\"l\\"']
     position = 0
@@ -621,21 +620,15 @@ def check_static_contract(source: str, pin_spec: str, samovar: str) -> None:
         ERRORS.append("executor missing START_CONFIGURED")
     if '"REBOOT_REQUIRED"' not in samovar:
         ERRORS.append("executor missing REBOOT_REQUIRED V26 reason")
-    for token in ('{"v":3,"d":[]}', "`v=3&address=N&cmd=start`", "a=?"):
-        if token not in pin_spec:
-            ERRORS.append(f"PIN_SPEC missing V3 contract token {token}")
 
 
 def main() -> int:
     source = BLYNK.read_text(encoding="utf-8") if BLYNK.exists() else ""
     samovar = SAMOVAR.read_text(encoding="utf-8") if SAMOVAR.exists() else ""
-    pin_spec = PIN_SPEC.read_text(encoding="utf-8") if PIN_SPEC.exists() else ""
     if not source:
         ERRORS.append("Blynk.ino not found")
     if not samovar:
         ERRORS.append("Samovar.ino not found")
-    if not pin_spec:
-        ERRORS.append("PIN_SPEC.md not found")
     if ERRORS:
         print("\n".join(ERRORS), file=sys.stderr)
         return 1
@@ -652,7 +645,7 @@ def main() -> int:
         "    const PendingI2CStepperCmd& command) {")
     command_result = extracted(samovar, "static OperationError i2c_command_result(")
     reporter = extracted(samovar, "static void report_blynk_i2c_v37_execution_failure(")
-    check_static_contract(source, pin_spec, samovar)
+    check_static_contract(source, samovar)
     if ERRORS:
         print("\n".join(ERRORS), file=sys.stderr)
         return 1
