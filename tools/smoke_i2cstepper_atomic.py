@@ -31,6 +31,7 @@ HARNESS = r'''
 struct I2CStepperDevice { bool present; uint8_t address; uint32_t lastHeartbeatMs; };
 I2CStepperDevice i2cSteppers[10] = {};
 uint32_t i2cStepperLastScanMs = 0;
+volatile bool i2cStepperScanActive = true;
 uint8_t i2cStepperSessionMixerAddress = 0;
 uint8_t i2cStepperSessionPumpAddress = 0;
 bool PowerOn = true;

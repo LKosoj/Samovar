@@ -45,6 +45,7 @@ I2CStepperDevice i2cSteppers[I2CSTEPPER_DEVICE_COUNT] = {
 volatile uint32_t i2c_config_in_flight = 0;
 uint8_t i2cStepperScanAddress = I2CSTEPPER_V3_ADDRESS_MIN;
 uint32_t i2cStepperLastScanMs = 0;
+volatile bool i2cStepperScanActive = true;
 uint8_t i2cStepperSessionMixerAddress = 0;
 uint8_t i2cStepperSessionPumpAddress = 0;
 
@@ -275,11 +276,21 @@ inline bool i2c_stepper_probe(I2CStepperDevice& device) {
   return true;
 }
 
+inline void i2c_stepper_scan_begin() {
+  i2cStepperScanAddress = I2CSTEPPER_V3_ADDRESS_MIN;
+  i2cStepperLastScanMs = 0;
+  i2cStepperScanActive = true;
+}
+
 inline void i2c_stepper_scan_step() {
+  if (!i2cStepperScanActive) return;
   I2CStepperDevice* device = i2c_stepper_device(i2cStepperScanAddress);
   if (device) i2c_stepper_probe(*device);
-  i2cStepperScanAddress = i2cStepperScanAddress == I2CSTEPPER_V3_ADDRESS_MAX
-      ? I2CSTEPPER_V3_ADDRESS_MIN : i2cStepperScanAddress + 1;
+  if (i2cStepperScanAddress == I2CSTEPPER_V3_ADDRESS_MAX) {
+    i2cStepperScanActive = false;
+  } else {
+    i2cStepperScanAddress++;
+  }
 }
 
 inline uint8_t i2c_stepper_present_count() {
@@ -433,7 +444,7 @@ inline bool i2c_stepper_stop(I2CStepperDevice& device) {
 
 inline void i2c_stepper_tick() {
   const uint32_t now = millis();
-  if (now - i2cStepperLastScanMs >= I2CSTEPPER_SCAN_MS) {
+  if (i2cStepperScanActive && now - i2cStepperLastScanMs >= I2CSTEPPER_SCAN_MS) {
     i2cStepperLastScanMs = now;
     i2c_stepper_scan_step();
   }

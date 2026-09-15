@@ -302,8 +302,11 @@ static int writeConfigCalls = 0;
 static int confirmCalls = 0;
 static int saveCalls = 0;
 static int finiteStartCalls = 0;
+static int scanBeginCalls = 0;
 static uint8_t writtenRelayMask = 0;
 static std::vector<uint8_t> sentCommands;
+
+static void i2c_stepper_scan_begin() {{ scanBeginCalls++; }}
 
 static bool i2c_stepper_read_config(I2CStepperDevice& device) {{
   readConfigCalls++;
@@ -380,6 +383,7 @@ static void reset() {{
   writeConfigSucceeds = true;
   sendSucceeds = true; sendError = I2CSTEPPER_V3_ERR_NONE;
   readConfigCalls = writeConfigCalls = confirmCalls = saveCalls = finiteStartCalls = 0;
+  scanBeginCalls = 0;
   writtenRelayMask = 0; sentCommands.clear(); lastMessage.clear();
 }}
 static PendingI2CStepperCmd command(const char* text) {{
@@ -389,6 +393,14 @@ static PendingI2CStepperCmd command(const char* text) {{
   return value;
 }}
 int main() {{
+  reset();
+  PendingI2CStepperCmd scan = command("scan");
+  devices[1].present = false;
+  check(execute_pending_i2c_stepper(scan) == OPERATION_ERROR_NONE,
+        "manual scan must start without a present device");
+  check(scanBeginCalls == 1 && sentCommands.empty() && readConfigCalls == 0,
+        "manual scan must only restart address discovery");
+
   reset();
   PendingI2CStepperCmd start = command("blynk_start");
   check(execute_pending_i2c_stepper(start) == OPERATION_ERROR_NONE, "configured start must succeed");

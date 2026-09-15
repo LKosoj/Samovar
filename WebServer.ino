@@ -272,8 +272,10 @@ static OperationError queue_pending_i2cstepper(
   PendingCommandLockGuard guard;
   if (!guard) return OPERATION_ERROR_LOCK_BUSY;
   I2CStepperDevice* device = i2c_stepper_device(command.address);
+  const bool scanCommand = strcmp(command.cmd, "scan") == 0;
   if (mode_switch_in_progress() || pending_i2cstepper_flag ||
-      !device || !device->present || i2c_stepper_config_busy(*device)) {
+      !device || (!scanCommand &&
+          (!device->present || i2c_stepper_config_busy(*device)))) {
     return !device ? OPERATION_ERROR_INTERNAL : OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
@@ -587,7 +589,9 @@ void write_i2c_stepper_json(Print& out, const I2CStepperDevice& dev) {
 void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev) {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   response->addHeader("Cache-Control", "no-store");
-  response->print("{\"selected\":");
+  response->print("{\"scanning\":");
+  response->print(i2cStepperScanActive ? 1 : 0);
+  response->print(",\"selected\":");
   write_i2c_stepper_json(*response, dev);
   response->print(",\"devices\":[");
   for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
@@ -639,7 +643,8 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
   command.toLowerCase();
   if (command != "status" && command != "apply" && command != "save" &&
       command != "start" && command != "stop" && command != "calstart" &&
-      command != "calfinish" && command != "relay" && command != "lease") {
+      command != "calfinish" && command != "relay" && command != "lease" &&
+      command != "scan") {
     send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
     return;
   }
@@ -665,7 +670,7 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     send_i2c_stepper_json(request, *dev);
     return;
   }
-  if (!dev->present) {
+  if (!dev->present && command != "scan") {
     send_no_store_response(
         request, 404, "application/json",
         build_error_envelope("unavailable", nullptr, "I2C device not available"));
@@ -676,30 +681,36 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     send_no_store_response(request, 204, "text/plain", "");
     return;
   }
+  if (command == "scan" && request->params() != addressCount + commandCount) {
+    send_i2c_numeric_error(request, "request", NUMERIC_PARSE_NOT_ALLOWED);
+    return;
+  }
 
   // Параметры уже проверены на имя/дубли/тип выше: копия без файлов и POST-полей.
-  I2CStepperParams params;
-  for (size_t index = 0; index < request->params(); index++) {
-    const AsyncWebParameter *param = request->getParam(index);
-    params.add(param->name(), param->value());
-  }
   I2CStepperV3Config config{};
   I2CStepperV3Motion motion{};
   uint8_t relay = 0;
   bool relayState = false;
-  const char *errorField = "request";
-  NumericParseResult result = parse_i2c_stepper_patch(
-      &params, command, *dev, config, motion, relay, relayState, errorField);
-  if (!result.ok()) {
-    send_i2c_numeric_error(request, errorField, result.error);
-    return;
-  }
-  I2CStepperDevice staged = *dev;
-  staged.config = config;
-  staged.motion = motion;
-  if (!i2c_stepper_command_supported(staged, command)) {
-    send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
-    return;
+  if (command != "scan") {
+    I2CStepperParams params;
+    for (size_t index = 0; index < request->params(); index++) {
+      const AsyncWebParameter *param = request->getParam(index);
+      params.add(param->name(), param->value());
+    }
+    const char *errorField = "request";
+    NumericParseResult result = parse_i2c_stepper_patch(
+        &params, command, *dev, config, motion, relay, relayState, errorField);
+    if (!result.ok()) {
+      send_i2c_numeric_error(request, errorField, result.error);
+      return;
+    }
+    I2CStepperDevice staged = *dev;
+    staged.config = config;
+    staged.motion = motion;
+    if (!i2c_stepper_command_supported(staged, command)) {
+      send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
+      return;
+    }
   }
 
   PendingI2CStepperCmd pendingCmd = {};
@@ -707,7 +718,7 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
   if (command == "relay") {
     pendingCmd.relay = relay;
     pendingCmd.relayState = relayState;
-  } else {
+  } else if (command != "scan") {
     pendingCmd.config = config;
     pendingCmd.motion = motion;
   }

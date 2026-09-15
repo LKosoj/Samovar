@@ -67,7 +67,7 @@ SETUP = r'''async page => {
   async function routeStatus() {
     await page.route('**/i2cstepper?*', route => route.fulfill({
       status:200, contentType:'application/json',
-      body:JSON.stringify({selected:s.selected, devices:s.devices})
+      body:JSON.stringify({scanning:0, selected:s.selected, devices:s.devices})
     }));
   }
   await routeStatus();
@@ -237,6 +237,65 @@ CHECK_SETUP_SAVE = r'''async page => {
 }'''
 
 
+CHECK_SETUP_SCAN = r'''async page => {
+  const base = __BASE__;
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  s.devices.forEach(device => { device.present = false; device.everPresent = false; });
+  s.selected = s.devices[0];
+  await page.unroute('**/i2cstepper?*');
+  let scanStarted = false;
+  let scanPolls = 0;
+  await page.route('**/i2cstepper?*', route => {
+    const requestUrl = route.request().url();
+    if (requestUrl.includes('cmd=scan')) {
+      scanStarted = true;
+      return route.fulfill({status:202, contentType:'application/json',
+        body:'{"operationId":1,"state":"queued","error":"none"}'});
+    }
+    let scanning = 0;
+    if (scanStarted) {
+      scanPolls++;
+      scanning = scanPolls < 2 ? 1 : 0;
+      if (!scanning) {
+        s.devices[1].present = true;
+        s.devices[1].everPresent = true;
+      }
+    }
+    const addressMatch = requestUrl.match(/[?&]address=(\d+)/);
+    const address = addressMatch ? Number(addressMatch[1]) : 1;
+    const selected = s.devices[address - 1] || s.devices[0];
+    return route.fulfill({status:200, contentType:'application/json',
+      body:JSON.stringify({scanning, selected, devices:s.devices})});
+  });
+  await page.goto(base + '/setup.htm', {waitUntil:'load'});
+  await page.waitForFunction(() => typeof rescanSetupI2c === 'function' &&
+    document.getElementById('i2c-missing').textContent === 'I2CStepper не найден.');
+  await page.evaluate(() => SamovarApp.openTab(null, 'I2CStepper'));
+  let view = await page.evaluate(() => ({
+    tab:document.getElementById('i2cStepperSetupTab').hidden,
+    button:document.getElementById('i2c-scan').textContent,
+    missing:document.getElementById('i2c-missing').textContent
+  }));
+  check(!view.tab, 'I2CStepper tab must remain visible without devices');
+  check(view.button === 'Пересканировать I2C-устройства', 'manual scan button is missing');
+  check(view.missing === 'I2CStepper не найден.', 'missing-device text is unclear');
+  await page.locator('#i2c-scan').click();
+  await page.waitForFunction(() => document.getElementById('i2c-panel').hidden === false);
+  view = await page.evaluate(() => ({
+    address:setupI2cAddress,
+    button:document.getElementById('i2c-scan').textContent,
+    disabled:document.getElementById('i2c-scan').disabled
+  }));
+  check(scanStarted && scanPolls >= 2, 'manual scan was not polled to completion');
+  check(view.address === 2, 'first device found by manual scan was not opened');
+  check(!view.disabled && view.button === 'Пересканировать I2C-устройства',
+    'scan button did not return to idle state');
+  check(s.requests.some(url => url.includes('cmd=scan')), 'scan request was not sent');
+  check(!s.consoleError, s.consoleError || 'console error');
+  return 'setup-scan';
+}'''
+
+
 def main():
     cli = shutil.which("playwright-cli")
     if not cli:
@@ -264,7 +323,7 @@ def main():
                     "__BOOTSTRAP__", json.dumps(UI_BOOTSTRAP_FIXTURE)) + body(check).replace(
                         "__BASE__", json.dumps(f"http://127.0.0.1:{server.server_port}")) + "}"
 
-            for check in (CHECK_SELECTION, CHECK_ACTIONS, CHECK_SETUP_SAVE):
+            for check in (CHECK_SELECTION, CHECK_ACTIONS, CHECK_SETUP_SAVE, CHECK_SETUP_SCAN):
                 run_cli(cli, session, ["run-code", scenario_code(check)], temp)
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
             print("I2C v3 browser gate failed: " + str(error), file=sys.stderr)

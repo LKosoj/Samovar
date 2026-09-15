@@ -1372,6 +1372,10 @@ static void report_blynk_i2c_v37_execution_failure(
 
 static OperationError execute_pending_i2c_stepper(
     const PendingI2CStepperCmd& command) {
+  if (strcmp(command.cmd, "scan") == 0) {
+    i2c_stepper_scan_begin();
+    return OPERATION_ERROR_NONE;
+  }
   I2CStepperDevice* device = i2c_stepper_device(command.address);
   if (!device) {
     report_blynk_i2c_v37_execution_failure(

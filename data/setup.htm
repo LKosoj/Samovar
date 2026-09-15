@@ -272,9 +272,10 @@
       }
     }
 
-    let setupI2cAddress = 0;
+    let setupI2cAddress = 1;
     let setupI2cDevices = [];
     let setupI2cSelected = null;
+    let setupI2cScanning = false;
 
     function setupI2cValue(id) {
       return document.getElementById('i2c-' + id);
@@ -289,7 +290,10 @@
     function renderSetupI2c() {
       const panel = setupI2cValue('panel');
       const missing = setupI2cValue('missing');
+      const scan = setupI2cValue('scan');
       const present = setupI2cDevices.filter(function (device) { return device.present; });
+      scan.disabled = setupI2cScanning;
+      scan.textContent = setupI2cScanning ? 'Идёт поиск…' : 'Пересканировать I2C-устройства';
       const selectorRow = setupI2cValue('selectorRow');
       const selector = setupI2cValue('selector');
       selectorRow.hidden = present.length < 2;
@@ -304,7 +308,11 @@
       if (!setupI2cSelected || !setupI2cSelected.present) {
         panel.hidden = true;
         missing.hidden = false;
-        missing.textContent = 'Выбранный I2CStepper недоступен. Другое устройство не выбрано автоматически.';
+        missing.textContent = setupI2cScanning
+          ? 'Выполняется поиск I2CStepper по адресам 1–10.'
+          : present.length
+            ? 'Выбранный I2CStepper недоступен. Другое устройство не выбрано автоматически.'
+            : 'I2CStepper не найден.';
         return;
       }
       missing.hidden = true;
@@ -335,18 +343,52 @@
         const payload = await response.json();
         setupI2cDevices = Array.isArray(payload.devices) ? payload.devices : [];
         setupI2cSelected = payload.selected || null;
+        setupI2cScanning = payload.scanning === 1;
         renderSetupI2c();
         SamovarApp.clearRequestError();
+        return true;
       } catch (error) {
         setupI2cSelected = null;
         renderSetupI2c();
         SamovarApp.showRequestError(String(error));
+        return false;
       }
     }
 
     function chooseSetupI2c() {
       setupI2cAddress = Number(setupI2cValue('selector').value);
       refreshSetupI2c();
+    }
+
+    async function rescanSetupI2c() {
+      const button = setupI2cValue('scan');
+      const hadSelectedDevice = Boolean(setupI2cSelected && setupI2cSelected.present);
+      button.disabled = true;
+      try {
+        const response = await fetch(setupI2cUrl('scan'), {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'Поиск I2CStepper не запущен'));
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        const deadline = Date.now() + 5000;
+        do {
+          await new Promise(function (resolve) { setTimeout(resolve, 200); });
+          if (!await refreshSetupI2c()) throw new Error('Не удалось получить результат поиска I2CStepper');
+        } while (setupI2cScanning && Date.now() < deadline);
+        if (setupI2cScanning) throw new Error('Поиск I2CStepper не завершён за 5 секунд');
+        if (!hadSelectedDevice) {
+          const first = setupI2cDevices.find(function (device) { return device.present; });
+          if (first) {
+            setupI2cAddress = first.address;
+            await refreshSetupI2c();
+          }
+        }
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError(String(error));
+        return false;
+      } finally {
+        button.disabled = setupI2cScanning;
+      }
     }
 
     async function saveSetupI2c() {
@@ -427,13 +469,10 @@
       SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
       SamovarApp.enhanceTooltips();
       SamovarApp.loadUiBootstrap(function (bootstrap) {
-        var tab = document.getElementById('i2cStepperSetupTab');
-        if (tab && bootstrap && Array.isArray(bootstrap.i2cSteppers) &&
-            bootstrap.i2cSteppers.some(function (device) { return device.present; })) {
-          tab.hidden = false;
+        if (bootstrap && Array.isArray(bootstrap.i2cSteppers)) {
           setupI2cDevices = bootstrap.i2cSteppers;
           var first = setupI2cDevices.find(function (device) { return device.present; });
-          setupI2cAddress = first ? first.address : 0;
+          setupI2cAddress = first ? first.address : 1;
           refreshSetupI2c();
         }
       }).catch(function () {});
@@ -471,11 +510,12 @@
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Cheese');" value="Сыр" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'NBK');" value="НБК" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Прочие" aria-pressed="false">
-      <input id='i2cStepperSetupTab' type='button' class="tablinks" value="I2CStepper" hidden
+      <input id='i2cStepperSetupTab' type='button' class="tablinks" value="I2CStepper"
              onclick="SamovarApp.openTab(event, 'I2CStepper')" aria-pressed="false">
     </div>
     <div id="I2CStepper" class="tabcontent" aria-hidden="true">
       <h2>Настройки Nano I2CStepper</h2>
+      <p><button id="i2c-scan" type="button" class="button" onclick="rescanSetupI2c()">Пересканировать I2C-устройства</button></p>
       <p id="i2c-missing" hidden></p>
       <p id="i2c-selectorRow" hidden><label>Устройство <select id="i2c-selector" onchange="chooseSetupI2c()"></select></label></p>
       <section id="i2c-panel" hidden>
