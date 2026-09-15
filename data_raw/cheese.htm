@@ -43,7 +43,7 @@
     }
   </style>
   <script>
-    var CHEESE_PROGRAM_MAX_ROWS = 20;
+    var CHEESE_PROGRAM_MAX_ROWS = 30;
     var CHEESE_PROGRAM_FIELDS = 6;
     // TYPE;VALUE1;VALUE2;VALUE3;MIXER;VALUE4
     var HeaterPowerOn = false;
@@ -220,7 +220,7 @@
 
     function addCheeseRow(values, afterRow) {
       var rows = document.getElementById('programRows');
-      if (rows.children.length >= CHEESE_PROGRAM_MAX_ROWS) return programError('Можно добавить не больше 20 этапов.');
+      if (rows.children.length >= CHEESE_PROGRAM_MAX_ROWS) return programError('Можно добавить не больше 30 этапов.');
       var row = document.getElementById('cheeseRowTemplate').content.firstElementChild.cloneNode(true);
       row.number = row.querySelector('.cheese-row-number');
       row.type = row.querySelector('.cheese-type');
@@ -275,7 +275,7 @@
       var text = String(program || '').trim();
       if (!text) return [];
       var lines = text.split(/\r?\n/);
-      if (lines.length > CHEESE_PROGRAM_MAX_ROWS) throw new Error('В программе больше 20 этапов.');
+      if (lines.length > CHEESE_PROGRAM_MAX_ROWS) throw new Error('В программе больше 30 этапов.');
       return lines.map(function(line, index) {
         var values = line.split(';');
         if (values.length !== CHEESE_PROGRAM_FIELDS || !validateCheeseRow(values)) {

@@ -4,6 +4,7 @@
 #include "program_io.h"
 #ifdef SAMOVAR_USE_BLYNK
 #include <BlynkSimpleEsp32.h>
+#include <new>
 
 static inline void report_blynk_numeric_error(
     uint8_t virtualPin,
@@ -623,9 +624,9 @@ static volatile bool s_pendingV35Ready = false;
 static uint32_t s_pendingV35Revision = 0;
 
 // F1 не проходит через общую очередь уведомлений: она ограничена по времени и может
-// быть очищена при недействительном токене. В программе не больше PROGRAM_MAX строк,
-// значит кольцевая очередь такой же ёмкости хранит каждый возможный факт F до принятой
-// Blynk отправки. Переполнение — ошибка процесса, а не молчаливая потеря факта.
+// быть очищена при недействительном токене. Записи создаются только для накопившихся
+// фактов F и остаются до принятой Blynk отправки. Переполнение или нехватка памяти —
+// ошибка процесса, а не молчаливая потеря факта.
 static portMUX_TYPE s_blynkFlocMux = portMUX_INITIALIZER_UNLOCKED;
 struct PendingFlocEvent {
   char line[512];
@@ -634,7 +635,7 @@ struct PendingFlocEvent {
   uint32_t sessionRevision;
   bool sessionReady;
 };
-static PendingFlocEvent s_pendingF1Queue[PROGRAM_MAX];
+static PendingFlocEvent* s_pendingF1Queue[PROGRAM_MAX] = {};
 static uint8_t s_pendingF1Head = 0;
 static uint8_t s_pendingF1Count = 0;
 static uint32_t s_pendingF1Revision = 0;
@@ -738,17 +739,21 @@ bool blynk_stage_floc_event(const String& line) {
   }
   portEXIT_CRITICAL(&s_blynkSessionMux);
 
+  PendingFlocEvent* event = new (std::nothrow) PendingFlocEvent{};
+  if (event == nullptr) return false;
+  strlcpy(event->line, line.c_str(), sizeof(event->line));
+  event->sessionReady = sessionReady;
+  event->sessionRevision = sessionRevision;
+  if (sessionReady) strlcpy(event->sessionLine, sessionLine, sizeof(event->sessionLine));
+
   portENTER_CRITICAL(&s_blynkFlocMux);
   if (s_pendingF1Count >= PROGRAM_MAX) {
     portEXIT_CRITICAL(&s_blynkFlocMux);
+    delete event;
     return false;
   }
-  PendingFlocEvent& event = s_pendingF1Queue[(s_pendingF1Head + s_pendingF1Count) % PROGRAM_MAX];
-  strlcpy(event.line, line.c_str(), sizeof(event.line));
-  event.revision = ++s_pendingF1Revision;
-  event.sessionReady = sessionReady;
-  event.sessionRevision = sessionRevision;
-  if (sessionReady) strlcpy(event.sessionLine, sessionLine, sizeof(event.sessionLine));
+  event->revision = ++s_pendingF1Revision;
+  s_pendingF1Queue[(s_pendingF1Head + s_pendingF1Count) % PROGRAM_MAX] = event;
   s_pendingF1Count++;
   portEXIT_CRITICAL(&s_blynkFlocMux);
   return true;
@@ -791,7 +796,7 @@ static bool blynk_push_pending_floc_session_start() {
   PendingFlocEvent event = {};
   bool ready = false;
   portENTER_CRITICAL(&s_blynkFlocMux);
-  if (s_pendingF1Count) event = s_pendingF1Queue[s_pendingF1Head];
+  if (s_pendingF1Count) event = *s_pendingF1Queue[s_pendingF1Head];
   ready = event.sessionReady;
   portEXIT_CRITICAL(&s_blynkFlocMux);
   if (!ready) return true;
@@ -802,9 +807,9 @@ static bool blynk_push_pending_floc_session_start() {
   if (!Blynk.connected()) return false;
   bool sentCurrent = false;
   portENTER_CRITICAL(&s_blynkFlocMux);
-  if (s_pendingF1Count && s_pendingF1Queue[s_pendingF1Head].revision == event.revision &&
-      s_pendingF1Queue[s_pendingF1Head].sessionReady) {
-    s_pendingF1Queue[s_pendingF1Head].sessionReady = false;
+  if (s_pendingF1Count && s_pendingF1Queue[s_pendingF1Head]->revision == event.revision &&
+      s_pendingF1Queue[s_pendingF1Head]->sessionReady) {
+    s_pendingF1Queue[s_pendingF1Head]->sessionReady = false;
     sentCurrent = true;
   }
   portEXIT_CRITICAL(&s_blynkFlocMux);
@@ -826,19 +831,23 @@ static void blynk_push_pending_floc_event() {
   PendingFlocEvent event = {};
   bool ready = false;
   portENTER_CRITICAL(&s_blynkFlocMux);
-  if (s_pendingF1Count) { event = s_pendingF1Queue[s_pendingF1Head]; ready = true; }
+  if (s_pendingF1Count) { event = *s_pendingF1Queue[s_pendingF1Head]; ready = true; }
   portEXIT_CRITICAL(&s_blynkFlocMux);
   if (!ready || !Blynk.connected()) return;
 
   Blynk.virtualWrite(V26, event.line);
   if (!Blynk.connected()) return;
 
+  PendingFlocEvent* sentEvent = nullptr;
   portENTER_CRITICAL(&s_blynkFlocMux);
-  if (s_pendingF1Count && s_pendingF1Queue[s_pendingF1Head].revision == event.revision) {
+  if (s_pendingF1Count && s_pendingF1Queue[s_pendingF1Head]->revision == event.revision) {
+    sentEvent = s_pendingF1Queue[s_pendingF1Head];
+    s_pendingF1Queue[s_pendingF1Head] = nullptr;
     s_pendingF1Head = (s_pendingF1Head + 1) % PROGRAM_MAX;
     s_pendingF1Count--;
   }
   portEXIT_CRITICAL(&s_blynkFlocMux);
+  delete sentEvent;
 }
 
 BLYNK_CONNECTED() {

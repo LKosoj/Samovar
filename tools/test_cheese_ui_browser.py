@@ -341,8 +341,18 @@ BROWSER_TEST = r'''async page => {
       "cooling scheme " + scheme + " is not localized");
   }
 
+  const maxCheeseProgram = Array.from({length:30}, () => "N;30;90;5.2;0^0^0^0;0").join("\n") + "\n";
+  await page.evaluate(text => loadFile(new File([text], "thirty-rows.txt", {type:"text/plain"})), maxCheeseProgram);
+  await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 30);
   await page.getByRole("button", {name:"Программа"}).click();
-  await page.locator(".cheese-value2").fill("92");
+  await page.locator(".cheese-row").last().locator(".cheese-add").click();
+  expect(await page.locator(".cheese-row").count() === 30, "editor allowed a 31st Cheese row");
+  expect((await page.locator("#request_error").textContent()).includes("30"), "editor reports the wrong Cheese row limit");
+  const tooManyRowsError = await page.evaluate(text => {
+    try { parseCheeseProgram(text); return ""; } catch (error) { return error.message; }
+  }, maxCheeseProgram + "N;30;90;5.2;0^0^0^0;0\n");
+  expect(tooManyRowsError.includes("30"), "31-row Cheese import reports the wrong limit");
+  await page.locator(".cheese-value2").first().fill("92");
   await page.getByRole("button", {name:"Дополнительно"}).click();
   await page.evaluate(() => { window.confirm = () => false; });
   await page.getByRole("button", {name:"Калибровка pH"}).click();

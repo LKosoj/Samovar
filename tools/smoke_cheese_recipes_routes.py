@@ -21,6 +21,7 @@ for token in (
 
 for token in (
     "https://www.samovar-tool.ru/cheesexml/v1/",
+    "var PROGRAM_MAX = 30;",
     "new URL('recipes/filters', API_BASE)",
     'id="recipeFamily"',
     'id="recipeStyle"',

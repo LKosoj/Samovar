@@ -82,7 +82,7 @@
   'use strict';
 
   var API_BASE = 'https://www.samovar-tool.ru/cheesexml/v1/';
-  var PROGRAM_MAX = 20;
+  var PROGRAM_MAX = 30;
   var state = { catalog: 'main', page: 1, perPage: 10, total: 0, query: '', filters: {family: '', style: '', country: '', species: '', difficulty: ''}, recipe: null, conversion: null, token: '', mode: null, applying: false };
   var language = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ru';
   var text = {

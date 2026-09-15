@@ -5,6 +5,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -20,7 +21,7 @@ FIXTURE_JSON["content"] = {"xml": FIXTURE_XML.read_text(encoding="utf-8")}
 TOKEN = "0123456789abcdef0123456789abcdef"
 
 BROWSER_TEST = r'''async page => {
-  const baseUrl = __BASE_URL__, recipe = __RECIPE__, xmlPath = __XML_PATH__, badXmlPath = __BAD_XML_PATH__, token = __TOKEN__;
+  const baseUrl = __BASE_URL__, recipe = __RECIPE__, xmlPath = __XML_PATH__, badXmlPath = __BAD_XML_PATH__, maxXmlPath = __MAX_XML_PATH__, overXmlPath = __OVER_XML_PATH__, token = __TOKEN__;
   const apiRequests = [], programPosts = [], commands = [], errors = [];
   const expect = (condition, message) => { if (!condition) throw new Error(message); };
   await page.addInitScript(() => Object.defineProperty(navigator, 'language', {configurable:true, get:() => 'en-US'}));
@@ -128,6 +129,17 @@ BROWSER_TEST = r'''async page => {
   expect(programPosts[0].data.includes('WProgram') && programPosts[0].data.includes('F;32;20;2.5'), 'program payload missing converted rows');
   expect(!programPosts[0].headers.authorization, 'Blynk token sent to local /program');
   expect(commands.length === 0, 'recipe page started or commanded the device');
+
+  await page.locator('#recipeFile').setInputFiles(maxXmlPath);
+  await page.locator('#convertRecipe').click();
+  expect((await page.locator('#programPreview').inputValue()).trim().split('\n').length === 30,
+    '30-step CheeseXML recipe was not converted completely');
+  expect(!(await page.locator('#applyRecipe').isDisabled()), '30-step CheeseXML recipe was rejected');
+  await page.locator('#recipeFile').setInputFiles(overXmlPath);
+  await page.locator('#convertRecipe').click();
+  expect(await page.locator('#applyRecipe').isDisabled(), '31-step CheeseXML recipe was accepted');
+  expect((await page.locator('#recipeWarnings').textContent()).includes('30'), '31-step CheeseXML warning reports the wrong limit');
+
   await page.locator('#recipeFile').setInputFiles(badXmlPath);
   await page.waitForFunction(() => document.getElementById('recipeStatus').textContent.includes('1.x'));
   expect(programPosts.length === 1, 'invalid XML triggered another /program POST');
@@ -164,6 +176,17 @@ def main() -> int:
         shutil.copy2(FIXTURE_XML, browser_xml)
         bad_xml = temp / "unsupported.xml"
         bad_xml.write_text('<CHEESEXML version="2.00"/>', encoding="utf-8")
+        fixture_xml = FIXTURE_XML.read_text(encoding="utf-8")
+        def limit_xml(count: int) -> str:
+            steps = "".join(
+                f'<STEP n="{index}" phase="forming" code="press"><NAME><T xml:lang="ru">Шаг {index}</T></NAME><PARAMS><TIME value="30" unit="min"/></PARAMS></STEP>'
+                for index in range(1, count + 1)
+            )
+            return re.sub(r"<PROCESS>[\s\S]*?</PROCESS>", f"<PROCESS>{steps}</PROCESS>", fixture_xml)
+        max_xml = temp / "thirty.xml"
+        max_xml.write_text(limit_xml(30), encoding="utf-8")
+        over_xml = temp / "thirty-one.xml"
+        over_xml.write_text(limit_xml(31), encoding="utf-8")
         server = http.server.ThreadingHTTPServer(
             ("127.0.0.1", 0), functools.partial(QuietHandler, directory=str(site))
         )
@@ -182,6 +205,8 @@ def main() -> int:
                 .replace("__RECIPE__", json.dumps(FIXTURE_JSON, ensure_ascii=False))
                 .replace("__XML_PATH__", json.dumps(str(browser_xml)))
                 .replace("__BAD_XML_PATH__", json.dumps(str(bad_xml)))
+                .replace("__MAX_XML_PATH__", json.dumps(str(max_xml)))
+                .replace("__OVER_XML_PATH__", json.dumps(str(over_xml)))
                 .replace("__TOKEN__", json.dumps(TOKEN)))
             run_cli(cli, session, ["run-code", code], temp, 60)
         except (OSError, RuntimeError) as caught:

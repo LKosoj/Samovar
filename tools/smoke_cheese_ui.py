@@ -17,6 +17,9 @@ def require(token: str, message: str) -> None:
 
 
 require("CHEESE_PROGRAM_FIELDS = 6", "editor does not pin six fields")
+require("CHEESE_PROGRAM_MAX_ROWS = 30", "editor does not match firmware 30-row capacity")
+require("Можно добавить не больше 30 этапов.", "editor add-row limit is not 30")
+require("В программе больше 30 этапов.", "editor import limit is not 30")
 require("TYPE;VALUE1;VALUE2;VALUE3;MIXER;VALUE4", "six-field wire format is undocumented in source")
 require("function validateCheeseRow(values)", "missing Cheese row validator")
 require("function serializeCheeseRows()", "missing Cheese serializer")
