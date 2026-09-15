@@ -321,6 +321,18 @@ BROWSER_TEST = r'''async page => {
   await page.evaluate(data => renderTelemetry(data), telemetry(7));
   expect(await page.locator("#stageType").textContent() === "Ручное действие", "active stage used unsaved draft instead of accepted program");
 
+  bootstrap.program =
+    "W;0.000000;30.000000;2.000000;2^222^120^6;0\n" +
+    "W;0.000000;30.000000;4.000000;2^-222^120^0;0\n" +
+    "D;10.000000;30.000000;7.000000;0^0^0^0;1\n";
+  await page.goto(baseUrl + "/cheese.htm", {waitUntil:"load"});
+  await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 3);
+  const reloadedActionCodes = await page.locator(".cheese-action-code").evaluateAll(nodes =>
+    nodes.map(node => node.value));
+  expect(reloadedActionCodes.join(",") === "2,4,7",
+    "firmware-formatted action codes changed after reload: " + reloadedActionCodes.join(","));
+
+  bootstrap.program = "D;10;30;2;0^0^0^0;1\n";
   for (const [scheme, expected] of [["two-valves", "два клапана"], ["unavailable", "недоступно"]]) {
     bootstrap.cheeseCoolingScheme = scheme;
     await page.goto(baseUrl + "/cheese.htm", {waitUntil:"load"});

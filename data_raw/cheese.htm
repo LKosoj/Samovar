@@ -242,7 +242,7 @@
       var initial = values || ['H', '30', '60', '1', '0^0^0^0', '0'];
       row.type.value = initial[0];
       row.value1.value = initial[1]; row.value2.value = initial[2]; row.value3.value = initial[3];
-      row.actionCode.value = initial[3]; row.value4.value = initial[5];
+      row.actionCode.value = String(Number(initial[3])); row.value4.value = initial[5];
       var mixer = String(initial[4]).split('^');
       if (initial[0] === 'L') row.luaCall.value = initial[4];
       else {
