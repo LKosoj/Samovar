@@ -198,13 +198,19 @@ using std::isfinite;
 struct SetupEEPROM {
   char SteamColor[20]; char PipeColor[20]; char WaterColor[20]; char TankColor[20]; char ACPColor[20];
   uint8_t BeerBrewOrder; float NbkDP; float ColDiam; float ColHeight; uint8_t PackDens;
-  float HeaterResistant; float MainsVoltage; uint16_t StepperStepMl; uint16_t StepperStepMlI2C;
+  float HeaterResistant; float MainsVoltage; uint16_t StepperStepMl;
   float CheesePhSlope; float CheesePhOffset; uint8_t TimeZone;
 };
+static const uint8_t I2CSTEPPER_DEVICE_COUNT = 10;
+struct I2CStepperDevice { bool present; };
+static void write_i2c_stepper_json(Print& out, const I2CStepperDevice& device) {
+  out.print(device.present ? "{\"present\":1}" : "{\"present\":0}");
+}
 struct UiBootstrapSnapshot {
   SAMOVAR_MODE mode; SetupEEPROM setup; String program; String description; String luaButtonList; String version; String powerUnit;
   bool steamVisible; bool pipeVisible; bool waterVisible; bool tankVisible; bool pressureVisible; bool programNumberVisible;
-  bool i2cStepperVisible; bool i2cPumpVisible; bool calibrationRunning; bool i2cCalibration;
+  bool i2cStepperVisible; bool i2cPumpVisible; I2CStepperDevice i2cDevices[I2CSTEPPER_DEVICE_COUNT];
+  bool calibrationRunning; bool processRunning; bool i2cCalibration;
   bool cheesePhAvailable; int cheesePhAds1115Address;
   int pwmValue; float pwmLow; float heaterMaxPower;
 };
@@ -229,13 +235,14 @@ static UiBootstrapSnapshot make_snapshot(SAMOVAR_MODE mode, const char* program,
   snapshot.setup.NbkDP = mode == SAMOVAR_NBK_MODE ? 1.25f : 0.5f;
   snapshot.setup.ColDiam = mode == SAMOVAR_NBK_MODE ? 3.0f : 1.5f;
   snapshot.setup.ColHeight = 1.7f; snapshot.setup.PackDens = 80; snapshot.setup.HeaterResistant = 12.3f;
-  snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = 123; snapshot.setup.StepperStepMlI2C = 456;
+  snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = 123;
   snapshot.setup.CheesePhSlope = 2.5f; snapshot.setup.CheesePhOffset = -1.0f;
   snapshot.setup.TimeZone = mode == SAMOVAR_NBK_MODE ? 3 : 5;
   snapshot.cheesePhAvailable = !i2c; snapshot.cheesePhAds1115Address = i2c ? 0x48 : 0;
   snapshot.steamVisible = true; snapshot.pipeVisible = false; snapshot.waterVisible = true; snapshot.tankVisible = false;
   snapshot.pressureVisible = true; snapshot.programNumberVisible = true; snapshot.i2cStepperVisible = i2c; snapshot.i2cPumpVisible = i2c;
-  snapshot.calibrationRunning = i2c; snapshot.i2cCalibration = i2c; snapshot.pwmValue = i2c ? 77 : 11; snapshot.pwmLow = i2c ? 20.0f : 10.0f; snapshot.heaterMaxPower = 1234.0f;
+  snapshot.i2cDevices[0].present = i2c; snapshot.calibrationRunning = i2c; snapshot.processRunning = i2c;
+  snapshot.i2cCalibration = i2c; snapshot.pwmValue = i2c ? 77 : 11; snapshot.pwmLow = i2c ? 20.0f : 10.0f; snapshot.heaterMaxPower = 1234.0f;
   return snapshot;
 }
 

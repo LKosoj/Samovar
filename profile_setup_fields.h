@@ -18,7 +18,7 @@
 //             для перекрёстной проверки smoke-тестом.
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
-//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, UPTO4, UPTO5 или UPTO6.
+//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, UPTO4, UPTO5, UPTO6 или UPTO7.
 //             V2ONLY/V3ONLY/V4ONLY образуют последовательные хвосты канонического
 //             формата (поле появляется начиная с этой версии и остаётся во всех
 //             следующих). UPTO4 — обратный случай: поле было в форматах 1-4,
@@ -27,6 +27,7 @@
 //             UPTO5 аналогично описывает поля, которые были в V4/V5, но удалены
 //             из текущего V6 без резервного места в SetupEEPROM.
 //             UPTO6 описывает поле, которое было в V4-V6 и удалено из V7.
+//             UPTO7 описывает поле, которое было до V7 включительно и удалено из V8.
 //
 // BKPower — единственное поле с дефолтом, зависящим от компиляции
 // (SAMOVAR_USE_SEM_AVR меняет рабочую мощность БК). Вынесено в именованную
@@ -105,7 +106,7 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(FLOAT, ColDiam, 4, candidate.ColDiam = 2.0f, ALL) \
   X(FLOAT, ColHeight, 4, candidate.ColHeight = 0.5f, ALL) \
   X(U8, PackDens, 1, candidate.PackDens = 55, ALL) \
-  X(U16, StepperStepMlI2C, 2, candidate.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT, ALL) \
+  X(U16, StepperStepMlI2C, 2, /* retired in V8 */, UPTO7) \
   X(FLOAT, NbkTn, 4, candidate.NbkTn = NBK_TN_DEFAULT, ALL) \
   X(FLOAT, BKPower, 4, candidate.BKPower = SAMOVAR_BK_POWER_DEFAULT, ALL) \
   X(FLOAT, MainsVoltage, 4, candidate.MainsVoltage = 230.0f, ALL) \

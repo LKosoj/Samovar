@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "power_regulator_numeric_input.h"
+PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 
 HARNESS = r'''
 #include <cmath>
@@ -168,6 +169,8 @@ def main() -> int:
                 "-Werror",
                 "-I",
                 str(ROOT),
+                "-I",
+                str(PROTOCOL),
                 str(harness),
                 "-o",
                 str(binary),

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include <I2CStepperV3.h>
 #include "numeric_parse.h"
 
 static const float CONTROL_VLESS_MIN = 0.001f;
@@ -33,16 +34,14 @@ enum ControlNbkKind : uint8_t {
 
 struct ControlNbkCommand {
   ControlNbkKind kind;
-  uint16_t stepSpeed;
+  uint32_t stepSpeed;
 };
 
 struct ControlI2CPumpInput {
-  uint16_t speedSteps;
+  uint32_t speedSteps;
   uint32_t targetSteps;
   float targetMl;
-  uint16_t fillingMl;
-  uint16_t fillingMlHour;
-  uint16_t stepsPerMl;
+  uint32_t stepsPerMl;
 };
 
 // Единственное место, где решается, можно ли верить сохранённому сопротивлению.
@@ -102,7 +101,7 @@ inline NumericParseResult parse_control_rate_steps(
 
 inline NumericParseResult parse_control_nbk(
     const char* text,
-    uint16_t stepsPerMl,
+    uint32_t stepsPerMl,
     ControlNbkCommand& out) {
   ControlNbkCommand parsed = {};
   uint16_t tag = 0;
@@ -120,9 +119,13 @@ inline NumericParseResult parse_control_nbk(
     if (!(value > 0.0 && value < 8000.0)) {
       return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
     }
+    const double speed = value * stepsPerMl / 3.6;
+    if (!isfinite(speed) || speed < 0.5 ||
+        speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) {
+      return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
+    }
     parsed.kind = CONTROL_NBK_ABSOLUTE;
-    result = checked_rate_to_step_speed(value, stepsPerMl, parsed.stepSpeed);
-    if (!result.ok()) return result;
+    parsed.stepSpeed = static_cast<uint32_t>(speed + 0.5);
   }
   out = parsed;
   return numeric_parse_result(NUMERIC_PARSE_OK);
@@ -131,12 +134,11 @@ inline NumericParseResult parse_control_nbk(
 inline NumericParseResult parse_control_i2c_pump(
     const char* speedText,
     const char* volumeText,
-    uint16_t stepsPerMl,
+    uint32_t stepsPerMl,
     ControlI2CPumpInput& out,
     const char*& errorField) {
-  // Контракт: вызывающая сторона (WebServer) обязана передавать УЖЕ разрешённую
-  // калибровку — i2c_stepper_steps_per_ml() (фолбэк на I2C_STEPPER_STEP_ML_DEFAULT
-  // при SamSetup.StepperStepMlI2C==0), поэтому 0 здесь — только защитная ветка.
+  // Контракт: вызывающая сторона (WebServer) передаёт калибровку выбранного Nano.
+  // Нулевое значение означает, что Nano ещё не откалиброван.
   if (stepsPerMl == 0) {
     errorField = "calibration";
     return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
@@ -144,16 +146,23 @@ inline NumericParseResult parse_control_i2c_pump(
 
   ControlI2CPumpInput parsed = {};
   parsed.stepsPerMl = stepsPerMl;
-  NumericParseResult result = parse_control_rate_steps(speedText, stepsPerMl, parsed.speedSteps);
+  double rate = 0.0;
+  NumericParseResult result = parse_finite_double(speedText, rate);
   if (!result.ok()) {
     errorField = "speed";
     return result;
   }
-  result = checked_step_speed_to_mlh(parsed.speedSteps, stepsPerMl, parsed.fillingMlHour);
-  if (!result.ok()) {
+  if (rate <= 0.0) {
     errorField = "speed";
-    return result;
+    return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
   }
+  const double speed = rate * stepsPerMl / 3.6;
+  if (!isfinite(speed) || speed < 0.5 ||
+      speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) {
+    errorField = "speed";
+    return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
+  }
+  parsed.speedSteps = static_cast<uint32_t>(speed + 0.5);
 
   // /i2cpump принимает дробные мл (как HEAD toFloat): объём — float.
   float volumeMl = 0.0f;
@@ -162,7 +171,7 @@ inline NumericParseResult parse_control_i2c_pump(
     errorField = "volume";
     return result;
   }
-  if (volumeMl <= 0.0f || volumeMl > static_cast<float>(UINT16_MAX)) {
+  if (volumeMl <= 0.0f) {
     errorField = "volume";
     return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
   }
@@ -171,7 +180,10 @@ inline NumericParseResult parse_control_i2c_pump(
     errorField = "volume";
     return result;
   }
-  parsed.fillingMl = static_cast<uint16_t>(volumeMl);
+  if (parsed.targetSteps > I2CSTEPPER_V3_TARGET_STEPS_MAX) {
+    errorField = "volume";
+    return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
+  }
   parsed.targetMl = volumeMl;
   out = parsed;
   return numeric_parse_result(NUMERIC_PARSE_OK);

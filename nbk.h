@@ -329,15 +329,13 @@ inline bool nbk_overflow_detection_available() {
 
 ActuatorCommandResult SetSpeed(float Speed) { // Прокладка для подсчета статистики
   if (!(Speed >= 0.0f)) return ACTUATOR_COMMAND_FAILED;
-  if (!i2c_stepper_refresh(i2cStepperPump)) return ACTUATOR_COMMAND_FAILED;
-  const float previousRate =
-      i2c_get_liquid_rate_by_step(i2cStepperPump.currentSpeed);
-  const uint16_t requestedSpeed = Speed == 0
-      ? 0
-      : uint16_t(i2c_stepper_steps_from_rate(Speed));
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present || !i2c_stepper_refresh(*pump)) return ACTUATOR_COMMAND_FAILED;
+  const float previousRate = i2c_get_liquid_rate_by_step(
+      pump->status.currentSpeedStepsPerSec);
   const bool applied = Speed == 0
       ? set_stepper_target(0, 0, 0, true)
-      : set_stepper_target(requestedSpeed, 0, 2147483640, true);
+      : start_second_i2c_pump(Speed, 0);
   if (!applied) return ACTUATOR_COMMAND_FAILED;
   uint32_t now = millis();
   if (time_speed == 0) {

@@ -4,8 +4,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+from smoke_helpers import extract_function_body
+
 
 ROOT = Path(__file__).resolve().parents[1]
+PROTOCOL_INCLUDE = ROOT / "libraries/I2CStepperProtocol/src"
+PUMP_SIGNATURE = "inline NumericParseResult parse_control_i2c_pump("
 
 HARNESS = r'''
 #include <cmath>
@@ -150,27 +154,36 @@ void test_rates_and_nbk() {
 }
 
 void test_i2c_pump() {
-  ControlI2CPumpInput input = {7, 8, 9.0f, 10, 11, 12};
+  ControlI2CPumpInput input = {7, 8, 9.0f, 12};
   const char* error_field = "sentinel";
   check(parse_control_i2c_pump("3.6", "100", 1000, input, error_field).ok(),
         "valid I2C pump input failed");
   check(input.speedSteps == 1000 && input.targetSteps == 100000 &&
-            input.targetMl == 100.0f && input.fillingMl == 100 &&
-            input.fillingMlHour == 3600 && input.stepsPerMl == 1000,
+            input.targetMl == 100.0f && input.stepsPerMl == 1000,
         "I2C pump typed draft mismatch");
+
+  input = {7, 8, 9.0f, 12};
+  error_field = "sentinel";
+  check(parse_control_i2c_pump("6.48", "12.5", 2000, input, error_field).ok() &&
+            input.speedSteps == 3600 && input.targetSteps == 25000 &&
+            input.targetMl == 12.5f && input.stepsPerMl == 2000,
+        "second I2C pump input pair mismatch");
 
   const char* invalid_speed[] = {"", "0", "nan", "inf", "1x", "999999"};
   for (const char* text : invalid_speed) {
-    input = {7, 8, 9.0f, 10, 11, 12};
+    input = {7, 8, 9.0f, 12};
     error_field = "sentinel";
     check(!parse_control_i2c_pump(text, "100", 1000, input, error_field).ok() &&
               input.speedSteps == 7 && input.targetSteps == 8 && input.targetMl == 9.0f,
           "invalid I2C speed changed output");
     check(std::strcmp(error_field, "speed") == 0, "I2C speed error field mismatch");
   }
-  const char* invalid_volume[] = {"", "0", "65536", "-1", "1x"};
+  char too_large_volume[32] = {};
+  std::snprintf(too_large_volume, sizeof(too_large_volume), "%lu",
+                static_cast<unsigned long>(I2CSTEPPER_V3_TARGET_STEPS_MAX / 1000UL + 1UL));
+  const char* invalid_volume[] = {"", "0", too_large_volume, "-1", "1x"};
   for (const char* text : invalid_volume) {
-    input = {7, 8, 9.0f, 10, 11, 12};
+    input = {7, 8, 9.0f, 12};
     error_field = "sentinel";
     check(!parse_control_i2c_pump("3.6", text, 1000, input, error_field).ok() &&
               input.speedSteps == 7 && input.targetSteps == 8 && input.targetMl == 9.0f,
@@ -180,13 +193,13 @@ void test_i2c_pump() {
 
   // /i2cpump принимает дробные мл (усечение/масштабирование, как HEAD toFloat):
   // объём не бракуется, targetSteps считается от полного (нецелого) значения мл.
-  input = {7, 8, 9.0f, 10, 11, 12};
+  input = {7, 8, 9.0f, 12};
   error_field = "sentinel";
   check(parse_control_i2c_pump("3.6", "1.5", 1000, input, error_field).ok() &&
-            input.targetSteps == 1500 && input.targetMl == 1.5f && input.fillingMl == 1,
+            input.targetSteps == 1500 && input.targetMl == 1.5f && input.stepsPerMl == 1000,
         "fractional I2C volume rejected");
 
-  input = {7, 8, 9.0f, 10, 11, 12};
+  input = {7, 8, 9.0f, 12};
   error_field = "sentinel";
   check(!parse_control_i2c_pump("3.6", "100", 0, input, error_field).ok() &&
             input.speedSteps == 7 && std::strcmp(error_field, "calibration") == 0,
@@ -196,7 +209,8 @@ void test_i2c_pump() {
 }  // namespace
 
 int main() {
-  static_assert(sizeof(ControlI2CPumpInput) <= 24, "I2C numeric draft budget exceeded");
+  static_assert(sizeof(ControlI2CPumpInput) == sizeof(uint32_t) * 3 + sizeof(float),
+                "I2C numeric draft must retain exactly four fields");
   test_power_and_scalars();
   test_rates_and_nbk();
   test_i2c_pump();
@@ -207,9 +221,11 @@ int main() {
 '''
 
 
-def main() -> int:
+def compile_and_run(header_override: str | None = None, emit: bool = True) -> tuple[int, str]:
     with tempfile.TemporaryDirectory(prefix="samovar-control-numeric-") as temp_dir:
         temp = Path(temp_dir)
+        if header_override is not None:
+            (temp / "control_numeric_input.h").write_text(header_override, encoding="utf-8")
         source = temp / "control_numeric_test.cpp"
         source.write_text(HARNESS, encoding="utf-8")
         binary = temp / "control_numeric_test"
@@ -222,6 +238,8 @@ def main() -> int:
                 "-Werror",
                 "-I",
                 str(ROOT),
+                "-I",
+                str(PROTOCOL_INCLUDE),
                 str(source),
                 "-o",
                 str(binary),
@@ -231,15 +249,64 @@ def main() -> int:
             check=False,
         )
         if compile_result.returncode != 0:
-            sys.stderr.write(compile_result.stdout)
-            sys.stderr.write(compile_result.stderr)
-            return compile_result.returncode
+            output = compile_result.stdout + compile_result.stderr
+            if emit:
+                sys.stderr.write(output)
+            return compile_result.returncode, output
         run_result = subprocess.run(
             [str(binary)], capture_output=True, text=True, check=False
         )
-        sys.stdout.write(run_result.stdout)
-        sys.stderr.write(run_result.stderr)
-        return run_result.returncode
+        output = run_result.stdout + run_result.stderr
+        if emit:
+            sys.stdout.write(run_result.stdout)
+            sys.stderr.write(run_result.stderr)
+        return run_result.returncode, output
+
+
+def source_mutant(source: str, old: str, new: str) -> str:
+    body = extract_function_body(source, PUMP_SIGNATURE, strip_comments=False)
+    if body.count(old) != 1:
+        raise ValueError(f"I2C pump mutation token is not unique: {old}")
+    mutated_body = body.replace(old, new, 1)
+    start = source.find(PUMP_SIGNATURE)
+    body_start = source.find("{", start) + 1
+    body_end = body_start + len(body)
+    return source[:body_start] + mutated_body + source[body_end:]
+
+
+def main() -> int:
+    baseline, _ = compile_and_run()
+    if baseline != 0:
+        return baseline
+
+    source = (ROOT / "control_numeric_input.h").read_text(encoding="utf-8")
+    mutations = (
+        (
+            "speed ceiling",
+            "speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC",
+            "false",
+            "invalid I2C speed changed output",
+        ),
+        (
+            "target steps ceiling",
+            "parsed.targetSteps > I2CSTEPPER_V3_TARGET_STEPS_MAX",
+            "false",
+            "invalid I2C volume changed output",
+        ),
+    )
+    for name, old, new, expected in mutations:
+        try:
+            mutated = source_mutant(source, old, new)
+        except ValueError as error:
+            print(f"FAIL: {error}", file=sys.stderr)
+            return 1
+        status, output = compile_and_run(mutated, emit=False)
+        if status == 0 or f"FAIL: {expected}" not in output:
+            print(f"FAIL: I2C pump {name} mutation survived: {output.strip()}",
+                  file=sys.stderr)
+            return 1
+    print("Control numeric input behavioural checks passed (source-derived mutations)")
+    return 0
 
 
 if __name__ == "__main__":

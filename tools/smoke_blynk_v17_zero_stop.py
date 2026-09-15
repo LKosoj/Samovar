@@ -243,6 +243,7 @@ def compile_and_run(harness: str, emit: bool) -> int:
             [
                 "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                 "-I", str(ROOT),
+                "-I", str(ROOT / "libraries/I2CStepperProtocol/src"),
                 str(source), "-o", str(binary),
             ],
             capture_output=True,

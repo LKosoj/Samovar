@@ -354,23 +354,22 @@ void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = tr
                     UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 
 // I2C stepper
-inline void detect_i2c_steppers();
 inline float i2c_stepper_steps_from_rate(float volume_per_hour);
-inline bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
+inline bool set_stepper_by_time(uint32_t spd, uint8_t direction, uint32_t time);
 inline bool set_stepper_target(
-    uint16_t spd,
+    uint32_t spd,
     uint8_t direction,
     uint32_t target,
-    bool requireI2c = false);
+    bool requireI2c = true);
 inline bool stop_i2c_pump_confirmed();
-inline uint16_t get_stepper_speed(void);
+inline uint32_t get_stepper_speed(void);
 inline uint32_t get_stepper_status(void);
 inline bool set_mixer_pump_target(uint8_t on);
 inline uint8_t get_mixer_pump_status(void);
 inline uint8_t get_i2c_rele_state(uint8_t r);
 inline bool set_i2c_rele_state(uint8_t r, bool s);
-inline float i2c_get_liquid_volume_by_step(int stepCount);
-inline float i2c_get_liquid_rate_by_step(int stepperSpeed);
+inline float i2c_get_liquid_volume_by_step(uint32_t stepCount);
+inline float i2c_get_liquid_rate_by_step(uint32_t stepperSpeed);
 inline float i2c_get_speed_from_rate(float volume_per_hour);
 
 #ifdef USE_LUA

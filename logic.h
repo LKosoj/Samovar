@@ -71,12 +71,12 @@ static bool rectSecondPumpRunning = false;
 static bool rectSecondPumpHeadsRow = false;
 static bool rectSecondPumpHeadsFilling = false;
 static bool rectSecondPumpPaused = false;
-static uint16_t rectSecondPumpPausedVolume = 0;
+static uint32_t rectSecondPumpPausedVolume = 0;
 static uint32_t rectSecondPumpTargetSteps = 0;
 
 inline bool rect_second_i2c_pump_enabled() {
-  return SamSetup.UseSecondI2CPump &&
-         use_I2C_dev == I2CSTEPPER_PUMP_ADDR;
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  return SamSetup.UseSecondI2CPump && pump && pump->present;
 }
 
 inline void rect_fail_second_i2c_pump(const String& action) {
@@ -110,8 +110,9 @@ inline bool rect_apply_second_pump_for_row(const WProgram& row) {
   if (row.WType == 'H') {
     rectSecondPumpHeadsRow = true;
     rectSecondPumpHeadsFilling = row.Volume > 0;
-    rectSecondPumpTargetSteps =
-        (uint32_t)row.Volume * (uint32_t)i2c_stepper_steps_per_ml();
+    I2CStepperDevice* pump = i2c_stepper_selected_pump();
+    if (!pump || !pump->present || pump->config.stepsPerMl == 0) return false;
+    rectSecondPumpTargetSteps = uint32_t(row.Volume) * pump->config.stepsPerMl;
     rectSecondPumpRunning = start_second_i2c_pump(row.Speed, row.Volume);
     return rectSecondPumpRunning;
   }
@@ -127,10 +128,9 @@ inline bool rect_apply_second_pump_for_row(const WProgram& row) {
 inline bool rect_pause_second_i2c_pump() {
   if (!rectSecondPumpRunning) return true;
   if (rectSecondPumpHeadsFilling) {
-    if (!i2c_stepper_refresh(i2cStepperPump, true)) return false;
-    rectSecondPumpPausedVolume = i2cStepperPump.remaining > UINT16_MAX
-        ? UINT16_MAX
-        : (uint16_t)i2cStepperPump.remaining;
+    I2CStepperDevice* pump = i2c_stepper_selected_pump();
+    if (!pump || !pump->present || !i2c_stepper_refresh(*pump, true)) return false;
+    rectSecondPumpPausedVolume = pump->status.remainingSteps;
   }
   if (!stop_second_i2c_pump()) return false;
   rectSecondPumpRunning = false;
@@ -147,10 +147,9 @@ inline bool rect_resume_second_i2c_pump() {
   const float rate = rectSecondPumpHeadsRow
       ? program[ProgramNum].Speed
       : SamSetup.SecondI2CPumpRate;
-  const uint16_t volume = rectSecondPumpHeadsFilling
-      ? rectSecondPumpPausedVolume
-      : 0;
-  rectSecondPumpRunning = start_second_i2c_pump(rate, volume);
+  rectSecondPumpRunning = rectSecondPumpHeadsFilling
+      ? start_second_i2c_pump_steps(rate, rectSecondPumpPausedVolume)
+      : start_second_i2c_pump(rate, 0);
   if (rectSecondPumpRunning) rectSecondPumpPaused = false;
   return rectSecondPumpRunning;
 }
@@ -159,8 +158,9 @@ inline uint32_t rect_current_withdrawal_steps() {
   if (!rectSecondPumpHeadsRow || rectSecondPumpTargetSteps == 0) {
     return stepper_safe_get_current();
   }
-  const uint32_t remaining =
-      (uint32_t)i2cStepperPump.remaining * i2c_stepper_steps_per_ml();
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present) return 0;
+  const uint32_t remaining = pump->status.remainingSteps;
   return remaining < rectSecondPumpTargetSteps
       ? rectSecondPumpTargetSteps - remaining
       : 0;

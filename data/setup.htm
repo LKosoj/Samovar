@@ -177,7 +177,6 @@
       { name: 'TankAddr', integer: true, min: -1, max: 255 },
       { name: 'ACPAddr', integer: true, min: -1, max: 255 },
       { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
-      { name: 'StepperStepMlI2C', integer: true, min: 0, max: 65535 },
       { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
       { name: 'Kp', min: 0, max: 100000 },
       { name: 'Ki', min: 0, max: 100000 },
@@ -273,6 +272,108 @@
       }
     }
 
+    let setupI2cAddress = 0;
+    let setupI2cDevices = [];
+    let setupI2cSelected = null;
+
+    function setupI2cValue(id) {
+      return document.getElementById('i2c-' + id);
+    }
+
+    function setupI2cUrl(command) {
+      const params = new URLSearchParams({address: String(setupI2cAddress)});
+      if (command) params.set('cmd', command);
+      return '/i2cstepper?' + params;
+    }
+
+    function renderSetupI2c() {
+      const panel = setupI2cValue('panel');
+      const missing = setupI2cValue('missing');
+      const present = setupI2cDevices.filter(function (device) { return device.present; });
+      const selectorRow = setupI2cValue('selectorRow');
+      const selector = setupI2cValue('selector');
+      selectorRow.hidden = present.length < 2;
+      selector.replaceChildren();
+      present.forEach(function (device) {
+        const option = document.createElement('option');
+        option.value = device.address;
+        option.textContent = (device.address & 1 ? 'Мешалка' : 'Насос') + ', адрес ' + device.address;
+        option.selected = device.address === setupI2cAddress;
+        selector.append(option);
+      });
+      if (!setupI2cSelected || !setupI2cSelected.present) {
+        panel.hidden = true;
+        missing.hidden = false;
+        missing.textContent = 'Выбранный I2CStepper недоступен. Другое устройство не выбрано автоматически.';
+        return;
+      }
+      missing.hidden = true;
+      panel.hidden = false;
+      const config = setupI2cSelected.config;
+      const address = setupI2cValue('newAddress');
+      address.replaceChildren();
+      for (let value = 1; value <= 10; value++) {
+        const existing = setupI2cDevices.find(function (device) { return device.address === value; });
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value + (value & 1 ? ' — мешалка' : ' — насос');
+        option.disabled = Boolean(existing && existing.present && value !== setupI2cAddress);
+        address.append(option);
+      }
+      address.value = String(config.address);
+      ['mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
+       'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+        setupI2cValue(name).value = config[name];
+      });
+    }
+
+    async function refreshSetupI2c() {
+      if (!setupI2cAddress) return;
+      try {
+        const response = await fetch(setupI2cUrl(), {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'I2CStepper недоступен'));
+        const payload = await response.json();
+        setupI2cDevices = Array.isArray(payload.devices) ? payload.devices : [];
+        setupI2cSelected = payload.selected || null;
+        renderSetupI2c();
+        SamovarApp.clearRequestError();
+      } catch (error) {
+        setupI2cSelected = null;
+        renderSetupI2c();
+        SamovarApp.showRequestError(String(error));
+      }
+    }
+
+    function chooseSetupI2c() {
+      setupI2cAddress = Number(setupI2cValue('selector').value);
+      refreshSetupI2c();
+    }
+
+    async function saveSetupI2c() {
+      if (!setupI2cSelected || !setupI2cSelected.present) return false;
+      const params = new URLSearchParams({address: String(setupI2cAddress), cmd: 'save'});
+      ['newAddress', 'mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
+       'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+        params.set(name, setupI2cValue(name).value);
+      });
+      const button = setupI2cValue('save');
+      button.disabled = true;
+      try {
+        const response = await fetch('/i2cstepper?' + params, {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'Настройки Nano не приняты'));
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        await refreshSetupI2c();
+        SamovarApp.showRequestError('Настройки сохранены в Nano. Новый адрес начнёт работать после перезагрузки Nano.');
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError(String(error));
+        return false;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     window.onload = function() {
       var setupForm = document.getElementById('setupform');
       SamovarApp.showCalculationNavForMode(document.getElementById('mode').value);
@@ -325,6 +426,17 @@
       }
       SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
       SamovarApp.enhanceTooltips();
+      SamovarApp.loadUiBootstrap(function (bootstrap) {
+        var tab = document.getElementById('i2cStepperSetupTab');
+        if (tab && bootstrap && Array.isArray(bootstrap.i2cSteppers) &&
+            bootstrap.i2cSteppers.some(function (device) { return device.present; })) {
+          tab.hidden = false;
+          setupI2cDevices = bootstrap.i2cSteppers;
+          var first = setupI2cDevices.find(function (device) { return device.present; });
+          setupI2cAddress = first ? first.address : 0;
+          refreshSetupI2c();
+        }
+      }).catch(function () {});
     };
 
     // ==================== THEME TOGGLE =================================================================
@@ -359,6 +471,26 @@
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Cheese');" value="Сыр" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'NBK');" value="НБК" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Прочие" aria-pressed="false">
+      <input id='i2cStepperSetupTab' type='button' class="tablinks" value="I2CStepper" hidden
+             onclick="SamovarApp.openTab(event, 'I2CStepper')" aria-pressed="false">
+    </div>
+    <div id="I2CStepper" class="tabcontent" aria-hidden="true">
+      <h2>Настройки Nano I2CStepper</h2>
+      <p id="i2c-missing" hidden></p>
+      <p id="i2c-selectorRow" hidden><label>Устройство <select id="i2c-selector" onchange="chooseSetupI2c()"></select></label></p>
+      <section id="i2c-panel" hidden>
+        <p><label for="i2c-newAddress">Новый адрес</label> <select id="i2c-newAddress"></select></p>
+        <p><label for="i2c-mode">Режим</label> <select id="i2c-mode"><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Наполнение</option></select></p>
+        <p><label for="i2c-stepsPerMl">Шагов/мл</label> <input id="i2c-stepsPerMl" type="number" min="1"></p>
+        <p><label for="i2c-mixerRpm">Обороты мешалки</label> <input id="i2c-mixerRpm" type="number" min="0"></p>
+        <p><label for="i2c-mixerRunSec">Работа мешалки, с</label> <input id="i2c-mixerRunSec" type="number" min="0"></p>
+        <p><label for="i2c-mixerPauseSec">Пауза мешалки, с</label> <input id="i2c-mixerPauseSec" type="number" min="0"></p>
+        <p><label for="i2c-pumpMlHour">Подача насоса, мл/ч</label> <input id="i2c-pumpMlHour" type="number" min="0"></p>
+        <p><label for="i2c-pumpPauseSec">Пауза насоса, с</label> <input id="i2c-pumpPauseSec" type="number" min="0"></p>
+        <p><label for="i2c-fillingMl">Объём наполнения, мл</label> <input id="i2c-fillingMl" type="number" min="0"></p>
+        <p><label for="i2c-fillingMlHour">Скорость наполнения, мл/ч</label> <input id="i2c-fillingMlHour" type="number" min="0"></p>
+        <p><button id="i2c-save" type="button" class="button" onclick="saveSetupI2c()">Сохранить в Nano</button></p>
+      </section>
     </div>
     <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -557,7 +689,6 @@
     <div id="Pump" class="tabcontent" aria-hidden="true">
       <h2><label for="StepperStepMl">Количество шагов шагового двигателя:</label> <input id="StepperStepMl" name='StepperStepMl' type='text' inputmode='decimal' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
       <div style="display: %I2CPumpTab%;">
-        <h2><label for="StepperStepMlI2C" class="tooltip">Количество шагов I2C насоса:<span class="tooltiptext">Калибровка внешнего насоса: сколько шагов двигателя приходится на 1 мл жидкости.</span></label> <input id="StepperStepMlI2C" name='StepperStepMlI2C' type='text' inputmode='decimal' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
         <h2>
           <input id='UseSecondI2CPump' type='checkbox' name='UseSecondI2CPump' value='UseSecondI2CPump' %SecondI2CPumpChecked%>
           <label for='UseSecondI2CPump' class="tooltip">Использовать I2C-насос над ЦП<span class="tooltiptext">Насос участвует в ректификации только если был обнаружен при запуске Самовара. Для голов он становится основным насосом, для тела и предзахлёба работает одновременно с локальным насосом.</span></label>

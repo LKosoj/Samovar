@@ -27,8 +27,6 @@ HARNESS = r'''
 #include <cstdint>
 #include <iostream>
 
-constexpr uint8_t I2CSTEPPER_PUMP_ADDR = 2;
-
 struct Setup {
   bool UseSecondI2CPump = true;
   float SecondI2CPumpRate = 1.0f;
@@ -40,12 +38,21 @@ struct WProgram {
   uint16_t Volume;
 };
 
-static uint8_t use_I2C_dev = I2CSTEPPER_PUMP_ADDR;
+struct I2CStepperV3Config { uint32_t stepsPerMl; };
+struct I2CStepperDevice {
+  uint8_t address;
+  bool present;
+  I2CStepperV3Config config;
+};
+static I2CStepperDevice selectedPump = {2, true, {100}};
+I2CStepperDevice* i2c_stepper_selected_pump() {
+  return selectedPump.present ? &selectedPump : nullptr;
+}
 static bool rectSecondPumpRunning = false;
 static bool rectSecondPumpHeadsRow = false;
 static bool rectSecondPumpHeadsFilling = false;
 static bool rectSecondPumpPaused = false;
-static uint16_t rectSecondPumpPausedVolume = 0;
+static uint32_t rectSecondPumpPausedVolume = 0;
 static uint32_t rectSecondPumpTargetSteps = 0;
 
 static bool stopResult = true;
@@ -62,8 +69,6 @@ bool start_second_i2c_pump(float, uint16_t) {
   startCalls++;
   return startResult;
 }
-
-uint16_t i2c_stepper_steps_per_ml() { return 100; }
 
 bool program_type_one_of(char type, const char* values) {
   for (const char* value = values; *value != '\0'; value++) {

@@ -59,10 +59,12 @@ BROWSER_TEST = r'''async page => {
   //   отступы формы и кнопок; базовая геометрия снята заново по всем 22 сценариям.
   // 09.09.2026: учтены скрытые настройки выключенного детектора, удалённые поля
   // Cheese и удалённые настройки Telegram/LogPeriod на вкладке Other.
+  // 15.09.2026: во вкладке Pump удалены 59 px устаревших настроек; фактическая
+  // геометрия и 23 подсказки перепроверены в Chromium без обрезания.
   const DESKTOP_GEOMETRY_BASELINE = {
     "setup/Main": { form: {x:270,y:85,width:900,height:1182.95}, panel: {x:299,y:190.8,width:842,height:1008.16}, actions: {x:386,y:1198.95,width:668,height:44}, save: {x:386,y:1198.95,width:160,height:44}, return: {x:640,y:1198.95,width:160,height:44}, edit: {x:894,y:1198.95,width:160,height:44} },
     "setup/Temp": { form: {x:270,y:85,width:900,height:1374.8}, panel: {x:299,y:190.8,width:842,height:1200}, actions: {x:386,y:1390.8,width:668,height:44}, save: {x:386,y:1390.8,width:160,height:44}, return: {x:640,y:1390.8,width:160,height:44}, edit: {x:894,y:1390.8,width:160,height:44} },
-    "setup/Pump": { form: {x:270,y:85,width:900,height:431.84}, panel: {x:299,y:190.8,width:842,height:257.05}, actions: {x:386,y:447.84,width:668,height:44}, save: {x:386,y:447.84,width:160,height:44}, return: {x:640,y:447.84,width:160,height:44}, edit: {x:894,y:447.84,width:160,height:44} },
+    "setup/Pump": { form: {x:270,y:85,width:900,height:372.84}, panel: {x:299,y:190.8,width:842,height:198.05}, actions: {x:386,y:388.84,width:668,height:44}, save: {x:386,y:388.84,width:160,height:44}, return: {x:640,y:388.84,width:160,height:44}, edit: {x:894,y:388.84,width:160,height:44} },
     "setup/Beer": { form: {x:270,y:85,width:900,height:599.89}, panel: {x:299,y:190.8,width:842,height:425.09}, actions: {x:386,y:615.89,width:668,height:44}, save: {x:386,y:615.89,width:160,height:44}, return: {x:640,y:615.89,width:160,height:44}, edit: {x:894,y:615.89,width:160,height:44} },
     "setup/Cheese": { form: {x:270,y:85,width:900,height:362.84}, panel: {x:299,y:190.8,width:842,height:188.05}, actions: {x:386,y:378.84,width:668,height:44}, save: {x:386,y:378.84,width:160,height:44}, return: {x:640,y:378.84,width:160,height:44}, edit: {x:894,y:378.84,width:160,height:44} },
     "setup/NBK": { form: {x:270,y:85,width:900,height:603.89}, panel: {x:299,y:190.8,width:842,height:429.09}, actions: {x:386,y:619.89,width:668,height:44}, save: {x:386,y:619.89,width:160,height:44}, return: {x:640,y:619.89,width:160,height:44}, edit: {x:894,y:619.89,width:160,height:44} },
@@ -115,6 +117,16 @@ BROWSER_TEST = r'''async page => {
     "12:00:00,78.1,77.9,20.2,82.3,760,1",
     "12:00:15,78.2,78.0,20.3,82.5,761,2"
   ].join("\n");
+  const i2cStepper = {
+    present: 1, address: 2, everPresent: 1, capabilities: 30,
+    config: { address: 2, mode: 3, optionFlags: 0, sensorFlags: 0, relayMask: 0,
+      mixerRpm: 0, mixerRunSec: 0, mixerPauseSec: 0, pumpMlHour: 100,
+      pumpPauseSec: 0, fillingMl: 100, fillingMlHour: 100, stepsPerMl: 100 },
+    motion: { mode: 0, direction: 0, speedStepsPerSec: 100, targetSteps: 1000 },
+    status: { mode: 3, flags: 0, result: 0, error: 0, stopReason: 0, generation: 1,
+      currentSpeedStepsPerSec: 0, remainingSteps: 0 }
+  };
+  const i2cStepperResponse = { selected: i2cStepper, devices: [i2cStepper] };
 
   page.on("console", message => {
     if (message.type() === "warning" || message.type() === "error") {
@@ -146,6 +158,9 @@ BROWSER_TEST = r'''async page => {
   }));
   await page.route("**/ui-bootstrap", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(bootstrapFixture)
+  }));
+  await page.route("**/i2cstepper?address=2", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(i2cStepperResponse)
   }));
   // program.htm/index.htm/distiller.htm (проверка подсказок на fit, ниже) на загрузке
   // сами запрашивают параметры колонки - без фикстуры это настоящий 404 от тестового
@@ -312,7 +327,7 @@ BROWSER_TEST = r'''async page => {
         form: ["setupform", "/save", "post"],
         actions: [["save", "save", "submit", "Сохранить"], ["return", "return", "button", "На главную"], ["edit", "edit", "button", "Редактор"]],
         longInputs: [["blynkauth", "text"], ["videourl", "text"]],
-        tabs: ["Main", "Temp", "Pump", "Beer", "Cheese", "NBK", "Other"]
+        tabs: ["I2CStepper", "Main", "Temp", "Pump", "Beer", "Cheese", "NBK", "Other"]
       };
       if (JSON.stringify(contract) !== JSON.stringify(expected)) {
         fail("behavior-invariant", "#setupform", form, null, JSON.stringify(contract));
@@ -726,7 +741,7 @@ BROWSER_TEST = r'''async page => {
   // 04.09.2026: в Beer добавлена подсказка к варочному порядку, сумма 14 -> 15.
   // 05.09.2026: согласованные подсказки MPX, второго I2C-насоса и НБК увеличили
   // фактическое число проверяемых подсказок до 24. Три старые настройки Cheese
-  // позже удалены вместе с их подсказками.
+  // позже удалены вместе с их подсказками; текущая разметка содержит 23.
   await page.setViewportSize({ width: 320, height: 800 });
   let setupTooltipTotal = 0;
   for (const tab of setupTabs) {
@@ -734,7 +749,7 @@ BROWSER_TEST = r'''async page => {
     await openSetupTab(tab);
     setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
   }
-  const SETUP_TOOLTIP_TOTAL_EXPECTED = 24;
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 23;
   if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
     throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
       " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);

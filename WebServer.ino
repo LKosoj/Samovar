@@ -44,6 +44,7 @@ static String build_error_envelope(const char *code, const char *field, const St
 }
 
 bool i2c_stepper_mode_supported(const I2CStepperDevice& dev);
+void i2c_stepper_web_lease_touch(uint8_t address);
 
 // bypassBarrier=true для recovery-команд (reboot/resetwifi): путь восстановления не должен
 // зависеть от исправности барьерной логики. Если из-за будущего дефекта mode_switch_barrier_active
@@ -247,8 +248,9 @@ static OperationError queue_pending_i2cpump(
     PendingI2CPumpCmd command, OperationId& operationId) {
   PendingCommandLockGuard guard;
   if (!guard) return OPERATION_ERROR_LOCK_BUSY;
+  I2CStepperDevice* device = i2c_stepper_device(command.address);
   if (mode_switch_in_progress() || pending_i2cpump_flag ||
-      i2c_stepper_config_busy(i2cStepperPump)) {
+      !device || !device->present || i2c_stepper_config_busy(*device)) {
     return OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
@@ -269,14 +271,10 @@ static OperationError queue_pending_i2cstepper(
     PendingI2CStepperCmd command, OperationId& operationId) {
   PendingCommandLockGuard guard;
   if (!guard) return OPERATION_ERROR_LOCK_BUSY;
-  I2CStepperDevice& device = command.device_sel == 0
-      ? i2cStepperMixer
-      : i2cStepperPump;
+  I2CStepperDevice* device = i2c_stepper_device(command.address);
   if (mode_switch_in_progress() || pending_i2cstepper_flag ||
-      command.device_sel > 1 || i2c_stepper_config_busy(device)) {
-    return command.device_sel > 1
-        ? OPERATION_ERROR_INTERNAL
-        : OPERATION_ERROR_LOCK_BUSY;
+      !device || !device->present || i2c_stepper_config_busy(*device)) {
+    return !device ? OPERATION_ERROR_INTERNAL : OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
   const OperationError reserveError = operation_store_reserve_locked(
@@ -299,8 +297,9 @@ static OperationError queue_pending_i2ccal(
   const bool calibrationStateValid = command.is_finish
       ? I2CPumpCalibrating && startval != SAMOVAR_STARTVAL_CALIBRATION
       : startval == SAMOVAR_STARTVAL_IDLE && !I2CPumpCalibrating;
+  I2CStepperDevice* device = i2c_stepper_device(command.address);
   if (mode_switch_in_progress() || pending_i2ccal_flag || pending_local_cal_flag ||
-      !calibrationStateValid || i2c_stepper_config_busy(i2cStepperPump)) {
+      !device || !device->present || !calibrationStateValid || i2c_stepper_config_busy(*device)) {
     return OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
@@ -342,27 +341,35 @@ static OperationError queue_pending_local_cal(
   return OPERATION_ERROR_NONE;
 }
 
-I2CStepperDevice* select_i2c_stepper_device(AsyncWebServerRequest *request) {
-  const AsyncWebParameter *param = get_request_param(request, "device");
-  String device = param ? param->value() : "pump";
-  if (device == "mixer") return &i2cStepperMixer;
-  if (device == "pump") return &i2cStepperPump;
-  return nullptr;
+static NumericParseResult parse_i2c_stepper_address(
+    const AsyncWebParameter *param, uint8_t& address) {
+  return param ? parse_bounded_uint8(param->value().c_str(),
+                                     I2CSTEPPER_V3_ADDRESS_MIN,
+                                     I2CSTEPPER_V3_ADDRESS_MAX, address)
+               : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+}
+
+I2CStepperDevice* select_i2c_stepper_device(AsyncWebServerRequest *request,
+                                             uint8_t& address) {
+  if (!parse_i2c_stepper_address(get_request_param(request, "address"), address).ok()) {
+    return nullptr;
+  }
+  return i2c_stepper_device(address);
 }
 
 #include "web_i2c_stepper_parse.h"
 
 static bool i2c_stepper_config_param(const String& name) {
-  return name == "mode" || name == "relayMask" || name == "sensorFlags" ||
-         name == "optionFlags" || name == "mixerRpm" ||
+  return name == "newAddress" || name == "mode" || name == "relayMask" ||
+         name == "sensorFlags" || name == "optionFlags" || name == "mixerRpm" ||
          name == "mixerRunSec" || name == "mixerPauseSec" ||
-         name == "pumpMlHour" || name == "pumpPauseSec" ||
-         name == "fillingMl" || name == "fillingMlHour" ||
-         name == "stepsPerMl";
+         name == "pumpMlHour" || name == "pumpPauseSec" || name == "fillingMl" ||
+         name == "fillingMlHour" || name == "stepsPerMl" || name == "direction" ||
+         name == "speedStepsPerSec" || name == "targetSteps";
 }
 
 static bool i2c_stepper_known_param(const String& name) {
-  return name == "device" || name == "cmd" || name == "relay" ||
+  return name == "address" || name == "cmd" || name == "relay" ||
          name == "state" || i2c_stepper_config_param(name);
 }
 
@@ -370,32 +377,49 @@ static NumericParseResult parse_i2c_stepper_patch(
     const I2CStepperParams *request,
     const String& command,
     const I2CStepperDevice& current,
-    I2CStepperDevice& candidate,
+    I2CStepperV3Config& config,
+    I2CStepperV3Motion& motion,
+    uint8_t& relay,
+    bool& relayState,
     const char*& errorField) {
-  I2CStepperDevice parsed = current;
-  NumericParseResult result = parse_i2c_stepper_bounded<uint8_t>(request, "mode", 1, 3, parsed.mode, errorField, parse_bounded_uint8);
+  config = current.config;
+  motion = current.motion;
+  relay = 0;
+  relayState = false;
+  NumericParseResult result = parse_i2c_stepper_bounded<uint8_t>(request, "newAddress",
+      I2CSTEPPER_V3_ADDRESS_MIN, I2CSTEPPER_V3_ADDRESS_MAX, config.address, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint8_t>(request, "relayMask", 0, 15, parsed.relayMask, errorField, parse_bounded_uint8);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "mode", 1, 3, config.mode, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint8_t>(request, "sensorFlags", 0, 7, parsed.sensorFlags, errorField, parse_bounded_uint8);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "relayMask", 0, 15, config.relayMask, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint8_t>(request, "optionFlags", 0, 7, parsed.optionFlags, errorField, parse_bounded_uint8);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "sensorFlags", 0, 7, config.sensorFlags, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "mixerRpm", 0, UINT16_MAX, parsed.mixerRpm, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "optionFlags", 0, 7, config.optionFlags, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "mixerRunSec", 0, UINT16_MAX, parsed.mixerRunSec, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "mixerRpm", 0, UINT32_MAX, config.mixerRpm, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "mixerPauseSec", 0, UINT16_MAX, parsed.mixerPauseSec, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "mixerRunSec", 0, UINT32_MAX, config.mixerRunSec, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "pumpMlHour", 0, UINT16_MAX, parsed.pumpMlHour, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "mixerPauseSec", 0, UINT32_MAX, config.mixerPauseSec, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "pumpPauseSec", 0, UINT16_MAX, parsed.pumpPauseSec, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "pumpMlHour", 0, UINT32_MAX, config.pumpMlHour, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "fillingMl", 0, UINT16_MAX, parsed.fillingMl, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "pumpPauseSec", 0, UINT32_MAX, config.pumpPauseSec, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "fillingMlHour", 0, UINT16_MAX, parsed.fillingMlHour, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "fillingMl", 0, UINT32_MAX, config.fillingMl, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_bounded<uint16_t>(request, "stepsPerMl", 1, UINT16_MAX, parsed.stepsPerMl, errorField, parse_bounded_uint16);
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "fillingMlHour", 0, UINT32_MAX, config.fillingMlHour, errorField, parse_bounded_uint32);
+  if (!result.ok()) return result;
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "stepsPerMl", 1, UINT32_MAX, config.stepsPerMl, errorField, parse_bounded_uint32);
+  if (!result.ok()) return result;
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "direction", 0, 1, motion.direction, errorField, parse_bounded_uint8);
+  if (!result.ok()) return result;
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "speedStepsPerSec", 0,
+      I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC, motion.speedStepsPerSec, errorField, parse_bounded_uint32);
+  if (!result.ok()) return result;
+  result = parse_i2c_stepper_bounded<uint32_t>(request, "targetSteps", 0,
+      I2CSTEPPER_V3_TARGET_STEPS_MAX, motion.targetSteps, errorField, parse_bounded_uint32);
   if (!result.ok()) return result;
 
   const uint8_t relayCount = request_param_count(request, "relay");
@@ -408,26 +432,26 @@ static NumericParseResult parse_i2c_stepper_patch(
     return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
   }
   if (hasRelay) {
-    uint8_t relay = 0;
-    bool state = false;
+    uint8_t parsedRelay = 0;
+    bool parsedRelayState = false;
     const I2CStepperParam *relayParam = get_request_param(request, "relay");
     const I2CStepperParam *stateParam = get_request_param(request, "state");
     result = relayParam
-        ? parse_bounded_uint8(relayParam->value().c_str(), 1, 4, relay)
+        ? parse_bounded_uint8(relayParam->value().c_str(), 1, 4, parsedRelay)
         : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
     if (!result.ok()) {
       errorField = "relay";
       return result;
     }
     result = stateParam
-        ? parse_exact_bool(stateParam->value().c_str(), state)
+        ? parse_exact_bool(stateParam->value().c_str(), parsedRelayState)
         : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
     if (!result.ok()) {
       errorField = "state";
       return result;
     }
-    if (state) parsed.relayMask |= uint8_t(1U << (relay - 1));
-    else parsed.relayMask &= uint8_t(~(1U << (relay - 1)));
+    relay = parsedRelay;
+    relayState = parsedRelayState;
   }
 
   bool hasConfig = false;
@@ -435,7 +459,7 @@ static NumericParseResult parse_i2c_stepper_patch(
     const I2CStepperParam *param = request->getParam(index);
     if (param && i2c_stepper_config_param(param->name())) hasConfig = true;
   }
-  if ((command == "status" || command == "stop" || command == "calfinish") &&
+  if ((command == "status" || command == "stop" || command == "calfinish" || command == "lease") &&
       (hasConfig || hasRelay || hasState)) {
     errorField = "cmd";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
@@ -448,65 +472,54 @@ static NumericParseResult parse_i2c_stepper_patch(
     errorField = "relay";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
   }
-  if (current.address == I2CSTEPPER_MIXER_ADDR &&
-      (request_param_count(request, "pumpMlHour") != 0 ||
-       request_param_count(request, "pumpPauseSec") != 0 ||
-       request_param_count(request, "fillingMl") != 0 ||
-       request_param_count(request, "fillingMlHour") != 0 ||
-       request_param_count(request, "stepsPerMl") != 0)) {
-    errorField = "device";
-    return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
-  if (current.address == I2CSTEPPER_PUMP_ADDR &&
-      (request_param_count(request, "mixerRpm") != 0 ||
-       request_param_count(request, "mixerRunSec") != 0 ||
-       request_param_count(request, "mixerPauseSec") != 0)) {
-    errorField = "device";
-    return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
   const bool validatesConfig = command == "apply" || command == "save" ||
       command == "start" || command == "calstart";
-  if (validatesConfig && current.address == I2CSTEPPER_MIXER_ADDR &&
-      parsed.mode != I2CSTEP_MODE_MIXER) {
+  const bool hasNewAddress = request_param_count(request, "newAddress") == 1;
+  if (hasNewAddress && command != "save") {
+    errorField = "newAddress";
+    return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+  }
+  if (config.address != current.config.address) {
+    I2CStepperDevice* occupied = i2c_stepper_device(config.address);
+    if (occupied && occupied->present) {
+      errorField = "newAddress";
+      return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+    }
+    if (!i2cstepper_v3_mode_after_address_change(
+            current.config.address, config.address, current.config.mode, &config.mode)) {
+      errorField = "newAddress";
+      return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+    }
+  }
+  if (validatesConfig && !i2cstepper_v3_mode_supported(config.address, config.mode)) {
     errorField = "mode";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
   }
-  if (validatesConfig && current.address == I2CSTEPPER_PUMP_ADDR &&
-      parsed.mode != I2CSTEP_MODE_PUMP && parsed.mode != I2CSTEP_MODE_FILLING) {
-    errorField = "mode";
-    return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
-  if (validatesConfig && !i2c_stepper_mode_supported(parsed)) {
-    errorField = "mode";
-    return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
-  if (hasConfig && parsed.sensorFlags != 0 &&
-      (parsed.caps & I2CSTEPPER_CAP_SENSOR) == 0) {
+  if (hasConfig && config.sensorFlags != 0 &&
+      (current.capabilities & I2CSTEPPER_V3_CAP_SENSOR) == 0) {
     errorField = "sensorFlags";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
   }
-  if (((hasConfig && parsed.relayMask != 0) || command == "relay") &&
-      (parsed.caps & I2CSTEPPER_CAP_RELAY) == 0) {
+  if (((hasConfig && config.relayMask != 0) || command == "relay") &&
+      (current.capabilities & I2CSTEPPER_V3_CAP_RELAY) == 0) {
     errorField = command == "relay" ? "relay" : "relayMask";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
   }
   if ((command == "apply" || command == "save" || command == "start" || command == "calstart") &&
-      parsed.address == I2CSTEPPER_PUMP_ADDR && parsed.stepsPerMl == 0) {
+      !i2cstepper_v3_address_is_mixer(config.address) && config.stepsPerMl == 0) {
     errorField = "stepsPerMl";
     return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
   }
   if (command == "start") {
-    const bool validStart = parsed.mode == I2CSTEP_MODE_MIXER ? parsed.mixerRpm > 0
-        : parsed.mode == I2CSTEP_MODE_PUMP ? parsed.pumpMlHour > 0
-        : parsed.fillingMl > 0 && parsed.fillingMlHour > 0;
+    const bool validStart = motion.speedStepsPerSec > 0 && motion.targetSteps > 0;
     if (!validStart) {
       errorField = "mode";
       return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
     }
   }
   if ((command == "calstart" || command == "calfinish") &&
-      (parsed.address != I2CSTEPPER_PUMP_ADDR ||
-       (parsed.caps & I2CSTEPPER_CAP_FILLING) == 0)) {
+      (i2cstepper_v3_address_is_mixer(config.address) ||
+       (current.capabilities & I2CSTEPPER_V3_CAP_FILLING) == 0)) {
     errorField = "cmd";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
   }
@@ -515,65 +528,73 @@ static NumericParseResult parse_i2c_stepper_patch(
       errorField = "stepsPerMl";
       return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
     }
-    const bool hasRate = parsed.mode == I2CSTEP_MODE_PUMP
-        ? request_param_count(request, "pumpMlHour") == 1 && parsed.pumpMlHour > 0
-        : request_param_count(request, "fillingMlHour") == 1 && parsed.fillingMlHour > 0;
-    if (!hasRate) {
-      errorField = parsed.mode == I2CSTEP_MODE_PUMP ? "pumpMlHour" : "fillingMlHour";
+    if (request_param_count(request, "pumpMlHour") != 1 || config.pumpMlHour == 0) {
+      errorField = "pumpMlHour";
       return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
     }
   }
-  candidate = parsed;
+  motion.mode = config.mode;
   return numeric_parse_result(NUMERIC_PARSE_OK);
 }
 
 bool i2c_stepper_mode_supported(const I2CStepperDevice& dev) {
-  if (dev.mode == I2CSTEP_MODE_MIXER) return (dev.caps & I2CSTEPPER_CAP_MIXER) != 0;
-  if (dev.mode == I2CSTEP_MODE_PUMP) return (dev.caps & I2CSTEPPER_CAP_PUMP) != 0;
-  if (dev.mode == I2CSTEP_MODE_FILLING) return (dev.caps & I2CSTEPPER_CAP_FILLING) != 0;
-  return false;
+  return i2cstepper_v3_mode_supported(dev.config.address, dev.config.mode);
 }
 
 bool i2c_stepper_command_supported(const I2CStepperDevice& dev, const String& cmd) {
   if (cmd == "status") return true;
-  if (cmd == "relay") return (dev.caps & I2CSTEPPER_CAP_RELAY) != 0;
-  if (cmd == "calstart" || cmd == "calfinish") return (dev.caps & I2CSTEPPER_CAP_FILLING) != 0;
+  if (cmd == "relay") return (dev.capabilities & I2CSTEPPER_V3_CAP_RELAY) != 0;
+  if (cmd == "calstart" || cmd == "calfinish") return (dev.capabilities & I2CSTEPPER_V3_CAP_FILLING) != 0;
   if (cmd == "apply" || cmd == "save" || cmd == "start") return i2c_stepper_mode_supported(dev);
-  if (cmd == "stop") return (dev.caps & (I2CSTEPPER_CAP_MIXER | I2CSTEPPER_CAP_PUMP | I2CSTEPPER_CAP_FILLING)) != 0;
+  if (cmd == "stop") return (dev.capabilities & (I2CSTEPPER_V3_CAP_MIXER | I2CSTEPPER_V3_CAP_PUMP | I2CSTEPPER_V3_CAP_FILLING)) != 0;
   return false;
 }
 
-// Состояние платы I2CStepper одним JSON-объектом: ответ /i2cstepper?cmd=status и
-// значение каждого устройства в Blynk V36 (Blynk.ino, PIN_SPEC.md §13).
 void write_i2c_stepper_json(Print& out, const I2CStepperDevice& dev) {
   out.print('{');
   out.print("\"present\":"); out.print(dev.present ? 1 : 0);
   out.print(",\"address\":"); out.print(dev.address);
-  out.print(",\"role\":"); out.print(dev.role);
-  out.print(",\"mode\":"); out.print(dev.mode);
-  out.print(",\"caps\":"); out.print(dev.caps);
-  out.print(",\"status\":"); out.print(dev.status);
-  out.print(",\"error\":"); out.print(dev.error);
-  out.print(",\"relayMask\":"); out.print(dev.relayMask);
-  out.print(",\"sensorFlags\":"); out.print(dev.sensorFlags);
-  out.print(",\"optionFlags\":"); out.print(dev.optionFlags);
-  out.print(",\"mixerRpm\":"); out.print(dev.mixerRpm);
-  out.print(",\"mixerRunSec\":"); out.print(dev.mixerRunSec);
-  out.print(",\"mixerPauseSec\":"); out.print(dev.mixerPauseSec);
-  out.print(",\"pumpMlHour\":"); out.print(dev.pumpMlHour);
-  out.print(",\"pumpPauseSec\":"); out.print(dev.pumpPauseSec);
-  out.print(",\"fillingMl\":"); out.print(dev.fillingMl);
-  out.print(",\"fillingMlHour\":"); out.print(dev.fillingMlHour);
-  out.print(",\"stepsPerMl\":"); out.print(dev.stepsPerMl);
-  out.print(",\"remaining\":"); out.print(dev.remaining);
-  out.print(",\"currentSpeed\":"); out.print(dev.currentSpeed);
+  out.print(",\"everPresent\":"); out.print(dev.everPresent ? 1 : 0);
+  out.print(",\"capabilities\":"); out.print(dev.capabilities);
+  out.print(",\"config\":{\"address\":"); out.print(dev.config.address);
+  out.print(",\"mode\":"); out.print(dev.config.mode);
+  out.print(",\"optionFlags\":"); out.print(dev.config.optionFlags);
+  out.print(",\"sensorFlags\":"); out.print(dev.config.sensorFlags);
+  out.print(",\"relayMask\":"); out.print(dev.config.relayMask);
+  out.print(",\"mixerRpm\":"); out.print(dev.config.mixerRpm);
+  out.print(",\"mixerRunSec\":"); out.print(dev.config.mixerRunSec);
+  out.print(",\"mixerPauseSec\":"); out.print(dev.config.mixerPauseSec);
+  out.print(",\"pumpMlHour\":"); out.print(dev.config.pumpMlHour);
+  out.print(",\"pumpPauseSec\":"); out.print(dev.config.pumpPauseSec);
+  out.print(",\"fillingMl\":"); out.print(dev.config.fillingMl);
+  out.print(",\"fillingMlHour\":"); out.print(dev.config.fillingMlHour);
+  out.print(",\"stepsPerMl\":"); out.print(dev.config.stepsPerMl); out.print('}');
+  out.print(",\"motion\":{\"mode\":"); out.print(dev.motion.mode);
+  out.print(",\"direction\":"); out.print(dev.motion.direction);
+  out.print(",\"speedStepsPerSec\":"); out.print(dev.motion.speedStepsPerSec);
+  out.print(",\"targetSteps\":"); out.print(dev.motion.targetSteps); out.print('}');
+  out.print(",\"status\":{\"mode\":"); out.print(dev.status.mode);
+  out.print(",\"flags\":"); out.print(dev.status.status);
+  out.print(",\"result\":"); out.print(dev.status.commandResult);
+  out.print(",\"error\":"); out.print(dev.status.error);
+  out.print(",\"stopReason\":"); out.print(dev.status.stopReason);
+  out.print(",\"generation\":"); out.print(dev.status.generation);
+  out.print(",\"currentSpeedStepsPerSec\":"); out.print(dev.status.currentSpeedStepsPerSec);
+  out.print(",\"remainingSteps\":"); out.print(dev.status.remainingSteps); out.print('}');
   out.print('}');
 }
 
 void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev) {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   response->addHeader("Cache-Control", "no-store");
+  response->print("{\"selected\":");
   write_i2c_stepper_json(*response, dev);
+  response->print(",\"devices\":[");
+  for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
+    if (index) response->print(',');
+    write_i2c_stepper_json(*response, i2cSteppers[index]);
+  }
+  response->print("]}");
   request->send(response);
 }
 
@@ -602,12 +623,12 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     }
   }
 
-  const uint8_t deviceCount = request_param_count(request, "device");
+  const uint8_t addressCount = request_param_count(request, "address");
   const uint8_t commandCount = request_param_count(request, "cmd");
-  if (deviceCount > 1 || commandCount > 1) {
+  if (addressCount != 1 || commandCount > 1) {
     send_i2c_numeric_error(
         request,
-        deviceCount > 1 ? "device" : "cmd",
+        addressCount != 1 ? "address" : "cmd",
         NUMERIC_PARSE_INVALID_ARGUMENT);
     return;
   }
@@ -618,25 +639,26 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
   command.toLowerCase();
   if (command != "status" && command != "apply" && command != "save" &&
       command != "start" && command != "stop" && command != "calstart" &&
-      command != "calfinish" && command != "relay") {
+      command != "calfinish" && command != "relay" && command != "lease") {
     send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
     return;
   }
-  if (command != "status" && (deviceCount != 1 || commandCount != 1)) {
+  if (command != "status" && (addressCount != 1 || commandCount != 1)) {
     send_i2c_numeric_error(
         request,
-        deviceCount != 1 ? "device" : "cmd",
+        addressCount != 1 ? "address" : "cmd",
         NUMERIC_PARSE_INVALID_ARGUMENT);
     return;
   }
 
-  I2CStepperDevice* dev = select_i2c_stepper_device(request);
+  uint8_t address = 0;
+  I2CStepperDevice* dev = select_i2c_stepper_device(request, address);
   if (!dev) {
-    send_i2c_numeric_error(request, "device", NUMERIC_PARSE_NOT_ALLOWED);
+    send_i2c_numeric_error(request, "address", NUMERIC_PARSE_OUT_OF_RANGE);
     return;
   }
   if (command == "status") {
-    if (request->params() != deviceCount + commandCount) {
+    if (request->params() != addressCount + commandCount) {
       send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
       return;
     }
@@ -649,6 +671,11 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
         build_error_envelope("unavailable", nullptr, "I2C device not available"));
     return;
   }
+  if (command == "lease") {
+    i2c_stepper_web_lease_touch(address);
+    send_no_store_response(request, 204, "text/plain", "");
+    return;
+  }
 
   // Параметры уже проверены на имя/дубли/тип выше: копия без файлов и POST-полей.
   I2CStepperParams params;
@@ -656,22 +683,34 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     const AsyncWebParameter *param = request->getParam(index);
     params.add(param->name(), param->value());
   }
-  I2CStepperDevice staged = *dev;
+  I2CStepperV3Config config{};
+  I2CStepperV3Motion motion{};
+  uint8_t relay = 0;
+  bool relayState = false;
   const char *errorField = "request";
   NumericParseResult result = parse_i2c_stepper_patch(
-      &params, command, *dev, staged, errorField);
+      &params, command, *dev, config, motion, relay, relayState, errorField);
   if (!result.ok()) {
     send_i2c_numeric_error(request, errorField, result.error);
     return;
   }
+  I2CStepperDevice staged = *dev;
+  staged.config = config;
+  staged.motion = motion;
   if (!i2c_stepper_command_supported(staged, command)) {
     send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
     return;
   }
 
   PendingI2CStepperCmd pendingCmd = {};
-  pendingCmd.staged = staged;
-  pendingCmd.device_sel = dev == &i2cStepperMixer ? 0 : 1;
+  pendingCmd.address = address;
+  if (command == "relay") {
+    pendingCmd.relay = relay;
+    pendingCmd.relayState = relayState;
+  } else {
+    pendingCmd.config = config;
+    pendingCmd.motion = motion;
+  }
   strncpy(pendingCmd.cmd, command.c_str(), sizeof(pendingCmd.cmd) - 1);
   OperationId operationId = 0;
   const OperationError queueError = queue_pending_i2cstepper(
@@ -691,7 +730,8 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
   for (size_t index = 0; index < request->params(); index++) {
     const AsyncWebParameter *param = request->getParam(index);
     const bool known = param &&
-        (param->name() == "stop" || param->name() == "speed" || param->name() == "volume");
+        (param->name() == "address" || param->name() == "stop" ||
+         param->name() == "speed" || param->name() == "volume");
     if (!known || param->isFile() || param->isPost() ||
         request_param_count(request, param->name().c_str()) != 1) {
       send_i2c_numeric_error(request, "request", NUMERIC_PARSE_INVALID_ARGUMENT);
@@ -700,20 +740,24 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
   }
 
   const uint8_t stopCount = request_param_count(request, "stop");
+  const uint8_t addressCount = request_param_count(request, "address");
   const uint8_t speedCount = request_param_count(request, "speed");
   const uint8_t volumeCount = request_param_count(request, "volume");
+  uint8_t address = 0;
+  I2CStepperDevice* device = select_i2c_stepper_device(request, address);
+  if (addressCount != 1 || !device || !device->present ||
+      (device->capabilities & I2CSTEPPER_V3_CAP_FILLING) == 0) {
+    send_no_store_response(request, 400, "application/json",
+        build_error_envelope("unavailable", "address", "I2C filling pump not available"));
+    return;
+  }
   if (stopCount == 1) {
-    if (speedCount != 0 || volumeCount != 0 || request->params() != 1) {
+    if (speedCount != 0 || volumeCount != 0 || request->params() != 2) {
       send_i2c_numeric_error(request, "stop", NUMERIC_PARSE_INVALID_ARGUMENT);
       return;
     }
-    if (!i2cStepperPump.present) {
-      send_no_store_response(
-          request, 400, "application/json",
-          build_error_envelope("unavailable", nullptr, "I2C pump not available"));
-      return;
-    }
     PendingI2CPumpCmd command = {};
+    command.address = address;
     command.is_stop = true;
     OperationId operationId = 0;
     const OperationError queueError = queue_pending_i2cpump(
@@ -729,7 +773,7 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
     send_operation_accepted(request, operationId);
     return;
   }
-  if (stopCount != 0 || speedCount != 1 || volumeCount != 1 || request->params() != 2) {
+  if (stopCount != 0 || speedCount != 1 || volumeCount != 1 || request->params() != 3) {
     send_i2c_numeric_error(request, "request", NUMERIC_PARSE_INVALID_ARGUMENT);
     return;
   }
@@ -741,28 +785,18 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
   NumericParseResult result = parse_control_i2c_pump(
       speedParam ? speedParam->value().c_str() : nullptr,
       volumeParam ? volumeParam->value().c_str() : nullptr,
-      i2c_stepper_steps_per_ml(),
+      device->config.stepsPerMl,
       parsed,
       errorField);
   if (!result.ok()) {
     send_i2c_numeric_error(request, errorField, result.error);
     return;
   }
-  if (!i2cStepperPump.present ||
-      (i2cStepperPump.caps & I2CSTEPPER_CAP_FILLING) == 0) {
-    send_no_store_response(
-        request, 400, "application/json",
-        build_error_envelope("unavailable", nullptr, "I2C filling mode not available"));
-    return;
-  }
-
   PendingI2CPumpCmd command = {};
+  command.address = address;
   command.speedSteps = parsed.speedSteps;
   command.targetSteps = parsed.targetSteps;
   command.targetMl = parsed.targetMl;
-  command.fillingMl = parsed.fillingMl;
-  command.fillingMlHour = parsed.fillingMlHour;
-  command.stepsPerMl = parsed.stepsPerMl;
   OperationId operationId = 0;
   const OperationError queueError = queue_pending_i2cpump(
       command, operationId);
@@ -924,7 +958,9 @@ struct UiBootstrapSnapshot {
   bool programNumberVisible;
   bool i2cStepperVisible;
   bool i2cPumpVisible;
+  I2CStepperDevice i2cDevices[I2CSTEPPER_DEVICE_COUNT];
   bool calibrationRunning;
+  bool processRunning;
   bool i2cCalibration;
   bool cheesePhAvailable;
   int cheesePhAds1115Address;
@@ -1242,12 +1278,15 @@ static bool capture_ui_bootstrap_snapshot(UiBootstrapSnapshot& snapshot) {
   snapshot.tankVisible = TankSensor.avgTemp > 0;
   snapshot.pressureVisible = bme_pressure > 0;
   snapshot.programNumberVisible = ProgramNum > 0;
-  snapshot.i2cStepperVisible =
-      i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present;
-  snapshot.i2cPumpVisible = i2c_stepper_cache.pump_present;
+  snapshot.i2cStepperVisible = i2c_stepper_present_count() != 0;
+  snapshot.i2cPumpVisible = i2c_stepper_lowest_present(false) != nullptr;
+  for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
+    snapshot.i2cDevices[index] = i2cSteppers[index];
+  }
   snapshot.i2cCalibration = I2CPumpCalibrating;
   snapshot.calibrationRunning =
       startval == SAMOVAR_STARTVAL_CALIBRATION || snapshot.i2cCalibration;
+  snapshot.processRunning = startval != SAMOVAR_STARTVAL_IDLE;
   snapshot.cheesePhAvailable = cheese_ph_available();
   snapshot.cheesePhAds1115Address = cheese_ph_ads1115_address();
   snapshot.pwmValue = bk_pwm;
@@ -1290,6 +1329,16 @@ static bool ui_bootstrap_write_float(
   if (!isfinite(value)) return false;
   if (value > 99999.0f || value < -99999.0f) return false;
   return ui_bootstrap_write_key(out, first, key) && out.print(value, digits) > 0;
+}
+
+static bool ui_bootstrap_write_i2c_devices(
+    Print& out, bool& first, const I2CStepperDevice* devices) {
+  if (!ui_bootstrap_write_key(out, first, "i2cSteppers") || out.print('[') != 1) return false;
+  for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
+    if (index && out.print(',') != 1) return false;
+    write_i2c_stepper_json(out, devices[index]);
+  }
+  return out.print(']') == 1;
 }
 
 static const char* ui_bootstrap_beer_brew_order(uint8_t order) {
@@ -1335,6 +1384,7 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
       !ui_bootstrap_write_bool(out, first, "programNumberVisible", snapshot.programNumberVisible) ||
       !ui_bootstrap_write_bool(out, first, "i2cStepperVisible", snapshot.i2cStepperVisible) ||
       !ui_bootstrap_write_bool(out, first, "i2cPumpVisible", snapshot.i2cPumpVisible) ||
+      !ui_bootstrap_write_i2c_devices(out, first, snapshot.i2cDevices) ||
       !ui_bootstrap_write_string(out, first, "beerBrewOrder",
                                   ui_bootstrap_beer_brew_order(snapshot.setup.BeerBrewOrder),
                                   strlen(ui_bootstrap_beer_brew_order(snapshot.setup.BeerBrewOrder))) ||
@@ -1350,8 +1400,8 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
       !ui_bootstrap_write_long(out, first, "timeZone", snapshot.setup.TimeZone) ||
       !ui_bootstrap_write_long(out, first, "stepperMaxSpeed", STEPPER_MAX_SPEED) ||
       !ui_bootstrap_write_long(out, first, "stepperStepsPerMl", snapshot.setup.StepperStepMl * 100L) ||
-      !ui_bootstrap_write_long(out, first, "i2cStepperStepsPerMl", snapshot.setup.StepperStepMlI2C * 100L) ||
       !ui_bootstrap_write_bool(out, first, "calibrationRunning", snapshot.calibrationRunning) ||
+      !ui_bootstrap_write_bool(out, first, "processRunning", snapshot.processRunning) ||
       !ui_bootstrap_write_string(out, first, "calibrationPump",
                                   snapshot.i2cCalibration ? "i2c" : "local",
                                   snapshot.i2cCalibration ? 3 : 5) ||
@@ -1428,7 +1478,6 @@ static const GetFloatDirectField kGetFloatDirectFields[] = {
 static const GetU16Field kGetU16Fields[] = {
     {"SuvidHoldMinutes", &SetupEEPROM::SuvidHoldMinutes},
     {"StepperStepMl", &SetupEEPROM::StepperStepMl},
-    {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C},
     {"SteamDelay", &SetupEEPROM::SteamDelay},
     {"PipeDelay", &SetupEEPROM::PipeDelay},
     {"WaterDelay", &SetupEEPROM::WaterDelay},
@@ -1890,7 +1939,6 @@ static const SaveU16Field kSaveU16Fields[] = {
     // никогда (переход по температуре в ректификации намеренно не используется).
     // validate_rect_program_startable() блокирует лишь СТАРТ, а не сохранение формы.
     {"StepperStepMl", &SetupEEPROM::StepperStepMl, 1, 65535},
-    {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C, 0, 65535},
 };
 
 static const SaveFloatField kSaveFloatFields[] = {
@@ -2400,10 +2448,12 @@ void web_command(AsyncWebServerRequest *request) {
         actionParam->value().c_str(), SamSetup.StepperStepMl, pumpSpeedSteps);
     commandKeySuffix = "=" + String(pumpSpeedSteps);
   } else if (action == "pnbk") {
+    I2CStepperDevice* pump = i2c_stepper_selected_pump();
+    const uint32_t stepsPerMl = pump && pump->present ? pump->config.stepsPerMl : 0;
     parseResult = parse_control_nbk(
-        actionParam->value().c_str(), SamSetup.StepperStepMlI2C, nbkCommand);
+        actionParam->value().c_str(), stepsPerMl, nbkCommand);
     if (parseResult.ok() && nbkCommand.kind != CONTROL_NBK_STOP &&
-        SamSetup.StepperStepMlI2C == 0) {
+        stepsPerMl == 0) {
       parseResult = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
     }
     commandKeySuffix = "=" + String(uint8_t(nbkCommand.kind));
@@ -2808,8 +2858,8 @@ void calibrate_command(AsyncWebServerRequest *request) {
   };
   for (size_t index = 0; index < request->params(); index++) {
     const AsyncWebParameter *param = request->getParam(index);
-    const bool known = param && (param->name() == "pump" || param->name() == "start" ||
-        param->name() == "finish" || param->name() == "stpstep");
+    const bool known = param && (param->name() == "pump" || param->name() == "address" ||
+        param->name() == "start" || param->name() == "finish" || param->name() == "stpstep");
     if (!known || param->isFile() || param->isPost() ||
         request_param_count(request, param->name().c_str()) != 1) {
       sendBadRequest(param ? param->name().c_str() : "request", NUMERIC_PARSE_INVALID_ARGUMENT);
@@ -2821,6 +2871,7 @@ void calibrate_command(AsyncWebServerRequest *request) {
   const uint8_t finishCount = request_param_count(request, "finish");
   const uint8_t speedCount = request_param_count(request, "stpstep");
   const uint8_t pumpCount = request_param_count(request, "pump");
+  const uint8_t addressCount = request_param_count(request, "address");
   if (startCount + finishCount != 1 || pumpCount > 1 ||
       (startCount == 1 ? speedCount != 1 : speedCount != 0)) {
     sendBadRequest(startCount + finishCount != 1 ? "action" : "stpstep",
@@ -2834,7 +2885,15 @@ void calibrate_command(AsyncWebServerRequest *request) {
     sendBadRequest("pump", NUMERIC_PARSE_NOT_ALLOWED);
     return;
   }
-  const bool isI2C = pump == "i2c";
+  const bool isI2C = addressCount == 1;
+  if (isI2C && pumpCount != 0) {
+    sendBadRequest("pump", NUMERIC_PARSE_NOT_ALLOWED);
+    return;
+  }
+  if (!isI2C && pump != "local") {
+    sendBadRequest("pump", NUMERIC_PARSE_NOT_ALLOWED);
+    return;
+  }
   uint16_t speed = 0;
   if (startCount == 1) {
     const AsyncWebParameter *speedParam = get_request_param(request, "stpstep");
@@ -2867,21 +2926,33 @@ void calibrate_command(AsyncWebServerRequest *request) {
     command.speed = speed;
     queueError = queue_pending_local_cal(command, operationId);
   } else {
-    if (!i2cStepperPump.present ||
-        (i2cStepperPump.caps & I2CSTEPPER_CAP_FILLING) == 0) {
-      sendBadRequest("pump", NUMERIC_PARSE_NOT_ALLOWED);
+    uint8_t address = 0;
+    I2CStepperDevice* device = select_i2c_stepper_device(request, address);
+    const bool deviceCalibrating = device &&
+        (device->status.status & I2CSTEPPER_V3_STATUS_CALIBRATION) != 0;
+    const bool deviceRunning = device &&
+        (device->status.status & I2CSTEPPER_V3_STATUS_RUNNING) != 0;
+    if (!device || !device->present || i2cstepper_v3_address_is_mixer(address) ||
+        (device->capabilities & I2CSTEPPER_V3_CAP_FILLING) == 0 ||
+        (isFinish ? !deviceCalibrating : deviceRunning || deviceCalibrating)) {
+      sendBadRequest("address", NUMERIC_PARSE_NOT_ALLOWED);
       return;
     }
     PendingI2CCalCmd command = {};
+    command.address = address;
     command.is_finish = isFinish;
     if (!isFinish) {
-      command.stepsPerMl = i2c_stepper_steps_per_ml();
-      NumericParseResult result = checked_step_speed_to_mlh(
-          speed, command.stepsPerMl, command.pumpMlHour);
-      if (!result.ok()) {
-        sendBadRequest("stpstep", result.error);
+      if (device->config.stepsPerMl == 0) {
+        sendBadRequest("calibration", NUMERIC_PARSE_INVALID_ARGUMENT);
         return;
       }
+      const uint64_t rate = (uint64_t(speed) * 3600U + device->config.stepsPerMl / 2U) /
+                            device->config.stepsPerMl;
+      if (rate == 0 || rate > UINT32_MAX) {
+        sendBadRequest("stpstep", NUMERIC_PARSE_OUT_OF_RANGE);
+        return;
+      }
+      command.pumpMlHour = uint32_t(rate);
       command.cmdSpeed = speed;
     }
     queueError = queue_pending_i2ccal(command, operationId);

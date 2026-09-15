@@ -24,7 +24,7 @@ UPLOAD_CASES = (
 )
 BOOTSTRAP_PAGES = (
     "index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm",
-    "program.htm", "chart.htm", "calibrate.htm", "calibrate_ph.htm", "cheese.htm",
+    "program.htm", "setup.htm", "chart.htm", "calibrate.htm", "calibrate_ph.htm", "cheese.htm",
 )
 BOOTSTRAP_READY_HELPER = r'''
   const bootstrapPages = new Set(__BOOTSTRAP_PAGES__);
@@ -100,12 +100,12 @@ __BOOTSTRAP_READY_HELPER__
     heaterAlarmLatched:0,heaterAlarmReason:'',latestMessageSequence:0,
     BeerBrewOrder:"allinone"
   };
-  const i2cFixture = {
-    present:1,address:16,role:1,mode:1,caps:25,status:0,error:0,relayMask:0,
-    sensorFlags:0,optionFlags:0,mixerRpm:100,mixerRunSec:10,mixerPauseSec:5,
-    pumpMlHour:100,pumpPauseSec:0,fillingMl:100,fillingMlHour:100,stepsPerMl:100,
-    remaining:0,currentSpeed:0
+  const i2cDevice = {
+    address:2,present:true,capabilities:12,config:{relayMask:0},
+    motion:{speedStepsPerSec:1200,targetSteps:100},
+    status:{flags:0,currentSpeedStepsPerSec:0,remainingSteps:0}
   };
+  const i2cFixture = {devices:[i2cDevice],selected:i2cDevice};
   // 04.09.2026: select BeerBrewOrder добавил один клавиатурный сценарий.
   const report = {expectedCells:runMatrix ? viewports.length*themes.length*pages.length : 0,cells:[],
     expectedActionCases:runActions ? 70*activationKinds.length : 0,actionCases:[],focusPages:[],failures:[],consoleProblems:[]};
@@ -130,7 +130,9 @@ __BOOTSTRAP_READY_HELPER__
     const queryStart = relative.indexOf("?");
     const pathname = queryStart < 0 ? relative : relative.slice(0, queryStart);
     if (["/command","/program","/save","/i2cpump","/i2cstepper"].includes(pathname) &&
-        !/[?&]device=/.test(relative)) mutationRequests.push({scenario,method:request.method(),url:requestUrl});
+        !(pathname === "/i2cstepper" && !/[?&]cmd=/.test(relative))) {
+      mutationRequests.push({scenario,method:request.method(),url:requestUrl});
+    }
   });
   await page.addInitScript(() => {
     window.Audio = function() {
@@ -153,7 +155,7 @@ __BOOTSTRAP_READY_HELPER__
       headsSpeedClamped:false,bodySpeedClamped:false
     })
   }));
-  await page.route("**/i2cstepper?device=*", route => route.fulfill({
+  await page.route("**/i2cstepper?address=2", route => route.fulfill({
     status:200,contentType:"application/json",body:JSON.stringify(i2cFixture)
   }));
   await page.route("**/data.csv", route => route.fulfill({
@@ -167,7 +169,7 @@ __BOOTSTRAP_READY_HELPER__
   async function stopI2c() {
     if (!page.url().endsWith("/i2cstepper.htm")) return;
     await page.waitForTimeout(80);
-    await page.evaluate(() => { if (pollTimer) clearTimeout(pollTimer); pollTimer = null; scheduleNextPoll = function() {}; });
+    await page.evaluate(() => { if (refreshTimer) clearInterval(refreshTimer); refreshTimer = 0; });
   }
 
   async function checkTabOrder() {

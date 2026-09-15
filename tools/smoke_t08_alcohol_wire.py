@@ -11,6 +11,7 @@ from smoke_a05_state_owners import HARNESS_PREFIX, production_section
 from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
+PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 
 
 def replace_function(source, signature, replacement):
@@ -91,6 +92,7 @@ def execute(code):
         source.write_text(code)
         # Ошибка компиляции, включая мутант, не считается успешной проверкой.
         subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        "-I", str(PROTOCOL),
                         str(source), "-o", str(binary)], check=True, capture_output=True, text=True)
         return subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
 

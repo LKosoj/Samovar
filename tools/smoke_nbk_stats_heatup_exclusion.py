@@ -71,16 +71,29 @@ static ProgramType currentTypeValue = 'S'; // не 'H' — прогрев уже
 ProgramType current_program_type() { return currentTypeValue; }
 
 static double liquidRateValue = 60.0; // условная скорость подачи (не 0, чтобы разница во времени была заметна)
-double i2c_get_liquid_rate_by_step(int) { return liquidRateValue; }
-struct PumpProbe { uint16_t currentSpeed; };
-static PumpProbe i2cStepperPump = {600};
-bool i2c_stepper_refresh(PumpProbe&) { return true; }
-float i2c_stepper_steps_from_rate(float rate) { return rate * 10.0f; }
+double i2c_get_liquid_rate_by_step(uint32_t) { return liquidRateValue; }
+struct I2CStepperV3Config { uint32_t stepsPerMl; };
+struct I2CStepperV3StatusSnapshot { uint32_t currentSpeedStepsPerSec; };
+struct I2CStepperDevice {
+  uint8_t address;
+  bool present;
+  I2CStepperV3Config config;
+  I2CStepperV3StatusSnapshot status;
+};
+static I2CStepperDevice selectedPump = {2, true, {100}, {600}};
+I2CStepperDevice* i2c_stepper_selected_pump() { return &selectedPump; }
+bool i2c_stepper_refresh(I2CStepperDevice& device) { return device.present; }
 static int stepperTargetCalls = 0;
-bool set_stepper_target(uint16_t speed, uint8_t, uint32_t, bool requireI2c) {
+bool set_stepper_target(uint32_t speed, uint8_t, uint32_t, bool requireI2c) {
   stepperTargetCalls++;
   if (!requireI2c) return false;
-  i2cStepperPump.currentSpeed = speed;
+  selectedPump.status.currentSpeedStepsPerSec = speed;
+  return true;
+}
+bool start_second_i2c_pump(float rate, uint16_t volume) {
+  stepperTargetCalls++;
+  if (rate <= 0.0f || volume != 0) return false;
+  selectedPump.status.currentSpeedStepsPerSec = uint32_t(rate * 10.0f);
   return true;
 }
 
@@ -169,10 +182,12 @@ int main() {
 '''
 
 
-def build_harness() -> str:
+def build_harness(s_body_override: str | None = None) -> str:
     source = (ROOT / "nbk.h").read_text(encoding="utf-8")
     s_body, _ = extract_braced_block_after(source, ANCHOR_S)
     s_body = s_body.replace("\r\n", "\n")
+    if s_body_override is not None:
+        s_body = s_body_override
     setspeed_body = extract_function_body(source, SETSPEED_SIGNATURE)
     setspeed_body = setspeed_body.replace("\r\n", "\n")
 
@@ -181,13 +196,7 @@ def build_harness() -> str:
     return harness
 
 
-def main() -> int:
-    try:
-        harness = build_harness()
-    except ValueError as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 1
-
+def compile_and_run(harness: str) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory(prefix="samovar-nbk-stats-heatup-exclusion-") as temp_dir:
         temp = Path(temp_dir)
         source = temp / "nbk_stats_heatup_exclusion_test.cpp"
@@ -209,15 +218,43 @@ def main() -> int:
             check=False,
         )
         if compile_result.returncode != 0:
-            sys.stderr.write(compile_result.stdout)
-            sys.stderr.write(compile_result.stderr)
-            return compile_result.returncode
-        run_result = subprocess.run(
+            return compile_result
+        return subprocess.run(
             [str(binary)], capture_output=True, text=True, check=False
         )
-        sys.stdout.write(run_result.stdout)
-        sys.stderr.write(run_result.stderr)
-        return run_result.returncode
+
+
+def main() -> int:
+    try:
+        harness = build_harness()
+        s_body, _ = extract_braced_block_after(
+            (ROOT / "nbk.h").read_text(encoding="utf-8"), ANCHOR_S
+        )
+        s_body = s_body.replace("\r\n", "\n")
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
+    result = compile_and_run(harness)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    if result.returncode != 0:
+        return result.returncode
+
+    mutation_anchor = "time_speed = millis();"
+    mutated_s = s_body.replace(mutation_anchor, "time_speed = 1;", 1)
+    if mutated_s == s_body:
+        print("FAIL: S-entry timing mutation anchor missing", file=sys.stderr)
+        return 1
+    mutated = compile_and_run(build_harness(mutated_s))
+    if mutated.returncode == 0:
+        print("FAIL: S-entry timing mutation survived", file=sys.stderr)
+        return 1
+    if "протухший интервал прогрева" not in mutated.stdout + mutated.stderr:
+        print("FAIL: S-entry timing mutation failed for an unrelated reason", file=sys.stderr)
+        print(mutated.stdout + mutated.stderr, file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

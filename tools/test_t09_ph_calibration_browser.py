@@ -27,7 +27,7 @@ BROWSER_TEST = r'''async page => {
     programNumberVisible:true, i2cStepperVisible:false, i2cPumpVisible:false, pwmLow:0, pwmValue:0,
     nbkDp:0, columnDiameter:2, columnHeight:1.5, packDensity:80, heaterResistance:10,
     mainsVoltage:230, heaterMaxPower:5290, stepperMaxSpeed:1000, stepperStepsPerMl:100,
-    i2cStepperStepsPerMl:100, calibrationRunning:false, calibrationPump:"local",
+    i2cSteppers:Array(10).fill({}), calibrationRunning:false, processRunning:false, calibrationPump:"local",
     cheesePhSlope:0.003, cheesePhOffset:7, cheesePhAvailable:true, cheesePhAds1115Address:0,
     cheeseCoolingScheme:"pump"
   })}));

@@ -46,8 +46,8 @@
     'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible',
     'beerBrewOrder', 'pwmLow', 'pwmValue', 'nbkDp', 'columnDiameter',
     'columnHeight', 'packDensity', 'heaterResistance', 'mainsVoltage', 'heaterMaxPower',
-    'stepperMaxSpeed', 'stepperStepsPerMl', 'i2cStepperStepsPerMl',
-    'calibrationRunning', 'calibrationPump', 'cheesePhSlope', 'cheesePhOffset',
+    'stepperMaxSpeed', 'stepperStepsPerMl', 'i2cSteppers',
+    'calibrationRunning', 'processRunning', 'calibrationPump', 'cheesePhSlope', 'cheesePhOffset',
     'cheeseCoolingScheme', 'cheesePhAvailable', 'cheesePhAds1115Address'
   ];
   const UI_BOOTSTRAP_STRING_KEYS = [
@@ -57,12 +57,12 @@
   ];
   const UI_BOOTSTRAP_BOOLEAN_KEYS = [
     'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
-    'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible', 'calibrationRunning',
+    'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible', 'calibrationRunning', 'processRunning',
     'cheesePhAvailable'
   ];
   const UI_BOOTSTRAP_INTEGER_KEYS = [
     'mode', 'pwmValue', 'packDensity', 'stepperMaxSpeed', 'stepperStepsPerMl',
-    'i2cStepperStepsPerMl', 'cheesePhAds1115Address'
+    'cheesePhAds1115Address'
   ];
   const UI_BOOTSTRAP_NUMBER_KEYS = [
     'pwmLow', 'nbkDp', 'columnDiameter', 'columnHeight', 'heaterResistance',
@@ -1759,6 +1759,7 @@
       if (typeof data[UI_BOOTSTRAP_STRING_KEYS[index]] !== 'string') return false;
     }
     if (descriptionByteLength(data.description) > 250) return false;
+    if (!Array.isArray(data.i2cSteppers) || data.i2cSteppers.length !== 10) return false;
     for (let index = 0; index < UI_BOOTSTRAP_BOOLEAN_KEYS.length; index++) {
       if (typeof data[UI_BOOTSTRAP_BOOLEAN_KEYS[index]] !== 'boolean') return false;
     }

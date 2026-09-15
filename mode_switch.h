@@ -131,20 +131,20 @@ static bool stop_i2c_mode_actuator(I2CStepperDevice& dev, bool finishCalibration
     return false;
   }
   bool stopped = true;
-  if (finishCalibration || (dev.status & I2CSTEPPER_STATUS_CALIBRATION)) {
-    stopped = i2c_stepper_send_command(dev, I2CSTEP_CMD_CALIBRATE_FINISH);
+  if (finishCalibration || (dev.status.status & I2CSTEPPER_V3_STATUS_CALIBRATION)) {
+    stopped = i2c_stepper_send_command(dev, I2CSTEPPER_V3_CMD_CALIBRATE_FINISH);
   }
   if (stopped) stopped = i2c_stepper_stop(dev);
-  if (stopped && (dev.caps & I2CSTEPPER_CAP_RELAY) && dev.relayMask != 0) {
-    dev.relayMask = 0;
+  if (stopped && (dev.capabilities & I2CSTEPPER_V3_CAP_RELAY) && dev.config.relayMask != 0) {
+    dev.config.relayMask = 0;
     stopped = i2c_stepper_write_config(dev) &&
-              i2c_stepper_send_command(dev, I2CSTEP_CMD_RELAY);
+              i2c_stepper_send_command(dev, I2CSTEPPER_V3_CMD_RELAY);
   }
   if (stopped) {
     stopped = i2c_stepper_refresh(dev, true) &&
-              (dev.status & (I2CSTEPPER_STATUS_RUNNING | I2CSTEPPER_STATUS_CALIBRATION)) == 0 &&
-              dev.currentSpeed == 0 &&
-              (!(dev.caps & I2CSTEPPER_CAP_RELAY) || dev.relayMask == 0);
+              (dev.status.status & (I2CSTEPPER_V3_STATUS_RUNNING | I2CSTEPPER_V3_STATUS_CALIBRATION)) == 0 &&
+              dev.status.currentSpeedStepsPerSec == 0 &&
+              (!(dev.capabilities & I2CSTEPPER_V3_CAP_RELAY) || dev.config.relayMask == 0);
   }
   i2c_stepper_config_end(dev);
   return stopped;
@@ -208,20 +208,21 @@ static bool tick_mode_actuator_cleanup(bool luaIdle) {
   stop_local_mode_actuators();
   if (!modeActuatorCleanup.initialized) {
     modeActuatorCleanup.initialized = true;
-    modeActuatorCleanup.mixerStopped = !(i2cStepperMixer.present || i2c_stepper_cache.mixer_present);
-    modeActuatorCleanup.pumpStopped = !(i2cStepperPump.present || i2c_stepper_cache.pump_present);
+    I2CStepperDevice* mixer = i2c_stepper_selected_mixer();
+    I2CStepperDevice* pump = i2c_stepper_selected_pump();
+    modeActuatorCleanup.mixerStopped = !((mixer && mixer->present) || i2c_stepper_cache.mixer_present);
+    modeActuatorCleanup.pumpStopped = !((pump && pump->present) || i2c_stepper_cache.pump_present);
     modeActuatorCleanup.deadline = safety_deadline_after(millis(), 30000);
     set_capacity(0);
   }
   if (!modeActuatorCleanup.mixerStopped) {
-    const bool stopped = stop_i2c_mode_actuator(i2cStepperMixer, false);
+    I2CStepperDevice* mixer = i2c_stepper_selected_mixer();
+    const bool stopped = !mixer || !mixer->present || stop_i2c_mode_actuator(*mixer, false);
     modeActuatorCleanup.mixerStopped = luaIdle && stopped;
   }
   if (!modeActuatorCleanup.pumpStopped) {
-    const bool stopped = stop_i2c_mode_actuator(
-      i2cStepperPump,
-      I2CPumpCalibrating
-    );
+    I2CStepperDevice* pump = i2c_stepper_selected_pump();
+    const bool stopped = !pump || !pump->present || stop_i2c_mode_actuator(*pump, I2CPumpCalibrating);
     modeActuatorCleanup.pumpStopped = luaIdle && stopped;
     if (stopped) I2CPumpCalibrating = false;
   }

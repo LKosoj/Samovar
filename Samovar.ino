@@ -745,28 +745,17 @@ struct I2CStepperCache {
 };
 volatile I2CStepperCache i2c_stepper_cache = {false, false, 0, 0, 0, 0};
 
-static void refresh_i2c_stepper_cache(I2CStepperDevice& device) {
-  if (!i2c_stepper_config_begin(device)) return;
-
-  // Фоновое обновление кэша ждёт мьютекс I2C короче обычного (100 мс вместо 1000):
-  // это не пользовательская команда, и подвисание здесь не должно подвешивать SysTicker.
-  bool present = i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS);
-  if (device.address == I2CSTEPPER_MIXER_ADDR) {
-    i2c_stepper_cache.mixer_present = present;
-  } else if (device.address == I2CSTEPPER_PUMP_ADDR) {
-    uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
-    i2c_stepper_cache.pump_present = present;
-    i2c_stepper_cache.pump_current_speed = device.currentSpeed;
-    float pumpRate = (present && stepsPerMl > 0)
-        ? static_cast<float>(device.currentSpeed) / stepsPerMl
-        : 0;
-    i2c_stepper_cache.pump_current_rate =
-        round(pumpRate * 3.6 * 1000) / 1000.0;
-    i2c_stepper_cache.pump_remaining = device.remaining;
-    i2c_stepper_cache.pump_status = device.status;
-  }
-
-  i2c_stepper_config_end(device);
+static void refresh_i2c_stepper_cache() {
+  I2CStepperDevice* mixer = i2c_stepper_selected_mixer();
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  i2c_stepper_cache.mixer_present = mixer && mixer->present;
+  i2c_stepper_cache.pump_present = pump && pump->present;
+  if (!pump || !pump->present) return;
+  i2c_stepper_cache.pump_current_speed = pump->status.currentSpeedStepsPerSec;
+  i2c_stepper_cache.pump_current_rate = i2c_get_liquid_rate_by_step(
+      pump->status.currentSpeedStepsPerSec);
+  i2c_stepper_cache.pump_remaining = pump->status.remainingSteps;
+  i2c_stepper_cache.pump_status = pump->status.status;
 }
 
 // [T6] Вынесенные блоки тела triggerSysTicker() — размещены здесь (а не в общем
@@ -1171,31 +1160,31 @@ static void tick_report_sensor_errors() {
 
 
 // [W-4] Отложенная команда /i2cstepper (I2C из async недопустим).
-//        staged — приватная копия конфига с применёнными args; не трогаем глобал до loop.
-//        device_sel: 0=mixer, 1=pump.
 struct PendingI2CStepperCmd {
-  I2CStepperDevice staged;
-  uint8_t device_sel;  // 0=mixer, 1=pump
+  uint8_t address;
+  uint8_t relay;
+  bool relayState;
+  I2CStepperV3Config config;
+  I2CStepperV3Motion motion;
   char cmd[16];
   OperationId operationId;
 };
-static_assert(sizeof(PendingI2CStepperCmd) <= 64,
+static_assert(sizeof(PendingI2CStepperCmd) <= 80,
               "PendingI2CStepperCmd exceeds its request-draft budget");
 PendingI2CStepperCmd pending_i2cstepper_buf;
 volatile bool pending_i2cstepper_flag = false;
 
 // [W-4] Отложенная команда /i2cpump (stop/start; I2C из async недопустим).
 struct PendingI2CPumpCmd {
+  uint8_t address;
   bool is_stop;
-  uint16_t speedSteps;
+  uint32_t speedSteps;
   uint32_t targetSteps;
   float targetMl;
   uint16_t fillingMl;
-  uint16_t fillingMlHour;
-  uint16_t stepsPerMl;
   OperationId operationId;
 };
-static_assert(sizeof(PendingI2CPumpCmd) <= 24,
+static_assert(sizeof(PendingI2CPumpCmd) <= 32,
               "PendingI2CPumpCmd exceeds its request-draft budget");
 PendingI2CPumpCmd pending_i2cpump_buf;
 volatile bool pending_i2cpump_flag = false;
@@ -1203,16 +1192,54 @@ volatile bool pending_i2cpump_flag = false;
 // [W-4] Отложенная команда калибровки I2C насоса (i2c_stepper_write_config/send_command
 //        из async недопустимы).
 struct PendingI2CCalCmd {
+  uint8_t address;
   bool is_finish;   // false=start, true=finish
-  uint16_t pumpMlHour;
-  uint16_t stepsPerMl;
-  uint16_t cmdSpeed;
+  uint32_t pumpMlHour;
+  uint32_t cmdSpeed;
   OperationId operationId;
 };
-static_assert(sizeof(PendingI2CCalCmd) <= 12,
+static_assert(sizeof(PendingI2CCalCmd) <= 20,
               "PendingI2CCalCmd exceeds its request-draft budget");
 PendingI2CCalCmd pending_i2ccal_buf;
 volatile bool pending_i2ccal_flag = false;
+
+static volatile uint32_t i2cStepperWebLeaseMs[I2CSTEPPER_DEVICE_COUNT] = {};
+static volatile bool i2cStepperWebLeaseActive[I2CSTEPPER_DEVICE_COUNT] = {};
+
+static void i2c_stepper_web_lease_begin(uint8_t address) {
+  if (!i2cstepper_v3_address_valid(address)) return;
+  const uint8_t index = address - I2CSTEPPER_V3_ADDRESS_MIN;
+  i2cStepperWebLeaseMs[index] = millis();
+  __sync_synchronize();
+  i2cStepperWebLeaseActive[index] = true;
+}
+
+void i2c_stepper_web_lease_touch(uint8_t address) {
+  if (!i2cstepper_v3_address_valid(address)) return;
+  const uint8_t index = address - I2CSTEPPER_V3_ADDRESS_MIN;
+  if (!i2cStepperWebLeaseActive[index]) return;
+  i2cStepperWebLeaseMs[index] = millis();
+}
+
+static void i2c_stepper_web_lease_clear(uint8_t address) {
+  if (!i2cstepper_v3_address_valid(address)) return;
+  i2cStepperWebLeaseActive[address - I2CSTEPPER_V3_ADDRESS_MIN] = false;
+}
+
+static void tick_i2c_stepper_web_lease() {
+  const uint32_t now = millis();
+  for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
+    if (!i2cStepperWebLeaseActive[index] ||
+        now - i2cStepperWebLeaseMs[index] <= 6000UL) continue;
+    I2CStepperDevice& device = i2cSteppers[index];
+    if (!device.present ||
+        (device.status.status & I2CSTEPPER_V3_STATUS_CALIBRATION) == 0) {
+      i2cStepperWebLeaseActive[index] = false;
+    } else if (i2c_stepper_stop(device)) {
+      i2cStepperWebLeaseActive[index] = false;
+    }
+  }
+}
 
 struct PendingLocalCalCmd {
   bool is_finish;
@@ -1306,9 +1333,9 @@ static void publish_pending_i2c_result(
 static OperationError i2c_command_result(
     bool commandSucceeded,
     const I2CStepperDevice& candidate) {
-  if (candidate.error != 0) {
+  if (candidate.status.error != I2CSTEPPER_V3_ERR_NONE) {
     String message = "I2CStepper error: ";
-    message += String(candidate.error);
+    message += String(candidate.status.error);
     WriteConsoleLog(message);
     return OPERATION_ERROR_I2C_DEVICE_ERROR;
   }
@@ -1318,88 +1345,131 @@ static OperationError i2c_command_result(
 }
 
 static OperationError confirm_i2c_candidate(I2CStepperDevice& candidate) {
-  if (!i2c_stepper_refresh(candidate, true)) {
+  if (!i2c_stepper_read_config(candidate) || !i2c_stepper_refresh(candidate, true)) {
     return OPERATION_ERROR_I2C_REFRESH_FAILED;
   }
   return i2c_command_result(true, candidate);
 }
 
+static void report_blynk_i2c_v37_execution_failure(
+    const char* command,
+    uint8_t address,
+    OperationError error,
+    const I2CStepperDevice* device) {
+  if (error == OPERATION_ERROR_NONE ||
+      (strcmp(command, "blynk_start") != 0 &&
+       strcmp(command, "blynk_stop") != 0 &&
+       strcmp(command, "blynk_relay") != 0)) return;
+  String message = "Blynk V37 a=";
+  message += address;
+  message += ": ";
+  message += error == OPERATION_ERROR_I2C_DEVICE_ERROR && device &&
+      device->status.error == I2CSTEPPER_V3_ERR_REBOOT_REQUIRED
+      ? "REBOOT_REQUIRED"
+      : operation_error_code(error);
+  SendMsg(message, WARNING_MSG);
+}
+
 static OperationError execute_pending_i2c_stepper(
     const PendingI2CStepperCmd& command) {
-  I2CStepperDevice* device = command.device_sel == 0
-      ? &i2cStepperMixer
-      : &i2cStepperPump;
-  if (command.device_sel > 1) return OPERATION_ERROR_INTERNAL;
+  I2CStepperDevice* device = i2c_stepper_device(command.address);
+  if (!device) {
+    report_blynk_i2c_v37_execution_failure(
+        command.cmd, command.address, OPERATION_ERROR_INTERNAL, nullptr);
+    return OPERATION_ERROR_INTERNAL;
+  }
+  if (!device->present) {
+    report_blynk_i2c_v37_execution_failure(
+        command.cmd, command.address, OPERATION_ERROR_I2C_REFRESH_FAILED, device);
+    return OPERATION_ERROR_I2C_REFRESH_FAILED;
+  }
   if (!i2c_stepper_config_begin(*device)) {
+    report_blynk_i2c_v37_execution_failure(
+        command.cmd, command.address, OPERATION_ERROR_I2C_CONFIG_BUSY, device);
     return OPERATION_ERROR_I2C_CONFIG_BUSY;
   }
 
   I2CStepperDevice candidate = *device;
-  candidate.mode = command.staged.mode;
-  candidate.relayMask = command.staged.relayMask;
-  candidate.sensorFlags = command.staged.sensorFlags;
-  candidate.optionFlags = command.staged.optionFlags;
-  candidate.mixerRpm = command.staged.mixerRpm;
-  candidate.mixerRunSec = command.staged.mixerRunSec;
-  candidate.mixerPauseSec = command.staged.mixerPauseSec;
-  candidate.pumpMlHour = command.staged.pumpMlHour;
-  candidate.pumpPauseSec = command.staged.pumpPauseSec;
-  candidate.fillingMl = command.staged.fillingMl;
-  candidate.fillingMlHour = command.staged.fillingMlHour;
-  candidate.stepsPerMl = command.staged.stepsPerMl;
+  const bool commandCarriesConfig = strcmp(command.cmd, "apply") == 0 ||
+      strcmp(command.cmd, "save") == 0 || strcmp(command.cmd, "start") == 0 ||
+      strcmp(command.cmd, "calstart") == 0;
+  if (commandCarriesConfig) {
+    candidate.config = command.config;
+    candidate.motion = command.motion;
+  }
 
   bool commandSucceeded = false;
+  bool skipReadback = false;
+  OperationError result = OPERATION_ERROR_NONE;
   if (strcmp(command.cmd, "apply") == 0) {
     commandSucceeded = i2c_stepper_apply(candidate);
   } else if (strcmp(command.cmd, "save") == 0) {
     commandSucceeded = i2c_stepper_save(candidate);
   } else if (strcmp(command.cmd, "start") == 0) {
-    commandSucceeded = i2c_stepper_start(candidate);
+    commandSucceeded = i2c_stepper_start_finite(candidate);
+  } else if (strcmp(command.cmd, "blynk_start") == 0) {
+    skipReadback = true;
+    commandSucceeded = i2c_stepper_send_command(
+        candidate, I2CSTEPPER_V3_CMD_START_CONFIGURED);
   } else if (strcmp(command.cmd, "stop") == 0) {
     commandSucceeded = i2c_stepper_stop(candidate);
+  } else if (strcmp(command.cmd, "blynk_stop") == 0) {
+    skipReadback = true;
+    commandSucceeded = i2c_stepper_stop(candidate);
   } else if (strcmp(command.cmd, "calstart") == 0) {
-    commandSucceeded = i2c_stepper_write_config(candidate) &&
-        i2c_stepper_send_command(candidate, I2CSTEP_CMD_CALIBRATE_START);
+    commandSucceeded = i2c_stepper_apply(candidate) &&
+        i2c_stepper_send_command(candidate, I2CSTEPPER_V3_CMD_CALIBRATE_START);
   } else if (strcmp(command.cmd, "calfinish") == 0) {
     commandSucceeded = i2c_stepper_send_command(
-        candidate, I2CSTEP_CMD_CALIBRATE_FINISH);
-  } else if (strcmp(command.cmd, "relay") == 0) {
-    commandSucceeded = i2c_stepper_write_config(candidate) &&
-        i2c_stepper_send_command(candidate, I2CSTEP_CMD_RELAY);
+        candidate, I2CSTEPPER_V3_CMD_CALIBRATE_FINISH);
+  } else if (strcmp(command.cmd, "relay") == 0 ||
+             strcmp(command.cmd, "blynk_relay") == 0) {
+    if (!i2c_stepper_read_config(candidate)) {
+      result = OPERATION_ERROR_I2C_REFRESH_FAILED;
+    } else {
+      if (command.relayState) candidate.config.relayMask |= uint8_t(1U << (command.relay - 1));
+      else candidate.config.relayMask &= uint8_t(~(1U << (command.relay - 1)));
+      skipReadback = true;
+      commandSucceeded = i2c_stepper_write_config(candidate) &&
+          i2c_stepper_send_command(candidate, I2CSTEPPER_V3_CMD_RELAY);
+    }
   } else {
     i2c_stepper_config_end(*device);
     return OPERATION_ERROR_INTERNAL;
   }
 
-  OperationError result = i2c_command_result(commandSucceeded, candidate);
-  if (result == OPERATION_ERROR_NONE) result = confirm_i2c_candidate(candidate);
+  if (result == OPERATION_ERROR_NONE) result = i2c_command_result(commandSucceeded, candidate);
+  if (result == OPERATION_ERROR_NONE && !skipReadback) result = confirm_i2c_candidate(candidate);
   if (result == OPERATION_ERROR_NONE) *device = candidate;
   i2c_stepper_config_end(*device);
+  report_blynk_i2c_v37_execution_failure(command.cmd, command.address, result, &candidate);
   return result;
 }
 
 static OperationError execute_pending_i2c_pump(
     const PendingI2CPumpCmd& command) {
-  if (!i2c_stepper_config_begin(i2cStepperPump)) {
+  I2CStepperDevice* device = i2c_stepper_device(command.address);
+  if (!device || !device->present) return OPERATION_ERROR_I2C_REFRESH_FAILED;
+  if (!i2c_stepper_config_begin(*device)) {
     return OPERATION_ERROR_I2C_CONFIG_BUSY;
   }
 
-  I2CStepperDevice candidate = i2cStepperPump;
+  I2CStepperDevice candidate = *device;
   bool commandSucceeded = false;
   if (command.is_stop) {
     commandSucceeded = i2c_stepper_stop(candidate);
   } else {
-    candidate.mode = I2CSTEP_MODE_FILLING;
-    candidate.fillingMl = command.fillingMl;
-    candidate.fillingMlHour = command.fillingMlHour;
-    candidate.stepsPerMl = command.stepsPerMl;
-    commandSucceeded = i2c_stepper_start(candidate);
+    candidate.config.mode = I2CSTEPPER_V3_MODE_FILLING;
+    candidate.motion.mode = I2CSTEPPER_V3_MODE_FILLING;
+    candidate.motion.speedStepsPerSec = command.speedSteps;
+    candidate.motion.targetSteps = command.targetSteps;
+    commandSucceeded = i2c_stepper_start_finite(candidate);
   }
 
   OperationError result = i2c_command_result(commandSucceeded, candidate);
   if (result == OPERATION_ERROR_NONE) result = confirm_i2c_candidate(candidate);
   if (result == OPERATION_ERROR_NONE) {
-    i2cStepperPump = candidate;
+    *device = candidate;
     if (command.is_stop) {
       I2CPumpCmdSpeed = 0;
       I2CPumpTargetMl = 0;
@@ -1409,26 +1479,27 @@ static OperationError execute_pending_i2c_pump(
       I2CPumpTargetMl = command.targetMl;
     }
   }
-  i2c_stepper_config_end(i2cStepperPump);
+  i2c_stepper_config_end(*device);
   return result;
 }
 
 static OperationError execute_pending_i2c_calibration(
     const PendingI2CCalCmd& command) {
-  if (!i2c_stepper_config_begin(i2cStepperPump)) {
+  I2CStepperDevice* device = i2c_stepper_device(command.address);
+  if (!device || !device->present) return OPERATION_ERROR_I2C_REFRESH_FAILED;
+  if (!i2c_stepper_config_begin(*device)) {
     return OPERATION_ERROR_I2C_CONFIG_BUSY;
   }
 
-  I2CStepperDevice candidate = i2cStepperPump;
+  I2CStepperDevice candidate = *device;
   bool commandSucceeded = false;
   if (command.is_finish) {
     commandSucceeded = i2c_stepper_send_command(
-        candidate, I2CSTEP_CMD_CALIBRATE_FINISH);
+        candidate, I2CSTEPPER_V3_CMD_CALIBRATE_FINISH);
   } else {
-    candidate.pumpMlHour = command.pumpMlHour;
-    candidate.stepsPerMl = command.stepsPerMl;
-    commandSucceeded = i2c_stepper_write_config(candidate) &&
-        i2c_stepper_send_command(candidate, I2CSTEP_CMD_CALIBRATE_START);
+    candidate.config.pumpMlHour = command.pumpMlHour;
+    commandSucceeded = i2c_stepper_apply(candidate) &&
+        i2c_stepper_send_command(candidate, I2CSTEPPER_V3_CMD_CALIBRATE_START);
   }
 
   OperationError result = i2c_command_result(commandSucceeded, candidate);
@@ -1437,24 +1508,17 @@ static OperationError execute_pending_i2c_calibration(
     // Калибровка уже физически завершена: CALIBRATE_FINISH подтверждена насосом,
     // а confirm_i2c_candidate() перечитал новый stepsPerMl из его регистров.
     // Отменить это отказом записи в NVS нельзя, поэтому staging-схема
-    // (кандидат -> запись -> применение), уместная для ещё не применённых
-    // настроек, здесь неприменима: дозу считает ESP по SamSetup.StepperStepMlI2C
-    // (i2c_stepper_steps_per_ml() и производные), и откат RAM заставил бы её
-    // лить по старому коэффициенту, пока насос откалиброван по новому.
-    // Применяем безусловно, отказ записи только сообщаем.
-    SamSetup.StepperStepMlI2C = candidate.stepsPerMl;
-    i2cStepperPump = candidate;
+    *device = candidate;
     I2CPumpCalibrating = false;
-    if (save_profile_nvs(SamSetup) != PERSIST_OK) {
-      result = OPERATION_ERROR_PROFILE_PERSIST_FAILED;
-    }
+    i2c_stepper_web_lease_clear(command.address);
   } else if (result == OPERATION_ERROR_NONE) {
-    i2cStepperPump = candidate;
+    *device = candidate;
     I2CPumpTargetMl = 0;
     I2CPumpCmdSpeed = command.cmdSpeed;
     I2CPumpCalibrating = true;
+    i2c_stepper_web_lease_begin(command.address);
   }
-  i2c_stepper_config_end(i2cStepperPump);
+  i2c_stepper_config_end(*device);
   return result;
 }
 
@@ -2102,8 +2166,7 @@ void triggerSysTicker(void *parameter) {
 
       // [W-3] Обновляем кэш I2C-шагового двигателя раз в секунду из SysTicker.
       //        Выполняем здесь (не в async), так как I2C защищён xI2CSemaphore внутри функций.
-      refresh_i2c_stepper_cache(i2cStepperMixer);
-      refresh_i2c_stepper_cache(i2cStepperPump);
+      refresh_i2c_stepper_cache();
       retry_i2c_pump_stop_if_unconfirmed();
 
       tick_update_clock_strings();
@@ -2531,6 +2594,7 @@ static uint32_t new_random_session_id() {
 }
 
 void session_begin(const String& sessionDescription) {
+  i2c_stepper_session_begin();
   const bool resume = sessionResumeAvailable && (millis() / 1000UL < SESSION_RESUME_WINDOW_S);
   sessionResumeAvailable = false;  // одноразово, как и modeHeatingStartRequested
   if (resume) {
@@ -2833,13 +2897,6 @@ static void setup_finalize_boot_display() {
   get_task_stack_usage();
   Serial.println("Samovar ready");
   
-  detect_i2c_steppers();
-  if (i2cStepperMixer.present) {
-    Serial.println("I2C Stepper Mixer v2");
-  }
-  if (i2cStepperPump.present) {
-    Serial.println("I2C Stepper Pump/Filling v2");
-  }
   used_byte = SPIFFS.usedBytes();
 
   SamovarStatus.reserve(80);
@@ -3848,41 +3905,46 @@ static void tick_apply_pending_pnbk() {
     //        обрабатывается в этом же loop раньше). Флаг сбрасываем всегда — устаревшую
     //        команду при возврате питания не исполняем.
     if (PowerOn) {
+      I2CStepperDevice* pump = i2c_stepper_selected_pump();
       // [Ремонт-2026-09-02 П4] На Оптимизации/Работе НБК ручная pnbk обходит алгоритм —
       // до разбора pnbk.kind, dispatch пропускается, флаг снимается через pnbkDone=true.
-      if (nbk_manual_control_locked()) {
+      if (!pump || !pump->present || pump->config.stepsPerMl == 0) {
+        SendMsg("Команда НБК отклонена: I2C-насос не выбран.", WARNING_MSG);
+        pnbkDone = true;
+      } else if (nbk_manual_control_locked()) {
         SendMsg("Ручное управление недоступно на Оптимизации и в Работе НБК.", WARNING_MSG);
         pnbkDone = true;
       } else if (pnbk.kind == CONTROL_NBK_INCREMENT) {
-        uint16_t deltaSpeed = 0;
-        NumericParseResult conversion = checked_rate_to_step_speed(
-            float(SamSetup.NbkDP) + 0.0001f,
-            SamSetup.StepperStepMlI2C,
-            deltaSpeed);
-        const uint32_t requestedSpeed = uint32_t(get_stepper_speed()) + deltaSpeed;
-        if (!conversion.ok() || requestedSpeed > UINT16_MAX) {
+        const float deltaSpeed = i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001f);
+        const uint32_t currentSpeed = get_stepper_speed();
+        const uint32_t requestedSpeed = currentSpeed + uint32_t(deltaSpeed);
+        if (!(deltaSpeed > 0.0f) || deltaSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC ||
+            requestedSpeed < currentSpeed ||
+            requestedSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) {
           SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
           pnbkDone = true;
         } else {
-          pnbkDone = set_stepper_target(uint16_t(requestedSpeed), 0, 2147483640);
+          pnbkDone = start_second_i2c_pump(
+              i2c_get_liquid_rate_by_step(requestedSpeed), 0);
         }
       } else if (pnbk.kind == CONTROL_NBK_DECREMENT) {
-        uint16_t currentSpeed = get_stepper_speed();
+        uint32_t currentSpeed = get_stepper_speed();
         float deltaRate = float(SamSetup.NbkDP) - 0.0001f;
-        uint16_t deltaSpeed = 0;
-        NumericParseResult conversion = deltaRate > 0.0f
-            ? checked_rate_to_step_speed(deltaRate, SamSetup.StepperStepMlI2C, deltaSpeed)
-            : numeric_parse_result(NUMERIC_PARSE_OK);
-        if (!conversion.ok()) {
+        const float deltaSpeed = deltaRate > 0.0f
+            ? i2c_get_speed_from_rate(deltaRate) : 0.0f;
+        if (deltaRate > 0.0f && (!(deltaSpeed > 0.0f) ||
+                                 deltaSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC)) {
           SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
           pnbkDone = true;
-        } else if (deltaSpeed >= currentSpeed) {
+        } else if (uint32_t(deltaSpeed) >= currentSpeed) {
           pnbkDone = set_stepper_target(0, 0, 0);
         } else {
-          pnbkDone = set_stepper_target(currentSpeed - deltaSpeed, 0, 2147483640);
+          pnbkDone = start_second_i2c_pump(
+              i2c_get_liquid_rate_by_step(currentSpeed - uint32_t(deltaSpeed)), 0);
         }
       } else if (pnbk.kind == CONTROL_NBK_ABSOLUTE) {
-        pnbkDone = set_stepper_target(pnbk.stepSpeed, 0, 2147483640);
+        pnbkDone = start_second_i2c_pump(
+            i2c_get_liquid_rate_by_step(pnbk.stepSpeed), 0);
       } else if (pnbk.kind == CONTROL_NBK_STOP) {
         pnbkDone = set_stepper_target(0, 0, 0);
       } else {
@@ -3967,6 +4029,9 @@ static void process_explicit_power_on_command() {
 }
 
 void loop() {
+  i2c_stepper_tick();
+  tick_i2c_stepper_web_lease();
+  i2c_stepper_session_end_if_idle();
   tick_usb_serial_command();
   tick_check_stack_headroom();
   tick_check_systicker_liveness();
@@ -5067,7 +5132,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
     snapshot.i2cPumpTargetMl = I2CPumpTargetMl;
     snapshot.i2cPumpRemainingMl = i2c_stepper_cache.pump_remaining;
     snapshot.i2cPumpRunning =
-        (i2c_stepper_cache.pump_status & I2CSTEPPER_STATUS_RUNNING) != 0;
+        (i2c_stepper_cache.pump_status & I2CSTEPPER_V3_STATUS_RUNNING) != 0;
   }
 
   snapshot.freeHeap = ESP.getFreeHeap();

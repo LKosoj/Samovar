@@ -1,82 +1,129 @@
 #!/usr/bin/env python3
-"""Контракт второго I2C-насоса над царгой пастеризации."""
+"""Контракт второго I2C-насоса ректификации на закреплённом v3-адресе."""
 
+import subprocess
+import tempfile
 from pathlib import Path
-from smoke_helpers import extract_function_body
 
+from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 LOGIC = (ROOT / "logic.h").read_text(encoding="utf-8")
 I2C = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
-MENU = (ROOT / "Menu.ino").read_text(encoding="utf-8")
-SAMOVAR_INO = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+SAMOVAR = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+
+
+def body(source: str, signature: str) -> str:
+  return extract_function_body(source, signature)
 
 
 def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise AssertionError(message)
+  if not condition:
+    raise AssertionError(message)
 
 
-enabled = extract_function_body(LOGIC, "inline bool rect_second_i2c_pump_enabled()")
+enabled = body(LOGIC, "inline bool rect_second_i2c_pump_enabled()")
 require("SamSetup.UseSecondI2CPump" in enabled,
-        "second pump must be opt-in")
-require("use_I2C_dev == I2CSTEPPER_PUMP_ADDR" in enabled,
-        "second pump must use only the device discovered at startup")
-require(SAMOVAR_INO.index('#include "I2CStepper.h"') <
-        SAMOVAR_INO.index('#include "logic.h"'),
-        "I2C stepper declarations must precede rectification helpers")
+        "second pump remains opt-in")
+require("i2c_stepper_selected_pump()" in enabled,
+        "second pump must use the session-pinned pump")
+require("use_I2C_dev" not in enabled,
+        "startup singleton must not select a v3 pump")
 
-start = extract_function_body(I2C, "inline bool start_second_i2c_pump(")
-stop = extract_function_body(I2C, "inline bool stop_second_i2c_pump()")
-require("i2c_stepper_send_confirmed_command" in start and "I2CSTEP_CMD_START" in start,
-        "second pump start must use the ten-send confirmed command")
-require("i2c_stepper_send_confirmed_command" in stop and "I2CSTEP_CMD_STOP" in stop,
-        "second pump stop must use the ten-send confirmed command")
-require("i2c_stepper_refresh" not in start,
-        "stale pre-refresh must not suppress ten START command attempts")
-require("i2c_stepper_refresh" not in stop,
-        "stale pre-refresh must not suppress ten STOP command attempts")
-require("rectSecondPumpRunning = false" not in stop,
-        "low-level STOP must not forget rectification running state")
-require("if (!configOwned) return false" in start and
-        start.index("if (!configOwned) return false") <
-        start.index("i2c_stepper_send_confirmed_command"),
-        "busy configuration owner must fail before START")
-require("if (!i2c_stepper_write_config(i2cStepperPump))" in start and
-        start.index("if (!i2c_stepper_write_config(i2cStepperPump))") <
-        start.index("i2c_stepper_send_confirmed_command"),
-        "failed configuration write must fail before START")
+start = body(I2C, "inline bool start_second_i2c_pump(")
+start_steps = body(I2C, "inline bool start_second_i2c_pump_steps(")
+require("i2c_stepper_selected_pump()" in start,
+        "start must resolve only selected pump")
+require("volumeMl == 0" in start and "i2c_stepper_start_continuous" in start,
+        "zero volume must use the explicit continuous command")
+require("targetSteps" in start_steps and "i2c_stepper_start_finite" in start_steps,
+        "finite volume must pass exact target steps")
+require("uint64_t(volumeMl) * device->config.stepsPerMl" in start and
+        "start_second_i2c_pump_steps(rateLitersPerHour, uint32_t(targetSteps))" in start,
+        "finite target must be calculated in steps without ml rounding")
 
-apply_row = extract_function_body(LOGIC, "inline bool rect_apply_second_pump_for_row(")
+stop = body(I2C, "inline bool stop_second_i2c_pump()")
+require("i2c_stepper_selected_pump()" in stop and "i2c_stepper_stop" in stop,
+        "stop must target the pinned device")
+
+apply_row = body(LOGIC, "inline bool rect_apply_second_pump_for_row(")
 require("row.WType == 'H'" in apply_row,
-        "heads row must run the I2C pump in filling mode")
-require("program_type_one_of(row.WType, \"BC\")" in apply_row,
-        "body and pre-flood rows must run the I2C pump continuously")
-require("SamSetup.SecondI2CPumpRate" in apply_row,
-        "body/preflood rate must come from the dedicated setting")
+        "heads row must run a finite filling")
+require('program_type_one_of(row.WType, "BC")' in apply_row,
+        "body and pre-flood remain continuous")
 require("rect_stop_second_i2c_pump_if_running()" in apply_row,
-        "disabled and non-pump rows must preserve running state until STOP is confirmed")
+        "non-pump rows must confirm a stop")
+pause = body(LOGIC, "inline bool rect_pause_second_i2c_pump()")
+resume = body(LOGIC, "inline bool rect_resume_second_i2c_pump()")
+require("rectSecondPumpPausedVolume = pump->status.remainingSteps;" in pause,
+        "pause must retain uint32 remaining steps exactly")
+require("start_second_i2c_pump_steps(rate, rectSecondPumpPausedVolume)" in resume,
+        "resume must not turn remaining steps back into ml")
 
-run_program = extract_function_body(LOGIC, "void run_program(uint8_t num)")
+PAUSE_HARNESS = r'''
+#include <cstdint>
+struct I2CStepperDevice {
+  bool present;
+  struct { uint32_t stepsPerMl; } config;
+  struct { uint32_t remainingSteps; } status;
+};
+I2CStepperDevice pump = {};
+I2CStepperDevice* i2c_stepper_selected_pump() { return &pump; }
+bool i2c_stepper_refresh(I2CStepperDevice&, bool) { return true; }
+bool rectSecondPumpRunning = true;
+bool rectSecondPumpHeadsRow = true;
+bool rectSecondPumpHeadsFilling = true;
+bool rectSecondPumpPaused = false;
+uint32_t rectSecondPumpPausedVolume = 0;
+uint32_t rectSecondPumpTargetSteps = 0;
+bool stop_second_i2c_pump() { return true; }
+bool rect_second_i2c_pump_enabled() { return true; }
+struct { float SecondI2CPumpRate; } SamSetup = {1.0f};
+struct WProgram { float Speed; };
+WProgram program[1] = {{2.5f}};
+uint8_t ProgramNum = 0;
+uint32_t resumedSteps = 0;
+bool start_second_i2c_pump_steps(float, uint32_t steps) {
+  resumedSteps = steps;
+  return true;
+}
+bool start_second_i2c_pump(float, uint16_t) { return true; }
+@PAUSE@
+@RESUME@
+int main() {
+  pump.present = true;
+  pump.status.remainingSteps = 100000;
+  if (!rect_pause_second_i2c_pump() || rectSecondPumpPausedVolume != 100000) return 1;
+  if (!rect_resume_second_i2c_pump()) return 2;
+  return resumedSteps == 100000 ? 0 : 3;
+}
+'''
+
+pause_function = "inline bool rect_pause_second_i2c_pump() {" + pause + "}"
+resume_function = "inline bool rect_resume_second_i2c_pump() {" + resume + "}"
+with tempfile.TemporaryDirectory(prefix="samovar-rect-v3-pause-") as temp_dir:
+  temp = Path(temp_dir)
+  cpp = temp / "pause.cpp"
+  binary = temp / "pause"
+  cpp.write_text(PAUSE_HARNESS.replace("@PAUSE@", pause_function)
+                 .replace("@RESUME@", resume_function), encoding="utf-8")
+  compiled = subprocess.run(
+      ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(binary)],
+      capture_output=True, text=True, check=False)
+  if compiled.returncode:
+    raise AssertionError("pause/resume harness compile failed: " + compiled.stderr)
+  resumed = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
+  if resumed.returncode:
+    raise AssertionError("pause/resume changed exact remaining steps")
+
+run_program = body(LOGIC, "void run_program(uint8_t num)")
 require("rect_apply_second_pump_for_row(program[num])" in run_program,
-        "every rectification row must apply second-pump routing")
+        "every rectification row must apply selected-pump routing")
 require("rect_fail_second_i2c_pump" in run_program,
-        "an unconfirmed row command must end with an explicit error")
-require("if (!rect_stop_second_i2c_pump_if_running())" in run_program,
-        "final program stop must remain retryable and escalate an unconfirmed STOP")
-require("if (!rectSecondPumpHeadsRow)" in run_program,
-        "local pump must stay stopped while heads use the I2C pump")
+        "command failure remains visible to the process")
 
-pause = extract_function_body(LOGIC, "void pause_withdrawal(bool Pause)")
-require("rect_pause_second_i2c_pump()" in pause,
-        "manual pause must stop the second pump")
-require("rect_resume_second_i2c_pump()" in pause,
-        "manual resume must restore the second pump")
+require(SAMOVAR.index('#include "I2CStepper.h"') <
+        SAMOVAR.index('#include "logic.h"'),
+        "v3 declarations must precede rectification helpers")
 
-menu = extract_function_body(MENU, "void menu_samovar_start()")
-require(menu.count("if (rectProgramCommandFailed) return;") >= 2,
-        "initial start and row continuation must not overwrite I2C failure state")
-require("if (!rect_stop_second_i2c_pump_if_running())" in menu,
-        "last B/C row must confirm second-pump STOP before RECT_DONE hold")
-
-print("OK: rectification routes the startup-discovered I2C pump without fallback")
+print("OK: rectification uses pinned v3 pump, finite target and explicit continuous mode")

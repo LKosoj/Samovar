@@ -317,7 +317,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 78, "SetupEEPROM v7 field inventory changed")
+require(len(setup_fields) == 77, "SetupEEPROM v8 field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -378,12 +378,14 @@ nvs_harness = (
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO4(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO5(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO6(kind, name, size)
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO7(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK(kind, name, size, deflt, scope) SAMOVAR_FIELD_SIZE_CHECK_TERM_##scope(kind, name, size)
         SAMOVAR_PROFILE_FIELDS(SAMOVAR_FIELD_SIZE_CHECK)
         #undef SAMOVAR_FIELD_SIZE_CHECK
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO4
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO5
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO6
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO7
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V3ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V2ONLY
@@ -401,7 +403,7 @@ nvs_harness = (
         r'''
         static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
         static const char* const SAMOVAR_PROFILE_KEY = "profile";
-        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 7;
+        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 8;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
@@ -416,10 +418,15 @@ nvs_harness = (
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V6 = 476;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V7 = 475;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V7 = 475;
+        static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V8 = 473;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V8 = 473;
 
         using ProfileCodec = ProfileBlobCodec<
-            SAMOVAR_PROFILE_PAYLOAD_SIZE_V7,
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V8,
             SAMOVAR_PROFILE_FORMAT_VERSION>;
+        using V7ProfileCodec = ProfileBlobCodec<
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V7,
+            7>;
         using V6ProfileCodec = ProfileBlobCodec<
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V6,
             6>;
@@ -440,7 +447,8 @@ nvs_harness = (
             1>;
 
         static_assert(sizeof(SetupEEPROM) == 492, "host ABI drift");
-        static_assert(ProfileCodec::BLOB_SIZE == 489, "v7 blob size drift");
+        static_assert(ProfileCodec::BLOB_SIZE == 487, "v8 blob size drift");
+        static_assert(V7ProfileCodec::BLOB_SIZE == 489, "v7 blob size drift");
         static_assert(V6ProfileCodec::BLOB_SIZE == 490, "v6 blob size drift");
         static_assert(V5ProfileCodec::BLOB_SIZE == 494, "v5 blob size drift");
         static_assert(V4ProfileCodec::BLOB_SIZE == 559, "v4 blob size drift");
@@ -450,7 +458,6 @@ nvs_harness = (
 
         static const float DEFAULT_DIST_TEMP = 98.0f;
         static const uint16_t STEPPER_STEP_ML = 100;
-        static const uint16_t I2C_STEPPER_STEP_ML_DEFAULT = 200;
         // Зеркало NBK_*_DEFAULT из nbk.h (Н1, SOLUTIONS_2026-08-24.md): харнесс
         // собирает profile_setup_fields.h изолированно, без nbk.h, поэтому
         // константы дублируются здесь по тому же приёму, что DEFAULT_DIST_TEMP выше.
@@ -635,7 +642,7 @@ nvs_harness = (
           } else if (fake.mutation == MUTATE_INVALID_BOOL) {
             fake.blob[ProfileCodec::HEADER_SIZE + 35] = 2U;
           } else {
-            fake.blob[ProfileCodec::HEADER_SIZE + 465] = 2U;
+            fake.blob[ProfileCodec::HEADER_SIZE + 463] = 2U;
           }
           write_crc(fake.blob);
         }
@@ -843,7 +850,7 @@ for token, signature in [
     ),
     (
         "decode_setup_payload_fields(",
-        "template <bool ReadUpTo4Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
+        "template <bool ReadUpTo4Fields, bool ReadUpTo7Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
     ),
     (
         "decode_setup_payload_v2only_fields(",
@@ -860,6 +867,10 @@ for token, signature in [
     (
         "decode_setup_payload(",
         "static bool decode_setup_payload(const uint8_t* payload, SetupEEPROM& candidate)",
+    ),
+    (
+        "decode_setup_payload_v7(",
+        "static bool decode_setup_payload_v7(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
     (
         "set_profile_version_defaults(",
@@ -1096,7 +1107,6 @@ nvs_harness += (
           candidate.ColDiam = 2.0f;
           candidate.ColHeight = 0.5f;
           candidate.PackDens = 80;
-          candidate.StepperStepMlI2C = 654;
           candidate.SuvidTemp = 62.5f;
           candidate.SuvidHoldMinutes = 37;
           candidate.BeerBrewOrder = 2;
@@ -1127,6 +1137,7 @@ nvs_harness += (
           char tg_token[50] = "";
           char tg_chat_id[14] = "";
           uint8_t CheesePhSmoothPercent = 0x5A;
+          uint16_t StepperStepMlI2C = 654;
           uint16_t CheeseDoserSpeed = 0x51A2;
           uint16_t CheeseDoserSteps = 0xB3C4;
         };
@@ -1157,6 +1168,7 @@ nvs_harness += (
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO4(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO5(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO6(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_TERM_UPTO7(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_LEGACY_ENCODE_TERM_##scope(kind, name)
           const bool encoded =
               SAMOVAR_PROFILE_FIELDS(SAMOVAR_LEGACY_ENCODE_FIELD)
@@ -1165,6 +1177,7 @@ nvs_harness += (
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO4
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO5
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO6
+#undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO7
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V3ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V2ONLY
@@ -1226,10 +1239,31 @@ nvs_harness += (
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
+        static std::vector<uint8_t> encode_v7_payload(
+            const SetupEEPROM& candidate, uint16_t retiredStepsPerMl) {
+          uint8_t v8Payload[ProfileCodec::PAYLOAD_SIZE] = {};
+          assert(encode_setup_payload(candidate, v8Payload));
+          std::vector<uint8_t> payload(V7ProfileCodec::PAYLOAD_SIZE);
+          memcpy(payload.data(), v8Payload, 432);
+          payload[432] = uint8_t(retiredStepsPerMl);
+          payload[433] = uint8_t(retiredStepsPerMl >> 8);
+          memcpy(payload.data() + 434, v8Payload + 432, 41);
+          return payload;
+        }
+
+        static std::vector<uint8_t> encode_v7_blob(
+            const SetupEEPROM& candidate, uint16_t retiredStepsPerMl) {
+          std::vector<uint8_t> payload = encode_v7_payload(candidate, retiredStepsPerMl);
+          V7ProfileCodec::Blob blob{};
+          V7ProfileCodec::encode(payload.data(), blob);
+          return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
+        }
+
         static std::vector<uint8_t> encode_v6_blob(
             const SetupEEPROM& candidate, uint8_t smooth) {
           uint8_t payload[V6ProfileCodec::PAYLOAD_SIZE] = {};
-          assert(encode_setup_payload(candidate, payload));
+          std::vector<uint8_t> v7Payload = encode_v7_payload(candidate, 654);
+          memcpy(payload, v7Payload.data(), v7Payload.size());
           payload[475] = smooth;
           V6ProfileCodec::Blob blob{};
           V6ProfileCodec::encode(payload, blob);
@@ -1239,7 +1273,8 @@ nvs_harness += (
         static std::vector<uint8_t> encode_v5_blob(
             const SetupEEPROM& candidate, uint8_t smooth, uint16_t speed, uint16_t steps) {
           uint8_t payload[V5ProfileCodec::PAYLOAD_SIZE] = {};
-          assert(encode_setup_payload(candidate, payload));
+          std::vector<uint8_t> v7Payload = encode_v7_payload(candidate, 654);
+          memcpy(payload, v7Payload.data(), v7Payload.size());
           payload[475] = smooth;
           payload[476] = uint8_t(speed);
           payload[477] = uint8_t(speed >> 8);
@@ -1397,7 +1432,7 @@ nvs_harness += (
 
           reset_fake();
           seed_current_blob(expected);
-          fake.blob[ProfileCodec::HEADER_SIZE + 465] = 2U;
+          fake.blob[ProfileCodec::HEADER_SIZE + 463] = 2U;
           write_crc(fake.blob);
           expect_load_failure(PROFILE_LOAD_PAYLOAD_ENCODING);
 
@@ -1410,7 +1445,6 @@ nvs_harness += (
           assert(loaded.flag == expected.flag);
           assert(loaded.Kp == expected.Kp);
           assert(loaded.Mode == expected.Mode);
-          assert(loaded.StepperStepMlI2C == expected.StepperStepMlI2C);
           assert(loaded.SuvidHoldMinutes == expected.SuvidHoldMinutes);
           assert(loaded.MpxZeroAdc == expected.MpxZeroAdc);
           assert(loaded.MpxCountsPerMmHg == expected.MpxCountsPerMmHg);
@@ -1422,7 +1456,7 @@ nvs_harness += (
           assert(encode_blob(loaded) == fake.blob);
         }
 
-        static void test_v1_v2_v3_v4_v5_v6_profiles_migrate_after_verified_v7_write() {
+        static void test_v1_v2_v3_v4_v5_v6_v7_profiles_migrate_after_verified_v8_write() {
           SetupEEPROM legacy = sample_setup();
           PersistResult persistResult = PERSIST_OK;
           legacy.Mode = SAMOVAR_LUA_MODE;
@@ -1577,6 +1611,32 @@ nvs_harness += (
           memset(&destination, 0xC3, sizeof(destination));
           assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
           assert(persistResult == PERSIST_READBACK_CRC);
+          assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
+
+          reset_fake();
+          fake.blob = encode_v7_blob(legacy, 0x1234);
+          loaded = {};
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
+          assert(loaded.Kp == legacy.Kp && loaded.NbkTn == legacy.NbkTn);
+          const std::vector<uint8_t> v8FromFirstV7 = fake.blob;
+
+          reset_fake();
+          fake.blob = encode_v7_blob(legacy, 0xFEDC);
+          loaded = {};
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
+          assert(loaded.Kp == legacy.Kp && loaded.NbkTn == legacy.NbkTn);
+          assert(fake.blob == v8FromFirstV7);
+
+          reset_fake();
+          fake.blob = encode_v7_blob(legacy, 0x55AA);
+          fake.writerBegin = false;
+          memset(&destination, 0xE1, sizeof(destination));
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_OPEN_FAILED);
           assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
         }
 
@@ -2059,23 +2119,22 @@ nvs_harness += (
           {"ColDiam", 423, 4, offsetof(SetupEEPROM, ColDiam), sizeof(((SetupEEPROM*)0)->ColDiam)},
           {"ColHeight", 427, 4, offsetof(SetupEEPROM, ColHeight), sizeof(((SetupEEPROM*)0)->ColHeight)},
           {"PackDens", 431, 1, offsetof(SetupEEPROM, PackDens), sizeof(((SetupEEPROM*)0)->PackDens)},
-          {"StepperStepMlI2C", 432, 2, offsetof(SetupEEPROM, StepperStepMlI2C), sizeof(((SetupEEPROM*)0)->StepperStepMlI2C)},
-          {"NbkTn", 434, 4, offsetof(SetupEEPROM, NbkTn), sizeof(((SetupEEPROM*)0)->NbkTn)},
-          {"BKPower", 438, 4, offsetof(SetupEEPROM, BKPower), sizeof(((SetupEEPROM*)0)->BKPower)},
-          {"MainsVoltage", 442, 4, offsetof(SetupEEPROM, MainsVoltage), sizeof(((SetupEEPROM*)0)->MainsVoltage)},
-          {"SuvidTemp", 446, 4, offsetof(SetupEEPROM, SuvidTemp), sizeof(((SetupEEPROM*)0)->SuvidTemp)},
-          {"SuvidHoldMinutes", 450, 2, offsetof(SetupEEPROM, SuvidHoldMinutes), sizeof(((SetupEEPROM*)0)->SuvidHoldMinutes)},
-          {"BeerBrewOrder", 452, 1, offsetof(SetupEEPROM, BeerBrewOrder), sizeof(((SetupEEPROM*)0)->BeerBrewOrder)},
-          {"MpxZeroAdc", 453, 4, offsetof(SetupEEPROM, MpxZeroAdc), sizeof(((SetupEEPROM*)0)->MpxZeroAdc)},
-          {"MpxCountsPerMmHg", 457, 4, offsetof(SetupEEPROM, MpxCountsPerMmHg), sizeof(((SetupEEPROM*)0)->MpxCountsPerMmHg)},
-          {"SecondI2CPumpRate", 461, 4, offsetof(SetupEEPROM, SecondI2CPumpRate), sizeof(((SetupEEPROM*)0)->SecondI2CPumpRate)},
-          {"UseSecondI2CPump", 465, 1, offsetof(SetupEEPROM, UseSecondI2CPump), sizeof(((SetupEEPROM*)0)->UseSecondI2CPump)},
-          {"NbkUseStreamServo", 466, 1, offsetof(SetupEEPROM, NbkUseStreamServo), sizeof(((SetupEEPROM*)0)->NbkUseStreamServo)},
-          {"CheesePhSlope", 467, 4, offsetof(SetupEEPROM, CheesePhSlope), sizeof(((SetupEEPROM*)0)->CheesePhSlope)},
-          {"CheesePhOffset", 471, 4, offsetof(SetupEEPROM, CheesePhOffset), sizeof(((SetupEEPROM*)0)->CheesePhOffset)},
+          {"NbkTn", 432, 4, offsetof(SetupEEPROM, NbkTn), sizeof(((SetupEEPROM*)0)->NbkTn)},
+          {"BKPower", 436, 4, offsetof(SetupEEPROM, BKPower), sizeof(((SetupEEPROM*)0)->BKPower)},
+          {"MainsVoltage", 440, 4, offsetof(SetupEEPROM, MainsVoltage), sizeof(((SetupEEPROM*)0)->MainsVoltage)},
+          {"SuvidTemp", 444, 4, offsetof(SetupEEPROM, SuvidTemp), sizeof(((SetupEEPROM*)0)->SuvidTemp)},
+          {"SuvidHoldMinutes", 448, 2, offsetof(SetupEEPROM, SuvidHoldMinutes), sizeof(((SetupEEPROM*)0)->SuvidHoldMinutes)},
+          {"BeerBrewOrder", 450, 1, offsetof(SetupEEPROM, BeerBrewOrder), sizeof(((SetupEEPROM*)0)->BeerBrewOrder)},
+          {"MpxZeroAdc", 451, 4, offsetof(SetupEEPROM, MpxZeroAdc), sizeof(((SetupEEPROM*)0)->MpxZeroAdc)},
+          {"MpxCountsPerMmHg", 455, 4, offsetof(SetupEEPROM, MpxCountsPerMmHg), sizeof(((SetupEEPROM*)0)->MpxCountsPerMmHg)},
+          {"SecondI2CPumpRate", 459, 4, offsetof(SetupEEPROM, SecondI2CPumpRate), sizeof(((SetupEEPROM*)0)->SecondI2CPumpRate)},
+          {"UseSecondI2CPump", 463, 1, offsetof(SetupEEPROM, UseSecondI2CPump), sizeof(((SetupEEPROM*)0)->UseSecondI2CPump)},
+          {"NbkUseStreamServo", 464, 1, offsetof(SetupEEPROM, NbkUseStreamServo), sizeof(((SetupEEPROM*)0)->NbkUseStreamServo)},
+          {"CheesePhSlope", 465, 4, offsetof(SetupEEPROM, CheesePhSlope), sizeof(((SetupEEPROM*)0)->CheesePhSlope)},
+          {"CheesePhOffset", 469, 4, offsetof(SetupEEPROM, CheesePhOffset), sizeof(((SetupEEPROM*)0)->CheesePhOffset)},
         };
 
-        static const uint8_t GOLDEN_A[475] = {
+        static const uint8_t GOLDEN_A[473] = {
           0x0B,  // [  0-  0] flag
           0x00, 0x00, 0x00, 0x00,  // [  1-  4] DeltaSteamTemp
           0x00, 0x00, 0x50, 0xC0,  // [  5-  8] DeltaPipeTemp
@@ -2140,7 +2199,6 @@ nvs_harness += (
           0x00, 0x80, 0x82, 0xC2,  // [423-426] ColDiam
           0x00, 0x80, 0x84, 0xC2,  // [427-430] ColHeight
           0xDF,  // [431-431] PackDens
-          0xBC, 0x0D,  // [432-433] StepperStepMlI2C
           0x00, 0x80, 0x8A, 0xC2,  // [434-437] NbkTn
           0x00, 0x80, 0x8C, 0xC2,  // [438-441] BKPower
           0x00, 0x80, 0x8E, 0xC2,  // [442-445] MainsVoltage
@@ -2156,7 +2214,7 @@ nvs_harness += (
           0x00, 0x80, 0x9A, 0xC2,  // [471-474] CheesePhOffset
         };
 
-        static const uint8_t GOLDEN_B[475] = {
+        static const uint8_t GOLDEN_B[473] = {
           0xEE,  // [  0-  0] flag
           0x00, 0xC0, 0x48, 0x43,  // [  1-  4] DeltaSteamTemp
           0x00, 0x60, 0x96, 0x43,  // [  5-  8] DeltaPipeTemp
@@ -2221,7 +2279,6 @@ nvs_harness += (
           0x00, 0x26, 0xCB, 0x45,  // [423-426] ColDiam
           0x00, 0x46, 0xCE, 0x45,  // [427-430] ColHeight
           0x0C,  // [431-431] PackDens
-          0x8B, 0xFC,  // [432-433] StepperStepMlI2C
           0x00, 0xA6, 0xD7, 0x45,  // [434-437] NbkTn
           0x00, 0xC6, 0xDA, 0x45,  // [438-441] BKPower
           0x00, 0xE6, 0xDD, 0x45,  // [442-445] MainsVoltage
@@ -2237,7 +2294,7 @@ nvs_harness += (
           0x00, 0xA6, 0xF0, 0x45,  // [471-474] CheesePhOffset
         };
 
-        static const uint8_t GOLDEN_DEFAULT_NOSEM[475] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_NOSEM[473] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2302,7 +2359,6 @@ nvs_harness += (
           0x00, 0x00, 0x00, 0x40,  // [423-426] ColDiam
           0x00, 0x00, 0x00, 0x3F,  // [427-430] ColHeight
           0x37,  // [431-431] PackDens
-          0xC8, 0x00,  // [432-433] StepperStepMlI2C
           0x00, 0x00, 0xC5, 0x42,  // [434-437] NbkTn
           0x00, 0x00, 0x34, 0x42,  // [438-441] BKPower
           0x00, 0x00, 0x66, 0x43,  // [442-445] MainsVoltage
@@ -2318,7 +2374,7 @@ nvs_harness += (
           0x00, 0x00, 0x80, 0x3F,  // [471-474] CheesePhOffset
         };
 
-        static const uint8_t GOLDEN_DEFAULT_SEM[475] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_SEM[473] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2383,7 +2439,6 @@ nvs_harness += (
           0x00, 0x00, 0x00, 0x40,  // [423-426] ColDiam
           0x00, 0x00, 0x00, 0x3F,  // [427-430] ColHeight
           0x37,  // [431-431] PackDens
-          0xC8, 0x00,  // [432-433] StepperStepMlI2C
           0x00, 0x00, 0xC5, 0x42,  // [434-437] NbkTn
           0x00, 0x00, 0x48, 0x43,  // [438-441] BKPower
           0x00, 0x00, 0x66, 0x43,  // [442-445] MainsVoltage
@@ -2503,7 +2558,6 @@ nvs_harness += (
         candidateA.ColDiam = -65.25f;
         candidateA.ColHeight = -66.25f;
         candidateA.PackDens = 223;
-        candidateA.StepperStepMlI2C = 3516;
         candidateA.NbkTn = -69.25f;
         candidateA.BKPower = -70.25f;
         candidateA.MainsVoltage = -71.25f;
@@ -2517,7 +2571,7 @@ nvs_harness += (
         candidateA.NbkUseStreamServo = true;
         candidateA.CheesePhSlope = -76.25f;
         candidateA.CheesePhOffset = -77.25f;
-          uint8_t payloadA[475] = {};
+          uint8_t payloadA[473] = {};
           assert(encode_setup_payload(candidateA, payloadA) &&
                  "encode_setup_payload must succeed for golden set A");
           golden_check_encode(payloadA, GOLDEN_A, "encode set A");
@@ -2592,7 +2646,6 @@ nvs_harness += (
         candidateB.ColDiam = 6500.75f;
         candidateB.ColHeight = 6600.75f;
         candidateB.PackDens = 12;
-        candidateB.StepperStepMlI2C = 64651;
         candidateB.NbkTn = 6900.75f;
         candidateB.BKPower = 7000.75f;
         candidateB.MainsVoltage = 7100.75f;
@@ -2606,7 +2659,7 @@ nvs_harness += (
         candidateB.NbkUseStreamServo = false;
         candidateB.CheesePhSlope = 7600.75f;
         candidateB.CheesePhOffset = 7700.75f;
-          uint8_t payloadB[475] = {};
+          uint8_t payloadB[473] = {};
           assert(encode_setup_payload(candidateB, payloadB) &&
                  "encode_setup_payload must succeed for golden set B");
           golden_check_encode(payloadB, GOLDEN_B, "encode set B");
@@ -2631,7 +2684,7 @@ nvs_harness += (
           memset(&candidate, 0xAA, sizeof(candidate));
           set_default_setup_profile(candidate);
 
-          uint8_t payload[475] = {};
+          uint8_t payload[473] = {};
           assert(encode_setup_payload(candidate, payload) &&
                  "encode_setup_payload must succeed for defaults");
         #ifndef SAMOVAR_USE_SEM_AVR
@@ -2645,7 +2698,7 @@ nvs_harness += (
         int main() {
           test_save_fault_matrix();
           test_load_fault_matrix();
-          test_v1_v2_v3_v4_v5_v6_profiles_migrate_after_verified_v7_write();
+          test_v1_v2_v3_v4_v5_v6_v7_profiles_migrate_after_verified_v8_write();
           test_poisoned_padding_and_canonical_rejection();
           test_legacy_fault_matrix();
           test_migration_precedence_and_errors();
@@ -2976,6 +3029,7 @@ if load_body:
         require(forbidden not in load_body, f"blob load contains forbidden fallback {forbidden}")
     require(
         len(re.findall(r"(?<![A-Za-z0-9])ProfileCodec::Blob", load_body)) == 1 and
+        load_body.count("V7ProfileCodec::Blob") == 1 and
         load_body.count("V6ProfileCodec::Blob") == 1 and
         load_body.count("V5ProfileCodec::Blob") == 1 and
         load_body.count("V4ProfileCodec::Blob") == 1 and
@@ -2983,28 +3037,30 @@ if load_body:
         load_body.count("V2ProfileCodec::Blob") == 1 and
         load_body.count("LegacyProfileCodec::Blob") == 1 and
         load_body.count("uint8_t payload[ProfileCodec::PAYLOAD_SIZE]") == 1 and
+        load_body.count("uint8_t payload[V7ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V6ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V5ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V4ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V3ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V2ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[LegacyProfileCodec::PAYLOAD_SIZE]") == 1 and
+        "decode_setup_payload_v7(payload, migrated)" in load_body and
         "decode_setup_payload_v6(payload, migrated)" in load_body and
         "decode_setup_payload_v5(payload, migrated)" in load_body and
         "decode_setup_payload_v4(payload, migrated)" in load_body and
         "decode_setup_payload_v3(payload, migrated)" in load_body and
         "decode_setup_payload_v2(payload, migrated)" in load_body and
         "decode_setup_payload_v1(payload, migrated)" in load_body and
-        load_body.count("save_profile_nvs(migrated)") == 6 and
+        load_body.count("save_profile_nvs(migrated)") == 7 and
         "SetupEEPROM decoded" not in load_body,
-        "profile load must decode V1/V2/V3/V4/V5/V6 and confirm their V7 rewrite with fixed buffers",
+        "profile load must decode V1/V2/V3/V4/V5/V6/V7 and confirm their V8 rewrite with fixed buffers",
     )
     require(
         load_body.startswith("\n  persistResult = PERSIST_OK;") and
-        load_body.count("candidate = migrated;") == 6 and
-        load_body.count("persistResult = save_profile_nvs(migrated);") == 6 and
-        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 6,
-        "legacy V1-V6 load must retain its decoded candidate and report the exact V7 persist failure",
+        load_body.count("candidate = migrated;") == 7 and
+        load_body.count("persistResult = save_profile_nvs(migrated);") == 7 and
+        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 7,
+        "legacy V1-V7 load must retain its decoded candidate and report the exact V8 persist failure",
     )
 
 if migrate_body:
@@ -3051,7 +3107,7 @@ decode_body = function_body(
 )
 decode_fields_body = function_body(
     nvs_text,
-    "template <bool ReadUpTo4Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_fields(",
+    "template <bool ReadUpTo4Fields, bool ReadUpTo7Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_fields(",
 )
 decode_v2only_body = function_body(
     nvs_text,
@@ -3082,17 +3138,17 @@ if not PROFILE_SETUP_FIELDS_HEADER.exists():
 else:
     profile_fields_text = PROFILE_SETUP_FIELDS_HEADER.read_text(encoding="utf-8")
     profile_field_rows = parse_profile_field_rows(profile_fields_text)
-    macro_field_names = [row[1] for row in profile_field_rows if row[4] not in ("UPTO4", "UPTO5", "UPTO6")]
+    macro_field_names = [row[1] for row in profile_field_rows if row[4] not in ("UPTO4", "UPTO5", "UPTO6", "UPTO7")]
     require(
         macro_field_names == setup_fields,
         "profile_setup_fields.h field order (без retired-полей, ушедших из SetupEEPROM) "
         "is not an exact 1-to-1 match with SetupEEPROM declaration order: "
         f"macro={macro_field_names!r} struct={setup_fields!r}",
     )
-    total_size = sum(int(row[2]) for row in profile_field_rows if row[4] not in ("UPTO4", "UPTO5", "UPTO6"))
+    total_size = sum(int(row[2]) for row in profile_field_rows if row[4] not in ("UPTO4", "UPTO5", "UPTO6", "UPTO7"))
     require(
-        total_size == 475,
-        f"profile_setup_fields.h SIZE column (без retired-полей) sums to {total_size} bytes, expected 475",
+        total_size == 473,
+        f"profile_setup_fields.h SIZE column (без retired-полей) sums to {total_size} bytes, expected 473",
     )
     # decode_setup_payload_fields() и decode_setup_payload_v2only_fields() читают
     # ОДИН И ТОТ ЖЕ курсор reader двумя последовательными проходами по одному и
@@ -3105,7 +3161,7 @@ else:
     # V2ONLY-хвост) - это нормально; интерливинг ALL/V2ONLY - нет.
     v2only_fields = [row[1] for row in profile_field_rows if row[4] == "V2ONLY"]
     scopes = [row[4] for row in profile_field_rows]
-    expected_scope_order = {"ALL": 0, "UPTO4": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3, "UPTO6": 4, "UPTO5": 5}
+    expected_scope_order = {"ALL": 0, "UPTO4": 0, "UPTO7": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3, "UPTO6": 4, "UPTO5": 5}
     require(
         all(scope in expected_scope_order for scope in scopes) and
         all(expected_scope_order[left] <= expected_scope_order[right]
@@ -3244,9 +3300,11 @@ require("void save_profile()" not in (ROOT / "FS.ino").read_text(encoding="utf-8
         "FS.ino void save_profile wrapper remains")
 require("void save_profile();" not in api_text, "void save_profile API remains")
 require('static_assert(sizeof(SetupEEPROM) == 492' in nvs_text,
-        "production SetupEEPROM v7 ABI assertion is missing")
+        "production SetupEEPROM v8 ABI assertion is missing")
 for token in [
-    "SAMOVAR_PROFILE_FORMAT_VERSION = 7",
+    "SAMOVAR_PROFILE_FORMAT_VERSION = 8",
+    "SAMOVAR_PROFILE_PAYLOAD_SIZE_V8 = 473",
+    "SAMOVAR_PROFILE_CANONICAL_BYTES_V8 = 473",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V7 = 475",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V7 = 475",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V6 = 476",
@@ -3255,13 +3313,14 @@ for token in [
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V5 = 480",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545",
+    "using V7ProfileCodec = ProfileBlobCodec<",
     "using V6ProfileCodec = ProfileBlobCodec<",
     "using V5ProfileCodec = ProfileBlobCodec<",
     "using V4ProfileCodec = ProfileBlobCodec<",
     "using V3ProfileCodec = ProfileBlobCodec<",
     "using V2ProfileCodec = ProfileBlobCodec<",
 ]:
-    require(token in nvs_text, f"production profile v7 contract is missing {token}")
+    require(token in nvs_text, f"production profile v8 contract is missing {token}")
 
 setup_body = function_body(samovar_text, "void setup()")
 if setup_body:

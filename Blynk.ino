@@ -239,26 +239,46 @@ static void blynk_push_v27() {
 }
 
 // ---------------------------------------------------------------------------
-// V36: состояние плат I2CStepper (PIN_SPEC.md §13). Ключ "mixer"/"pump" есть только у
-// платы, которая хоть раз ответила после старта: без плат пин не шлётся вовсе, а пропавшая
-// плата приходит с present=0. Объект платы - тот же, что отдаёт /i2cstepper?cmd=status.
+// V36: компактное состояние I2CStepper v3 (PIN_SPEC.md §13). Только устройства,
+// ответившие после старта, остаются в массиве; пропавшее сохраняется с p=0.
 // ---------------------------------------------------------------------------
+static uint32_t blynk_i2c_v36_remaining(const I2CStepperDevice& device) {
+  const uint32_t remaining = device.status.remainingSteps;
+  if (remaining == 0) return 0;
+  const uint32_t divisor = device.status.mode == I2CSTEPPER_V3_MODE_MIXER
+      ? device.motion.speedStepsPerSec
+      : device.config.stepsPerMl;
+  return divisor == 0 ? 0 : remaining / divisor + (remaining % divisor != 0 ? 1 : 0);
+}
+
+static void blynk_i2c_v36_write_device(
+    Print& out, const I2CStepperDevice& device) {
+  out.print("{\"a\":"); out.print(device.address);
+  out.print(",\"p\":"); out.print(device.present ? 1 : 0);
+  out.print(",\"c\":"); out.print(device.capabilities);
+  out.print(",\"s\":"); out.print(device.status.status);
+  out.print(",\"e\":"); out.print(device.status.error);
+  out.print(",\"m\":"); out.print(device.status.mode);
+  out.print(",\"q\":"); out.print(device.status.currentSpeedStepsPerSec);
+  out.print(",\"r\":"); out.print(blynk_i2c_v36_remaining(device));
+  out.print(",\"l\":"); out.print(device.config.relayMask);
+  out.print('}');
+}
+
 static void blynk_push_v36() {
-  if (!i2cStepperMixer.everPresent && !i2cStepperPump.everPresent) return;
   String json;
-  json.reserve(640);
+  json.reserve(768);
   JsonStringPrint sink(json);
-  sink.print("{\"cal\":");
-  sink.print(I2CPumpCalibrating ? 1 : 0);
-  if (i2cStepperMixer.everPresent) {
-    sink.print(",\"mixer\":");
-    write_i2c_stepper_json(sink, i2cStepperMixer);
+  sink.print("{\"v\":3,\"d\":[");
+  bool first = true;
+  for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
+    const I2CStepperDevice& device = i2cSteppers[index];
+    if (!device.everPresent) continue;
+    if (!first) sink.print(',');
+    first = false;
+    blynk_i2c_v36_write_device(sink, device);
   }
-  if (i2cStepperPump.everPresent) {
-    sink.print(",\"pump\":");
-    write_i2c_stepper_json(sink, i2cStepperPump);
-  }
-  sink.print('}');
+  sink.print("]}");
   Blynk.virtualWrite(V36, json);
 }
 
@@ -278,6 +298,156 @@ static inline void report_blynk_refusal(uint8_t virtualPin, const char* reason) 
   message += ": ";
   message += reason;
   SendMsg(message, WARNING_MSG);
+}
+
+enum : uint8_t {
+  BLYNK_I2C_V37_START = 0,
+  BLYNK_I2C_V37_STOP,
+  BLYNK_I2C_V37_RELAY,
+};
+
+static void report_blynk_i2c_v37_refusal(
+    const String& address, const char* reason) {
+  String message = "Blynk V37 a=";
+  message += address;
+  message += ": ";
+  message += reason;
+  SendMsg(message, WARNING_MSG);
+}
+
+static bool blynk_i2c_v37_query_well_formed(const char* query) {
+  if (!query || !*query) return false;
+  const char* item = query;
+  while (true) {
+    const char* end = strchr(item, '&');
+    const size_t size = end ? size_t(end - item) : strlen(item);
+    if (size == 0 || !memchr(item, '=', size)) return false;
+    if (!end) return true;
+    item = end + 1;
+  }
+}
+
+static bool blynk_i2c_v37_known_name(const String& name) {
+  return name == "v" || name == "address" || name == "cmd" ||
+      name == "relay" || name == "state";
+}
+
+static bool blynk_i2c_v37_parse(
+    const char* query, uint8_t& requestedAddress, uint8_t& command,
+    uint8_t& relay, bool& relayState, String& address, const char*& reason) {
+  address = "?";
+  reason = "argument request";
+  I2CStepperParams params;
+  if (!params.parseQuery(query)) return false;
+
+  const I2CStepperParam* addressParam = get_request_param(&params, "address");
+  uint8_t parsedAddress = 0;
+  NumericParseResult result = addressParam && request_param_count(&params, "address") == 1
+      ? parse_bounded_uint8(addressParam->value().c_str(),
+                            I2CSTEPPER_V3_ADDRESS_MIN,
+                            I2CSTEPPER_V3_ADDRESS_MAX, parsedAddress)
+      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  if (!result.ok()) {
+    reason = "address";
+    return false;
+  }
+  address = String(parsedAddress);
+  requestedAddress = parsedAddress;
+
+  if (!blynk_i2c_v37_query_well_formed(query)) return false;
+
+  for (size_t index = 0; index < params.params(); index++) {
+    const I2CStepperParam* item = params.getParam(index);
+    if (!item || !blynk_i2c_v37_known_name(item->name()) ||
+        request_param_count(&params, item->name().c_str()) != 1) {
+      reason = "argument request";
+      return false;
+    }
+  }
+
+  const I2CStepperParam* versionParam = get_request_param(&params, "v");
+  uint8_t version = 0;
+  result = versionParam && request_param_count(&params, "v") == 1
+      ? parse_bounded_uint8(versionParam->value().c_str(), 3, 3, version)
+      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  if (!result.ok()) {
+    reason = "v";
+    return false;
+  }
+
+  const I2CStepperParam* commandParam = get_request_param(&params, "cmd");
+  if (!commandParam || request_param_count(&params, "cmd") != 1) {
+    reason = "cmd";
+    return false;
+  }
+  String commandText = commandParam->value();
+  commandText.toLowerCase();
+  if (commandText == "start") command = BLYNK_I2C_V37_START;
+  else if (commandText == "stop") command = BLYNK_I2C_V37_STOP;
+  else if (commandText == "relay") command = BLYNK_I2C_V37_RELAY;
+  else {
+    reason = "cmd";
+    return false;
+  }
+
+  const uint8_t relayCount = request_param_count(&params, "relay");
+  const uint8_t stateCount = request_param_count(&params, "state");
+  if (command != BLYNK_I2C_V37_RELAY) {
+    if (relayCount != 0 || stateCount != 0 || params.params() != 3) {
+      reason = "argument request";
+      return false;
+    }
+    return true;
+  }
+  const I2CStepperParam* relayParam = get_request_param(&params, "relay");
+  const I2CStepperParam* stateParam = get_request_param(&params, "state");
+  if (relayCount != 1 || !relayParam) {
+    reason = "relay";
+    return false;
+  }
+  if (stateCount != 1 || !stateParam) {
+    reason = "state";
+    return false;
+  }
+  if (params.params() != 5) {
+    reason = "argument request";
+    return false;
+  }
+  if (!(result = parse_bounded_uint8(relayParam->value().c_str(), 1, 4,
+                                     relay)).ok()) {
+    reason = "relay";
+    return false;
+  }
+  uint8_t parsedRelayState = 0;
+  if (!(result = parse_bounded_uint8(stateParam->value().c_str(), 0, 1,
+                                     parsedRelayState)).ok()) {
+    reason = "state";
+    return false;
+  }
+  relayState = parsedRelayState != 0;
+  return true;
+}
+
+// Единственная точка стыка Task6 с общей очередью: callback не ходит по I2C.
+// START_CONFIGURED запускает сохранённую конфигурацию непосредственно на Nano; cached
+// config/motion из callback для него не являются входными данными.
+static OperationError queue_blynk_i2c_v37(
+    uint8_t requestedAddress, uint8_t command, uint8_t relay, bool relayState,
+    OperationId& operationId) {
+  I2CStepperDevice* device = i2c_stepper_device(requestedAddress);
+  if (!device || !device->present) return OPERATION_ERROR_I2C_REFRESH_FAILED;
+  PendingI2CStepperCmd pending = {};
+  pending.address = requestedAddress;
+  if (command == BLYNK_I2C_V37_START) {
+    strncpy(pending.cmd, "blynk_start", sizeof(pending.cmd) - 1);
+  } else if (command == BLYNK_I2C_V37_STOP) {
+    strncpy(pending.cmd, "blynk_stop", sizeof(pending.cmd) - 1);
+  } else {
+    pending.relay = relay;
+    pending.relayState = relayState;
+    strncpy(pending.cmd, "blynk_relay", sizeof(pending.cmd) - 1);
+  }
+  return queue_pending_i2cstepper(pending, operationId);
 }
 
 // ШИМ насоса воды 0..1023 (= /command watert).
@@ -301,10 +471,12 @@ BLYNK_WRITE(V28) {
 // Скорость подачи НБК: л/ч, 0 = стоп, 8000/9000 = шаг вниз/вверх (= /command pnbk).
 BLYNK_WRITE(V29) {
   if (mode_switch_in_progress()) return;
+  const I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  const uint32_t stepsPerMl = pump ? pump->config.stepsPerMl : 0;
   ControlNbkCommand nbkCommand = {};
   NumericParseResult result = parse_control_nbk(
-      param.asStr(), SamSetup.StepperStepMlI2C, nbkCommand);
-  if (result.ok() && nbkCommand.kind != CONTROL_NBK_STOP && SamSetup.StepperStepMlI2C == 0) {
+      param.asStr(), stepsPerMl, nbkCommand);
+  if (result.ok() && nbkCommand.kind != CONTROL_NBK_STOP && stepsPerMl == 0) {
     result = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
   }
   if (!result.ok()) {
@@ -686,72 +858,29 @@ BLYNK_DISCONNECTED() {
   blynkRunLastMs = 0;
 }
 
-// I2CStepper (мешалка/насос): команда строкой в формате параметров /i2cstepper,
-// например device=pump&cmd=start&mode=2&pumpMlHour=1200&stepsPerMl=200 (PIN_SPEC.md §13).
-// Проверка та же, что у веб-обработчика (parse_i2c_stepper_patch); cmd=status здесь
-// не нужен - состояние обеих плат прошивка сама шлёт в V36. Отказ - предупреждение в V26
-// с кодом и именем поля, результат виден по V36.
+// I2CStepper v3: только runtime-команды из PIN_SPEC.md §13. В callback нет I2C:
+// он разбирает строку и ставит адресный DTO в общую очередь.
 BLYNK_WRITE(V37) {
-  if (mode_switch_in_progress()) return;
-  I2CStepperParams params;
-  const char* errorField = "request";
-  NumericParseResult result = numeric_parse_result(NUMERIC_PARSE_OK);
-  if (!params.parseQuery(param.asStr())) {
-    result = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-  }
-  for (size_t index = 0; result.ok() && index < params.params(); index++) {
-    const I2CStepperParam* item = params.getParam(index);
-    if (!i2c_stepper_known_param(item->name()) ||
-        request_param_count(&params, item->name().c_str()) != 1) {
-      errorField = item->name().c_str();
-      result = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-    }
-  }
-  const I2CStepperParam* deviceParam = get_request_param(&params, "device");
-  const I2CStepperParam* commandParam = get_request_param(&params, "cmd");
-  String command = commandParam ? commandParam->value() : String();
-  command.toLowerCase();
-  I2CStepperDevice* dev = nullptr;
-  if (deviceParam && deviceParam->value() == "mixer") dev = &i2cStepperMixer;
-  else if (deviceParam && deviceParam->value() == "pump") dev = &i2cStepperPump;
-  if (result.ok() && !dev) {
-    errorField = "device";
-    result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
-  if (result.ok() && command != "apply" && command != "save" && command != "start" &&
-      command != "stop" && command != "calstart" && command != "calfinish" &&
-      command != "relay") {
-    errorField = "cmd";
-    result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
-  if (result.ok() && !dev->present) {
-    report_blynk_refusal(37, "NO_I2C_DEVICE");
+  uint8_t addressValue = 0;
+  uint8_t command = 0;
+  uint8_t relay = 0;
+  bool relayState = false;
+  String address;
+  const char* reason = "argument request";
+  if (!blynk_i2c_v37_parse(param.asStr(), addressValue, command, relay, relayState,
+                            address, reason)) {
+    report_blynk_i2c_v37_refusal(address, reason);
     return;
   }
-  I2CStepperDevice staged = {};
-  if (result.ok()) {
-    staged = *dev;
-    result = parse_i2c_stepper_patch(&params, command, *dev, staged, errorField);
-  }
-  if (result.ok() && !i2c_stepper_command_supported(staged, command)) {
-    errorField = "cmd";
-    result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
-  }
-  if (!result.ok()) {
-    String reason = numeric_parse_error_code(result.error);
-    reason += ' ';
-    reason += errorField;
-    report_blynk_refusal(37, reason.c_str());
+  if (mode_switch_in_progress()) {
+    report_blynk_i2c_v37_refusal(address, "BUSY");
     return;
   }
-  PendingI2CStepperCmd pendingCmd = {};
-  pendingCmd.staged = staged;
-  pendingCmd.device_sel = dev == &i2cStepperMixer ? 0 : 1;
-  strncpy(pendingCmd.cmd, command.c_str(), sizeof(pendingCmd.cmd) - 1);
   OperationId operationId = 0;
-  const OperationError queueError = queue_pending_i2cstepper(pendingCmd, operationId);
+  const OperationError queueError = queue_blynk_i2c_v37(
+      addressValue, command, relay, relayState, operationId);
   if (queueError != OPERATION_ERROR_NONE) {
-    report_blynk_refusal(37, queueError == OPERATION_ERROR_LOCK_BUSY
+    report_blynk_i2c_v37_refusal(address, queueError == OPERATION_ERROR_LOCK_BUSY
         ? "BUSY" : operation_error_code(queueError));
   }
 }

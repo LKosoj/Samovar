@@ -1935,13 +1935,12 @@ static int lua_wrapper_i2cpump_start(lua_State *lua_state) {
   float volumeMl = 0.0f;
   const bool rateFinite = lua_narrow_to_float(rawRate, speedRate).ok();
   const bool volumeFinite = lua_narrow_to_float(rawVolume, volumeMl).ok();
-  if (use_I2C_dev != 2 || !rateFinite || !volumeFinite || speedRate <= 0.0f || volumeMl <= 0.0f) {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present || !rateFinite || !volumeFinite || speedRate <= 0.0f || volumeMl <= 0.0f) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }
-  const uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0
-      ? SamSetup.StepperStepMlI2C
-      : I2C_STEPPER_STEP_ML_DEFAULT;
+  const uint32_t stepsPerMl = pump->config.stepsPerMl;
   uint32_t targetSteps = 0;
   const NumericParseResult targetResult = checked_truncating_product_u32(
       static_cast<double>(volumeMl), static_cast<double>(stepsPerMl),
@@ -1952,14 +1951,14 @@ static int lua_wrapper_i2cpump_start(lua_State *lua_state) {
   }
   const float speedValue = i2c_get_speed_from_rate(speedRate);
   const NumericParseResult speedResult = validate_bounded_finite_float(
-      speedValue, 1.0f, static_cast<float>(UINT16_MAX));
+      speedValue, 1.0f, static_cast<float>(I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC));
   if (!speedResult.ok()) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
-  const uint16_t speedSteps = static_cast<uint16_t>(speedValue);
+  const uint32_t speedSteps = static_cast<uint32_t>(speedValue);
   I2CPumpCmdSpeed = speedSteps;
   I2CPumpTargetSteps = targetSteps;
   I2CPumpTargetMl = volumeMl;
@@ -1970,7 +1969,8 @@ static int lua_wrapper_i2cpump_start(lua_State *lua_state) {
 
 static int lua_wrapper_i2cpump_stop(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  if (use_I2C_dev != 2) {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }
@@ -1985,7 +1985,8 @@ static int lua_wrapper_i2cpump_stop(lua_State *lua_state) {
 }
 
 static int lua_wrapper_i2cpump_get_speed(lua_State *lua_state) {
-  if (use_I2C_dev != 2) {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }
@@ -1994,7 +1995,8 @@ static int lua_wrapper_i2cpump_get_speed(lua_State *lua_state) {
 }
 
 static int lua_wrapper_i2cpump_get_target_ml(lua_State *lua_state) {
-  if (use_I2C_dev != 2) {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }
@@ -2003,7 +2005,8 @@ static int lua_wrapper_i2cpump_get_target_ml(lua_State *lua_state) {
 }
 
 static int lua_wrapper_i2cpump_get_remaining_ml(lua_State *lua_state) {
-  if (use_I2C_dev != 2) {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }
@@ -2014,7 +2017,8 @@ static int lua_wrapper_i2cpump_get_remaining_ml(lua_State *lua_state) {
 }
 
 static int lua_wrapper_i2cpump_get_running(lua_State *lua_state) {
-  if (use_I2C_dev != 2) {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  if (!pump || !pump->present) {
     lua_pushnumber(lua_state, 0);
     return 1;
   }

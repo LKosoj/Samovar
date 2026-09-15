@@ -44,7 +44,7 @@ for signature, required, forbidden in [
     ("static int lua_wrapper_exp_analogWrite", ["I2C analog expander write timeout"], []),
     ("static int lua_wrapper_set_stepper_by_time", ["lua_check_int32_arg", "lua_check_index_arg"], ["uint16_t a = luaL_checkinteger"]),
     ("static int lua_wrapper_set_stepper_target", ["lua_check_int32_arg", "lua_check_index_arg"], ["uint32_t c = luaL_checkinteger"]),
-    ("static int lua_wrapper_i2cpump_start", ["checked_truncating_product_u32", "i2c_get_speed_from_rate"], ["(uint32_t)(volumeMl * stepsPerMl)"]),
+    ("static int lua_wrapper_i2cpump_start", ["checked_truncating_product_u32", "i2c_get_speed_from_rate", "i2c_stepper_selected_pump", "pump->config.stepsPerMl"], ["(uint32_t)(volumeMl * stepsPerMl)", "StepperStepMlI2C"]),
     ("static int lua_wrapper_i2cpump_stop", ["const bool stopped = set_stepper_target", "stopped"], ["lua_pushnumber(lua_state, 1)"]),
     ("static int lua_wrapper_set_mixer_pump_target", ["lua_check_index_arg"], ["uint8_t a = luaL_checkinteger", "lua_check_int32_arg"]),
     ("static int lua_wrapper_set_i2c_rele_state", ["lua_check_index_arg"], ["uint8_t a = luaL_checkinteger", "lua_check_int32_arg"]),
@@ -232,6 +232,22 @@ if preserves_simulation_output_block(LUA.replace(
     ERRORS.append("mutation proof failed for the simulation actuator block")
 
 
+def preserves_i2c_pump_speed_limit(source: str) -> bool:
+    try:
+        callback = extract_function_body(source, "static int lua_wrapper_i2cpump_start")
+    except ValueError:
+        return False
+    return "I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC" in callback
+
+
+if not preserves_i2c_pump_speed_limit(LUA):
+    ERRORS.append("Lua I2C pump start must use the canonical v3 speed limit")
+if preserves_i2c_pump_speed_limit(LUA.replace(
+    "I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC", "18001.0f", 1
+)):
+    ERRORS.append("mutation proof failed for the Lua I2C pump speed limit")
+
+
 def definition(source: str, signature: str) -> str:
     return f"{signature} {{\n{extract_function_body(source, signature)}\n}}\n"
 
@@ -298,6 +314,7 @@ extern "C" {
 }
 
 #include "numeric_parse.h"
+#include <I2CStepperV3.h>
 
 #define USE_WATER_PUMP 1
 #define INPUT 1
@@ -309,7 +326,6 @@ extern "C" {
 #define portTICK_RATE_MS 1
 #define portTICK_PERIOD_MS 1
 #define EXPANDER_UPDATE_TIMEOUT 500
-#define I2C_STEPPER_STEP_ML_DEFAULT 16000
 #define pdMS_TO_TICKS(value) (value)
 
 using TickType_t = uint32_t;
@@ -341,7 +357,6 @@ enum ProfileOperationPhase : uint8_t {
 
 struct SetupFake {
   int32_t Mode;
-  uint16_t StepperStepMlI2C;
   uint16_t StepperStepMl;
   int TimeZone;
 };
@@ -627,24 +642,32 @@ int mixerTargetCalls = 0;
 int relaySetCalls = 0;
 int relayReadCalls = 0;
 int speedFromRateCalls = 0;
-uint16_t lastSpeed = 0;
+uint32_t lastSpeed = 0;
 uint8_t lastDirection = 0;
 uint16_t lastTime = 0;
 uint32_t lastTarget = 0;
 float lastRate = 0.0f;
-int use_I2C_dev = 2;
-uint16_t I2CPumpCmdSpeed = 0;
+struct I2CStepperDevice {
+  bool present;
+  I2CStepperV3Config config;
+};
+I2CStepperDevice selectedPump = {};
+bool selectedPumpAvailable = true;
+I2CStepperDevice* i2c_stepper_selected_pump() {
+  return selectedPumpAvailable ? &selectedPump : nullptr;
+}
+uint32_t I2CPumpCmdSpeed = 0;
 uint32_t I2CPumpTargetSteps = 0;
 float I2CPumpTargetMl = 0.0f;
 
-bool set_stepper_by_time(uint16_t speed, uint8_t direction, uint16_t seconds) {
+bool set_stepper_by_time(uint32_t speed, uint8_t direction, uint32_t seconds) {
   stepperByTimeCalls++;
   lastSpeed = speed;
   lastDirection = direction;
   lastTime = seconds;
   return stepperByTimeResult;
 }
-bool set_stepper_target(uint16_t speed, uint8_t direction, uint32_t target) {
+bool set_stepper_target(uint32_t speed, uint8_t direction, uint32_t target) {
   stepperTargetCalls++;
   lastSpeed = speed;
   lastDirection = direction;
@@ -1160,8 +1183,9 @@ void test_i2c_wrappers(lua_State* state) {
 
 void test_pump(lua_State* state) {
   lua_Number result = 0;
-  use_I2C_dev = 2;
-  SamSetup.StepperStepMlI2C = 100;
+  selectedPumpAvailable = true;
+  selectedPump.present = true;
+  selectedPump.config.stepsPerMl = 100;
   SamSetup.StepperStepMl = 25;
   speedFromRateResult = 42.0f;
   stepperTargetResult = true;
@@ -1172,28 +1196,28 @@ void test_pump(lua_State* state) {
             lastTarget == 125,
         "fractional pump volume/rate tracking contract");
 
-  SamSetup.StepperStepMlI2C = 0;
+  selectedPump.config.stepsPerMl = 0;
+  const int uncalibratedTargets = stepperTargetCalls;
   run_chunk(state, "return i2cpump_start(1,1)", true, 1, &result);
-  check(lastTarget == I2C_STEPPER_STEP_ML_DEFAULT,
-        "persisted/default I2C calibration contract");
+  check(result == 0 && stepperTargetCalls == uncalibratedTargets,
+        "uncalibrated selected Nano must not use a Samovar default");
 
-  SamSetup.StepperStepMlI2C = 1;
-  const float nearUint32 = std::nextafter(4294967296.0f, 0.0f);
+  selectedPump.config.stepsPerMl = 1;
+  const float nearUint32 = 2000000000.0f;
   set_number_global(state, "nearUint32", nearUint32);
   speedFromRateResult = 1.0f;
   run_chunk(state, "return i2cpump_start(1,nearUint32)", true, 1, &result);
-  check(result == 1 && lastTarget == static_cast<uint32_t>(nearUint32) &&
-            lastTarget == 4294967040U,
-        "near-UINT32 pump product edge was rejected or narrowed incorrectly");
+  check(result == 1 && lastTarget == static_cast<uint32_t>(nearUint32),
+        "large v3 target was rejected or narrowed incorrectly");
 
-  speedFromRateResult = 65535.0f;
+  speedFromRateResult = 18000.0f;
   run_chunk(state, "return i2cpump_start(1,1)", true, 1, &result);
-  check(I2CPumpCmdSpeed == UINT16_MAX, "pump speed 65535 rejected");
-  speedFromRateResult = 65536.0f;
+  check(I2CPumpCmdSpeed == 18000U, "v3 pump maximum speed rejected");
+  speedFromRateResult = 18001.0f;
   const int targetCalls = stepperTargetCalls;
   run_chunk(state, "return i2cpump_start(1,1)", true, 1, &result);
-  check(result == 0, "pump speed overflow now soft no-throw contract");
-  check(stepperTargetCalls == targetCalls, "pump speed 65536 touched target");
+  check(result == 0, "pump speed above v3 maximum must fail softly");
+  check(stepperTargetCalls == targetCalls, "speed above v3 maximum touched target");
 
   speedFromRateResult = 1.0f;
   const int rateCalls = speedFromRateCalls;
@@ -1229,23 +1253,23 @@ void test_pump(lua_State* state) {
   check(result == 0, "infinite pump volume now soft no-throw contract");
   check(stepperTargetCalls == finiteTargets, "NaN/Inf pump rate/volume touched hardware");
 
-  use_I2C_dev = 1;
+  selectedPumpAvailable = false;
   const int noDeviceTargets = stepperTargetCalls;
   const int noDeviceRates = speedFromRateCalls;
   run_chunk(state, "return i2cpump_start(1,1)", true, 1, &result);
   check(result == 0 && stepperTargetCalls == noDeviceTargets &&
             speedFromRateCalls == noDeviceRates,
         "non-I2C pump did not preserve zero/no-call contract");
-  use_I2C_dev = 2;
+  selectedPumpAvailable = true;
 
   modeSwitchActive = true;
   bypassOuterModeSwitchCheck = false;
-  use_I2C_dev = 1;
+  selectedPumpAvailable = false;
   const int guardSkipTargets = stepperTargetCalls;
   run_chunk(state, "return i2cpump_start(1,1)", true, 1, &result);
   check(result == 0 && stepperTargetCalls == guardSkipTargets,
         "hardware-absent pump start stays soft even mid mode-switch (hw check runs first)");
-  use_I2C_dev = 2;
+  selectedPumpAvailable = true;
   run_chunk(state, "i2cpump_start(1,1)", false);
   check_last_error_contains("mode switch blocks state changes",
                             "hardware-present pump start still honors the mode-switch mutation guard");
@@ -1253,19 +1277,19 @@ void test_pump(lua_State* state) {
   modeSwitchActive = false;
 
   modeSwitchActive = true;
-  use_I2C_dev = 1;
+  selectedPumpAvailable = false;
   const int stopGuardSkipTargets = stepperTargetCalls;
   run_chunk(state, "return i2cpump_stop()", true, 1, &result);
   check(result == 0 && stepperTargetCalls == stopGuardSkipTargets,
         "hardware-absent pump stop stays soft even mid mode-switch (hw check runs first)");
-  use_I2C_dev = 2;
+  selectedPumpAvailable = true;
   run_chunk(state, "i2cpump_stop()", false);
   check_last_error_contains("mode switch blocks state changes",
                             "hardware-present pump stop still honors the mode-switch mutation guard");
   check(stepperTargetCalls == stopGuardSkipTargets, "blocked pump stop touched hardware");
   modeSwitchActive = false;
 
-  SamSetup.StepperStepMlI2C = 100;
+  selectedPump.config.stepsPerMl = 100;
   speedFromRateResult = static_cast<float>(SamSetup.StepperStepMl);
   run_chunk(state, "return i2cpump_start(2,1)", true, 1, &result);
   check(I2CPumpCmdSpeed == SamSetup.StepperStepMl,
@@ -1554,7 +1578,8 @@ int main() {
         result = subprocess.run(
             [
                 "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
-                "-I", str(lua_dir), "-I", str(ROOT), str(harness_path),
+                "-I", str(lua_dir), "-I", str(ROOT),
+                "-I", str(ROOT / "libraries/I2CStepperProtocol/src"), str(harness_path),
                 *[str(path) for path in objects], "-lm", "-ldl", "-o", str(binary),
             ],
             capture_output=True,

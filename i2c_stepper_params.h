@@ -17,8 +17,8 @@ struct I2CStepperParam {
 
 class I2CStepperParams {
  public:
-  // device, cmd, 12 полей конфига, relay, state - больше корректный запрос не содержит.
-  static const size_t kMax = 16;
+  // address, cmd, v3 config/motion fields, relay/state - больше корректный запрос не содержит.
+  static const size_t kMax = 20;
 
   size_t params() const { return count_; }
   const I2CStepperParam* getParam(size_t index) const {

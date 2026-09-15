@@ -6,172 +6,143 @@
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
 <link rel="stylesheet" href="style.css?v=7.00u7">
 <title>Самовар</title>
-
 <script src="app.js"></script>
 <script>
-let stepperStepMlLocal = 0;
-let stepperStepMlI2C = 0;
+let localStepsPerMl = 0;
+let externalAddress = 0;
+let externalStepsPerMl = 0;
 let calibrationRunning = false;
-let calibrationPump = '';
 let calibrationInFlight = false;
+let externalLeaseTimer = 0;
 
-function applyCalibrationBootstrap(data){
-  stepperStepMlLocal = data.stepperStepsPerMl;
-  stepperStepMlI2C = data.i2cStepperStepsPerMl;
-  calibrationRunning = data.calibrationRunning;
-  calibrationPump = calibrationRunning ? data.calibrationPump : '';
-  document.getElementById('kstepperspd').value = String(data.stepperMaxSpeed);
-  const pumpSelect = document.getElementById('pump_type');
-  const pumpHint = document.getElementById('i2c_pump_hint');
-  pumpSelect.style.display = data.i2cPumpVisible ? '' : 'none';
-  pumpHint.style.display = data.i2cPumpVisible ? '' : 'none';
+function externalCalibration() {
+  return externalAddress !== 0;
 }
 
-function updateCalibrationButton(){
-  document.getElementById('calibrateid').value = calibrationRunning ? 'Зафиксировать 100 мл' : 'Начать калибровку';
+function touchExternalLease() {
+  if (!externalCalibration() || !calibrationRunning) return;
+  fetch('/i2cstepper?address=' + externalAddress + '&cmd=lease', {
+    cache: 'no-store'
+  }).catch(() => {});
+}
+
+function updateExternalLease() {
+  clearInterval(externalLeaseTimer);
+  externalLeaseTimer = 0;
+  if (!externalCalibration() || !calibrationRunning) return;
+  touchExternalLease();
+  externalLeaseTimer = window.setInterval(touchExternalLease, 2000);
+}
+
+function updateCalibrationButton() {
+  const running = calibrationRunning;
+  document.getElementById('calibrateid').value = running
+    ? 'Зафиксировать 100 мл' : 'Начать калибровку';
   document.getElementById('calibrateid').disabled = calibrationInFlight;
-  document.getElementById('pump_type').disabled = calibrationRunning || calibrationInFlight;
-  document.getElementById('kstepperspd').disabled = calibrationRunning || calibrationInFlight;
-  document.getElementById('save').disabled = calibrationRunning || calibrationInFlight;
+  document.getElementById('kstepperspd').disabled = running || calibrationInFlight;
+  const save = document.getElementById('save');
+  if (save) save.disabled = running || calibrationInFlight;
 }
 
-function getPumpType(){
-  var sel = document.getElementById('pump_type');
-  if (sel && sel.style.display !== 'none') return sel.value;
-  return 'local';
-}
-
-function onPumpTypeChange(){
-  if (calibrationRunning && calibrationPump) {
-    document.getElementById('pump_type').value = calibrationPump;
-  }
-  var t = getPumpType();
-  if (t === 'i2c') {
-    document.getElementById('stepperstepml').value = stepperStepMlI2C;
-  } else {
-    document.getElementById('stepperstepml').value = stepperStepMlLocal;
-  }
-}
-
-async function readConfirmedCalibrationValue(pump){
-  const url = pump === 'i2c' ? '/i2cstepper?device=pump' : '/ajax?messageCursor=0';
-  const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) {
+async function readExternalCalibration() {
+  const response = await fetch('/i2cstepper?address=' + externalAddress, {
+    cache: 'no-store'
+  });
+  if (!response.ok) {
     throw new Error(await SamovarApp.responseErrorText(
-      resp, 'Не удалось обновить результат калибровки'
+      response, 'Не удалось перечитать внешний насос'
     ));
   }
-  const data = await resp.json();
-  const stepsPerMl = Number(pump === 'i2c' ? data.stepsPerMl : data.StepperStepMl);
-  if (!Number.isInteger(stepsPerMl) || stepsPerMl <= 0 || stepsPerMl > 65535) {
-    throw new Error('Контроллер вернул некорректный результат калибровки.');
+  const payload = await response.json();
+  const device = payload.selected;
+  if (!device || !device.present || (device.address & 1) || !device.config ||
+      !Number.isInteger(Number(device.config.stepsPerMl)) ||
+      Number(device.config.stepsPerMl) <= 0) {
+    throw new Error('Внешний I2C-насос недоступен или не откалиброван.');
   }
-  return stepsPerMl * 100;
+  externalStepsPerMl = Number(device.config.stepsPerMl);
+  document.getElementById('stepperstepml').value = String(externalStepsPerMl);
 }
 
-async function calibrate(){
+async function calibrate() {
   if (calibrationInFlight) return false;
-  const previousCalibrationRunning = calibrationRunning;
-  const previousCalibrationPump = calibrationPump;
+  const wasRunning = calibrationRunning;
   const params = new URLSearchParams();
-  let nextCalibrationRunning;
-  const pump = calibrationRunning ? calibrationPump : getPumpType();
-  params.set('pump', pump);
-  if (!calibrationRunning){
+  if (externalCalibration()) params.set('address', String(externalAddress));
+  else params.set('pump', 'local');
+  if (wasRunning) {
+    params.set('finish', '1');
+  } else {
     const speed = SamovarApp.readNumericInput('kstepperspd', {
       label: 'Скорость шагового двигателя', integer: true, min: 1, max: 8000
     });
     if (!speed) return false;
     params.set('stpstep', speed.text);
     params.set('start', '1');
-    nextCalibrationRunning = true;
-  } else {
-    params.set('finish', '1');
-    nextCalibrationRunning = false;
   }
   calibrationInFlight = true;
   updateCalibrationButton();
   try {
-    try {
-      let resp = await fetch('/calibrate?' + params.toString());
-      if (!resp.ok) {
-        SamovarApp.showRequestError(await SamovarApp.responseErrorText(resp, 'Калибровка не принята'));
-        return false;
-      }
-      const acceptance = await SamovarApp.readOperationAcceptance(resp);
-      await SamovarApp.waitForOperation(acceptance.operationId);
-    } catch (e) {
-      calibrationRunning = previousCalibrationRunning;
-      calibrationPump = previousCalibrationPump;
-      SamovarApp.showRequestError('Ошибка сети при калибровке: ' + e);
+    const response = await fetch('/calibrate?' + params.toString());
+    if (!response.ok) {
+      SamovarApp.showRequestError(await SamovarApp.responseErrorText(
+        response, 'Калибровка не принята'
+      ));
       return false;
     }
-    calibrationRunning = nextCalibrationRunning;
-    calibrationPump = calibrationRunning ? pump : '';
-    if (!nextCalibrationRunning) {
-      try {
-        const confirmedValue = await readConfirmedCalibrationValue(pump);
-        if (pump === 'i2c') {
-          stepperStepMlI2C = confirmedValue;
-        } else {
-          stepperStepMlLocal = confirmedValue;
-        }
-        document.getElementById('stepperstepml').value = String(confirmedValue);
-      } catch (e) {
-        SamovarApp.showRequestError(
-          'Калибровка завершена, но не удалось обновить результат: ' + e
-        );
-        return false;
+    const acceptance = await SamovarApp.readOperationAcceptance(response);
+    await SamovarApp.waitForOperation(acceptance.operationId);
+    calibrationRunning = !wasRunning;
+    updateExternalLease();
+    if (!calibrationRunning) {
+      if (externalCalibration()) {
+        await readExternalCalibration();
+      } else {
+        const confirmed = await fetch('/ajax?messageCursor=0', {cache: 'no-store'});
+        const payload = await confirmed.json();
+        localStepsPerMl = Number(payload.StepperStepMl);
+        document.getElementById('stepperstepml').value = String(localStepsPerMl * 100);
       }
     }
     SamovarApp.clearRequestError();
     return true;
+  } catch (error) {
+    SamovarApp.showRequestError('Ошибка сети при калибровке: ' + error);
+    return false;
   } finally {
     calibrationInFlight = false;
     updateCalibrationButton();
   }
-};
+}
 
-async function saveCalibration(event){
+async function saveCalibration(event) {
   event.preventDefault();
-  if (calibrationRunning || calibrationInFlight) {
-    SamovarApp.showRequestError('Дождитесь окончания калибровки.');
-    return false;
-  }
+  if (externalCalibration() || calibrationRunning || calibrationInFlight) return false;
   const steps = SamovarApp.readNumericInput('stepperstepml', {
     label: 'Шагов на 100 мл', integer: true, min: 100, max: 6553500,
-    accept: function(v){ return v % 100 === 0; },
-    acceptMessage: 'Поле «Шагов на 100 мл» должно быть кратно 100: контроллер хранит шаги на 1 мл.'
+    accept: value => value % 100 === 0,
+    acceptMessage: 'Поле «Шагов на 100 мл» должно быть кратно 100.'
   });
   if (!steps) return false;
-  // У каждого насоса своя настройка, а поле на странице одно: отправка не по тому
-  // имени молча перетрёт калибровку соседнего насоса. Скорость (kstepperspd) не
-  // шлём вовсе - это параметр запуска, а не настройка, и /save её не принимает.
-  const pump = getPumpType();
-  const params = new URLSearchParams();
-  params.set(pump === 'i2c' ? 'StepperStepMlI2C' : 'StepperStepMl', String(steps.number / 100));
-  // Флаг занятости, а не только своя кнопка: пока сохранение в полёте, calibrate()
-  // обязан видеть занятость и не стартовать параллельно - иначе запись настройки
-  // и старт калибровки уедут на контроллер одновременно.
   calibrationInFlight = true;
   updateCalibrationButton();
   try {
-    const resp = await fetch('/save', { method: 'POST', body: params });
-    if (!resp.ok) {
-      SamovarApp.showRequestError(await SamovarApp.responseErrorText(resp, 'Настройки не сохранены'));
+    const response = await fetch('/save', {
+      method: 'POST', body: new URLSearchParams({StepperStepMl: String(steps.number / 100)})
+    });
+    if (!response.ok) {
+      SamovarApp.showRequestError(await SamovarApp.responseErrorText(
+        response, 'Настройки не сохранены'
+      ));
       return false;
     }
-    const acceptance = await SamovarApp.readOperationAcceptance(resp);
+    const acceptance = await SamovarApp.readOperationAcceptance(response);
     await SamovarApp.waitForOperation(acceptance.operationId);
-    if (pump === 'i2c') {
-      stepperStepMlI2C = steps.number;
-    } else {
-      stepperStepMlLocal = steps.number;
-    }
+    localStepsPerMl = steps.number / 100;
     SamovarApp.clearRequestError();
     return true;
-  } catch (e) {
-    SamovarApp.showRequestError('Настройки не сохранены: ' + e);
+  } catch (error) {
+    SamovarApp.showRequestError('Настройки не сохранены: ' + error);
     return false;
   } finally {
     calibrationInFlight = false;
@@ -181,35 +152,65 @@ async function saveCalibration(event){
 
 window.onload = async function() {
   SamovarApp.initTheme();
-  if (!await SamovarApp.loadUiBootstrap(applyCalibrationBootstrap)) return;
+  const params = new URLSearchParams(
+    typeof location === 'undefined' ? '' : location.search
+  );
+  const rawAddress = params.get('address');
+  if (rawAddress !== null) {
+    const parsed = Number(rawAddress);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10 || (parsed & 1)) {
+      SamovarApp.showRequestError('Неверный адрес внешнего I2C-насоса.');
+      return;
+    }
+    externalAddress = parsed;
+    document.getElementById('save').remove();
+    document.getElementById('title').textContent = 'Калибровка внешнего I2C-насоса';
+    document.getElementById('steps-label').textContent = 'Шагов/мл в Nano:';
+    document.getElementById('stepperstepml').readOnly = true;
+    document.getElementById('return').onclick = () => location.assign(
+      '/i2cstepper.htm?address=' + externalAddress
+    );
+    try {
+      let bootstrap = null;
+      if (!await SamovarApp.loadUiBootstrap(data => { bootstrap = data; })) return;
+      calibrationRunning = Boolean(bootstrap.calibrationRunning);
+      if (bootstrap.processRunning || calibrationRunning) {
+        SamovarApp.showRequestError('Калибровка внешнего насоса сейчас недоступна.');
+        return;
+      }
+      document.getElementById('kstepperspd').value = String(bootstrap.stepperMaxSpeed);
+      await readExternalCalibration();
+    } catch (error) {
+      SamovarApp.showRequestError(String(error));
+      return;
+    }
+  } else {
+    let bootstrap = null;
+    if (!await SamovarApp.loadUiBootstrap(data => { bootstrap = data; })) return;
+    localStepsPerMl = Number(bootstrap.stepperStepsPerMl);
+    calibrationRunning = Boolean(bootstrap.calibrationRunning);
+    document.getElementById('kstepperspd').value = String(bootstrap.stepperMaxSpeed);
+    document.getElementById('stepperstepml').value = String(localStepsPerMl * 100);
+  }
   document.forms.setupform.addEventListener('submit', saveCalibration);
-  if (calibrationRunning) document.getElementById('pump_type').value = calibrationPump;
-  onPumpTypeChange();
   updateCalibrationButton();
 };
+window.addEventListener('beforeunload', () => clearInterval(externalLeaseTimer));
 </script>
 </head>
-
 <body>
 <!--#include ui_page_header.htm-->
     <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
   </header>
 <form action='/save' method="post" name="setupform">
-<h1>Калибровка шагового двигателя</h1>
+<h1 id="title">Калибровка шагового двигателя</h1>
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
-<h2><label for="pump_type">Насос:</label>
-  <select id='pump_type' onchange='onPumpTypeChange();'>
-    <option value="local" selected>Встроенный</option>
-    <option value="i2c">Внешний (I2C)</option>
-  </select>
-  <span id="i2c_pump_hint">(I2C)</span>
-</h2>
-<h2>Объем жидкости : <span id='start_pressure'>100</span> мл.</h2>
-<h2><label for="kstepperspd">Скорость шагового двигателя :</label> <input id='kstepperspd' name='kstepperspd' type='text' inputmode='numeric' value='' style="width: 6em;"> шагов/сек.</h2>
-<h2><label for="stepperstepml">Шагов на 100 мл:</label> <input id='stepperstepml' name='stepperstepml' type='text' inputmode='numeric' value='' style="width: 6em;"></h2>
-<input id='calibrateid' type='button' name='calibratenm' value='Начать калибровку' onclick='calibrate();' class="button">
+<h2>Объем жидкости : <span>100</span> мл.</h2>
+<h2><label for="kstepperspd">Скорость шагового двигателя :</label> <input id='kstepperspd' type='text' inputmode='numeric' value='' style="width: 6em;"> шагов/сек.</h2>
+<h2><label id="steps-label" for="stepperstepml">Шагов на 100 мл:</label> <input id='stepperstepml' type='text' inputmode='numeric' value='' style="width: 6em;"></h2>
+<input id='calibrateid' type='button' value='Начать калибровку' onclick='calibrate();' class="button">
 <input id='save' type='submit' value='Сохранить' class="button">
-<input id='return' type='button' name='return' value='К настройкам' onclick='javascript:location.href="/setup.htm"' class="button">
+<input id='return' type='button' value='К настройкам' onclick='location.href="/setup.htm"' class="button">
 </div>
 </form>
 </body>

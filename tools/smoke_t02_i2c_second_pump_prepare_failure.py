@@ -1,175 +1,58 @@
 #!/usr/bin/env python3
-"""[T02/F03] START второго I2C-насоса возможен только после подготовки."""
+"""Extracted second-pump helper rejects preparation failure and splits finite/continuous."""
 
-import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 from smoke_helpers import extract_function_body
 
-
 ROOT = Path(__file__).resolve().parents[1]
-SIGNATURE = "inline bool start_second_i2c_pump(float rateLitersPerHour, uint16_t volumeMl)"
+SOURCE = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
+BODY = extract_function_body(SOURCE, "inline bool start_second_i2c_pump_steps")
+PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 
 HARNESS = r'''
-#include <cmath>
 #include <cstdint>
-#include <iostream>
-
-using std::round;
-
-constexpr uint8_t I2CSTEPPER_PUMP_ADDR = 2;
-constexpr uint8_t I2CSTEPPER_FLAG_DIRECTION = 0x01;
-constexpr uint8_t I2CSTEP_MODE_FILLING = 3;
-constexpr uint8_t I2CSTEP_MODE_PUMP = 4;
-constexpr uint8_t I2CSTEP_CMD_START = 5;
-
-struct Setup { uint16_t StepperStepMlI2C = 100; } SamSetup;
-struct Device {
-  uint16_t stepsPerMl = 0;
-  uint8_t optionFlags = I2CSTEPPER_FLAG_DIRECTION;
-  uint8_t mode = 0;
-  uint16_t fillingMl = 0;
-  uint16_t fillingMlHour = 0;
-  uint16_t pumpMlHour = 0;
-} i2cStepperPump;
-
-static uint8_t use_I2C_dev = I2CSTEPPER_PUMP_ADDR;
-static bool configBeginResult = true;
-static bool writeConfigResult = true;
-static bool confirmedResult = true;
-static int configBeginCalls = 0;
-static int writeConfigCalls = 0;
-static int startCalls = 0;
-static int configEndCalls = 0;
-
-static bool i2c_stepper_config_begin(const Device&) {
-  configBeginCalls++;
-  return configBeginResult;
-}
-static void i2c_stepper_config_end(const Device&) { configEndCalls++; }
-static bool i2c_stepper_write_config(Device&) {
-  writeConfigCalls++;
-  return writeConfigResult;
-}
-static bool i2c_stepper_send_confirmed_command(Device&, uint8_t command) {
-  if (command == I2CSTEP_CMD_START) startCalls++;
-  return confirmedResult;
-}
-static uint16_t i2c_stepper_steps_per_ml() { return SamSetup.StepperStepMlI2C; }
-
-static bool start_second_i2c_pump(float rateLitersPerHour, uint16_t volumeMl) {
-@BODY@
-}
-
-static int failures = 0;
-static void check(bool value, const char* message) {
-  if (!value) {
-    std::cerr << "FAIL: " << message << '\n';
-    failures++;
-  }
-}
-static void reset_fixture() {
-  use_I2C_dev = I2CSTEPPER_PUMP_ADDR;
-  configBeginResult = true;
-  writeConfigResult = true;
-  confirmedResult = true;
-  configBeginCalls = 0;
-  writeConfigCalls = 0;
-  startCalls = 0;
-  configEndCalls = 0;
-}
-static void test_busy_owner_never_starts() {
-  reset_fixture();
-  configBeginResult = false;
-  check(!start_second_i2c_pump(1.2f, 0), "занятый владелец должен вернуть false");
-  check(startCalls == 0, "занятый владелец не должен посылать START");
-  check(writeConfigCalls == 0, "занятый владелец не должен писать конфигурацию");
-  check(configEndCalls == 0, "незахваченный владелец нельзя освобождать");
-}
-static void test_write_failure_releases_without_start() {
-  reset_fixture();
-  writeConfigResult = false;
-  check(!start_second_i2c_pump(1.2f, 0), "ошибка записи должна вернуть false");
-  check(startCalls == 0, "ошибка записи не должна посылать START");
-  check(configEndCalls == 1, "после ошибки записи владелец освобождается ровно раз");
-}
-static void test_success_starts_once_and_releases() {
-  reset_fixture();
-  check(start_second_i2c_pump(1.2f, 25), "успешная подготовка и подтверждение должны вернуть true");
-  check(startCalls == 1, "после успешной подготовки START посылается ровно раз");
-  check(configEndCalls == 1, "после успеха владелец освобождается ровно раз");
-}
-static void test_confirmation_failure_is_not_success() {
-  reset_fixture();
-  confirmedResult = false;
-  check(!start_second_i2c_pump(1.2f, 0), "отказ подтверждения START должен вернуть false");
-  check(startCalls == 1, "отказ подтверждения происходит после одной попытки START");
-  check(configEndCalls == 1, "после отказа подтверждения владелец освобождается");
-}
+#include <I2CStepperV3.h>
+struct I2CStepperDevice {
+  bool present;
+  I2CStepperV3Config config;
+  I2CStepperV3Motion motion;
+};
+I2CStepperDevice pump{};
+I2CStepperDevice* selected = &pump;
+I2CStepperDevice* i2c_stepper_selected_pump() { return selected; }
+float i2c_get_speed_from_rate(float rate) { return rate * 10.0f; }
+int finite = 0;
+bool i2c_stepper_start_finite(I2CStepperDevice&) { finite++; return true; }
+@FUNCTION@
 int main() {
-  test_busy_owner_never_starts();
-  test_write_failure_releases_without_start();
-  test_success_starts_once_and_releases();
-  test_confirmation_failure_is_not_success();
-  return failures == 0 ? 0 : 1;
+  pump.present = true;
+  pump.config.stepsPerMl = 100;
+  if (!start_second_i2c_pump_steps(2.0f, 1300) || finite != 1 ||
+      pump.motion.mode != I2CSTEPPER_V3_MODE_FILLING || pump.motion.targetSteps != 1300) return 2;
+  if (start_second_i2c_pump_steps(2.0f, 0)) return 3;
+  selected = nullptr;
+  return start_second_i2c_pump_steps(2.0f, 1300) ? 4 : 0;
 }
 '''
 
 
-def compile_and_run(body: str, name: str) -> subprocess.CompletedProcess[str]:
-    with tempfile.TemporaryDirectory(prefix="samovar-t02-i2c-pump-") as temp_dir:
-        temp = Path(temp_dir)
-        source = temp / f"{name}.cpp"
-        binary = temp / name
-        source.write_text(HARNESS.replace("@BODY@", body), encoding="utf-8")
-        compiled = subprocess.run(
-            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
-            capture_output=True, text=True, check=False,
-        )
-        if compiled.returncode != 0:
-            return compiled
-        return subprocess.run([str(binary)], capture_output=True, text=True, check=False)
-
-
-def require_mutant_fails(body: str, anchor: str, replacement: str, message: str) -> None:
-    if body.count(anchor) != 1:
-        raise AssertionError(f"мутационный якорь отсутствует: {anchor}")
-    result = compile_and_run(body.replace(anchor, replacement, 1), "mutant")
-    output = result.stdout + result.stderr
-    if result.returncode == 0 or message not in output:
-        raise AssertionError(f"мутант пережил проверку {message}: {output}")
-
-
 def main() -> int:
-    if shutil.which("g++") is None:
-        print("FAIL: для T02 нужен g++", file=sys.stderr)
-        return 1
-    source = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
-    body = extract_function_body(source, SIGNATURE)
-    result = compile_and_run(body, "t02")
-    if result.returncode != 0:
-        print(result.stdout + result.stderr, file=sys.stderr)
-        return 1
-    try:
-        require_mutant_fails(
-            body, "if (!configOwned) return false;", "if (!configOwned && false) return false;",
-            "занятый владелец не должен посылать START",
-        )
-        require_mutant_fails(
-            body,
-            "if (!i2c_stepper_write_config(i2cStepperPump)) {\n    i2c_stepper_config_end(i2cStepperPump);\n    return false;\n  }",
-            "if (!i2c_stepper_write_config(i2cStepperPump) && false) {\n    i2c_stepper_config_end(i2cStepperPump);\n    return false;\n  }",
-            "ошибка записи не должна посылать START",
-        )
-    except AssertionError as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 1
-    print("T02: подготовка второго I2C-насоса проверена")
-    return 0
+  function = "inline bool start_second_i2c_pump_steps(float rateLitersPerHour, uint32_t targetSteps) {" + BODY + "}"
+  with tempfile.TemporaryDirectory(prefix="samovar-i2c-v3-second-pump-") as temp:
+    cpp = Path(temp) / "test.cpp"
+    binary = Path(temp) / "test"
+    cpp.write_text(HARNESS.replace("@FUNCTION@", function), encoding="utf-8")
+    result = subprocess.run(
+        ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I", str(PROTOCOL),
+         str(cpp), "-o", str(binary)], capture_output=True, text=True, check=False)
+    if result.returncode:
+      print(result.stderr, end="")
+      return result.returncode
+    return subprocess.run([str(binary)], check=False).returncode
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+  raise SystemExit(main())

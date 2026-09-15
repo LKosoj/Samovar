@@ -9,6 +9,8 @@ from build_web_assets import resolve_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE_NAMES = ("chart.htm", "program.htm", "calibrate.htm", "calibrate_ph.htm")
+SETUP = ROOT / "data_raw" / "setup.htm"
+I2C_PAGE = ROOT / "data_raw" / "i2cstepper.htm"
 
 
 def validate(pages: dict[str, str]) -> list[str]:
@@ -36,11 +38,10 @@ def validate(pages: dict[str, str]) -> list[str]:
             "SamovarApp.postProgram(document.forms.mainform)",
         ),
         "calibrate.htm": (
-            "stepperStepMlLocal = data.stepperStepsPerMl",
-            "stepperStepMlI2C = data.i2cStepperStepsPerMl",
-            "calibrationRunning = data.calibrationRunning",
-            "calibrationPump = calibrationRunning ? data.calibrationPump : ''",
-            "data.stepperMaxSpeed", "data.i2cPumpVisible",
+            "SamovarApp.loadUiBootstrap(data => { bootstrap = data; })",
+            "localStepsPerMl = Number(bootstrap.stepperStepsPerMl)",
+            "calibrationRunning = Boolean(bootstrap.calibrationRunning)",
+            "bootstrap.processRunning", "await readExternalCalibration()",
             "fetch('/calibrate?'", "fetch('/save'",
         ),
         "calibrate_ph.htm": (
@@ -54,12 +55,8 @@ def validate(pages: dict[str, str]) -> list[str]:
                 errors.append(f"{name}: missing Task 4 token {token}")
 
     calibrate = pages["calibrate.htm"]
-    for token in (
-        "data.stepperStepsPerMl * 100",
-        "data.i2cStepperStepsPerMl * 100",
-    ):
-        if token in calibrate:
-            errors.append(f"calibrate.htm: bootstrap value is already per 100 ml: {token}")
+    if "StepperStepMlI2C" in calibrate:
+        errors.append("calibrate.htm: retired Samovar I2C calibration remains")
 
     chart = pages["chart.htm"]
     if chart.find("await SamovarApp.loadUiBootstrap") > chart.find("SamovarApp.startTelemetryPage"):
@@ -89,12 +86,23 @@ def main() -> int:
         for name in PAGE_NAMES
     }
     errors = validate(pages)
+    setup = SETUP.read_text(encoding="utf-8")
+    i2c_page = I2C_PAGE.read_text(encoding="utf-8")
+    for token in (
+        "id=\"I2CStepper\"", "refreshSetupI2c", "saveSetupI2c",
+        "cmd: 'save'", "i2c-newAddress", "i2c-stepsPerMl",
+    ):
+        if token not in setup:
+            errors.append(f"setup.htm: I2CStepper settings tab missing {token}")
+    for token in ("saveNano", "newAddress", "stepsPerMl", "mixerRpm"):
+        if token in i2c_page:
+            errors.append(f"i2cstepper.htm: operational page retains Nano settings token {token}")
 
     mutations = (
         ("chart visibility inversion", "chart.htm", "Steam: !data.steamVisible", "Steam: data.steamVisible"),
         ("program numeric bootstrap", "program.htm", "mainsVolt = data.mainsVoltage", "mainsVolt = 230"),
         ("program unsupported diameter guard", "program.htm", "? requestedDiameter : ''", "? requestedDiameter : requestedDiameter"),
-        ("calibration endpoint units", "calibrate.htm", "stepperStepMlLocal = data.stepperStepsPerMl", "stepperStepMlLocal = data.stepperStepsPerMl * 100"),
+        ("external calibration process guard", "calibrate.htm", "bootstrap.processRunning", "bootstrap.processBusy"),
         ("pH bootstrap mapping", "calibrate_ph.htm", "data.cheesePhSlope", "data.cheesePhOffset"),
     )
     if not errors:

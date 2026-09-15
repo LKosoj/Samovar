@@ -38,7 +38,6 @@
   "SetACPTemp" : "43.000",
   "ACPDelay" : "20",
   "StepperStepMl" : "16000",
-  "StepperStepMlI2C" : "16000",
   "UseSecondI2CPump" : false,
   "SecondI2CPumpRate" : "0.0",
   "BeerBrewOrder" : "0",

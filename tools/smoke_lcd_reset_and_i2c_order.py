@@ -49,7 +49,7 @@ MENU_RESET_LCD_SIGNATURE = "void menu_reset_lcd()"
 SETUP_MENU_SIGNATURE = "void setupMenu()"
 SETUP_WIFI_SIGNATURE = "static void setup_wifi_stack_defaults()"
 TRIGGER_SYSTICKER_SIGNATURE = "void triggerSysTicker(void *parameter)"
-CACHE_REFRESH_SIGNATURE = "static void refresh_i2c_stepper_cache(I2CStepperDevice& device)"
+CACHE_REFRESH_SIGNATURE = "static void refresh_i2c_stepper_cache()"
 
 
 def read(path: Path) -> str:
@@ -148,18 +148,21 @@ def check_systicker_alarm_order(body: str, errors: list[str]) -> None:
         )
 
 
-# --- 6. refresh_i2c_stepper_cache(): укороченный таймаут I2C_CACHE_LOCK_WAIT_MS -------------
+# --- 6. refresh_i2c_stepper_cache(): current selected-device snapshot ------------------------
 def check_cache_refresh_timeout(body: str, errors: list[str]) -> None:
-    if "i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS)" not in body:
-        errors.append(
-            "refresh_i2c_stepper_cache: не передаёт укороченный таймаут "
-            "I2C_CACHE_LOCK_WAIT_MS в i2c_stepper_refresh()"
-        )
-    if "i2c_stepper_refresh(device, true);" in body:
-        errors.append(
-            "refresh_i2c_stepper_cache: использует таймаут по умолчанию (1000 мс, общий "
-            "с записью пользовательской конфигурации) вместо укороченного"
-        )
+    require_ordered_tokens(
+        "refresh_i2c_stepper_cache selected v3 snapshot",
+        body,
+        [
+            "I2CStepperDevice* mixer = i2c_stepper_selected_mixer();",
+            "I2CStepperDevice* pump = i2c_stepper_selected_pump();",
+            "i2c_stepper_cache.mixer_present = mixer && mixer->present;",
+            "i2c_stepper_cache.pump_present = pump && pump->present;",
+            "if (!pump || !pump->present) return;",
+            "i2c_stepper_cache.pump_current_speed = pump->status.currentSpeedStepsPerSec;",
+        ],
+        errors,
+    )
 
 
 def run_check(label: str, body: str, check_fn) -> list[str]:
@@ -210,8 +213,8 @@ def mutate_systicker_alarm_order(body: str) -> str:
 
 def mutate_cache_refresh_timeout(body: str) -> str:
     return body.replace(
-        "i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS)",
-        "i2c_stepper_refresh(device, true)",
+        "i2c_stepper_cache.pump_present = pump && pump->present;",
+        "i2c_stepper_cache.pump_present = false;",
     )
 
 

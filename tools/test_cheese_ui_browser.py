@@ -26,8 +26,8 @@ BOOTSTRAP = {
     "pwmLow": 0, "pwmValue": 0, "nbkDp": 0, "columnDiameter": 2,
     "columnHeight": 1.5, "packDensity": 80, "heaterResistance": 10,
     "mainsVoltage": 220, "heaterMaxPower": 4840, "stepperMaxSpeed": 1000,
-    "stepperStepsPerMl": 100, "i2cStepperStepsPerMl": 100,
-    "calibrationRunning": False, "calibrationPump": "local", "cheesePhSlope": 1,
+    "stepperStepsPerMl": 100, "i2cSteppers": [{} for _ in range(10)],
+    "calibrationRunning": False, "processRunning": False, "calibrationPump": "local", "cheesePhSlope": 1,
     "cheesePhAvailable": True, "cheesePhAds1115Address": 0,
     "cheesePhOffset": 0, "cheeseCoolingScheme": "pump",
 }

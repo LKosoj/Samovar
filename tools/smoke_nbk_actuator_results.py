@@ -21,12 +21,19 @@ enum ActuatorCommandResult {
   ACTUATOR_COMMAND_APPLIED,
   ACTUATOR_COMMAND_FAILED,
 };
-struct PumpProbe { uint16_t currentSpeed; };
-static PumpProbe i2cStepperPump = {40};
+struct I2CStepperV3Config { uint32_t stepsPerMl; };
+struct I2CStepperV3StatusSnapshot { uint32_t currentSpeedStepsPerSec; };
+struct I2CStepperDevice {
+  uint8_t address;
+  bool present;
+  I2CStepperV3Config config;
+  I2CStepperV3StatusSnapshot status;
+};
+static I2CStepperDevice selectedPump = {2, true, {100}, {40}};
 static bool i2cAvailable = true;
 static bool driverSucceeds = true;
-static bool lastRequireI2c = false;
 static int driverCalls = 0;
+static uint8_t lastCommandAddress = 0;
 static uint32_t fakeMillis = 0;
 static uint32_t time_speed = 0;
 static float nbk_P = 4.0f;
@@ -39,16 +46,27 @@ static StatsProbe stats = {};
 
 uint32_t millis() { return fakeMillis; }
 ProgramType current_program_type() { return 'W'; }
-bool i2c_stepper_refresh(PumpProbe&) { return i2cAvailable; }
-float i2c_get_liquid_rate_by_step(uint16_t speed) {
+I2CStepperDevice* i2c_stepper_selected_pump() {
+  return selectedPump.present ? &selectedPump : nullptr;
+}
+bool i2c_stepper_refresh(I2CStepperDevice& device) {
+  return i2cAvailable && device.present;
+}
+float i2c_get_liquid_rate_by_step(uint32_t speed) {
   return float(speed) / 10.0f;
 }
-float i2c_stepper_steps_from_rate(float rate) { return rate * 10.0f; }
-bool set_stepper_target(uint16_t speed, uint8_t, uint32_t, bool requireI2c) {
+bool set_stepper_target(uint32_t speed, uint8_t, uint32_t, bool requireI2c) {
   driverCalls++;
-  lastRequireI2c = requireI2c;
   if (!requireI2c || !driverSucceeds) return false;
-  i2cStepperPump.currentSpeed = speed;
+  lastCommandAddress = selectedPump.address;
+  selectedPump.status.currentSpeedStepsPerSec = speed;
+  return true;
+}
+bool start_second_i2c_pump(float rate, uint16_t volume) {
+  driverCalls++;
+  if (!driverSucceeds || volume != 0 || rate <= 0.0f) return false;
+  lastCommandAddress = selectedPump.address;
+  selectedPump.status.currentSpeedStepsPerSec = uint32_t(rate * 10.0f);
   return true;
 }
 
@@ -65,11 +83,11 @@ static void check(bool condition, const char* message) {
 }
 
 static void reset_fixture() {
-  i2cStepperPump.currentSpeed = 40;
+  selectedPump = {2, true, {100}, {40}};
   i2cAvailable = true;
   driverSucceeds = true;
-  lastRequireI2c = false;
   driverCalls = 0;
+  lastCommandAddress = 0;
   fakeMillis = 200;
   time_speed = 100;
   nbk_P = 4.0f;
@@ -92,16 +110,30 @@ int main() {
   driverSucceeds = false;
   check(SetSpeed(7.0f) == ACTUATOR_COMMAND_FAILED,
         "отказ I2C-команды обязан дать FAILED");
-  check(driverCalls == 1 && lastRequireI2c,
-        "NBK обязан запросить именно I2C-only команду");
+  check(driverCalls == 1 && lastCommandAddress == 0,
+        "отказ команды не должен подтверждать адрес насоса");
   check(time_speed == 100 && nbk_P == 4.0f,
         "отказ драйвера не должен коммитить время или подачу");
+
+  reset_fixture();
+  driverSucceeds = false;
+  check(SetSpeed(0.0f) == ACTUATOR_COMMAND_FAILED,
+        "остановка НБК обязана ждать подтверждения I2C-насоса");
+  check(driverCalls == 1 && lastCommandAddress == 0,
+        "неподтверждённая остановка не должна имитировать local fallback");
+
+  reset_fixture();
+  check(SetSpeed(0.0f) == ACTUATOR_COMMAND_APPLIED,
+        "подтверждённая остановка НБК обязана применяться");
+  check(driverCalls == 1 && lastCommandAddress == 2,
+        "остановка НБК обязана остаться на выбранном I2C-насосе");
 
   reset_fixture();
   fakeMillis = 300;
   check(SetSpeed(7.0f) == ACTUATOR_COMMAND_APPLIED,
         "подтверждённая I2C-команда обязана дать APPLIED");
-  check(lastRequireI2c, "успешная команда НБК не должна разрешать local fallback");
+  check(lastCommandAddress == 2,
+        "успешная команда НБК обязана идти на выбранный I2C-насос");
   check(time_speed == 300 && nbk_P == 7.0f,
         "APPLIED обязан коммитить время и новую подачу");
   check(stats.totalVolume > 3.0f && stats.activeVolume > 3.0f &&
@@ -500,11 +532,16 @@ def main() -> int:
 
     mutations = (
         set_speed.replace(
-            "if (!i2c_stepper_refresh(i2cStepperPump)) return ACTUATOR_COMMAND_FAILED;",
-            "if (false && !i2c_stepper_refresh(i2cStepperPump)) return ACTUATOR_COMMAND_FAILED;",
+            "if (!pump || !pump->present || !i2c_stepper_refresh(*pump)) return ACTUATOR_COMMAND_FAILED;",
+            "if (false) return ACTUATOR_COMMAND_FAILED;",
             1,
         ),
-        set_speed.replace(", true)", ", false)"),
+        set_speed.replace(
+            ": start_second_i2c_pump(Speed, 0);",
+            ": true;",
+            1,
+        ),
+        set_speed.replace(", true)", ", false)", 1),
         set_speed.replace(
             "if (!applied) return ACTUATOR_COMMAND_FAILED;",
             "if (!applied) return ACTUATOR_COMMAND_APPLIED;",

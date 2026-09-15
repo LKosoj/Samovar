@@ -28,21 +28,26 @@ require_ordered_tokens(
     "I2C patch is all-or-nothing",
     patch_body,
     [
-        "I2CStepperDevice parsed = current;",
-        'parse_i2c_stepper_bounded<uint8_t>(request, "mode", 1, 3, parsed.mode, errorField, parse_bounded_uint8)',
-        'parse_i2c_stepper_bounded<uint8_t>(request, "relayMask", 0, 15, parsed.relayMask, errorField, parse_bounded_uint8)',
-        'parse_i2c_stepper_bounded<uint8_t>(request, "sensorFlags", 0, 7, parsed.sensorFlags, errorField, parse_bounded_uint8)',
-        'parse_i2c_stepper_bounded<uint16_t>(request, "stepsPerMl", 1, UINT16_MAX, parsed.stepsPerMl, errorField, parse_bounded_uint16)',
+        "config = current.config;",
+        "motion = current.motion;",
+        'parse_i2c_stepper_bounded<uint8_t>(request, "newAddress",',
+        'parse_i2c_stepper_bounded<uint8_t>(request, "mode", 1, 3, config.mode, errorField, parse_bounded_uint8)',
+        'parse_i2c_stepper_bounded<uint8_t>(request, "relayMask", 0, 15, config.relayMask, errorField, parse_bounded_uint8)',
+        'parse_i2c_stepper_bounded<uint8_t>(request, "sensorFlags", 0, 7, config.sensorFlags, errorField, parse_bounded_uint8)',
+        'parse_i2c_stepper_bounded<uint32_t>(request, "stepsPerMl", 1, UINT32_MAX, config.stepsPerMl, errorField, parse_bounded_uint32)',
         "hasRelay != hasState",
-        'command == "status" || command == "stop" || command == "calfinish"',
+        'command == "status" || command == "stop" || command == "calfinish" || command == "lease"',
+        'hasNewAddress && command != "save"',
+        "occupied && occupied->present",
+        "i2cstepper_v3_mode_after_address_change(",
         'command == "calstart"',
         'request_param_count(request, "stepsPerMl") != 1',
-        "candidate = parsed;",
+        "motion.mode = config.mode;",
     ],
     errors,
 )
-if patch_body.count("candidate = parsed;") != 1:
-    errors.append("I2C patch must publish candidate exactly once")
+if patch_body.count("config = current.config;") != 1 or patch_body.count("motion = current.motion;") != 1:
+    errors.append("I2C patch must initialize config and motion exactly once")
 for token in [".toInt()", ".toFloat()", "& 0x0F"]:
     if token in patch_body:
         errors.append(f"I2C patch contains unsafe conversion/mask: {token}")
@@ -56,7 +61,13 @@ require_ordered_tokens(
         "command != \"status\"",
         "parse_i2c_stepper_patch(",
         "if (!result.ok())",
-        "pendingCmd.staged = staged;",
+        "pendingCmd.address = address;",
+        'if (command == "relay")',
+        "pendingCmd.relay = relay;",
+        "pendingCmd.relayState = relayState;",
+        "else",
+        "pendingCmd.config = config;",
+        "pendingCmd.motion = motion;",
         "OperationId operationId = 0;",
         "queue_pending_i2cstepper(",
         "pendingCmd, operationId)",
@@ -227,7 +238,60 @@ def run_relay_error_field_check() -> None:
                            run_result.stdout + run_result.stderr)
 
 
+def run_address_mode_check() -> None:
+    source_text = r'''
+#include <iostream>
+#include "I2CStepperV3.h"
+
+static int failures = 0;
+static void check(bool value, const char* message) {
+  if (!value) {
+    std::cerr << "FAIL: " << message << '\n';
+    failures++;
+  }
+}
+
+int main() {
+  uint8_t mode = 0;
+  check(i2cstepper_v3_mode_after_address_change(2, 4, I2CSTEPPER_V3_MODE_FILLING, &mode) &&
+        mode == I2CSTEPPER_V3_MODE_FILLING,
+        "same-parity Filling address change must preserve Filling");
+  check(i2cstepper_v3_mode_after_address_change(2, 4, I2CSTEPPER_V3_MODE_PUMP, &mode) &&
+        mode == I2CSTEPPER_V3_MODE_PUMP,
+        "same-parity Pump address change must preserve Pump");
+  check(i2cstepper_v3_mode_after_address_change(2, 3, I2CSTEPPER_V3_MODE_FILLING, &mode) &&
+        mode == I2CSTEPPER_V3_MODE_MIXER,
+        "pump-to-mixer address change must use Mixer default");
+  check(i2cstepper_v3_mode_after_address_change(3, 4, I2CSTEPPER_V3_MODE_MIXER, &mode) &&
+        mode == I2CSTEPPER_V3_MODE_PUMP,
+        "mixer-to-pump address change must use Pump default");
+  check(!i2cstepper_v3_mode_after_address_change(0, 2, I2CSTEPPER_V3_MODE_PUMP, &mode),
+        "invalid old address must reject mode change");
+  return failures != 0;
+}
+'''
+    with tempfile.TemporaryDirectory(prefix="samovar-i2c-address-mode-") as temp_dir:
+        temp = Path(temp_dir)
+        source = temp / "address_mode_test.cpp"
+        binary = temp / "address_mode_test"
+        source.write_text(source_text, encoding="utf-8")
+        compile_result = subprocess.run(
+            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+             "-I", str(ROOT / "libraries/I2CStepperProtocol/src"), str(source), "-o", str(binary)],
+            capture_output=True, text=True, check=False,
+        )
+        if compile_result.returncode != 0:
+            errors.append("address/mode harness compile failed:\n" +
+                          compile_result.stdout + compile_result.stderr)
+            return
+        run_result = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
+        if run_result.returncode != 0:
+            errors.append("address/mode runtime checks failed:\n" +
+                          run_result.stdout + run_result.stderr)
+
+
 run_relay_error_field_check()
+run_address_mode_check()
 
 if errors:
     print("Numeric I2C contract smoke failed:")

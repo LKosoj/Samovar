@@ -90,6 +90,16 @@ def replace_token(match: "re.Match[str]") -> str:
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const i2cStepper = {
+    present: 1, address: 2, everPresent: 1, capabilities: 30,
+    config: { address: 2, mode: 3, optionFlags: 0, sensorFlags: 0, relayMask: 0,
+      mixerRpm: 0, mixerRunSec: 0, mixerPauseSec: 0, pumpMlHour: 100,
+      pumpPauseSec: 0, fillingMl: 100, fillingMlHour: 100, stepsPerMl: 100 },
+    motion: { mode: 0, direction: 0, speedStepsPerSec: 100, targetSteps: 1000 },
+    status: { mode: 3, flags: 0, result: 0, error: 0, stopReason: 0, generation: 1,
+      currentSpeedStepsPerSec: 0, remainingSteps: 0 }
+  };
+  const i2cStepperResponse = { selected: i2cStepper, devices: [i2cStepper] };
   const errors = [];
   const saveRequests = [];
 
@@ -110,6 +120,14 @@ BROWSER_TEST = r'''async page => {
   await page.route("**/ajax?operationId=*", route => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify({ operationId: 1, state: "succeeded", error: "none" })
+  }));
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({
+      i2cSteppers: [{ address: 2, present: true }]
+    })
+  }));
+  await page.route("**/i2cstepper?address=2", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(i2cStepperResponse)
   }));
 
   // После успешного сохранения submitSetupForm() (data_raw/setup.htm) штатно уводит

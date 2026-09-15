@@ -55,8 +55,8 @@ BROWSER_TEST = r'''async page => {
       beerBrewOrder: "allinone", pwmLow: 0, pwmValue: 0, nbkDp: 0,
       columnDiameter: 2, columnHeight: 1, packDensity: 80, heaterResistance: 10,
       mainsVoltage: 230, heaterMaxPower: 230, stepperMaxSpeed: 1000,
-      stepperStepsPerMl: 100, i2cStepperStepsPerMl: 100,
-      calibrationRunning: false, calibrationPump: "local", cheesePhSlope: 1,
+      stepperStepsPerMl: 100, i2cSteppers: Array(10).fill({}),
+      calibrationRunning: false, processRunning: false, calibrationPump: "local", cheesePhSlope: 1,
       cheesePhOffset: 0, cheeseCoolingScheme: "pump", cheesePhAvailable: true,
       cheesePhAds1115Address: 0
     })

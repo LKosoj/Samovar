@@ -597,7 +597,6 @@ struct SetupEEPROM {
   float ColDiam;                                               //Внутренний диаметр колонны в дюймах
   float ColHeight;                                             //Высота насадки в метрах
   uint8_t PackDens;                                            //Плотность насадки в процентах
-  uint16_t StepperStepMlI2C;                                   //Количество шагов I2C шагового двигателя на мл. жидкости
   float NbkTn;                                                 //Т завершения НБК (нижняя граница по барде); 0 = не задано (дефолт 98.5 в nbk.h)
   float BKPower;                                               //Рабочая мощность/напряжение БК после закипания
   float MainsVoltage;                                          //Номинальное напряжение сети, В
@@ -808,7 +807,7 @@ volatile int currentstepcnt = 0;                                // Текуще�
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
 volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя
 volatile uint16_t I2CStepperSpeed;                              // Скорость шагового двигателя
-volatile uint16_t I2CPumpCmdSpeed;                               // Скорость внешнего I2C насоса (шаг/сек)
+volatile uint32_t I2CPumpCmdSpeed;                               // Скорость внешнего I2C насоса (шаг/сек)
 volatile uint32_t I2CPumpTargetSteps;                            // Целевые шаги внешнего I2C насоса
 volatile float I2CPumpTargetMl;                                  // Целевой объем внешнего I2C насоса, мл
 volatile bool I2CPumpCalibrating;                                // Флаг калибровки внешнего I2C насоса
@@ -877,7 +876,6 @@ String test_str_val;                                            // Тестов�
 String Lua_status;                                              // Статус Lua
 uint32_t total_byte;                                            // Доступно байт на файловой системе
 uint32_t used_byte;                                             // Использовано байт на файловой системе
-uint8_t use_I2C_dev;                                            // Использовать Nano, подключенную по I2C для управления шаговым двигателем мешалки и насосом (основное назначение - пиво)
 uint16_t water_pump_speed;                                      // Скорость насоса
 
 String current_power_mode;                                      // Режим работы регулятора напряжения

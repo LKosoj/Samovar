@@ -155,19 +155,16 @@ BROWSER_TEST = r'''async page => {
     PowerOn: 0, StepperStepMl: 111, sessionId: 1,
     heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
-  const i2cMixer = {
-    present: 1, address: 16, role: 1, mode: 1, caps: 25, status: 0, error: 0,
-    relayMask: 0, sensorFlags: 0, optionFlags: 0, mixerRpm: 100,
-    mixerRunSec: 10, mixerPauseSec: 5, pumpMlHour: 0, pumpPauseSec: 0,
-    fillingMl: 0, fillingMlHour: 0, stepsPerMl: 1, remaining: 0, currentSpeed: 0
+  const i2cStepper = {
+    present: 1, address: 2, everPresent: 1, capabilities: 30,
+    config: { address: 2, mode: 3, optionFlags: 0, sensorFlags: 0, relayMask: 0,
+      mixerRpm: 0, mixerRunSec: 0, mixerPauseSec: 0, pumpMlHour: 100,
+      pumpPauseSec: 0, fillingMl: 100, fillingMlHour: 100, stepsPerMl: 100 },
+    motion: { mode: 0, direction: 0, speedStepsPerSec: 100, targetSteps: 1000 },
+    status: { mode: 3, flags: 0, result: 0, error: 0, stopReason: 0, generation: 1,
+      currentSpeedStepsPerSec: 0, remainingSteps: 0 }
   };
-  const i2cPump = {
-    present: 1, address: 17, role: 2, mode: 3, caps: 30, status: 0, error: 0,
-    relayMask: 0, sensorFlags: 0, optionFlags: 0, mixerRpm: 0,
-    mixerRunSec: 0, mixerPauseSec: 0, pumpMlHour: 100, pumpPauseSec: 0,
-    fillingMl: 100, fillingMlHour: 100, stepsPerMl: 100, remaining: 0,
-    currentSpeed: 0
-  };
+  const i2cStepperResponse = { selected: i2cStepper, devices: [i2cStepper] };
   const csvFixture = [
     "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum",
     "12:00:00,78.1,77.9,20.2,82.3,760,1",
@@ -207,11 +204,8 @@ BROWSER_TEST = r'''async page => {
       headsSpeedClamped: false, bodySpeedClamped: false
     })
   }));
-  await page.route("**/i2cstepper?device=mixer", route => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(i2cMixer)
-  }));
-  await page.route("**/i2cstepper?device=pump", route => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(i2cPump)
+  await page.route("**/i2cstepper?address=2", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(i2cStepperResponse)
   }));
   await page.route("**/data.csv", route => route.fulfill({
     status: 200, contentType: "text/csv", body: csvFixture
@@ -638,22 +632,31 @@ BROWSER_TEST = r'''async page => {
       if (!/[✅⚠🛑]/u.test(result.text) || !result.metric.ratio || result.metric.ratio + 1e-9 < result.metric.threshold) addFailure(label, "#detector_status_text", "state-" + detectorState, result.metric);
     }
 
-    await gotoPage("default", "i2cstepper.htm", theme, 180);
-    for (const state of ["state-on", "state-off"]) {
-      await page.evaluate(value => {
-        const element = document.getElementById("mixer_run_toggle");
-        element.className = "button state-button " + value;
-        element.value = value === "state-on" ? "Остановить мешалку" : "Запустить мешалку";
-      }, state);
-      if (state === "state-on") await page.hover("#mixer_run_toggle");
-      else await page.mouse.move(0, 0);
+    await gotoPage("default", "setup.htm", theme, 180);
+    await page.locator("#i2cStepperSetupTab").click();
+    await page.locator("#i2c-panel").waitFor({ state: "visible" });
+    {
+      const label = "i2c-setup/" + theme;
       const result = await page.evaluate(() => {
-        const element = document.getElementById("mixer_run_toggle");
-        return { metric: browserMetrics().textMetric(element), text: element.value };
+        const element = document.getElementById("i2c-save");
+        return { metric: browserMetrics().textMetric(element), text: element.textContent };
       });
-      const label = "i2c/" + theme + "/" + state;
       report.stateCases.push(label);
-      if (!result.text || !result.metric.ratio || result.metric.ratio + 1e-9 < result.metric.threshold) addFailure(label, ".state-button." + state, state, result.metric);
+      if (!result.text || !result.metric.ratio || result.metric.ratio + 1e-9 < result.metric.threshold) addFailure(label, "#i2c-save", "save", result.metric);
+    }
+
+    await gotoPage("default", "i2cstepper.htm", theme, 180);
+    for (const [state, selector] of [
+      ["start", "#panel button[onclick*=\"command('start'\"]"],
+      ["stop", "#panel button[onclick*=\"command('stop'\"]"]
+    ]) {
+      const result = await page.evaluate(selector => {
+        const element = document.querySelector(selector);
+        return { metric: browserMetrics().textMetric(element), text: element.textContent };
+      }, selector);
+      const label = "i2c-operational/" + theme + "/" + state;
+      report.stateCases.push(label);
+      if (!result.text || !result.metric.ratio || result.metric.ratio + 1e-9 < result.metric.threshold) addFailure(label, selector, state, result.metric);
     }
 
     const rowTypes = {
@@ -853,7 +856,7 @@ BROWSER_TEST = r'''async page => {
 
   if (report.baselineCells.length !== 60) addFailure("cardinality", "baseline", "cells", { detail: "got " + report.baselineCells.length });
   if (report.brewxmlCells.length !== 6) addFailure("cardinality", "brewxml", "cells", { detail: "got " + report.brewxmlCells.length });
-  if (report.stateCases.length !== 160) addFailure("cardinality", "states", "cases", { detail: "got " + report.stateCases.length });
+  if (report.stateCases.length !== 162) addFailure("cardinality", "states", "cases", { detail: "got " + report.stateCases.length });
   if (report.consoleProblems.length) report.consoleProblems.forEach(problem => addFailure("console", "window", "warning/error", { detail: problem }));
   if (report.lifecycleProblems.length) report.lifecycleProblems.forEach(problem => addFailure("lifecycle", "page", "close/crash", { detail: problem }));
   if (parity.size !== 33) addFailure("cardinality", "parity", "entries", { detail: "got " + parity.size });
@@ -994,7 +997,7 @@ def main() -> int:
             print(f"U-03 contrast browser cleanup failed: {error}", file=sys.stderr)
         return 1
 
-    print("U-03 contrast browser gate passed: 60 baseline + 6 brewxml + 160 states")
+    print("U-03 contrast browser gate passed: 60 baseline + 6 brewxml + 162 states")
     return 0
 
 

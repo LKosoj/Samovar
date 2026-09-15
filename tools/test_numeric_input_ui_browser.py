@@ -50,8 +50,9 @@ UI_BOOTSTRAP_FIXTURE = {
     "heaterMaxPower": 230,
     "stepperMaxSpeed": 1000,
     "stepperStepsPerMl": 100,
-    "i2cStepperStepsPerMl": 100,
+    "i2cSteppers": [{"address": 2, "present": True}, *({} for _ in range(9))],
     "calibrationRunning": False,
+    "processRunning": False,
     "calibrationPump": "local",
     "cheesePhSlope": 1,
     "cheesePhOffset": 0, "cheeseCoolingScheme": "pump",
@@ -93,21 +94,12 @@ BROWSER_TEST = r'''async page => {
     headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000,
     headsSpeedClamped: false, bodySpeedClamped: false
   };
-  const i2cFixtures = {
-    mixer: {
-      present: 1, address: 16, role: 1, mode: 1, caps: 25, status: 0, error: 0,
-      relayMask: 0, sensorFlags: 0, optionFlags: 0, mixerRpm: 100,
-      mixerRunSec: 10, mixerPauseSec: 5, pumpMlHour: 0, pumpPauseSec: 0,
-      fillingMl: 0, fillingMlHour: 0, stepsPerMl: 1, remaining: 0, currentSpeed: 0
-    },
-    pump: {
-      present: 1, address: 17, role: 2, mode: 3, caps: 30, status: 0, error: 0,
-      relayMask: 0, sensorFlags: 0, optionFlags: 0, mixerRpm: 0,
-      mixerRunSec: 0, mixerPauseSec: 0, pumpMlHour: 100, pumpPauseSec: 0,
-      fillingMl: 100, fillingMlHour: 100, stepsPerMl: 100,
-      remaining: 0, currentSpeed: 0
-    }
+  const i2cDevice = {
+    address: 2, present: true, capabilities: 12,
+    config: {relayMask: 0, stepsPerMl: 43200}, motion: {speedStepsPerSec: 1200, targetSteps: 100},
+    status: {flags: 0, currentSpeedStepsPerSec: 0, remainingSteps: 0}
   };
+  const i2cPayload = {devices:[i2cDevice], selected:i2cDevice};
   const consoleProblems = [];
   const lifecycleEvents = [];
   const covered = [];
@@ -142,18 +134,26 @@ BROWSER_TEST = r'''async page => {
       activeRouteHandlers--;
     }
   }
-  await page.route("**/i2cstepper?device=mixer", route => fulfillI2cRoute(route, i2cFixtures.mixer));
-  await page.route("**/i2cstepper?device=pump", route => fulfillI2cRoute(route, i2cFixtures.pump));
+  await page.route("**/i2cstepper?address=2", route => fulfillI2cRoute(route, i2cPayload));
 
   async function stopI2cPolling() {
-    await page.waitForFunction(() =>
-      typeof pollInFlight !== "undefined" && !pollInFlight &&
-      document.getElementById("pump_panel").style.display === "block"
-    );
+    try {
+      await page.waitForFunction(() =>
+        typeof refreshTimer !== "undefined" && selected && selected.present &&
+        document.getElementById("panel").hidden === false
+      );
+    } catch (error) {
+      throw new Error("selected I2C startup " + JSON.stringify(await page.evaluate(() => ({
+        selectedAddress:typeof selectedAddress === "undefined" ? null : selectedAddress,
+        devices:typeof devices === "undefined" ? null : devices,
+        selected:typeof selected === "undefined" ? null : selected,
+        panel:document.getElementById("panel")?.hidden,
+        error:document.getElementById("request_error")?.textContent || ""
+      }))));
+    }
     await page.evaluate(() => {
-      if (pollTimer) clearTimeout(pollTimer);
-      pollTimer = null;
-      scheduleNextPoll = function() {};
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = 0;
     });
     const deadline = Date.now() + 1000;
     while (activeRouteHandlers && Date.now() < deadline) {
@@ -664,16 +664,14 @@ BROWSER_TEST = r'''async page => {
       calibrationRunning = true;
       await calibrate();
       const finishUrl = window.__numericRequests.at(-1).url;
-      calibrationRunning = false;
-      calibrationPump = '';
       input.value = "250";
       window.__numericDelayMs = 80;
       const beforeConcurrent = window.__numericRequests.length;
       const firstStart = calibrate();
       const duringStart = {
         buttonDisabled: document.getElementById("calibrateid").disabled,
-        pumpDisabled: document.getElementById("pump_type").disabled,
-        speedDisabled: input.disabled
+        speedDisabled: input.disabled,
+        saveDisabled: document.getElementById("save").disabled
       };
       const duplicateStart = await calibrate();
       const firstStartResult = await firstStart;
@@ -695,7 +693,7 @@ BROWSER_TEST = r'''async page => {
         !result.operationRequests.every(url => url === "/ajax?operationId=901") ||
         result.calibratedValue !== "11100" ||
         !result.concurrentStartSerialized || !result.duringStart.buttonDisabled ||
-        !result.duringStart.pumpDisabled || !result.duringStart.speedDisabled) {
+        !result.duringStart.saveDisabled || !result.duringStart.speedDisabled) {
       throw new Error("calibration contract mismatch: " + JSON.stringify(result));
     }
   }
@@ -707,8 +705,6 @@ BROWSER_TEST = r'''async page => {
       const response = await route.fetch();
       const body = await response.json();
       body.calibrationRunning = true;
-      body.calibrationPump = "i2c";
-      body.i2cPumpVisible = true;
       await route.fulfill({response, json:body});
     });
     await page.goto(baseUrl + "/calibrate.htm", { waitUntil: "load" });
@@ -717,266 +713,90 @@ BROWSER_TEST = r'''async page => {
     await installRecorder("/calibrate", "calibrate");
     const result = await page.evaluate(async () => {
       const button = document.getElementById("calibrateid");
-      const pump = document.getElementById("pump_type");
       const speed = document.getElementById("kstepperspd");
-      const hydrated = calibrationRunning && calibrationPump === "i2c" &&
+      const save = document.getElementById("save");
+      const hydrated = calibrationRunning && externalAddress === 0 && localStepsPerMl === 100 &&
         button.value === "Зафиксировать 100 мл" && button.disabled === false &&
-        pump.value === "i2c" && pump.disabled && speed.disabled;
-      pump.value = "local";
-      onPumpTypeChange();
-      const lockedToServerPump = pump.value === "i2c";
+        save.disabled && speed.disabled;
       window.__numericDelayMs = 80;
       const firstFinish = calibrate();
-      const duringFinish = button.disabled && pump.disabled && speed.disabled;
+      const duringFinish = button.disabled && save.disabled && speed.disabled;
       const duplicateFinish = await calibrate();
       const firstFinishResult = await firstFinish;
       const finishUrl = window.__numericRequests[0] && window.__numericRequests[0].url;
       return {
-        hydrated, lockedToServerPump, duringFinish, duplicateFinish, firstFinishResult,
+        hydrated, duringFinish, duplicateFinish, firstFinishResult,
         requestCount: window.__numericRequests.length,
         operationRequests: window.__numericOperationRequests.slice(),
-        exactFinish: finishUrl === "/calibrate?pump=i2c&finish=1",
-        finished: !calibrationRunning && calibrationPump === "" &&
+        exactFinish: finishUrl === "/calibrate?pump=local&finish=1",
+        finished: !calibrationRunning && externalAddress === 0 &&
           button.value === "Начать калибровку" && !button.disabled &&
-          !pump.disabled && !speed.disabled,
+          !save.disabled && !speed.disabled,
         calibratedValue: document.getElementById("stepperstepml").value
       };
     });
-    if (!result.hydrated || !result.lockedToServerPump || !result.duringFinish ||
+    if (!result.hydrated || !result.duringFinish ||
         result.duplicateFinish !== false || result.firstFinishResult !== true ||
         result.requestCount !== 1 || result.operationRequests.length !== 1 ||
         result.operationRequests[0] !== "/ajax?operationId=901" ||
-        !result.exactFinish || !result.finished || result.calibratedValue !== "10000") {
+        !result.exactFinish || !result.finished || result.calibratedValue !== "11100") {
       throw new Error("hydrated calibration contract mismatch: " + JSON.stringify(result));
+    }
+  }
+
+  async function testExternalCalibration() {
+    scenario = "calibrate-external-address";
+    await page.goto(baseUrl + "/calibrate.htm?address=2", { waitUntil: "load" });
+    await page.waitForFunction(() => externalAddress === 2 && externalStepsPerMl === 43200);
+    const result = await page.evaluate(() => ({
+      title:document.getElementById("title").textContent,
+      address:externalAddress, steps:externalStepsPerMl,
+      displayed:document.getElementById("stepperstepml").value,
+      save:document.getElementById("save"),
+      returnUrl:String(document.getElementById("return").onclick)
+    }));
+    if (result.title !== "Калибровка внешнего I2C-насоса" || result.address !== 2 ||
+        result.steps !== 43200 || result.displayed !== "43200" || result.save !== null ||
+        !result.returnUrl.includes("/i2cstepper.htm?address=' + externalAddress")) {
+      throw new Error("external calibration address contract mismatch: " + JSON.stringify(result));
     }
   }
 
   async function testI2cStepper() {
     await installRecorder("/i2cstepper", "json");
-    const result = await page.evaluate(async fixture => {
-      function setFields(value) {
-        ["pumpMlHour", "pumpPauseSec", "fillingMl", "fillingMlHour"].forEach(id => {
-          document.getElementById(id).value = String(value);
-        });
-        document.getElementById("stepsPerMl").value = String(value === 0 ? 1 : value);
-        document.getElementById("pumpMode").value = "3";
-        document.getElementById("pump_relayMask").value = "0";
-        markDirty("pump");
-      }
-      function mutationRequests() {
-        return window.__numericRequests.filter(request => request.url.includes("&cmd="));
-      }
-      function readbackCount(device) {
-        return window.__numericRequests.filter(
-          request => request.url === "/i2cstepper?device=" + device
-        ).length;
-      }
-      async function waitMutationCount(count) {
-        const deadline = Date.now() + 1000;
-        while (mutationRequests().length < count && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-      }
-      async function waitDeviceIdle(device, timeoutMs) {
-        const deadline = Date.now() + (timeoutMs || 1000);
-        while (deviceActionInFlight(device) && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-        return !deviceActionInFlight(device);
-      }
-      setFields(0);
-      let expected = mutationRequests().length + 1;
-      sendDevice("pump", "apply");
-      await waitMutationCount(expected);
-      await waitDeviceIdle("pump");
-      setFields(65535);
-      expected++;
-      sendDevice("pump", "apply");
-      await waitMutationCount(expected);
-      await waitDeviceIdle("pump");
-      expected++;
-      sendDevice("pump", "stop");
-      await waitMutationCount(expected);
-      await waitDeviceIdle("pump");
-      const stop = mutationRequests().at(-1).url;
-      expected++;
-      sendDevice("pump", "calfinish");
-      await waitMutationCount(expected);
-      await waitDeviceIdle("pump");
-      const finish = mutationRequests().at(-1).url;
-      const exactStop = stop === "/i2cstepper?device=pump&cmd=stop";
-      const exactFinish = finish === "/i2cstepper?device=pump&cmd=calfinish";
-      const initialOperationContract = window.__numericOperationRequests.length === 4 &&
-        window.__numericOperationRequests.every(url => url === "/ajax?operationId=901") &&
-        readbackCount("pump") === 4;
-      const beforeInvalid = mutationRequests().length;
-      setFields(1);
-      document.getElementById("stepsPerMl").value = "";
-      const invalidReturn = sendDevice("pump", "apply");
-      const invalidBlocked = mutationRequests().length === beforeInvalid && invalidReturn === false &&
-        !actionInFlight("pump", "apply");
-      setFields(100);
+    const result = await page.evaluate(async () => {
+      const speed = document.getElementById("speedStepsPerSec");
+      const target = document.getElementById("targetSteps");
+      const operationalOnly = !document.getElementById("newAddress") &&
+        !document.getElementById("stepsPerMl") && !document.getElementById("pump_type");
+      speed.value = "18000";
+      target.value = "2147483647";
+      const first = command("start", commandValues());
+      const concurrentStop = await command("stop");
+      const firstResult = await first;
+      const mutations = () => window.__numericRequests.filter(request => request.url.includes("&cmd=") || request.url.includes("?address=2&cmd="));
+      const startUrl = mutations()[0] && mutations()[0].url;
+      const relayResult = await command("relay", {relay: 1, state: 1});
+      const relayUrl = mutations().at(-1).url;
       window.__numericStatus = 400;
-      expected = mutationRequests().length + 1;
-      sendDevice("pump", "apply");
-      await waitMutationCount(expected);
-      await waitDeviceIdle("pump");
-      const dirty400 = dirtyDevices.pump && document.getElementById("pump_panel").style.display === "block";
-      window.__numericStatus = 503;
-      expected++;
-      sendDevice("pump", "apply");
-      await waitMutationCount(expected);
-      await waitDeviceIdle("pump");
-      const dirty503 = dirtyDevices.pump && document.getElementById("pump_panel").style.display === "block";
-      const httpErrorsVisible = (() => {
-        const node = document.getElementById("request_error");
-        return !!node && getComputedStyle(node).display !== "none" && node.textContent.trim() !== "";
-      })();
-
-      window.__numericStatus = 202;
-      window.__numericDelayMs = 80;
-      setFields(222);
-      const beforeSerialized = mutationRequests().length;
-      const beforeSerializedOperations = window.__numericOperationRequests.length;
-      const beforePumpReadbacks = readbackCount("pump");
-      const beforeMixerReadbacks = readbackCount("mixer");
-      const pumpAccepted = sendDevice("pump", "apply");
-      const pumpSaveBlocked = sendDevice("pump", "save") === false;
-      const pumpRelayBlocked = toggleRelay("pump", 1) === false;
-      const mixerParallel = sendDevice("mixer", "apply");
-      const pumpButtonsLocked = [
-        "pump_apply", "pump_run_toggle", "pump_save", "pump_calstart",
-        "pump_calfinish", "pumpRelay1", "pumpRelay2", "pumpRelay3", "pumpRelay4"
-      ].every(id => document.getElementById(id).disabled);
-      renderPolledDevice("pump", Object.assign({}, fixture, {
-        pumpMlHour: 100, fillingMl: 100, fillingMlHour: 100,
-        stepsPerMl: 100, relayMask: 0
-      }));
-      const staleDuringRequestPreserved = dirtyDevices.pump &&
-        document.getElementById("pumpMlHour").value === "222" &&
-        document.getElementById("pump_relayMask").value === "0";
-      await waitDeviceIdle("pump");
-      await waitDeviceIdle("mixer");
-      const perDeviceSerialized = pumpAccepted && pumpSaveBlocked && pumpRelayBlocked &&
-        mixerParallel && mutationRequests().length === beforeSerialized + 2 &&
-        window.__numericOperationRequests.length === beforeSerializedOperations + 2 &&
-        readbackCount("pump") === beforePumpReadbacks + 1 &&
-        readbackCount("mixer") === beforeMixerReadbacks + 1;
-      renderPolledDevice("pump", Object.assign({}, fixture, {
-        pumpMlHour: 100, fillingMl: 100, fillingMlHour: 100,
-        stepsPerMl: 100, relayMask: 0
-      }));
-      const staleAfterAcceptPreserved = dirtyDevices.pump &&
-        document.getElementById("pumpMlHour").value === "222" &&
-        document.getElementById("pump_relayMask").value === "0";
-      renderPolledDevice("pump", Object.assign({}, fixture, {
-        mode: 3, pumpMlHour: 222, pumpPauseSec: 222, fillingMl: 222,
-        fillingMlHour: 222, stepsPerMl: 222, relayMask: 0,
-        optionFlags: 0, sensorFlags: 0
-      }));
-      const matchingPollCleared = !dirtyDevices.pump && pendingDeviceConfig.pump === null;
-
-      setFields(333);
-      window.__numericDelayMs = 0;
-      sendDevice("pump", "apply");
-      await waitDeviceIdle("pump");
-      document.getElementById("fillingMl").value = "444";
-      document.getElementById("fillingMl").dispatchEvent(new Event("input", { bubbles: true }));
-      renderPolledDevice("pump", Object.assign({}, fixture, {
-        mode: 3, pumpMlHour: 333, pumpPauseSec: 333, fillingMl: 333,
-        fillingMlHour: 333, stepsPerMl: 333, relayMask: 0,
-        optionFlags: 0, sensorFlags: 0
-      }));
-      const editAfterAcceptPreserved = dirtyDevices.pump && pendingDeviceConfig.pump === null &&
-        document.getElementById("fillingMl").value === "444";
-
-      setFields(444);
-      sendDevice("pump", "calstart");
-      await waitDeviceIdle("pump");
-      renderPolledDevice("pump", Object.assign({}, fixture, {
-        mode: 3, pumpMlHour: 100, pumpPauseSec: 10, fillingMl: 100,
-        fillingMlHour: 444, stepsPerMl: 444, relayMask: 0,
-        optionFlags: 0, sensorFlags: 0
-      }));
-      const partialCalstartPreserved = dirtyDevices.pump && pendingDeviceConfig.pump === null &&
-        document.getElementById("pumpPauseSec").value === "444";
-
-      const relayAccepted = toggleRelay("pump", 1);
-      await waitDeviceIdle("pump");
-      renderPolledDevice("pump", Object.assign({}, fixture, {
-        mode: 3, pumpMlHour: 100, pumpPauseSec: 10, fillingMl: 100,
-        fillingMlHour: 444, stepsPerMl: 444, relayMask: 1,
-        optionFlags: 0, sensorFlags: 0
-      }));
-      const applyAfterRelay = deviceUrl("pump", "apply");
-      const authoritativeRelayPreserved = relayAccepted && dirtyDevices.pump &&
-        document.getElementById("pumpPauseSec").value === "444" &&
-        document.getElementById("pump_relayMask").value === "1" &&
-        document.getElementById("pumpRelay1").classList.contains("state-on") &&
-        new URLSearchParams(applyAfterRelay.split("?")[1]).get("relayMask") === "1";
-
-      SamovarApp.clearRequestError();
-      i2cRequestErrorOwner = null;
-      window.__numericPlans = [
-        { status: 400, delayMs: 20 },
-        { status: 202, delayMs: 80 }
-      ];
-      const pumpErrorStarted = sendDevice("pump", "apply");
-      const mixerSuccessStarted = sendDevice("mixer", "apply");
-      await waitDeviceIdle("pump");
-      await waitDeviceIdle("mixer");
-      const mixedErrorNode = document.getElementById("request_error");
-      const mixedErrorPreserved = pumpErrorStarted && mixerSuccessStarted &&
-        i2cRequestErrorOwner === "pump" && mixedErrorNode &&
-        getComputedStyle(mixedErrorNode).display !== "none" &&
-        mixedErrorNode.textContent.includes("HTTP 400");
-
-      const recordedFetch = window.fetch;
-      window.fetch = function(url, options) {
-        const raw = typeof url === "string" ? url : url.url;
-        if (!raw.startsWith("/i2cstepper?device=pump&cmd=apply")) {
-          return recordedFetch(url, options);
-        }
-        return Promise.resolve({
-          ok: true,
-          json: function() {
-            return new Promise(function(resolve, reject) {
-              options.signal.addEventListener("abort", function() {
-                reject(new DOMException("body timeout", "AbortError"));
-              }, { once: true });
-            });
-          }
-        });
-      };
-      setFields(555);
-      const timeoutStartedAt = Date.now();
-      const hangingBodyAccepted = sendDevice("pump", "apply");
-      const bodyTimeoutReleased = await waitDeviceIdle("pump", 5500);
-      const timeoutElapsed = Date.now() - timeoutStartedAt;
-      const bodyTimeoutError = document.getElementById("request_error");
-      const bodyTimeoutHandled = hangingBodyAccepted && bodyTimeoutReleased &&
-        timeoutElapsed >= 3500 && timeoutElapsed < 5500 &&
-        !deviceActionInFlight("pump") && bodyTimeoutError &&
-        getComputedStyle(bodyTimeoutError).display !== "none";
+      const failedStop = await command("stop");
+      const error = document.getElementById("request_error");
       return {
-        exactStop, exactFinish, initialOperationContract, invalidBlocked,
-        dirty400, dirty503, httpErrorsVisible,
-        pumpButtonsLocked, staleDuringRequestPreserved, perDeviceSerialized,
-        staleAfterAcceptPreserved, matchingPollCleared, editAfterAcceptPreserved,
-        partialCalstartPreserved, authoritativeRelayPreserved, mixedErrorPreserved,
-        bodyTimeoutHandled
+        operationalOnly, firstResult, concurrentStop, relayResult, failedStop,
+        startUrl, relayUrl, operationRequests:window.__numericOperationRequests.slice(),
+        released:!commandInFlight,
+        errorVisible:!!error && getComputedStyle(error).display !== "none" && error.textContent.trim() !== "",
+        bounds:speed.min === "1" && speed.max === "18000" && target.min === "1" && target.max === "2147483647",
+        calibrationUrl:String(document.getElementById("calibrate").getAttribute("onclick") || "")
       };
-    }, i2cFixtures.pump);
-    const state = await requestState();
-    if (!result.exactStop || !result.exactFinish || !result.initialOperationContract ||
-        !result.invalidBlocked ||
-        !result.dirty400 || !result.dirty503 || !result.pumpButtonsLocked ||
-        !result.staleDuringRequestPreserved || !result.perDeviceSerialized ||
-        !result.staleAfterAcceptPreserved || !result.matchingPollCleared ||
-        !result.editAfterAcceptPreserved || !result.partialCalstartPreserved ||
-        !result.authoritativeRelayPreserved || !result.mixedErrorPreserved ||
-        !result.bodyTimeoutHandled || !result.httpErrorsVisible) {
-      throw new Error("I2CStepper contract mismatch: " + JSON.stringify({ result, state }));
+    });
+    if (!result.operationalOnly || !result.firstResult || result.concurrentStop !== false ||
+        !result.relayResult || result.failedStop !== false || !result.released || !result.errorVisible ||
+        !result.bounds || result.startUrl !== "/i2cstepper?address=2&cmd=start&speedStepsPerSec=18000&targetSteps=2147483647" ||
+        result.relayUrl !== "/i2cstepper?address=2&cmd=relay&relay=1&state=1" ||
+        result.operationRequests.length !== 2 || !result.operationRequests.every(url => url === "/ajax?operationId=901") ||
+        !result.calibrationUrl.includes("/calibrate.htm?address=' + selectedAddress")) {
+      throw new Error("selected I2CStepper contract mismatch: " + JSON.stringify(result));
     }
   }
 
@@ -1017,6 +837,7 @@ BROWSER_TEST = r'''async page => {
 
   await testInvalidProgramHeater();
   await testHydratedCalibration();
+  await testExternalCalibration();
   await page.unrouteAll({ behavior: "ignoreErrors" });
   if (covered.length !== 36) throw new Error("expected 36 page checks, got " + covered.length);
   if (lifecycleEvents.length) throw new Error(lifecycleEvents.join("\n"));
@@ -1043,11 +864,7 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
         "MainsVoltage": "230.00",
         "StepperStep": "100",
         "StepperStepMl": "100",
-        "StepperStepMlI2C": "100",
         "CalibrationRunning": "0",
-        "CalibrationPump": "local",
-        "I2CPumpTab": "inline-block",
-        "I2CStepperTab": "inline-block",
         "btn_list": '""',
         "WProgram": "",
         "Descr": "",

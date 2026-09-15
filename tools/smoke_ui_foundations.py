@@ -378,106 +378,34 @@ def check_i2cstepper_w610(errors):
     errors.append("data_raw/i2cstepper.htm not found")
     return
 
-  if re.search(r"setTimeout\s*\(\s*pollDevices\s*,\s*2000\s*\)", text):
-    errors.append("data_raw/i2cstepper.htm W6.10 uses fixed setTimeout(pollDevices, 2000)")
-
-  for token in [
-    "inFlightActions",
-    "deviceActionInFlight(device)",
-    "setActionInFlight(device, action, true)",
-    "button.disabled = disabled",
-    "setDeviceUnavailable(device,",
-  ]:
+  for token in ["let refreshTimer = 0;", "let commandInFlight = false;", "function selectedUrl(command)", "async function command(command, values)"]:
     if token not in text:
-      errors.append(f"data_raw/i2cstepper.htm W6.10 missing in-flight/disabled token: {token}")
-
+      errors.append(f"data_raw/i2cstepper.htm selected-device runtime missing {token}")
+  for stale in ["sendDevice", "inFlightActions", "leaseTimer", "nextPollDelay", "configSnapshot"]:
+    if stale in text:
+      errors.append(f"data_raw/i2cstepper.htm retains obsolete per-device runtime {stale}")
   try:
-    send_body = extract_function_body(text, "function sendDevice(device, cmd)")
+    command_body = extract_function_body(text, "async function command(command, values)")
+    init_body = extract_function_body(text, "async function init()")
   except ValueError as exc:
     errors.append(str(exc))
-    send_body = ""
-  if send_body:
-    if "if (deviceActionInFlight(device)) return false;" not in send_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 sendDevice() does not serialize commands per device")
-    if "setActionInFlight(device, action, false);" not in send_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 sendDevice() does not release action after response/render path")
-    if "setDeviceUnavailable(device, 'Ошибка выполнения команды I2CStepper.', true)" not in send_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 sendDevice() does not keep command errors explicit")
-
-  try:
-    relay_body = extract_function_body(text, "function toggleRelay(device, relayNum)")
-  except ValueError as exc:
-    errors.append(str(exc))
-    relay_body = ""
-  if relay_body:
-    if "if (deviceActionInFlight(device)) return false;" not in relay_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 toggleRelay() does not serialize commands per device")
-    if "setActionInFlight(device, action, false);" not in relay_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 toggleRelay() does not release relay action after response/render path")
-    if "setDeviceUnavailable(device, 'Ошибка переключения реле I2CStepper.', true)" not in relay_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 toggleRelay() does not keep relay errors explicit")
-
-  try:
-    request_body = extract_function_body(text, "async function requestJson(url, done, showAlert, errorOwner)")
-  except ValueError as exc:
-    errors.append(str(exc))
-    request_body = ""
-  if request_body:
-    fetch_pos = request_body.find("await fetch(url")
-    parse_tokens = (
-      "await SamovarApp.responseErrorText(",
-      "await SamovarApp.readOperationAcceptance(resp)",
-      "await resp.json()",
-    )
-    parse_positions = [request_body.find(token) for token in parse_tokens]
-    wait_pos = request_body.find(
-      "await SamovarApp.waitForOperation(acceptance.operationId)")
-    finally_pos = request_body.find("finally")
-    if min([fetch_pos, wait_pos, finally_pos] + parse_positions) < 0:
-      errors.append("data_raw/i2cstepper.htm W6.10 request timeout/parse contract is incomplete")
-    else:
-      first_parse_pos = min(parse_positions)
-      if "clearTimeout(timer)" in request_body[fetch_pos:first_parse_pos] or \
-          "timer = null" in request_body[fetch_pos:first_parse_pos]:
-        errors.append("data_raw/i2cstepper.htm W6.10 clears the request timer before response parsing")
-      branch_boundaries = (parse_positions[1], wait_pos, finally_pos)
-      for label, parse_pos, boundary in zip(
-          ("HTTP error", "operation acceptance", "status JSON"),
-          parse_positions,
-          branch_boundaries):
-        clear_pos = request_body.find("clearTimeout(timer)", parse_pos)
-        null_pos = request_body.find("timer = null", clear_pos)
-        if clear_pos < 0 or null_pos < 0 or not (parse_pos < clear_pos < null_pos < boundary):
-          errors.append(
-            f"data_raw/i2cstepper.htm W6.10 {label} timer is not cleared after parsing"
-          )
-      acceptance_clear_pos = request_body.find(
-        "clearTimeout(timer)", parse_positions[1])
-      if acceptance_clear_pos < 0 or acceptance_clear_pos > wait_pos:
-        errors.append("data_raw/i2cstepper.htm W6.10 4s request timer covers the 45s operation waiter")
-    timer_null_assignments = re.findall(
-      r"(?m)^\s*timer\s*=\s*null;\s*$", request_body)
-    if request_body.count("clearTimeout(timer)") != 4 or \
-        len(timer_null_assignments) != 3:
-      errors.append("data_raw/i2cstepper.htm W6.10 request timer cleanup owner count drift")
-    if "finally {\n        if (timer) clearTimeout(timer);" not in request_body:
-      errors.append("data_raw/i2cstepper.htm W6.10 request timer lacks finally cleanup")
-    for token in [
-      "i2cRequestErrorOwner = errorOwner;",
-      "SamovarApp.clearRequestErrorIfUnchanged(errorRevision)",
-    ]:
-      if token not in request_body:
-        errors.append(f"data_raw/i2cstepper.htm W6.10 request error ownership missing token: {token}")
-
-  try:
-    delay_body = extract_function_body(text, "function nextPollDelay()")
-  except ValueError as exc:
-    errors.append(str(exc))
-    delay_body = ""
-  if delay_body:
-    for token in ["hasInFlightActions()", "state.present && state.supported && state.active", "state.present && state.supported && !state.error"]:
-      if token not in delay_body:
-        errors.append(f"data_raw/i2cstepper.htm W6.10 nextPollDelay() missing adaptive polling token: {token}")
+    return
+  for token in [
+    "if (commandInFlight || !selected || !selected.present) return false;",
+    "new URLSearchParams({address: String(selectedAddress), cmd: command})",
+    "await SamovarApp.readOperationAcceptance(response)",
+    "await SamovarApp.waitForOperation(acceptance.operationId)",
+    "await refresh();",
+    "SamovarApp.showRequestError(String(error));",
+    "commandInFlight = false;",
+  ]:
+    if token not in command_body:
+      errors.append(f"data_raw/i2cstepper.htm selected command missing {token}")
+  for token in ["devices = Array.isArray(bootstrap.i2cSteppers)", "selectedAddress = first ? first.address : 0;", "refreshTimer = window.setInterval(refresh, 2000);"]:
+    if token not in init_body:
+      errors.append(f"data_raw/i2cstepper.htm selected startup missing {token}")
+  if "clearInterval(refreshTimer);" not in text:
+    errors.append("data_raw/i2cstepper.htm does not release selected refresh timer")
 
 
 def check_program_htm_template_js(errors):

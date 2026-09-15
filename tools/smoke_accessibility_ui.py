@@ -38,7 +38,7 @@ SETUP_CONTROLS = (
     "SteamDelay", "PipeAddr", "DeltaPipeTemp", "SetPipeTemp", "PipeDelay",
     "WaterAddr", "DeltaWaterTemp", "SetWaterTemp", "WaterDelay", "TankAddr",
     "DeltaTankTemp", "SetTankTemp", "TankDelay", "ACPAddr", "DeltaACPTemp",
-    "SetACPTemp", "ACPDelay", "StepperStepMl", "StepperStepMlI2C", "Kp", "Ki",
+    "SetACPTemp", "ACPDelay", "StepperStepMl", "Kp", "Ki",
     "Kd", "StbVoltage", "BVolt", "NbkIn", "NbkDelta", "NbkDM", "NbkDP",
     "NbkSteamT", "NbkOwPress", "blynkauth", "videourl",
     "TimeZone", "HeaterR", "rele1", "rele2", "rele3", "rele4",
@@ -56,11 +56,8 @@ PAGE_LABELS = {
         "loadprogram", "heaterMaxPower", "vless", "vlssp", "vlp", "vlhp", "vltp",
         "trest", "sum",
     ),
-    "calibrate.htm": ("pump_type", "kstepperspd", "stepperstepml"),
-    "i2cstepper.htm": (
-        "mixerRpm", "mixerRunSec", "mixerPauseSec", "pumpMode", "pumpMlHour",
-        "pumpPauseSec", "fillingMl", "fillingMlHour", "stepsPerMl",
-    ),
+    "calibrate.htm": ("kstepperspd", "stepperstepml"),
+    "i2cstepper.htm": ("speedStepsPerSec", "targetSteps"),
     # [Пиво 02.09 D1] выбор рецепта при нескольких RECIPE в файле.
     "brewxml.htm": ("recipe-select",),
 }

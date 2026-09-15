@@ -50,7 +50,6 @@ current_defaults = {
     "useDetector": False,
     "MpxZeroAdc": "36.7",
     "MpxCountsPerMmHg": "12.0",
-    "StepperStepMlI2C": "16000",
     "UseSecondI2CPump": False,
     "SecondI2CPumpRate": "0.0",
     "BeerBrewOrder": "0",

@@ -619,7 +619,7 @@ require(
     (
         "stop_local_mode_actuators",
         "stop_i2c_mode_actuator",
-        "I2CSTEP_CMD_CALIBRATE_FINISH",
+        "I2CSTEPPER_V3_CMD_CALIBRATE_FINISH",
         "i2c_stepper_stop",
         "mode_actuators_idle",
         "force_complete_mode_switch_failed",
@@ -629,7 +629,7 @@ require_ordered_tokens(
     "external actuator stop precedes Lua-idle publication gate",
     function_body(mode_switch, "static bool tick_mode_actuator_cleanup"),
     [
-        "stop_i2c_mode_actuator(i2cStepperMixer, false)",
+        "stop_i2c_mode_actuator(*mixer, false)",
         "stop_i2c_mode_actuator(",
         "modeActuatorCleanup.pumpStopped = luaIdle && stopped",
         "if (!luaIdle) return false",

@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-"""Поведенческая проверка правила приоритета mixer/pump в select_relay_capable_device
-(I2CStepper.h): если mixer на связи и умеет CAP_RELAY - берём его, иначе pump с
-CAP_RELAY. Тело функции берётся дословно из реального файла через extract_function_body,
-а не копируется в тест."""
+"""Проверяет выбор реле среди закреплённых v3-устройств из реального исходника."""
 
-import re
 import subprocess
 import sys
 import tempfile
@@ -13,152 +9,75 @@ from pathlib import Path
 from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
+PROTOCOL_INCLUDE = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 
-HARNESS_TEMPLATE = r'''
+HARNESS = r'''
 #include <cstdint>
 #include <iostream>
-
-#define I2CSTEPPER_CAP_RELAY @CAP_RELAY@
+#include <I2CStepperV3.h>
 
 struct I2CStepperDevice {
-  uint8_t caps = 0;
+  bool present;
+  uint8_t capabilities;
 };
 
-I2CStepperDevice i2cStepperMixer;
-I2CStepperDevice i2cStepperPump;
+I2CStepperDevice* mixer = nullptr;
+I2CStepperDevice* pump = nullptr;
+I2CStepperDevice* i2c_stepper_selected_mixer() { return mixer; }
+I2CStepperDevice* i2c_stepper_selected_pump() { return pump; }
 
-static int mixerRefreshCalls = 0;
-static int pumpRefreshCalls = 0;
-static bool mixerRefreshResult = false;
-static bool pumpRefreshResult = false;
-
-bool i2c_stepper_refresh(I2CStepperDevice& dev) {
-  if (&dev == &i2cStepperMixer) { mixerRefreshCalls++; return mixerRefreshResult; }
-  if (&dev == &i2cStepperPump) { pumpRefreshCalls++; return pumpRefreshResult; }
-  return false;
-}
-
-@SELECT_RELAY_CAPABLE_DEVICE@
+@FUNCTION@
 
 static int failures = 0;
-
-static void check(bool condition, const char* message) {
-  if (!condition) {
-    std::cerr << "FAIL: " << message << '\n';
-    failures++;
-  }
-}
-
-static void reset_counters() {
-  mixerRefreshCalls = 0;
-  pumpRefreshCalls = 0;
+static void check(bool value, const char* text) {
+  if (!value) { std::cerr << "FAIL: " << text << '\n'; failures++; }
 }
 
 int main() {
-  // (1) оба на связи и оба с CAP_RELAY -> выбран mixer
-  mixerRefreshResult = true;
-  i2cStepperMixer.caps = I2CSTEPPER_CAP_RELAY;
-  pumpRefreshResult = true;
-  i2cStepperPump.caps = I2CSTEPPER_CAP_RELAY;
-  reset_counters();
-  I2CStepperDevice* selected1 = select_relay_capable_device();
-  check(selected1 == &i2cStepperMixer,
-        "сценарий 1: если оба устройства годны, приоритет должен быть у mixer");
-  check(pumpRefreshCalls == 0,
-        "сценарий 1: refresh для pump не должен вызываться, если mixer уже годен (лишний обмен по I2C)");
+  I2CStepperDevice mixerDevice{true, I2CSTEPPER_V3_CAP_RELAY};
+  I2CStepperDevice pumpDevice{true, I2CSTEPPER_V3_CAP_RELAY};
 
-  // (2) mixer без CAP_RELAY, pump с CAP_RELAY -> выбран pump
-  mixerRefreshResult = true;
-  i2cStepperMixer.caps = 0;
-  pumpRefreshResult = true;
-  i2cStepperPump.caps = I2CSTEPPER_CAP_RELAY;
-  reset_counters();
-  I2CStepperDevice* selected2 = select_relay_capable_device();
-  check(selected2 == &i2cStepperPump,
-        "сценарий 2: если у mixer нет CAP_RELAY, должен выбираться pump");
+  mixer = &mixerDevice;
+  pump = &pumpDevice;
+  check(select_relay_capable_device() == &mixerDevice,
+        "закреплённая мешалка с relay имеет приоритет");
 
-  // (3) mixer не отвечает (refresh=false), pump годен -> выбран pump
-  mixerRefreshResult = false;
-  i2cStepperMixer.caps = I2CSTEPPER_CAP_RELAY;
-  pumpRefreshResult = true;
-  i2cStepperPump.caps = I2CSTEPPER_CAP_RELAY;
-  reset_counters();
-  I2CStepperDevice* selected3 = select_relay_capable_device();
-  check(selected3 == &i2cStepperPump,
-        "сценарий 3: если mixer не на связи, должен выбираться pump");
+  mixerDevice.capabilities = 0;
+  check(select_relay_capable_device() == &pumpDevice,
+        "закреплённый насос выбирается, если у мешалки нет relay");
 
-  // (4) ни один не годится -> nullptr
-  mixerRefreshResult = false;
-  i2cStepperMixer.caps = I2CSTEPPER_CAP_RELAY;
-  pumpRefreshResult = false;
-  i2cStepperPump.caps = I2CSTEPPER_CAP_RELAY;
-  reset_counters();
-  I2CStepperDevice* selected4 = select_relay_capable_device();
-  check(selected4 == nullptr,
-        "сценарий 4: если ни mixer, ни pump не годны, результат должен быть nullptr");
+  mixer = nullptr;
+  pump = nullptr;
+  check(select_relay_capable_device() == nullptr,
+        "нет закреплённого устройства — нет скрытого fallback");
 
-  if (failures != 0) return 1;
-  std::cout << "i2c relay device selection: mixer/pump priority verified\n";
-  return 0;
+  return failures == 0 ? 0 : 1;
 }
 '''
 
 
-def compile_and_run(source: str) -> int:
-    with tempfile.TemporaryDirectory(prefix="samovar-i2c-relay-") as temp_dir:
-        temp = Path(temp_dir)
-        source_path = temp / "i2c_relay.cpp"
-        binary_path = temp / "i2c_relay"
-        source_path.write_text(source, encoding="utf-8")
-        result = subprocess.run(
-            [
-                "g++",
-                "-std=c++11",
-                "-Wall",
-                "-Wextra",
-                "-Werror",
-                str(source_path),
-                "-o",
-                str(binary_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            sys.stderr.write(result.stdout)
-            sys.stderr.write(result.stderr)
-            return result.returncode
-        result = subprocess.run(
-            [str(binary_path)], capture_output=True, text=True, check=False
-        )
-        sys.stdout.write(result.stdout)
-        sys.stderr.write(result.stderr)
-        return result.returncode
-
-
 def main() -> int:
-    source = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
-
-    cap_relay_match = re.search(r"#define\s+I2CSTEPPER_CAP_RELAY\s+(\S+)", source)
-    if not cap_relay_match:
-        print("FAIL: I2CSTEPPER_CAP_RELAY macro not found in I2CStepper.h", file=sys.stderr)
-        return 1
-    cap_relay = cap_relay_match.group(1)
-
-    signature = "inline I2CStepperDevice* select_relay_capable_device()"
-    try:
-        body = extract_function_body(source, signature)
-    except ValueError as exc:
-        print(f"FAIL: {exc}", file=sys.stderr)
-        return 1
-    function = "I2CStepperDevice* select_relay_capable_device() {" + body + "}"
-
-    harness = HARNESS_TEMPLATE.replace("@CAP_RELAY@", cap_relay).replace(
-        "@SELECT_RELAY_CAPABLE_DEVICE@", function
-    )
-    return compile_and_run(harness)
+  source = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
+  signature = "inline I2CStepperDevice* select_relay_capable_device()"
+  try:
+    body = extract_function_body(source, signature)
+  except ValueError as exc:
+    print(f"FAIL: {exc}", file=sys.stderr)
+    return 1
+  function = "I2CStepperDevice* select_relay_capable_device() {" + body + "}"
+  with tempfile.TemporaryDirectory(prefix="samovar-i2c-relay-") as temp_dir:
+    source_path = Path(temp_dir) / "test.cpp"
+    binary_path = Path(temp_dir) / "test"
+    source_path.write_text(HARNESS.replace("@FUNCTION@", function), encoding="utf-8")
+    compiled = subprocess.run(
+        ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+         "-I", str(PROTOCOL_INCLUDE), str(source_path), "-o", str(binary_path)],
+        capture_output=True, text=True, check=False)
+    if compiled.returncode:
+      sys.stderr.write(compiled.stdout + compiled.stderr)
+      return compiled.returncode
+    return subprocess.run([str(binary_path)], check=False).returncode
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+  raise SystemExit(main())

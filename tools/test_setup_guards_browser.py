@@ -35,6 +35,16 @@ DATA = ROOT / "data"
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
+  const i2cStepper = {
+    present: 1, address: 2, everPresent: 1, capabilities: 30,
+    config: { address: 2, mode: 3, optionFlags: 0, sensorFlags: 0, relayMask: 0,
+      mixerRpm: 0, mixerRunSec: 0, mixerPauseSec: 0, pumpMlHour: 100,
+      pumpPauseSec: 0, fillingMl: 100, fillingMlHour: 100, stepsPerMl: 100 },
+    motion: { mode: 0, direction: 0, speedStepsPerSec: 100, targetSteps: 1000 },
+    status: { mode: 3, flags: 0, result: 0, error: 0, stopReason: 0, generation: 1,
+      currentSpeedStepsPerSec: 0, remainingSteps: 0 }
+  };
+  const i2cStepperResponse = { selected: i2cStepper, devices: [i2cStepper] };
   const errors = [];
   const passed = [];
 
@@ -60,6 +70,9 @@ BROWSER_TEST = r'''async page => {
   }));
   await page.route("**/ui-bootstrap", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(bootstrapFixture)
+  }));
+  await page.route("**/i2cstepper?address=2", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(i2cStepperResponse)
   }));
 
   // ВНИМАНИЕ: этот код исполняется в Node-окружении playwright-cli (снаружи
@@ -107,10 +120,18 @@ BROWSER_TEST = r'''async page => {
     throw new Error("request_error did not change (revision " + previousRevision + ") within " + timeoutMs + "ms");
   }
 
+  async function waitForSetupReady() {
+    await page.waitForFunction(() => {
+      const address = document.getElementById("i2c-newAddress");
+      return document.body.inert === false && address && address.options.length === 10;
+    });
+  }
+
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // ---------- П52: dirty-флаг и beforeunload ----------
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  await waitForSetupReady();
 
   const initialDirty = await page.evaluate(() => document.getElementById("setupform").dataset.dirty);
   if (initialDirty !== "false") throw new Error("form starts dirty=" + initialDirty);
@@ -222,6 +243,10 @@ BROWSER_TEST = r'''async page => {
 
   // ---------- П55: loadFile показывает результат ----------
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  // Начальная загрузка очищает #request_error после рендера I2CStepper. Ждём
+  // её штатного завершения, чтобы последующее сообщение принадлежало именно
+  // проверяемому loadFile(), а не было очищено конкурентным bootstrap-запросом.
+  await waitForSetupReady();
 
   const badJsonRevision = await page.evaluate(() => {
     const revision = SamovarApp.currentRequestErrorRevision();
@@ -303,6 +328,7 @@ BROWSER_TEST = r'''async page => {
     if (f) f.dataset.dirty = "false";
   });
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  await waitForSetupReady();
 
   const fieldErrorResult = await page.evaluate(async () => {
     const form = document.getElementById("setupform");
@@ -368,6 +394,7 @@ BROWSER_TEST = r'''async page => {
     if (f) f.dataset.dirty = "false";
   });
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  await waitForSetupReady();
   const structuralErrorResult = await page.evaluate(async () => {
     const form = document.getElementById("setupform");
     const revisionBefore = SamovarApp.currentRequestErrorRevision();
@@ -396,6 +423,7 @@ BROWSER_TEST = r'''async page => {
     if (f) f.dataset.dirty = "false";
   });
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  await waitForSetupReady();
   const clickResult = await page.evaluate(() => {
     const links = document.getElementsByClassName("tablinks");
     let tempLink = null;

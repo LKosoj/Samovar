@@ -102,6 +102,9 @@ async function makeEnv(vars, fetchImpl) {
     URLSearchParams: URLSearchParams,
     Number: Number,
     String: String,
+    setInterval: function () { return 1; },
+    clearInterval: function () {},
+    addEventListener: function () {},
     document: {
       getElementById: function (id) { return elements[id] || null; },
       forms: { setupform: form },
@@ -114,8 +117,9 @@ async function makeEnv(vars, fetchImpl) {
         apply({
           stepperMaxSpeed: vars.StepperStep,
           stepperStepsPerMl: vars.StepperStepMl,
-          i2cStepperStepsPerMl: vars.StepperStepMlI2C,
+          i2cSteppers: Array(10).fill({}),
           calibrationRunning: vars.CalibrationRunning === 1,
+          processRunning: false,
           calibrationPump: vars.CalibrationPump,
           i2cPumpVisible: vars.I2CPumpTab !== "none",
         });
@@ -193,20 +197,6 @@ async function scenarioBuiltInPumpSavesOwnSetting() {
   check(call.init.method === "POST", "must use POST");
   check(call.body === "StepperStepMl=25",
     "built-in pump must save 2500 per 100 ml as StepperStepMl=25 per ml (got: " + call.body + ")");
-}
-
-async function scenarioI2cPumpDoesNotClobberBuiltIn() {
-  const fetchImpl = makeFetch(accepted);
-  const env = await makeEnv(BASE, fetchImpl);
-  env.elements.pump_type.value = "i2c";
-  env.elements.stepperstepml.value = "3300";
-  const ok = await env.submit();
-  check(ok === true, "saving the I2C pump must resolve true");
-  const body = fetchImpl.calls[0].body;
-  check(body === "StepperStepMlI2C=33",
-    "the I2C pump must save StepperStepMlI2C=33, not the built-in setting (got: " + body + ")");
-  check(body.indexOf("stepperstepml") === -1 && /StepperStepMl=/.test(body) === false,
-    "saving the I2C pump must never send the built-in pump's param - it would overwrite its calibration (got: " + body + ")");
 }
 
 async function scenarioSpeedIsNeverSent() {
@@ -297,7 +287,6 @@ async function scenarioCalibrateIsBlockedWhileSaveIsInFlight() {
 
 async function main() {
   await scenarioBuiltInPumpSavesOwnSetting();
-  await scenarioI2cPumpDoesNotClobberBuiltIn();
   await scenarioSpeedIsNeverSent();
   await scenarioNonMultipleOfHundredIsRejectedLocally();
   await scenarioSavingIsBlockedWhileCalibrating();
@@ -309,7 +298,7 @@ async function main() {
     for (const message of failures) console.error("FAIL: " + message);
     process.exit(1);
   }
-  console.log("calibrate save smoke passed (8 scenarios)");
+  console.log("calibrate save smoke passed (7 scenarios)");
 }
 
 main().catch(function (err) {
@@ -346,9 +335,10 @@ def check_server_contract() -> list[str]:
             "WebServer.ino now allows kstepperspd in /save - calibrate.htm deliberately "
             "does not send it; revisit tools/smoke_calibrate_save.py"
         )
-    for param in ("StepperStepMl", "StepperStepMlI2C"):
-        if region and f'"{param}"' not in region:
-            errors.append(f"WebServer.ino: /save no longer allows {param}")
+    if region and '"StepperStepMl"' not in region:
+        errors.append("WebServer.ino: /save no longer allows StepperStepMl")
+    if '"StepperStepMlI2C"' in region:
+        errors.append("WebServer.ino: /save must not expose retired StepperStepMlI2C")
     if "staged.StepperStepMl = (uint16_t)(stepsPer100Ml / 100);" not in text:
         errors.append(
             "WebServer.ino: the lowercase stepperstepml -> built-in pump mapping changed; "

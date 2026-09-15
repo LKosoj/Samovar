@@ -143,7 +143,7 @@ for field in [
     "SetWaterTemp", "WaterDelay", "DeltaTankTemp", "SetTankTemp",
     "TankDelay", "DeltaACPTemp", "SetACPTemp", "ACPDelay", "SteamAddr",
     "PipeAddr", "WaterAddr", "TankAddr", "ACPAddr", "StepperStepMl",
-    "StepperStepMlI2C", "Kp", "Ki", "Kd", "StbVoltage", "BVolt",
+    "Kp", "Ki", "Kd", "StbVoltage", "BVolt",
     "NbkIn", "NbkDelta", "NbkDM", "NbkDP", "NbkSteamT", "NbkOwPress",
     "TimeZone", "HeaterR", "rele1", "rele2", "rele3", "rele4",
 ]:
@@ -264,6 +264,30 @@ for token in [
     if token not in setup:
         errors.append(f"setup dirty/submit contract missing token: {token}")
 
+setup_i2c_save = body(setup, "async function saveSetupI2c")
+require_ordered_tokens(
+    "setup owns the complete Nano configuration save",
+    setup_i2c_save,
+    [
+        "if (!setupI2cSelected || !setupI2cSelected.present) return false;",
+        "new URLSearchParams({address: String(setupI2cAddress), cmd: 'save'})",
+        "params.set(name, setupI2cValue(name).value);",
+        "await SamovarApp.readOperationAcceptance(response)",
+        "await SamovarApp.waitForOperation(accepted.operationId)",
+        "await refreshSetupI2c();",
+    ],
+    errors,
+)
+for field in [
+    "newAddress", "mode", "stepsPerMl", "mixerRpm", "mixerRunSec", "mixerPauseSec",
+    "pumpMlHour", "pumpPauseSec", "fillingMl", "fillingMlHour",
+]:
+    if f"'{field}'" not in setup_i2c_save:
+        errors.append(f"setup Nano save omits {field}")
+_nano_save_mutant = setup.replace("cmd: 'save'", "cmd: 'start'", 1)
+if body(_nano_save_mutant, "async function saveSetupI2c").find("cmd: 'save'") >= 0:
+    errors.append("setup Nano save mutation was not detected")
+
 page_contracts = {
     "index.htm": [
         "sendPowerCommand('Voltage'", "sendNumericCommand('pumpspeed'",
@@ -339,13 +363,18 @@ require_ordered_tokens(
     "calibration validates start and handles HTTP failure before state change",
     calibrate_body,
     [
+        "const wasRunning = calibrationRunning;",
         "new URLSearchParams()",
+        "if (externalCalibration()) params.set('address', String(externalAddress));",
         "SamovarApp.readNumericInput('kstepperspd'",
         "integer: true, min: 1, max: 8000",
         "params.set('start', '1')",
-        "if (!resp.ok)",
-        "SamovarApp.responseErrorText",
-        "calibrationRunning = nextCalibrationRunning;",
+        "calibrationInFlight = true;",
+        "const response = await fetch('/calibrate?' + params.toString());",
+        "if (!response.ok)",
+        "SamovarApp.showRequestError(await SamovarApp.responseErrorText(",
+        "calibrationRunning = !wasRunning;",
+        "updateExternalLease();",
     ],
     errors,
 )
@@ -353,82 +382,57 @@ for token in ['params.set(\'finish\', \'1\')', '<script src="app.js"></script>',
     if token not in calibrate:
         errors.append(f"calibrate.htm missing token: {token}")
 for token in [
+    "let localStepsPerMl = 0;",
+    "let externalAddress = 0;",
+    "let externalStepsPerMl = 0;",
     "let calibrationRunning = false;",
-    "let calibrationPump = '';",
-    "calibrationRunning = data.calibrationRunning;",
-    "calibrationRunning ? data.calibrationPump : ''",
     "if (calibrationInFlight) return false;",
-    "document.getElementById('pump_type').disabled = calibrationRunning || calibrationInFlight;",
-    "const pump = calibrationRunning ? calibrationPump : getPumpType();",
-    "calibrationPump = calibrationRunning ? pump : '';",
+    "document.getElementById('save').remove();",
+    "'/i2cstepper.htm?address=' + externalAddress",
+    "externalStepsPerMl = Number(device.config.stepsPerMl);",
+    "if (externalCalibration() || calibrationRunning || calibrationInFlight) return false;",
 ]:
     if token not in calibrate:
         errors.append(f"calibrate state hydration/lock missing token: {token}")
 
 if "String calibrateKeyProcessor(const String &var)" in web:
     errors.append("WebServer.ino: удалённый calibrateKeyProcessor всё ещё рендерит calibration state")
-for token in ('"calibrationRunning"', '"calibrationPump"'):
+for token in ('"calibrationRunning"', '"processRunning"'):
     if token not in web:
         errors.append(f"/ui-bootstrap calibration state missing token: {token}")
 
 i2c = read(DATA / "i2cstepper.htm")
-request_json = body(i2c, "async function requestJson")
-send_device = body(i2c, "function sendDevice")
-device_url = body(i2c, "function deviceUrl")
-render_polled_device = body(i2c, "function renderPolledDevice")
-config_snapshot = body(i2c, "function configSnapshot")
-for token in ["SamovarApp.responseErrorText", "return false;", "SamovarApp.showRequestError"]:
-    if token not in request_json:
-        errors.append(f"i2c request error contract missing token: {token}")
-if "alert(" in request_json:
-    errors.append("i2c requestJson still uses alert instead of shared error renderer")
+i2c_command = body(i2c, "async function command")
+i2c_refresh = body(i2c, "async function refresh")
+i2c_values = body(i2c, "function commandValues")
 require_ordered_tokens(
-    "i2c validation occurs before in-flight mutation",
-    send_device,
-    ["deviceUrl(device, cmd)", "if (!url)", "return false;", "setActionInFlight(device, action, true)"],
+    "selected I2C command serializes and confirms its address-bound operation",
+    i2c_command,
+    [
+        "if (commandInFlight || !selected || !selected.present) return false;",
+        "commandInFlight = true;",
+        "new URLSearchParams({address: String(selectedAddress), cmd: command})",
+        "await fetch('/i2cstepper?' + params",
+        "await SamovarApp.readOperationAcceptance(response)",
+        "await SamovarApp.waitForOperation(acceptance.operationId)",
+        "await refresh();",
+        "commandInFlight = false;",
+    ],
     errors,
 )
+for token in ["speedStepsPerSec", "targetSteps"]:
+    if token not in i2c_values:
+        errors.append(f"operational I2C command values missing {token}")
 for token in [
-    "if (deviceActionInFlight(device)) return false;",
-    "pendingDeviceConfig[device] = snapshot;",
-    "snapshot.accepted = true;",
-    "var fullConfig = cmd === 'apply' || cmd === 'save' || cmd === 'start';",
-    "var snapshot = fullConfig ? configSnapshot(url, deviceEditVersion[device]) : null;",
+    "fetch(selectedUrl(), {cache: 'no-store'})",
+    "selected = payload.selected || null;",
+    "SamovarApp.showRequestError(String(error));",
 ]:
-    if token not in send_device:
-        errors.append(f"i2c per-device serialization/confirmation missing token: {token}")
-for token in [
-    "pending.accepted",
-    "pending.editVersion === deviceEditVersion[device]",
-    "configMatches(data, pending)",
-]:
-    if token not in render_polled_device:
-        errors.append(f"i2c stale-poll dirty guard missing token: {token}")
-if "document.getElementById(device + '_relayMask').value = relayMask;" not in i2c:
-    errors.append("i2c confirmed relay state does not update the authoritative hidden mask")
-if "'relayMask'" in config_snapshot:
-    errors.append("i2c ordinary form snapshot incorrectly owns the live relay mask")
-for token in [
-    "SamovarApp.currentRequestErrorRevision()",
-    "i2cRequestErrorOwner = errorOwner;",
-    "SamovarApp.clearRequestErrorIfUnchanged(errorRevision)",
-]:
-    if token not in request_json:
-        errors.append(f"i2c request sequencing missing token: {token}")
-for token in [
-    "cmd === 'stop' || cmd === 'calfinish'",
-    "new URLSearchParams()",
-    "mixerParams(cmd, params)",
-    "pumpParams(cmd, params)",
-]:
-    if token not in device_url:
-        errors.append(f"i2c command-specific URL missing token: {token}")
-for field in [
-    "mixerRpm", "mixerRunSec", "mixerPauseSec", "pumpMlHour",
-    "pumpPauseSec", "fillingMl", "fillingMlHour", "stepsPerMl",
-]:
-    if not re.search(rf"appendInteger\(params, '{field}'", i2c):
-        errors.append(f"i2c integer validation missing {field}")
+    if token not in i2c_refresh:
+        errors.append(f"selected I2C refresh contract missing {token}")
+for stale in ["sendDevice", "inFlightActions", "leaseTimer", "newAddress", "stepsPerMl"]:
+    if stale in i2c:
+        errors.append(f"operational I2C page retains obsolete config token {stale}")
 
 browser = read(ROOT / "tools" / "test_numeric_input_ui_browser.py")
 if browser:

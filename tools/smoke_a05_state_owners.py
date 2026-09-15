@@ -208,6 +208,8 @@ HARNESS_PREFIX = r'''
 #include <string>
 #include <type_traits>
 
+#include <I2CStepperV3.h>
+
 using std::isfinite;
 
 #define SAMOVAR_VERSION "6.27"
@@ -902,6 +904,8 @@ def compile_matrix(section: str, name: str, defines: list[str]) -> str:
             "-Wextra",
             "-Werror",
             "-pedantic",
+            "-I",
+            str(ROOT / "libraries/I2CStepperProtocol/src"),
             *defines,
             str(source_path),
             "-o",

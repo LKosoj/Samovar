@@ -50,9 +50,8 @@ BROWSER_TEST = r'''async page => {
       mainsVoltage:i ? 220 : 230,
       stepperMaxSpeed:i ? 2400 : 1200,
       stepperStepsPerMl:i ? 65400 : 32100,
-      i2cStepperStepsPerMl:i ? 87600 : 43200,
-      calibrationRunning:!!i, calibrationPump:i ? "i2c" : "local",
-      i2cPumpVisible:!!i,
+      i2cSteppers:Array(10).fill({}),
+      calibrationRunning:!!i, processRunning:false, calibrationPump:"local",
       cheesePhSlope:i ? -0.006543 : -0.00321,
       cheesePhOffset:i ? 18.25 : 14.75,
       cheesePhAvailable:!i,
@@ -61,6 +60,14 @@ BROWSER_TEST = r'''async page => {
     })});
   });
   await page.route("**/data.csv", route => route.fulfill({status:200, contentType:"text/csv", body:""}));
+  await page.route("**/i2cstepper?address=2", route => route.fulfill({
+    status:200, contentType:"application/json", body:JSON.stringify({
+      devices:[{address:2,present:true}], selected:{address:2,present:true,
+        capabilities:4,config:{stepsPerMl:43200,relayMask:0},
+        motion:{speedStepsPerSec:1200,targetSteps:100},
+        status:{flags:0,currentSpeedStepsPerSec:0,remainingSteps:0}}
+    })
+  }));
   await page.route("**/ajax_col_params?*", route => route.fulfill({status:200, contentType:"application/json", body:JSON.stringify({
     floodPowerW:3000,workingPowerW:2500,maxFlowMlH:1000,theoreticalPlates:20,
     headsFlowMlH:100,bodyFlowMinMlH:200,bodyFlowMaxMlH:400,bodyEndFlowMlH:300,
@@ -86,7 +93,13 @@ BROWSER_TEST = r'''async page => {
     plan = {index};
     const before = requests.length;
     await page.goto(baseUrl + "/" + pageName, {waitUntil:"load"});
-    await page.waitForFunction(() => document.body.inert === false);
+    try {
+      await page.waitForFunction(() => document.body.inert === false);
+    } catch (error) {
+      throw new Error(pageName + " bootstrap state " + JSON.stringify(await page.evaluate(() => ({
+        inert:document.body.inert, error:document.getElementById("request_error")?.textContent || ""
+      }))));
+    }
     expect(requests[before] === "/ui-bootstrap", pageName + " bootstrap order");
     return before;
   }
@@ -116,9 +129,9 @@ BROWSER_TEST = r'''async page => {
     expect(program.heater === String(Math.round((i ? 220*220/20 : 230*230/10))), "program heater " + i);
 
     await openSuccess("calibrate.htm", i);
-    const calibration = await page.evaluate(() => ({speed:document.getElementById("kstepperspd").value, steps:document.getElementById("stepperstepml").value, local:stepperStepMlLocal, i2c:stepperStepMlI2C, running:calibrationRunning, pump:calibrationPump, select:document.getElementById("pump_type").value, visible:getComputedStyle(document.getElementById("pump_type")).display !== "none"}));
-    expect(calibration.speed === String(i ? 2400 : 1200) && calibration.local === (i ? 65400 : 32100) && calibration.i2c === (i ? 87600 : 43200), "calibration numbers " + i);
-    expect(calibration.running === !!i && calibration.pump === (i ? "i2c" : "") && calibration.select === (i ? "i2c" : "local") && calibration.steps === String(i ? 87600 : 32100) && calibration.visible === !!i, "calibration state " + i);
+    const calibration = await page.evaluate(() => ({speed:document.getElementById("kstepperspd").value, steps:document.getElementById("stepperstepml").value, local:localStepsPerMl, external:externalAddress, externalSteps:externalStepsPerMl, running:calibrationRunning, save:document.getElementById("save").disabled, speedDisabled:document.getElementById("kstepperspd").disabled}));
+    expect(calibration.speed === String(i ? 2400 : 1200) && calibration.local === (i ? 65400 : 32100) && calibration.steps === String((i ? 65400 : 32100) * 100), "calibration numbers " + i);
+    expect(calibration.running === !!i && calibration.external === 0 && calibration.externalSteps === 0 && calibration.save === !!i && calibration.speedDisabled === !!i, "local calibration state " + i);
 
     before = await openSuccess("calibrate_ph.htm", i);
     if (!i) await page.waitForFunction(() => document.getElementById("phCurrent").textContent === "6.75");
