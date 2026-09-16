@@ -61,6 +61,12 @@ BROWSER_TEST = r'''async page => {
     contentType: "application/json",
     body: JSON.stringify(ajaxFixture)
   }));
+  // program.htm (T3) при каждой загрузке дергает /cheese-recipes-bootstrap для карточки
+  // "Рецепты пива с сайта"; эти тесты её не касаются - отдаём mode:1, чтобы карточка
+  // осталась скрытой и не было 404 в консоли.
+  await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({mode: 1})
+  }));
   await page.route("**/ajax_col_params?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",

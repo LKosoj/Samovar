@@ -15,6 +15,7 @@
 var is_program = false;
 var program = "";
 var recipeImportGeneration = 0;
+var BEER_RECIPE_STORAGE_KEY = "samovar.beerxml.pending";
 
 /**
    * Корректировка округления десятичных дробей.
@@ -62,6 +63,19 @@ function formatRecipeErrorMessage(err, kind) {
   return (err && err.message) ? err.message : String(err);
 }
 
+// Общий разбор текста рецепта для локального файла (loadBeerXML) и рецепта с сайта
+// (loadPendingBeerRecipe) — второй конвертер не заводим, оба пути идут через get_brew_info/get_brewmate_info.
+function applyRecipeText(text, kind, generation) {
+	try {
+		if (kind === "BrewMate") get_brewmate_info(text);
+		else get_brew_info(text);
+		return true;
+	} catch (err) {
+		if (generation === recipeImportGeneration) SamovarApp.showRequestError(formatRecipeErrorMessage(err, kind));
+		return false;
+	}
+}
+
 function loadBeerXML(e) {
 	var file = e;
 	if (!file) return;
@@ -91,12 +105,7 @@ function loadBeerXML(e) {
 		var textReader = new FileReader();
 		textReader.onload = function () {
 			if (generation !== recipeImportGeneration) return;
-			try {
-				if (kind === "BrewMate") get_brewmate_info(textReader.result);
-				else get_brew_info(textReader.result);
-			} catch (err) {
-				if (generation === recipeImportGeneration) SamovarApp.showRequestError(formatRecipeErrorMessage(err, kind));
-			}
+			applyRecipeText(textReader.result, kind, generation);
 		};
 		textReader.onerror = function () {
 			if (generation === recipeImportGeneration) SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
@@ -107,6 +116,38 @@ function loadBeerXML(e) {
 		if (generation === recipeImportGeneration) SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
 	};
 	reader.readAsArrayBuffer(file);
+}
+
+// Рецепт, выбранный в каталоге program.htm ("Рецепты пива с сайта", T3): program.htm сам
+// скачивает BeerXML с сайта и кладёт его в sessionStorage, минуя Blynk и второй конвертер.
+function loadPendingBeerRecipe() {
+	var raw = sessionStorage.getItem(BEER_RECIPE_STORAGE_KEY);
+	if (!raw) return;
+	sessionStorage.removeItem(BEER_RECIPE_STORAGE_KEY);
+	try {
+		var payload = JSON.parse(raw);
+		var xml = payload && typeof payload.xml === "string" ? payload.xml : "";
+		var parsed = (new DOMParser()).parseFromString(xml, "text/xml");
+		var root = parsed.documentElement;
+		if (parsed.getElementsByTagName("parsererror").length || !root || root.nodeName !== "RECIPES" || !root.getElementsByTagName("RECIPE").length) {
+			var syntaxError = new Error("файл повреждён, это не корректный XML.");
+			syntaxError.xmlSyntaxError = true;
+			throw syntaxError;
+		}
+		is_program = false;
+		program = "";
+		var generation = ++recipeImportGeneration;
+		if (applyRecipeText(xml, "BeerXML", generation)) showRecipeSource(payload.name);
+	} catch (err) {
+		SamovarApp.showRequestError(formatRecipeErrorMessage(err, "BeerXML"));
+	}
+}
+
+function showRecipeSource(name) {
+	var el = document.getElementById("recipeSource");
+	if (!el) return;
+	el.textContent = "Источник: " + (name || "");
+	el.style.display = name ? "" : "none";
 }
 
 function parseXml(xml, arrayTags) {
@@ -802,6 +843,7 @@ async function set_program(){
 SamovarApp.initTheme();
 document.addEventListener('DOMContentLoaded', function () {
   SamovarApp.initTheme();
+  loadPendingBeerRecipe();
   fetch('/ajax?messageCursor=0').then(function (resp) {
     if (!resp.ok) return null;
     return resp.json();
@@ -829,6 +871,9 @@ document.addEventListener('DOMContentLoaded', function () {
 </label>
 <input type="file" id="fileToLoad" accept="application/xml" onchange="loadBeerXML(this.files[0])"/>
 </div>
+
+<!-- [Пиво T3] источник рецепта, выбранного в каталоге program.htm -->
+<div id="recipeSource" class="dvcs" style="display:none; margin:10px auto; text-align:center;"></div>
 
 <!-- [Пиво 02.09 D1] выбор рецепта, если в файле несколько RECIPE -->
 <div class="btn-cell" id="recipe-select-row" style="display:none; margin: 10px auto;">

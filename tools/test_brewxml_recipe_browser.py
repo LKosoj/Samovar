@@ -733,7 +733,7 @@ def main() -> int:
                 raise RuntimeError(original_error)
             source = (site / "brewxml.htm").read_text(encoding="utf-8")
             mutations = (
-                ("late FileReader callback", "if (generation !== recipeImportGeneration) return;\n\t\t\ttry {", "if (false) return;\n\t\t\ttry {", "new import must cancel A until successful B"),
+                ("late FileReader callback", "if (generation !== recipeImportGeneration) return;\n\t\t\tapplyRecipeText(", "if (false) return;\n\t\t\tapplyRecipeText(", "new import must cancel A until successful B"),
                 ("negative BOIL_TIME", "Number(rawBoilTime) < 0", "false", "text and negative BOIL_TIME must reject and clear the old program"),
             )
             for label, old, new, expected_error in mutations:

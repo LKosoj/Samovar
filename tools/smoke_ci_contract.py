@@ -531,6 +531,8 @@ class BrowserTestRunnerTests(unittest.TestCase):
             # 02.09.2026: пакет "Пиво" - кнопка паузы на beer.htm и импорт рецепта brewxml.htm.
             "test_beer_pause_button_browser.py",
             "test_beer_program_backup_browser.py",
+            # 16.09.2026 (T3): каталог рецептов пива с сайта на program.htm -> brewxml.htm.
+            "test_beer_recipes_catalog_browser.py",
             "test_cheese_recipes_browser.py",
             "test_cheese_ui_browser.py",
             "test_detector_tails_observe_browser.py",

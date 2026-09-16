@@ -9,6 +9,22 @@
 <title>Самовар</title>
 
 <script src="app.js"></script>
+<style>
+  /* Карточка «Рецепты пива с сайта» (T3, см. docs/plans/2026-09-16-beer-tasks/T3-firmware.md) */
+  #beerRecipesCard .recipes-tabs,
+  #beerRecipesCard .recipes-toolbar,
+  #beerRecipesCard .recipes-pager { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin: .75rem 0; }
+  #beerRecipesCard .recipes-toolbar input[type="search"] { flex: 1 1 12rem; }
+  #beerRecipesCard .recipes-toolbar select { flex: 1 1 10rem; }
+  #beerRecipesCard .recipes-tabs button[aria-pressed="true"] { background: var(--accent-hover); color: var(--text-on-accent); }
+  #beerRecipesCard .recipe-list { display: grid; gap: .5rem; margin: .75rem 0; }
+  #beerRecipesCard .recipe-list button { width: 100%; text-align: left; background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border-card); border-radius: var(--radius-sm); padding: .6rem .75rem; cursor: pointer; }
+  #beerRecipesCard .recipe-list small { display: block; color: var(--text-muted); margin-top: .2rem; }
+  #beerRecipesCard .recipe-empty,
+  #beerRecipesCard .recipe-status { color: var(--text-muted); }
+  #beerRecipesCard .recipe-status[data-kind="error"] { color: var(--warn); }
+  #beerRecipesCard .recipe-status[data-kind="ok"] { color: var(--ok); }
+</style>
 <script>
   var pwr_unit = "";
 var heaterResistance = NaN;
@@ -1358,6 +1374,26 @@ window.onload = async function() {
 <div class="message-box" style="display: none;" id="message"></div>
 Samovar v. <span id='version'></span>
 </h1>
+<section id="beerRecipesCard" class="card" aria-labelledby="beerRecipesTitle" hidden>
+  <h2 id="beerRecipesTitle"></h2>
+  <div class="recipes-tabs" role="group">
+    <button type="button" class="button" data-beer-catalog="main" aria-pressed="true"></button>
+    <button type="button" class="button secondary" data-beer-catalog="user" aria-pressed="false"></button>
+    <button type="button" class="button secondary" data-beer-catalog="my" aria-pressed="false"></button>
+  </div>
+  <div class="recipes-toolbar">
+    <input id="beerRecipeQuery" type="search" maxlength="200">
+    <select id="beerRecipeFamily"><option value=""></option></select>
+    <button id="beerRecipeFind" class="button secondary" type="button"></button>
+  </div>
+  <div id="beerRecipeList" class="recipe-list"></div>
+  <div class="recipes-pager">
+    <button id="beerRecipePrev" class="button secondary" type="button"></button>
+    <span id="beerRecipePage">—</span>
+    <button id="beerRecipeNext" class="button secondary" type="button"></button>
+  </div>
+  <p id="beerRecipeStatus" class="recipe-status" role="status"></p>
+</section>
 <div class="text"><label for="loadprogram">Расчет программы отбора</label>
 <select id="loadprogram" name="loadprogram" onchange="getProgramFromFile(this)">
   <option value="0">Фрукты</option>
@@ -1518,5 +1554,148 @@ Samovar v. <span id='version'></span>
 </div>
 </div>
 </form>
+<script>
+(function () {
+  'use strict';
+  // Карточка «Рецепты пива с сайта» (T3): каталог рецептов beerxml.v1, показывается
+  // только при mode == 2 (режим «Пиво»). Преобразование XML в программу — на brewxml.htm.
+
+  var API_BASE = 'https://www.samovar-tool.ru/beerxml/v1/';
+  var STORAGE_KEY = 'samovar.beerxml.pending';
+  var state = { catalog: 'main', page: 1, perPage: 10, total: 0, query: '', family: '', token: '', familyLabel: {} };
+  var language = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ru';
+  var text = {
+    ru: {
+      heading: 'Рецепты пива с сайта', main: 'Основные', user: 'Пользовательские', mine: 'Мои',
+      search: 'Поиск рецепта', find: 'Найти', allFamilies: 'Все семейства', previous: 'Назад', next: 'Вперёд',
+      loading: 'Загрузка…', loadingRecipe: 'Загрузка рецепта…', found: 'Найдено: {count}', empty: 'Рецепты не найдены.',
+      noToken: 'Для списка «Мои» в устройстве не задан токен Blynk.', catalogPrefix: 'Каталог: ', recipePrefix: 'Рецепт: '
+    },
+    en: {
+      heading: 'Beer recipes from the site', main: 'Main', user: 'User', mine: 'Mine',
+      search: 'Search recipes', find: 'Search', allFamilies: 'All families', previous: 'Previous', next: 'Next',
+      loading: 'Loading…', loadingRecipe: 'Loading recipe…', found: 'Found: {count}', empty: 'No recipes found.',
+      noToken: 'No Blynk token is configured for Mine.', catalogPrefix: 'Catalogue: ', recipePrefix: 'Recipe: '
+    }
+  };
+
+  function byId(id) { return document.getElementById(id); }
+  function t(key, values) {
+    var value = text[language][key] || text.ru[key] || key;
+    return values ? value.replace(/\{(\w+)\}/g, function (_, name) { return values[name] === undefined ? '' : values[name]; }) : value;
+  }
+  function localizeCard() {
+    byId('beerRecipesTitle').textContent = t('heading');
+    var labels = {
+      '[data-beer-catalog="main"]': 'main', '[data-beer-catalog="user"]': 'user', '[data-beer-catalog="my"]': 'mine',
+      '#beerRecipeFind': 'find', '#beerRecipePrev': 'previous', '#beerRecipeNext': 'next'
+    };
+    Object.keys(labels).forEach(function (selector) { document.querySelector(selector).textContent = t(labels[selector]); });
+    byId('beerRecipeQuery').placeholder = t('search');
+    byId('beerRecipeQuery').setAttribute('aria-label', t('search'));
+    byId('beerRecipeFamily').setAttribute('aria-label', t('allFamilies'));
+    byId('beerRecipeFamily').querySelector('option[value=""]').textContent = t('allFamilies');
+  }
+  function status(message, kind) { var el = byId('beerRecipeStatus'); el.textContent = message || ''; el.dataset.kind = kind || ''; }
+  function authHeaders() { return state.catalog === 'my' && state.token ? { Authorization: 'Bearer ' + state.token } : {}; }
+  async function jsonRequest(url, options) {
+    var response = await fetch(url, options || {});
+    var body = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(body.message || ('HTTP ' + response.status));
+    return body;
+  }
+  function catalogUrl() {
+    var url = new URL('recipes', API_BASE);
+    url.searchParams.set('catalog', state.catalog);
+    if (state.query) url.searchParams.set('q', state.query);
+    if (state.family) url.searchParams.set('family', state.family);
+    url.searchParams.set('page', state.page);
+    url.searchParams.set('perPage', state.perPage);
+    url.searchParams.set('lang', language);
+    return url.toString();
+  }
+  async function loadFilters() {
+    try {
+      var url = new URL('recipes/filters', API_BASE); url.searchParams.set('lang', language);
+      var data = await jsonRequest(url.toString());
+      var select = byId('beerRecipeFamily');
+      (Array.isArray(data.families) ? data.families : []).forEach(function (entry) {
+        state.familyLabel[entry.code] = entry.label;
+        select.appendChild(new Option(entry.label, entry.code));
+      });
+    } catch (_) {}
+  }
+  async function loadCatalog() {
+    if (state.catalog === 'my' && !state.token) { status(t('noToken'), 'error'); renderList([]); return; }
+    status(t('loading'));
+    try {
+      var page = await jsonRequest(catalogUrl(), { headers: authHeaders() });
+      state.total = Number(page.total) || 0;
+      renderList(Array.isArray(page.items) ? page.items : []);
+      status(t('found', { count: state.total }), 'ok');
+    } catch (error) { renderList([]); status(t('catalogPrefix') + error.message, 'error'); }
+  }
+  function renderList(items) {
+    var list = byId('beerRecipeList'); list.textContent = '';
+    items.forEach(function (item) {
+      var button = document.createElement('button'); button.type = 'button';
+      button.textContent = item.name || item.slug;
+      var metaParts = [];
+      if (item.family) metaParts.push(state.familyLabel[item.family] || item.family);
+      if (item.style && item.style.name) metaParts.push(item.style.name);
+      if (item.abv !== undefined && item.abv !== null && item.abv !== '') metaParts.push(item.abv + '% ABV');
+      var meta = document.createElement('small'); meta.textContent = metaParts.join(' · ');
+      button.appendChild(meta);
+      button.addEventListener('click', function () { selectRecipe(item); });
+      list.appendChild(button);
+    });
+    if (!items.length) { var empty = document.createElement('p'); empty.className = 'recipe-empty'; empty.textContent = t('empty'); list.appendChild(empty); }
+    var pages = Math.max(1, Math.ceil(state.total / state.perPage));
+    byId('beerRecipePage').textContent = state.page + ' / ' + pages;
+    byId('beerRecipePrev').disabled = state.page <= 1;
+    byId('beerRecipeNext').disabled = state.page >= pages;
+  }
+  async function selectRecipe(item) {
+    status(t('loadingRecipe'));
+    try {
+      var url = new URL('recipes/' + encodeURIComponent(item.slug) + '/beerxml', API_BASE);
+      var response = await fetch(url.toString(), { headers: authHeaders() });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var xml = await response.text();
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ name: item.name || item.slug, xml: xml }));
+      location.href = 'brewxml.htm';
+    } catch (error) { status(t('recipePrefix') + error.message, 'error'); }
+  }
+  function doSearch() {
+    state.query = byId('beerRecipeQuery').value.trim();
+    state.family = byId('beerRecipeFamily').value;
+    state.page = 1;
+    loadCatalog();
+  }
+
+  document.querySelectorAll('[data-beer-catalog]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      state.catalog = button.dataset.beerCatalog; state.page = 1;
+      document.querySelectorAll('[data-beer-catalog]').forEach(function (entry) { entry.setAttribute('aria-pressed', entry === button ? 'true' : 'false'); });
+      loadCatalog();
+    });
+  });
+  byId('beerRecipeFind').addEventListener('click', doSearch);
+  // Слушатель keydown на странице запрещён гейтом клавиатуры (tools/smoke_accessibility_ui.py,
+  // он централизован в app.js) - вместо него используем нативное событие search у
+  // input[type=search]: Chromium сам шлёт его по Enter, без обёртки в <form>.
+  byId('beerRecipeQuery').addEventListener('search', doSearch);
+  byId('beerRecipePrev').addEventListener('click', function () { if (state.page > 1) { state.page--; loadCatalog(); } });
+  byId('beerRecipeNext').addEventListener('click', function () { if (state.page * state.perPage < state.total) { state.page++; loadCatalog(); } });
+
+  localizeCard();
+  jsonRequest('/cheese-recipes-bootstrap', { cache: 'no-store' }).then(function (bootstrap) {
+    if (Number(bootstrap.mode) !== 2) return;
+    state.token = typeof bootstrap.blynkToken === 'string' ? bootstrap.blynkToken : '';
+    byId('beerRecipesCard').hidden = false;
+    loadFilters().then(loadCatalog);
+  }).catch(function () {});
+}());
+</script>
 </body>
 </html>
