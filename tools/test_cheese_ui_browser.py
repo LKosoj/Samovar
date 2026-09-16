@@ -331,6 +331,10 @@ BROWSER_TEST = r'''async page => {
     nodes.map(node => node.value));
   expect(reloadedActionCodes.join(",") === "2,4,7",
     "firmware-formatted action codes changed after reload: " + reloadedActionCodes.join(","));
+  const reloadedNumbers = await page.locator("#programRows .cheese-row").last()
+    .locator(".cheese-value1, .cheese-value2").evaluateAll(nodes => nodes.map(node => node.value));
+  expect(reloadedNumbers.join(",") === "10,30",
+    "firmware six-decimal numbers shown verbatim in fields: " + reloadedNumbers.join(","));
 
   bootstrap.program = "D;10;30;2;0^0^0^0;1\n";
   for (const [scheme, expected] of [["two-valves", "два клапана"], ["unavailable", "недоступно"]]) {
