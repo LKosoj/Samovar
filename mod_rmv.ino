@@ -189,9 +189,14 @@ uint16_t RMVK_set_on(uint16_t state, uint64_t powerGeneration) {
   if (state > 0)state = 1;
   else state = 0;
   snprintf(cmd, sizeof(cmd), "AT+ON=%d", state);
-  ret = RMVK_cmd(cmd, RMVK_ON, state > 0, powerGeneration);
-  // Ответ, не совпавший с запрошенным состоянием, — отказ регулятора, а не успех.
+  // Ответ на "AT+ON=x" в руководстве РМВ-К не описан и на практике не равен
+  // "ON"/"OFF" (7.0 отсекала нагрев по нему как по отказу регулятора). Поэтому
+  // сам ответ не судим, а сверяем фактическое состояние документированным "AT+ON?".
+  RMVK_cmd(cmd, RMVK_ON, state > 0, powerGeneration);
+  ret = RMVK_cmd("AT+ON?", RMVK_ON, false, 0);
+  // Состояние, не совпавшее с запрошенным, — отказ регулятора, а не успех.
   if (ret == RMVK_ERROR || ret != state) return RMVK_ERROR;
+  rmvk.on = ret > 0;
   return ret;
 }
 uint16_t RMVK_select_mem(uint16_t sm) {

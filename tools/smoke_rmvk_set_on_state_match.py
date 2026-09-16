@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Поведенческая проверка mod_rmv.ino::RMVK_set_on — ответ обязан совпасть с
-запрошенным состоянием.
+"""Поведенческая проверка mod_rmv.ino::RMVK_set_on — фактическое состояние
+(ответ на "AT+ON?") обязано совпасть с запрошенным.
+
+Ответ на саму команду "AT+ON=x" руководством РМВ-К не описан и на практике не
+равен "ON"/"OFF": версия 7.0 судила по нему и отсекала нагрев как по отказу
+регулятора (жалоба с форума 16.09.2026). Поэтому RMVK_set_on игнорирует ответ
+на "AT+ON=x" и сверяет состояние вторым, документированным запросом "AT+ON?".
 
 RMVK_cmd(..., RMVK_ON, ...) отвечает "ON"->1 или "OFF"->0 в ОБОИХ направлениях:
 и на команду включения, и на чтение текущего состояния (RMVK_get_state). Поэтому
@@ -29,6 +34,7 @@ SIGNATURE = "uint16_t RMVK_set_on(uint16_t state, uint64_t powerGeneration)"
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 
 typedef enum {
@@ -39,21 +45,29 @@ typedef enum {
 
 #define RMVK_ERROR 255
 
-static uint16_t mockReturn = 0;
+typedef struct {
+  volatile uint8_t conn;
+  volatile uint8_t on;
+} rmvk_t;
+
+static uint16_t mockReturn = 0;      // ответ на второй вызов ("AT+ON?")
+static uint16_t mockSetReturn = 0;   // ответ на первый вызов ("AT+ON=x")
 static int cmdCalls = 0;
 static rmvk_res_t lastRes = RMVK_INT;
+static bool lastCmdIsQuery = false;
+static rmvk_t rmvk;
 
 // Заглушка НЕ static: единственный вызов лежит во вклеенном теле RMVK_set_on
 // ниже, и со static мутация, убравшая вызов, роняла бы компилятор по
 // unused-function вместо содержательного assert-а. Держится это на проверке
 // cmdCalls/lastRes ниже.
 uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res, bool energizing, uint64_t powerGeneration) {
-  (void)cmd;
   (void)energizing;
   (void)powerGeneration;
   cmdCalls++;
   lastRes = res;
-  return (uint8_t)mockReturn;
+  lastCmdIsQuery = std::strcmp(cmd, "AT+ON?") == 0;
+  return (uint8_t)(cmdCalls == 1 ? mockSetReturn : mockReturn);
 }
 
 uint16_t RMVK_set_on(uint16_t state, uint64_t powerGeneration) {
@@ -71,35 +85,43 @@ static void check(bool condition, const char* message) {
 
 static void reset_fixture() {
   mockReturn = 0;
+  // Ответ на "AT+ON=x" заведомо "чужой" - он не должен влиять на результат.
+  mockSetReturn = RMVK_ERROR;
   cmdCalls = 0;
   lastRes = RMVK_INT;
+  lastCmdIsQuery = false;
+  rmvk.on = 0;
 }
 
-// Сценарий 1: попросили включить, регулятор ответил "OFF" (mock=0) - это
+// Сценарий 1: попросили включить, "AT+ON?" вернул "OFF" (mock=0) - это
 // отказ регулятора, а не успех.
-static void test_on_request_off_reply_is_error() {
+static void test_on_request_off_state_is_error() {
   reset_fixture();
   mockReturn = 0;
   uint16_t ret = RMVK_set_on(1, 7);
-  check(ret == RMVK_ERROR, "ответ OFF на команду включения не признан отказом регулятора");
-  check(cmdCalls == 1, "RMVK_cmd должен быть вызван ровно один раз");
+  check(ret == RMVK_ERROR, "состояние OFF после команды включения не признано отказом регулятора");
+  check(cmdCalls == 2, "RMVK_cmd должен быть вызван дважды: AT+ON=1 и AT+ON?");
+  check(lastCmdIsQuery, "вторым должен уйти запрос состояния AT+ON?");
   check(lastRes == RMVK_ON, "RMVK_set_on должен запрашивать RMVK_ON");
 }
 
-// Сценарий 2: попросили включить, регулятор подтвердил "ON" (mock=1).
-static void test_on_request_on_reply_succeeds() {
+// Сценарий 2: попросили включить, ответ на "AT+ON=1" чужой (RMVK_ERROR), но
+// "AT+ON?" подтвердил "ON" (mock=1) - успех, ответ на команду не судится.
+static void test_on_request_on_state_succeeds() {
   reset_fixture();
   mockReturn = 1;
   uint16_t ret = RMVK_set_on(1, 7);
   check(ret == 1, "подтверждённое включение должно вернуть 1");
+  check(rmvk.on == 1, "после подтверждённого включения rmvk.on должен стать 1");
 }
 
-// Сценарий 3: попросили выключить, регулятор подтвердил "OFF" (mock=0).
-static void test_off_request_off_reply_succeeds() {
+// Сценарий 3: попросили выключить, "AT+ON?" подтвердил "OFF" (mock=0).
+static void test_off_request_off_state_succeeds() {
   reset_fixture();
   mockReturn = 0;
   uint16_t ret = RMVK_set_on(0, 7);
   check(ret == 0, "подтверждённое выключение должно вернуть 0");
+  check(rmvk.on == 0, "после подтверждённого выключения rmvk.on должен стать 0");
 }
 
 // Сценарий 4: транспортная ошибка (таймаут/BUSY) обязана остаться RMVK_ERROR.
@@ -111,9 +133,9 @@ static void test_transport_error_stays_error() {
 }
 
 int main() {
-  test_on_request_off_reply_is_error();
-  test_on_request_on_reply_succeeds();
-  test_off_request_off_reply_succeeds();
+  test_on_request_off_state_is_error();
+  test_on_request_on_state_succeeds();
+  test_off_request_off_state_succeeds();
   test_transport_error_stays_error();
   if (failures != 0) return 1;
   std::cout << "RMVK_set_on state-match checks passed\n";

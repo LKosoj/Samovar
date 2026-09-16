@@ -178,7 +178,7 @@ void set_buzzer(bool fl);
 void set_alarm();
 inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand = true);
 inline bool emergency_trip_heater_outputs_locked();
-inline void force_heater_output_off_locked(bool requestSleep);
+inline void force_heater_output_off_locked(bool requestSleep, bool keepMainRelay = false);
 inline bool heater_safety_latched();
 inline bool heater_power_on();
 inline bool heater_enable_outputs(uint8_t outputs);

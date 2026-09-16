@@ -55,6 +55,10 @@ inline float power_work_mode_threshold() { return POWER_WORK_MODE_THRESHOLD; }
 #ifdef SAMOVAR_USE_POWER
 static bool powerWorkerReady = false;
 #endif
+// Реле 1 (питание регулятора/контактора) сейчас включено. Пишется только вместе с
+// digitalWrite(RELE_CHANNEL1) под emergencyStopMux. По нему решается, есть ли смысл
+// проверять исход команды регулятору: обесточенный прибор молчит штатно.
+static bool heaterMainRelayOn = false;
 
 inline void notify_power_worker() {
 #ifdef SAMOVAR_USE_POWER
@@ -82,6 +86,7 @@ inline bool heater_outputs_enable_locked(uint8_t outputs, bool setPowerOn) {
   PowerOn = heaterSafetyState.powerOn;
   if (outputs & SAFETY_HEATER_OUTPUT_MAIN) {
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
+    heaterMainRelayOn = true;
   }
   if (outputs & SAFETY_HEATER_OUTPUT_BOOST) {
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
@@ -113,7 +118,11 @@ inline uint64_t request_regulator_state_locked(
 #else
   if (mode != SAFETY_REGULATOR_MODE_SLEEP &&
       (heaterSafetyState.emergencyLatched || mode_switch_barrier_active || !PowerOn)) return 0;
-  return safety_regulator_request(
+  // Команда сна в обесточенный регулятор (реле 1 снято: старт контроллера, авария,
+  // fail-close) отправляется, но не проверяется - прибор за контактором молчит штатно.
+  const bool verify = mode != SAFETY_REGULATOR_MODE_SLEEP || heaterMainRelayOn;
+  const uint64_t previous = regulatorRequestState.desiredGeneration;
+  const uint64_t generation = safety_regulator_request(
     regulatorRequestState,
     mode,
     hasVoltage,
@@ -122,6 +131,11 @@ inline uint64_t request_regulator_state_locked(
     safety_deadline_after(millis(), POWER_REGULATOR_REQUEST_TIMEOUT_MS),
     force
   );
+  if (regulatorRequestState.pending && generation == regulatorRequestState.desiredGeneration) {
+    if (generation != previous) regulatorRequestState.desiredVerify = verify;
+    else regulatorRequestState.desiredVerify = regulatorRequestState.desiredVerify || verify;
+  }
+  return generation;
 #endif
 }
 
@@ -171,8 +185,16 @@ inline void set_power_worker_ready(bool ready) {
 #endif
 }
 
-inline void apply_heater_outputs_off_locked() {
+inline void heater_main_output_off_locked() {
   digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+  heaterMainRelayOn = false;
+}
+
+// keepMainRelay=true - штатное выключение с UART-регулятором (порядок 6.27): реле 1
+// остаётся под напряжением, пока регулятору не уйдёт команда сна (иначе регулятор за
+// контактором получает её уже обесточенным); снимается в POWER_TRANSITION_OFF_RESET_WAIT.
+inline void apply_heater_outputs_off_locked(bool keepMainRelay = false) {
+  if (!keepMainRelay) heater_main_output_off_locked();
   heater_boost_output_off();
   PowerOn = false;
   acceleration_heater = false;
@@ -187,9 +209,9 @@ inline void apply_heater_outputs_off_locked() {
   powerTransition.regulatorGeneration = 0;
 }
 
-inline void force_heater_output_off_locked(bool requestSleep) {
+inline void force_heater_output_off_locked(bool requestSleep, bool keepMainRelay) {
   safety_heater_force_off(heaterSafetyState);
-  apply_heater_outputs_off_locked();
+  apply_heater_outputs_off_locked(keepMainRelay);
   safety_regulator_invalidate_energizing(regulatorRequestState);
   if (power_transition_start_pending_locked()) safety_transition_cancel(powerTransition.transition);
   if (requestSleep) {
@@ -202,6 +224,8 @@ inline bool emergency_trip_heater_outputs_locked() {
   alarm_event = true;
   apply_heater_outputs_off_locked();
   safety_transition_cancel(powerTransition.transition);
+  // Реле уже сняты, но регулятор без контактора остаётся под напряжением - команду сна
+  // шлём всегда; её исход не проверяется (verify=false, реле 1 снято выше).
   request_regulator_state_locked(SAFETY_REGULATOR_MODE_SLEEP, false, 0, firstRequest);
   return firstRequest;
 }
@@ -401,7 +425,13 @@ inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
   bool updatePowerMode = false;
 #endif
   portENTER_CRITICAL(&emergencyStopMux);
+#ifdef SAMOVAR_USE_POWER
+  // Порядок 6.27: реле 4 сразу, команда сна регулятору через 700 мс при ещё включённом
+  // реле 1, реле 1 - через 200 мс после неё (POWER_TRANSITION_OFF_RESET_WAIT).
+  force_heater_output_off_locked(false, true);
+#else
   force_heater_output_off_locked(false);
+#endif
   if (power_transition_phase_is_off(powerTransition.transition.phase)) {
     if (enqueueResetCommand) powerTransition.enqueueResetCommand = true;
   } else {
@@ -445,9 +475,10 @@ inline void tick_power_transition() {
 #ifdef SAMOVAR_USE_POWER
   const uint64_t desiredGeneration = regulatorRequestState.desiredGeneration;
   const SafetyRegulatorMode desiredMode = regulatorRequestState.desiredMode;
+  const bool desiredVerify = regulatorRequestState.desiredVerify;
   if (desiredGeneration != 0 &&
       safety_regulator_expire_request(regulatorRequestState, desiredGeneration, now)) {
-    reportTimeout = true;
+    reportTimeout = desiredVerify;
     if (heaterSafetyState.powerOn) {
       if (desiredMode == SAFETY_REGULATOR_MODE_SLEEP) {
         terminate_sleep_fault_locked(now);
@@ -563,7 +594,7 @@ inline void tick_power_transition() {
     if (powerTransition.regulatorGeneration == 0) {
       if (!safety_transition_due(powerTransition.transition, now)) {
         portEXIT_CRITICAL(&emergencyStopMux);
-        if (reportTimeout) SendMsg("Таймаут команды регулятора при выключенных реле", ALARM_MSG);
+        if (reportTimeout) SendMsg("Таймаут команды регулятора при выключении нагрева", ALARM_MSG);
         return;
       }
 #ifdef SAMOVAR_USE_POWER
@@ -588,9 +619,10 @@ inline void tick_power_transition() {
           status == SAFETY_REGULATOR_REQUEST_FAILED ||
           status == SAFETY_REGULATOR_REQUEST_TIMED_OUT ||
           status == SAFETY_REGULATOR_REQUEST_SUPERSEDED) {
-        reportApplyFailure = status == SAFETY_REGULATOR_REQUEST_FAILED;
-        reportTimeout = status == SAFETY_REGULATOR_REQUEST_TIMED_OUT;
-        reportSuperseded = status == SAFETY_REGULATOR_REQUEST_SUPERSEDED;
+        const bool verify = regulatorRequestState.desiredVerify;
+        reportApplyFailure = verify && status == SAFETY_REGULATOR_REQUEST_FAILED;
+        reportTimeout = verify && status == SAFETY_REGULATOR_REQUEST_TIMED_OUT;
+        reportSuperseded = verify && status == SAFETY_REGULATOR_REQUEST_SUPERSEDED;
         powerTransition.regulatorGeneration = 0;
         safety_transition_advance(
           powerTransition.transition,
@@ -603,7 +635,7 @@ inline void tick_power_transition() {
     portEXIT_CRITICAL(&emergencyStopMux);
     if (notifyWorker) notify_power_worker();
     if (reportApplyFailure) SendMsg("Команда выключения регулятора завершилась ошибкой", ALARM_MSG);
-    if (reportTimeout) SendMsg("Таймаут команды выключения регулятора при снятых локальных реле", ALARM_MSG);
+    if (reportTimeout) SendMsg("Таймаут команды выключения регулятора", ALARM_MSG);
     if (reportSuperseded) SendMsg("Команда выключения регулятора была явно отменена новой командой", ALARM_MSG);
     // [P7 п.3b] Отказ регулятора сбросил сессию владельца ленивого старта (distiller/BK/NBK) -
     // явно сообщаем, иначе она молча переподнимется без пользователя. nbk_transition_reports_
@@ -618,6 +650,7 @@ inline void tick_power_transition() {
   }
 
   if (phase == POWER_TRANSITION_OFF_RESET_WAIT && safety_transition_due(powerTransition.transition, now)) {
+    heater_main_output_off_locked();
     safety_transition_cancel(powerTransition.transition);
     power_text_ptr = (char *)"ON";
     reg_online = false;
@@ -904,13 +937,14 @@ inline void process_pending_power_request() {
   portENTER_CRITICAL(&emergencyStopMux);
   const uint32_t claimTime = millis();
   const SafetyRegulatorMode desiredMode = regulatorRequestState.desiredMode;
+  const bool desiredVerify = regulatorRequestState.desiredVerify;
   const SafetyRegulatorWorkerClaim claim = safety_regulator_worker_claim(
     regulatorRequestState,
     claimTime,
     snapshot
   );
   if (claim == SAFETY_REGULATOR_WORKER_TIMED_OUT) {
-    reportTimeout = true;
+    reportTimeout = desiredVerify;
     if (heaterSafetyState.powerOn) {
       if (desiredMode == SAFETY_REGULATOR_MODE_SLEEP) {
         terminate_sleep_fault_locked(claimTime);
@@ -964,8 +998,9 @@ inline void process_pending_power_request() {
       ownerReset = fail_close_regulator_locked(millis(), true);
       notifyWorker = true;
   }
-  reportTimeout = timedOut;
-  reportFailure = !success && !timedOut && allowedBefore && allowedAfter &&
+  // verify=false: команда сна в обесточенный регулятор - молчание не отказ.
+  reportTimeout = timedOut && snapshot.verify;
+  reportFailure = snapshot.verify && !success && !timedOut && allowedBefore && allowedAfter &&
                   !heaterSafetyState.emergencyLatched;
   portEXIT_CRITICAL(&emergencyStopMux);
 

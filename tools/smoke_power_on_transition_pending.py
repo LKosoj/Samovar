@@ -79,7 +79,7 @@ bool power_transition_start_pending_locked() { return test_blockedOnStartPending
 bool heater_outputs_enable_locked(int, bool) { return test_heaterEnableResult; }
 void reset_heat_loss_calculation() {}
 void finish_power_off_transition(bool) {}
-void force_heater_output_off_locked(bool) {}
+void force_heater_output_off_locked(bool, bool = false) {}
 void set_current_power_mode_value(int) {}
 void set_menu_screen(int) {}
 uint32_t millis() { return 0; }

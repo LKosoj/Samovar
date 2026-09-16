@@ -112,6 +112,10 @@ struct SafetyRegulatorRequestState {
   bool appliedHasVoltage;
   bool pending;
   bool workerBusy;
+  // Нужен ли отчёт/реакция на исход заявки. false - "послать и забыть": команда
+  // сна в обесточенный регулятор (старт контроллера, авария, fail-close), где
+  // молчание прибора не отказ, а норма (регулятор за контактором).
+  bool desiredVerify;
 };
 
 struct SafetyRegulatorRequestSnapshot {
@@ -121,6 +125,7 @@ struct SafetyRegulatorRequestSnapshot {
   SafetyRegulatorMode mode;
   float voltage;
   bool hasVoltage;
+  bool verify;
 };
 
 enum SafetyModeSwitchPhase : uint8_t {
@@ -311,6 +316,7 @@ inline bool safety_regulator_begin_apply(
   snapshot.mode = state.desiredMode;
   snapshot.voltage = state.desiredVoltage;
   snapshot.hasVoltage = state.desiredHasVoltage;
+  snapshot.verify = state.desiredVerify;
   state.processingGeneration = snapshot.generation;
   state.workerBusy = true;
   return true;
@@ -395,6 +401,7 @@ inline void safety_regulator_invalidate_energizing(SafetyRegulatorRequestState& 
   state.desiredDeadline = 0;
   state.desiredHasVoltage = false;
   state.desiredVoltage = 0;
+  state.desiredVerify = false;
   state.pending = false;
 }
 
