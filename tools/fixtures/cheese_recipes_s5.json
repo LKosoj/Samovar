@@ -3,11 +3,19 @@
   "slug": "s5-fixture",
   "name": "Тестовый сыр",
   "content": {
+    "ingredients": [
+      {"id": "milk", "name": "Молоко"},
+      {"id": "culture", "name": "Закваска"},
+      {"id": "rennet", "name": "Фермент"}
+    ],
     "process": [
       {"n": 1, "phase": "milk_prep", "code": "heat", "name": "Нагрев", "temp": {"min": 31, "max": 33, "unit": "C"}},
-      {"n": 2, "phase": "coagulation", "code": "culture", "name": "Закваска до pH", "temp": {"value": 32, "unit": "C", "si": 32}, "time": {"value": 60, "unit": "min"}, "pH": {"value": 6.4}},
-      {"n": 3, "phase": "coagulation", "code": "rennet", "name": "Флок", "temp": {"value": 32, "unit": "C", "si": 32}, "time": {"value": 20, "unit": "min"}, "pH": {"value": 6.35}, "floc": {"time": 8, "unit": "min", "multiplier": 2.5}},
-      {"n": 4, "phase": "forming", "code": "press", "name": "Прессование", "time": {"value": 30, "unit": "min"}}
+      {"n": 2, "phase": "coagulation", "code": "culture", "name": "Закваска до pH", "temp": {"value": 32, "unit": "C", "si": 32}, "time": {"value": 60, "unit": "min"}, "pH": {"value": 6.4}, "additions": [{"role": "culture", "ref": "culture", "amount": {"value": 1, "unit": "DCU"}}]},
+      {"n": 3, "phase": "coagulation", "code": "rennet", "name": "Флок", "temp": {"value": 32, "unit": "C", "si": 32}, "time": {"value": 20, "unit": "min"}, "pH": {"value": 6.35}, "floc": {"time": 8, "unit": "min", "multiplier": 2.5}, "additions": [{"role": "coagulant", "ref": "rennet", "amount": {"value": 2, "unit": "ml", "si": 0.002}}]},
+      {"n": 4, "phase": "cutting", "code": "cut", "name": "Нарезка", "pH": {"value": 6.5}, "cuts": [{"wait": {"value": 5, "unit": "min"}}, {}], "settle": {"value": 3, "unit": "min"}},
+      {"n": 5, "phase": "cooking", "code": "cook", "name": "Постановка зерна", "temp": {"value": 38, "unit": "C", "si": 38}, "time": {"value": 30, "unit": "min"}, "stir": {"intensity": "moderate", "every": 10, "unit": "min", "duration": {"value": 2, "unit": "min"}}},
+      {"n": 6, "phase": "pressing", "code": "press", "name": "Прессование", "time": {"value": 30, "unit": "min"}},
+      {"n": 7, "phase": "aging", "code": "age", "name": "Созревание", "temp": {"value": 12, "unit": "C", "si": 12}, "time": {"value": 7, "unit": "d"}}
     ],
     "aging": [{"n": 1, "duration": {"value": 7, "unit": "d"}}]
   }

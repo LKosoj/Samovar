@@ -15,6 +15,7 @@ for token in (
     'server.on("/cheese-recipes-bootstrap", HTTP_GET',
     'response->addHeader("Cache-Control", "no-store")',
     'json_write_escaped(*response, token',
+    'response->print(F(",\\"i2cMixer\\":"));',
 ):
     if token not in web:
         errors.append("WebServer.ino missing " + token)
@@ -33,6 +34,10 @@ for token in (
     "new DOMParser()",
     "new FileReader()",
     "fetch('/program', { method: 'POST'",
+    "if (bootstrap.i2cMixer === true) byId('mixerDevice').value = '2';",
+    'id="doserMode"',
+    'id="mixerKind"',
+    'id="cutMinutes"',
     'id="themeToggle"',
     'onclick="SamovarApp.toggleTheme()"',
     "SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });",

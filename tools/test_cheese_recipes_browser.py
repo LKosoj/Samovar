@@ -23,12 +23,13 @@ TOKEN = "0123456789abcdef0123456789abcdef"
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__, recipe = __RECIPE__, xmlPath = __XML_PATH__, badXmlPath = __BAD_XML_PATH__, maxXmlPath = __MAX_XML_PATH__, overXmlPath = __OVER_XML_PATH__, token = __TOKEN__;
   const apiRequests = [], programPosts = [], commands = [], errors = [];
+  let i2cMixer = false;
   const expect = (condition, message) => { if (!condition) throw new Error(message); };
   await page.addInitScript(() => Object.defineProperty(navigator, 'language', {configurable:true, get:() => 'en-US'}));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/cheese-recipes-bootstrap', route => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify({mode:7,blynkToken:token})
+    status: 200, contentType: 'application/json', body: JSON.stringify({mode:7,i2cMixer:i2cMixer,blynkToken:token})
   }));
   await page.route('https://www.samovar-tool.ru/cheesexml/v1/**', route => {
     const request = route.request(), url = request.url();
@@ -115,13 +116,45 @@ BROWSER_TEST = r'''async page => {
   await page.locator('#recipeFile').setInputFiles(xmlPath);
   await page.waitForFunction(() => document.getElementById('recipeName').textContent === 'Тестовый сыр');
   await page.locator('#convertRecipe').click();
-  const expected = 'H;32;60;1;0^0^0^0;0\nN;32;60;6.4;0^0^0^0;0\nN;32;20;6.35;0^0^0^0;0\nF;32;20;2.5;0^0^0^0;0\nW;0;30;6;0^0^0^0;0\n';
+  const expected = 'H;32;60;1;0^0^0^0;0\nW;0;30;1;0^0^0^0;0\nN;32;60;6.4;0^0^0^0;0\nW;0;30;2;0^0^0^0;0\nN;32;20;6.35;0^0^0^0;0\nF;32;20;2.5;0^0^0^0;0\nW;0;30;4;0^0^0^0;0\nP;32;3;63;0^0^0^0;0\nP;38;30;90;0^0^0^0;0\nW;0;30;6;0^0^0^0;0\n';
   expect(await page.locator('#programPreview').inputValue() === expected, 'local XML conversion differs: ' + await page.locator('#programPreview').inputValue());
   const warnings = await page.locator('#recipeWarnings').textContent();
   expect(warnings.includes('удерживается 30 с') && warnings.includes('исключены из программы') && warnings.includes('ручное действие'), 'required warnings missing: ' + warnings);
+  expect(warnings.includes('Этапы созревания и упаковки исключены'), 'aging process step was not reported as excluded: ' + warnings);
+  expect(!expected.includes(';12;') && !expected.includes('6.5'), 'aging step or cut-step pH leaked into the program');
 
   const xmlProgram = await page.locator('#programPreview').inputValue();
   expect(jsonProgram === xmlProgram, 'JSON and XML do not use one normalized conversion');
+
+  // Оборудование: дозатор по шагам + лира по I2C режут и мешают, нарезка/осаживание/вымешивание по расписанию.
+  expect(await page.locator('#doserStepsRow').isHidden() && await page.locator('#mixerDeviceRow').isHidden() && await page.locator('#cutMinutesRow').isHidden(), 'equipment detail fields are visible before a device is chosen');
+  expect(await page.locator('#mixerDevice').inputValue() === '1', 'relay must be the default stirrer connection without an I2C mixer');
+  await page.locator('#doserMode').selectOption('1');
+  expect(!(await page.locator('#doserStepsRow').isHidden()), 'steps-per-feed field did not appear');
+  await page.locator('#doserSteps').fill('200');
+  await page.locator('#mixerKind').selectOption('2');
+  await page.locator('#mixerDevice').selectOption('2');
+  expect(!(await page.locator('#mixerRpmRow').isHidden()) && !(await page.locator('#cutMinutesRow').isHidden()), 'RPM or lyre cutting time field did not appear');
+  await page.locator('#mixerRpm').fill('90');
+  await page.locator('#cutMinutes').fill('1.5');
+  await page.locator('#cutMinutes').dispatchEvent('change');
+  const equipped = 'H;32;60;1;0^0^0^0;0\nD;200;10;0;2^90^0^0;3\nN;32;60;6.4;0^0^0^0;0\nD;200;10;0;2^90^0^0;3\nN;32;20;6.35;0^0^0^0;0\nF;32;20;2.5;0^0^0^0;0\nM;0;1.5;0;2^90^0^0;0\nP;32;5;65;0^0^0^0;0\nM;0;1.5;0;2^90^0^0;0\nP;32;3;63;0^0^0^0;0\nP;38;30;90;2^90^120^480;0\nW;0;30;6;0^0^0^0;0\n';
+  expect(await page.locator('#programPreview').inputValue() === equipped, 'doser + lyre conversion differs: ' + await page.locator('#programPreview').inputValue());
+  const equippedWarnings = await page.locator('#recipeWarnings').textContent();
+  expect(equippedWarnings.includes('Загрузите дозатор по порядку: 1) Закваска, 1 DCU; 2) Фермент, 2 ml.'), 'feeder loading memo missing: ' + equippedWarnings);
+  expect(!(await page.locator('#applyRecipe').isDisabled()), 'equipped conversion is not applicable');
+  await page.locator('#doserSteps').fill('0');
+  await page.locator('#doserSteps').dispatchEvent('change');
+  expect(await page.locator('#applyRecipe').isDisabled() && (await page.locator('#recipeWarnings').textContent()).includes('Число шагов'), 'invalid steps-per-feed was accepted');
+  await page.locator('#doserMode').selectOption('0');
+  await page.locator('#mixerKind').selectOption('1');
+  await page.locator('#mixerDevice').selectOption('1');
+  await page.locator('#mixerDevice').dispatchEvent('change');
+  const relay = 'H;32;60;1;0^0^0^0;0\nW;0;30;1;1^0^0^0;0\nN;32;60;6.4;0^0^0^0;0\nW;0;30;2;1^0^0^0;0\nN;32;20;6.35;0^0^0^0;0\nF;32;20;2.5;0^0^0^0;0\nW;0;30;4;0^0^0^0;0\nP;32;3;63;0^0^0^0;0\nP;38;30;90;1^0^120^480;0\nW;0;30;6;0^0^0^0;0\n';
+  expect(await page.locator('#programPreview').inputValue() === relay, 'plain relay stirrer conversion differs: ' + await page.locator('#programPreview').inputValue());
+  await page.locator('#mixerKind').selectOption('0');
+  await page.locator('#mixerKind').dispatchEvent('change');
+  expect(await page.locator('#programPreview').inputValue() === expected, 'resetting equipment did not restore the manual conversion');
 
   await page.locator('#applyRecipe').click();
   await page.waitForFunction(() => document.getElementById('recipeStatus').textContent.includes('Запуск не выполнялся'));
@@ -143,9 +176,12 @@ BROWSER_TEST = r'''async page => {
   await page.locator('#recipeFile').setInputFiles(badXmlPath);
   await page.waitForFunction(() => document.getElementById('recipeStatus').textContent.includes('1.x'));
   expect(programPosts.length === 1, 'invalid XML triggered another /program POST');
+  i2cMixer = true;
   await page.goto(baseUrl + '/cheese-recipes.htm?lang=en', {waitUntil:'load'});
   await page.waitForFunction(() => document.querySelectorAll('#recipeList button').length === 1);
   expect(await page.locator('html').getAttribute('lang') === 'en', 'explicit English query did not select English UI');
+  expect(await page.locator('#mixerDevice').inputValue() === '2', 'bootstrap i2cMixer did not preselect the I2C connection');
+  expect(await page.locator('#equipment-title').textContent() === 'Equipment' && (await page.locator('#mixerKind option').allTextContents()).join('|') === 'none|stirrer (stirring only)|lyre (stirring and cutting)', 'equipment block was not localized');
   const englishCatalogRequest = [...apiRequests].reverse().find(request => request.url.includes('/recipes?catalog=main'));
   expect(englishCatalogRequest.url.includes('lang=en'), 'explicit English language was not sent to the API');
   expect(await page.locator('.recipes-page h1').textContent() === 'Cheese recipes', 'English page heading was not localized');

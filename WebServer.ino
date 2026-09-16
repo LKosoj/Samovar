@@ -1109,6 +1109,8 @@ void WebServerInit(void) {
     response->addHeader("Cache-Control", "no-store");
     response->print(F("{\"mode\":"));
     response->print(static_cast<int>(Samovar_Mode));
+    response->print(F(",\"i2cMixer\":"));
+    response->print(i2c_stepper_mixer_present() ? F("true") : F("false"));
     response->print(F(",\"blynkToken\":\""));
     json_write_escaped(*response, token, strnlen(token, sizeof(token)));
     response->print(F("\"}"));

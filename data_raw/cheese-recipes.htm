@@ -18,10 +18,13 @@
     .recipe-status[data-kind="ok"] { color: var(--ok); }
     .temperature-choices { display: grid; gap: .5rem; margin: .75rem 0; }
     .temperature-choice { display: grid; grid-template-columns: 1fr minmax(7rem, 10rem); gap: .75rem; align-items: center; }
+    .equipment-choices { display: grid; gap: .5rem; margin: .75rem 0; }
+    .equipment-choices label { display: grid; grid-template-columns: 1fr minmax(7rem, 14rem); gap: .75rem; align-items: center; }
+    .equipment-choices label[hidden] { display: none; }
     .program-preview { width: 100%; min-height: 12rem; box-sizing: border-box; font-family: monospace; resize: vertical; }
     .warnings { margin: .75rem 0; padding-left: 1.25rem; }
     .recipe-meta { color: var(--text-muted); margin-top: -.4rem; }
-    @media (max-width: 760px) { .recipes-grid { grid-template-columns: 1fr; } .temperature-choice { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .recipes-grid { grid-template-columns: 1fr; } .temperature-choice, .equipment-choices label { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -63,6 +66,15 @@
         <h3 id="recipeName"></h3>
         <p id="recipeMeta" class="recipe-meta"></p>
         <div id="temperatureChoices" class="temperature-choices"></div>
+        <h3 id="equipment-title"></h3>
+        <div id="equipmentChoices" class="equipment-choices">
+          <label id="doserModeRow"><span></span><select id="doserMode"><option value="0"></option><option value="1"></option></select></label>
+          <label id="doserStepsRow"><span></span><input id="doserSteps" type="number" min="1" max="2147483647" step="1" value="200"></label>
+          <label id="mixerKindRow"><span></span><select id="mixerKind"><option value="0"></option><option value="1"></option><option value="2"></option></select></label>
+          <label id="mixerDeviceRow"><span></span><select id="mixerDevice"><option value="1"></option><option value="2"></option></select></label>
+          <label id="mixerRpmRow"><span></span><input id="mixerRpm" type="number" min="1" max="32767" step="1" value="60"></label>
+          <label id="cutMinutesRow"><span></span><input id="cutMinutes" type="number" min="0.1" max="1440" step="0.1" value="2"></label>
+        </div>
         <div class="recipes-actions">
           <button id="convertRecipe" class="button secondary" type="button" disabled></button>
         </div>
@@ -89,7 +101,9 @@
     ru: {
       title: 'Самовар — рецепты сыра', heading: 'Рецепты сыра', intro: 'Выберите рецепт с samovar-tool.ru или откройте локальный файл cheesexml.xml. Файл и токен обрабатываются только в памяти браузера.',
       catalog: 'Каталог', source: 'Источник рецептов', main: 'Основные', user: 'Пользовательские', mine: 'Мои', search: 'Поиск рецепта', find: 'Найти', open: 'Открыть CheeseXML', previous: 'Назад', next: 'Вперёд', program: 'Программа', none: 'Рецепт не выбран', convert: 'Преобразовать', preview: 'Предварительный просмотр программы', apply: 'Применить программу', editor: 'Открыть редактор', allFamilies: 'Все семейства', allStyles: 'Все стили', allCountries: 'Все страны', allSpecies: 'Любое молоко', allDifficulties: 'Любая сложность', familyFilter: 'Семейство сыра', styleFilter: 'Стиль сыра', countryFilter: 'Страна', speciesFilter: 'Вид молока', difficultyFilter: 'Сложность', difficulty: 'Сложность {value}',
-      loading: 'Загрузка…', loadingRecipe: 'Загрузка рецепта…', found: 'Найдено: {count}', empty: 'Рецепты не найдены.', noToken: 'Для списка «Мои» в устройстве не задан токен Blynk.', catalogPrefix: 'Каталог: ', recipePrefix: 'Рецепт: ', notApplied: 'Программа не применена: ', recipe: 'Рецепт {id}', myRecipe: 'Мой рецепт', catalogSource: 'Каталог {catalog}', steps: 'этапов: {count}', check: 'Проверьте температуры и нажмите «Преобразовать».', temperature: 'выберите температуру', ready: 'Предпросмотр готов. Программа ещё не применена.', mode: 'Для применения переключите Самовар в режим «Сыр».', invalid: 'Преобразование нельзя применить.', applying: 'Применение…', accepted: 'Программа принята устройством. Запуск не выполнялся.', local: 'Локальный CheeseXML', stage: 'Этап {count}', unnamed: 'Без названия', noSteps: 'В рецепте нет технологических этапов.', xmlSyntax: 'XML содержит синтаксическую ошибку.', xmlRoot: 'Ожидается корень CHEESEXML.', xmlVersion: 'Поддерживается только CheeseXML 1.x.', xmlRecipe: 'В CheeseXML нет RECIPE.', manualTimeout: 'Этап «{name}»: для ручного действия установлен тайм-аут 30 мин.', manual: 'Этап «{name}» не поддерживается автоматикой и преобразован в ручное действие.', chooseRange: 'Этап «{name}»: выберите одно значение температуры из диапазона.', previousTemp: 'Этап «{name}»: используется температура предыдущего этапа {temp} °C.', phTimeout: 'Этап «{name}»: установлен тайм-аут pH 120 мин.', phHold: 'Этап «{name}»: условие pH ≤ {value} удерживается 30 с.', flocTimeout: 'Этап «{name}»: тайм-аут флока рассчитан из ожидаемого времени либо установлен 60 мин.', coolingTimeout: 'Этап «{name}»: установлен тайм-аут охлаждения 60 мин.', holdTimeout: 'Этап «{name}»: к выдержке добавлен запас тайм-аута 60 мин.', heatTimeout: 'Этап «{name}»: для нагрева установлены тайм-аут 60 мин и скорость 1 °C/мин.', aging: 'Стадии созревания исключены из программы Самовара.', rowLimit: 'В программе больше {count} этапов; применение недоступно.', fileRead: 'Не удалось прочитать файл.',
+      loading: 'Загрузка…', loadingRecipe: 'Загрузка рецепта…', found: 'Найдено: {count}', empty: 'Рецепты не найдены.', noToken: 'Для списка «Мои» в устройстве не задан токен Blynk.', catalogPrefix: 'Каталог: ', recipePrefix: 'Рецепт: ', notApplied: 'Программа не применена: ', recipe: 'Рецепт {id}', myRecipe: 'Мой рецепт', catalogSource: 'Каталог {catalog}', steps: 'этапов: {count}', check: 'Проверьте температуры и нажмите «Преобразовать».', temperature: 'выберите температуру', ready: 'Предпросмотр готов. Программа ещё не применена.', mode: 'Для применения переключите Самовар в режим «Сыр».', invalid: 'Преобразование нельзя применить.', applying: 'Применение…', accepted: 'Программа принята устройством. Запуск не выполнялся.', local: 'Локальный CheeseXML', stage: 'Этап {count}', unnamed: 'Без названия', noSteps: 'В рецепте нет технологических этапов.', xmlSyntax: 'XML содержит синтаксическую ошибку.', xmlRoot: 'Ожидается корень CHEESEXML.', xmlVersion: 'Поддерживается только CheeseXML 1.x.', xmlRecipe: 'В CheeseXML нет RECIPE.', manualTimeout: 'Этап «{name}»: для ручного действия установлен тайм-аут 30 мин.', manual: 'Этап «{name}» не поддерживается автоматикой и преобразован в ручное действие.', chooseRange: 'Этап «{name}»: выберите одно значение температуры из диапазона.', previousTemp: 'Этап «{name}»: используется температура предыдущего этапа {temp} °C.', phTimeout: 'Этап «{name}»: установлен тайм-аут pH 120 мин.', phHold: 'Этап «{name}»: условие pH ≤ {value} удерживается 30 с.', flocTimeout: 'Этап «{name}»: тайм-аут флока рассчитан из ожидаемого времени либо установлен 60 мин.', coolingTimeout: 'Этап «{name}»: установлен тайм-аут охлаждения 60 мин.', holdTimeout: 'Этап «{name}»: к выдержке добавлен запас тайм-аута 60 мин.', heatTimeout: 'Этап «{name}»: для нагрева установлены тайм-аут 60 мин и скорость 1 °C/мин.', aging: 'Стадии созревания исключены из программы Самовара.', agingSteps: 'Этапы созревания и упаковки исключены из программы Самовара.', rowLimit: 'В программе больше {count} этапов; применение недоступно.', fileRead: 'Не удалось прочитать файл.',
+      equipment: 'Оборудование', doser: 'Автоподача добавок', doserNo: 'нет, вносить вручную', doserYes: 'локальный шаговый двигатель, по шагам', doserSteps: 'Шагов на одну подачу', mixerKind: 'Перемешивание', mixerNone: 'нет', mixerPlain: 'мешалка (только перемешивание)', mixerLyre: 'лира (перемешивание и нарезка)', mixerDevice: 'Подключение мешалки', mixerRelay: 'реле', mixerI2c: 'I2C', mixerRpm: 'Обороты I2C-мешалки, RPM', cutMinutes: 'Время нарезки лирой, мин', doserMemo: 'Загрузите дозатор по порядку: {list}.', doserStepsInvalid: 'Число шагов на подачу должно быть целым от 1 до 2147483647.', rpmInvalid: 'Обороты I2C-мешалки должны быть целым числом от 1 до 32767.', cutInvalid: 'Время нарезки лирой должно быть от 0.1 до 1440 мин.',
+      role: {culture: 'Закваска', coagulant: 'Фермент', mineral: 'CaCl2 / минерал', acid: 'Кислота', salt: 'Соль', enzyme: 'Фермент (липаза)', mold: 'Плесень', adjunct: 'Добавка', water: 'Вода', spice: 'Специи', other: 'Добавка'},
       family: {acid_set: 'Кислотный', blue: 'С голубой плесенью', brined: 'Рассольный', fresh: 'Свежий', hard: 'Твёрдый', pasta_filata: 'Вытяжной', semi_hard: 'Полутвёрдый', soft_ripened: 'Мягкий созревающий', washed_rind: 'С мытой коркой', whey: 'Сывороточный'},
       style: {adygei: 'Адыгейский', bleu_dauvergne: 'Блё д\'Овернь', brynza: 'Брынза', feta_bulgarian: 'Болгарская фета', belper_knolle: 'Бельпер Кнолле', alpine: 'Альпийский', asiago: 'Азиаго', beaufort: 'Бофор', burrata: 'Буррата', alpine_tomme: 'Альпийская томма', bel_paese: 'Бель паэзе', tomme: 'Томм', brie: 'Бри', brie_nuit: 'Бри нюи', appenzeller: 'Аппенцеллер', brick: 'Брик'},
       species: {bos_taurus: 'Коровье молоко', capra_hircus: 'Козье молоко', ovis_aries: 'Овечье молоко', bubalus_bubalis: 'Буйволиное молоко', mixed: 'Смешанное молоко'},
@@ -98,7 +112,9 @@
     en: {
       title: 'Samovar — cheese recipes', heading: 'Cheese recipes', intro: 'Choose a recipe from samovar-tool.ru or open a local cheesexml.xml file. The file and token stay only in browser memory.',
       catalog: 'Catalogue', source: 'Recipe source', main: 'Main', user: 'User', mine: 'Mine', search: 'Search recipes', find: 'Search', open: 'Open CheeseXML', previous: 'Previous', next: 'Next', program: 'Program', none: 'No recipe selected', convert: 'Convert', preview: 'Program preview', apply: 'Apply program', editor: 'Open editor', allFamilies: 'All families', allStyles: 'All styles', allCountries: 'All countries', allSpecies: 'Any milk', allDifficulties: 'Any difficulty', familyFilter: 'Cheese family', styleFilter: 'Cheese style', countryFilter: 'Country', speciesFilter: 'Milk species', difficultyFilter: 'Difficulty', difficulty: 'Difficulty {value}',
-      loading: 'Loading…', loadingRecipe: 'Loading recipe…', found: 'Found: {count}', empty: 'No recipes found.', noToken: 'No Blynk token is configured for Mine.', catalogPrefix: 'Catalogue: ', recipePrefix: 'Recipe: ', notApplied: 'Program was not applied: ', recipe: 'Recipe {id}', myRecipe: 'My recipe', catalogSource: '{catalog} catalogue', steps: 'steps: {count}', check: 'Check temperatures and select “Convert”.', temperature: 'choose a temperature', ready: 'Preview is ready. The program has not been applied.', mode: 'Switch Samovar to Cheese mode to apply.', invalid: 'The conversion cannot be applied.', applying: 'Applying…', accepted: 'The program was accepted by the device. It was not started.', local: 'Local CheeseXML', stage: 'Step {count}', unnamed: 'Untitled', noSteps: 'The recipe has no process steps.', xmlSyntax: 'XML has a syntax error.', xmlRoot: 'CHEESEXML root is required.', xmlVersion: 'Only CheeseXML 1.x is supported.', xmlRecipe: 'CHEESEXML has no RECIPE.', manualTimeout: 'Step “{name}”: a 30 min timeout was set for the manual action.', manual: 'Step “{name}” is not supported by automation and was converted to a manual action.', chooseRange: 'Step “{name}”: choose one temperature from the range.', previousTemp: 'Step “{name}”: the previous step temperature {temp} °C is used.', phTimeout: 'Step “{name}”: a 120 min pH timeout was set.', phHold: 'Step “{name}”: the pH ≤ {value} condition is held for 30 s.', flocTimeout: 'Step “{name}”: the flocculation timeout was calculated from the expected time or set to 60 min.', coolingTimeout: 'Step “{name}”: a 60 min cooling timeout was set.', holdTimeout: 'Step “{name}”: a 60 min timeout margin was added to the hold.', heatTimeout: 'Step “{name}”: a 60 min timeout and 1 °C/min rate were set for heating.', aging: 'Aging stages are excluded from the Samovar program.', rowLimit: 'The program has more than {count} steps and cannot be applied.', fileRead: 'The file could not be read.',
+      loading: 'Loading…', loadingRecipe: 'Loading recipe…', found: 'Found: {count}', empty: 'No recipes found.', noToken: 'No Blynk token is configured for Mine.', catalogPrefix: 'Catalogue: ', recipePrefix: 'Recipe: ', notApplied: 'Program was not applied: ', recipe: 'Recipe {id}', myRecipe: 'My recipe', catalogSource: '{catalog} catalogue', steps: 'steps: {count}', check: 'Check temperatures and select “Convert”.', temperature: 'choose a temperature', ready: 'Preview is ready. The program has not been applied.', mode: 'Switch Samovar to Cheese mode to apply.', invalid: 'The conversion cannot be applied.', applying: 'Applying…', accepted: 'The program was accepted by the device. It was not started.', local: 'Local CheeseXML', stage: 'Step {count}', unnamed: 'Untitled', noSteps: 'The recipe has no process steps.', xmlSyntax: 'XML has a syntax error.', xmlRoot: 'CHEESEXML root is required.', xmlVersion: 'Only CheeseXML 1.x is supported.', xmlRecipe: 'CHEESEXML has no RECIPE.', manualTimeout: 'Step “{name}”: a 30 min timeout was set for the manual action.', manual: 'Step “{name}” is not supported by automation and was converted to a manual action.', chooseRange: 'Step “{name}”: choose one temperature from the range.', previousTemp: 'Step “{name}”: the previous step temperature {temp} °C is used.', phTimeout: 'Step “{name}”: a 120 min pH timeout was set.', phHold: 'Step “{name}”: the pH ≤ {value} condition is held for 30 s.', flocTimeout: 'Step “{name}”: the flocculation timeout was calculated from the expected time or set to 60 min.', coolingTimeout: 'Step “{name}”: a 60 min cooling timeout was set.', holdTimeout: 'Step “{name}”: a 60 min timeout margin was added to the hold.', heatTimeout: 'Step “{name}”: a 60 min timeout and 1 °C/min rate were set for heating.', aging: 'Aging stages are excluded from the Samovar program.', agingSteps: 'Aging and packaging steps are excluded from the Samovar program.', rowLimit: 'The program has more than {count} steps and cannot be applied.', fileRead: 'The file could not be read.',
+      equipment: 'Equipment', doser: 'Automatic additive feeder', doserNo: 'none, add by hand', doserYes: 'local stepper motor, by steps', doserSteps: 'Steps per feed', mixerKind: 'Stirring', mixerNone: 'none', mixerPlain: 'stirrer (stirring only)', mixerLyre: 'lyre (stirring and cutting)', mixerDevice: 'Stirrer connection', mixerRelay: 'relay', mixerI2c: 'I2C', mixerRpm: 'I2C stirrer speed, RPM', cutMinutes: 'Lyre cutting time, min', doserMemo: 'Load the feeder in order: {list}.', doserStepsInvalid: 'Steps per feed must be an integer from 1 to 2147483647.', rpmInvalid: 'I2C stirrer RPM must be an integer from 1 to 32767.', cutInvalid: 'Lyre cutting time must be 0.1 to 1440 min.',
+      role: {culture: 'Culture', coagulant: 'Rennet', mineral: 'CaCl2 / mineral', acid: 'Acid', salt: 'Salt', enzyme: 'Enzyme (lipase)', mold: 'Mold', adjunct: 'Additive', water: 'Water', spice: 'Spices', other: 'Additive'},
       family: {acid_set: 'Acid-set', blue: 'Blue', brined: 'Brined', fresh: 'Fresh', hard: 'Hard', pasta_filata: 'Pasta filata', semi_hard: 'Semi-hard', soft_ripened: 'Soft-ripened', washed_rind: 'Washed-rind', whey: 'Whey'},
       style: {adygei: 'Adyghe', bleu_dauvergne: 'Bleu d\'Auvergne', brynza: 'Bryndza', feta_bulgarian: 'Bulgarian feta', belper_knolle: 'Belper Knolle', alpine: 'Alpine', asiago: 'Asiago', beaufort: 'Beaufort', burrata: 'Burrata', alpine_tomme: 'Alpine tomme', bel_paese: 'Bel Paese', tomme: 'Tomme', brie: 'Brie', brie_nuit: 'Brie nuit', appenzeller: 'Appenzeller', brick: 'Brick'},
       species: {bos_taurus: 'Cow milk', capra_hircus: 'Goat milk', ovis_aries: 'Sheep milk', bubalus_bubalis: 'Buffalo milk', mixed: 'Mixed milk'},
@@ -120,7 +136,9 @@
   function localizePage() {
     document.documentElement.lang = language; document.title = t('title');
     byId('recipeIntro').textContent = t('intro');
-    var labels = {'.recipes-page h1': 'heading', '#catalog-title': 'catalog', '#preview-title': 'program', '[data-catalog="main"]': 'main', '[data-catalog="user"]': 'user', '[data-catalog="my"]': 'mine', '#recipeSearch button': 'find', 'label[for="recipeFile"]': 'open', '#recipePrev': 'previous', '#recipeNext': 'next', '#recipeName': 'none', '#convertRecipe': 'convert', '#applyRecipe': 'apply', 'a[href="/cheese.htm"]': 'editor'};
+    var labels = {'.recipes-page h1': 'heading', '#catalog-title': 'catalog', '#preview-title': 'program', '[data-catalog="main"]': 'main', '[data-catalog="user"]': 'user', '[data-catalog="my"]': 'mine', '#recipeSearch button': 'find', 'label[for="recipeFile"]': 'open', '#recipePrev': 'previous', '#recipeNext': 'next', '#recipeName': 'none', '#convertRecipe': 'convert', '#applyRecipe': 'apply', 'a[href="/cheese.htm"]': 'editor', '#equipment-title': 'equipment',
+      '#doserModeRow > span': 'doser', '#doserStepsRow > span': 'doserSteps', '#mixerKindRow > span': 'mixerKind', '#mixerDeviceRow > span': 'mixerDevice', '#mixerRpmRow > span': 'mixerRpm', '#cutMinutesRow > span': 'cutMinutes',
+      '#doserMode option[value="0"]': 'doserNo', '#doserMode option[value="1"]': 'doserYes', '#mixerKind option[value="0"]': 'mixerNone', '#mixerKind option[value="1"]': 'mixerPlain', '#mixerKind option[value="2"]': 'mixerLyre', '#mixerDevice option[value="1"]': 'mixerRelay', '#mixerDevice option[value="2"]': 'mixerI2c'};
     Object.keys(labels).forEach(function (selector) { document.querySelector(selector).textContent = t(labels[selector]); });
     byId('recipeQuery').placeholder = byId('recipeQuery').setAttribute('aria-label', t('search')) || t('search');
     var filters = {Family: ['familyFilter', 'allFamilies'], Style: ['styleFilter', 'allStyles'], Country: ['countryFilter', 'allCountries'], Species: ['speciesFilter', 'allSpecies'], Difficulty: ['difficultyFilter', 'allDifficulties']};
@@ -167,8 +185,20 @@
     if (!value || typeof value !== 'object') return null;
     return { value: finite(value.value), min: finite(value.min), max: finite(value.max), si: finite(value.si), unit: String(value.unit || '') };
   }
+  function normalizeAddition(addition) {
+    var item = addition && typeof addition === 'object' ? addition : {};
+    return { role: String(item.role || ''), ref: String(item.ref || ''), amount: normalizeQuantity(item.amount) };
+  }
+  function normalizeIngredients(list) {
+    var names = {};
+    (Array.isArray(list) ? list : []).forEach(function (item) {
+      if (item && item.id) names[String(item.id)] = localized(item.name) || String(item.name || '');
+    });
+    return names;
+  }
   function normalizeStep(step, index) {
     var ph = step.pH || step.ph;
+    var stir = step.stir && typeof step.stir === 'object' ? step.stir : null;
     return {
       n: finite(step.n) || index + 1,
       phase: String(step.phase || ''),
@@ -180,7 +210,12 @@
       pH: ph && typeof ph === 'object' ? { value: finite(ph.value), min: finite(ph.min), max: finite(ph.max) } : null,
       floc: step.floc && typeof step.floc === 'object' ? {
         time: finite(step.floc.time), unit: String(step.floc.unit || ''), multiplier: finite(step.floc.multiplier)
-      } : null
+      } : null,
+      additions: (Array.isArray(step.additions) ? step.additions : []).map(normalizeAddition),
+      stir: stir ? { intensity: String(stir.intensity || ''), every: finite(stir.every), unit: String(stir.unit || ''), duration: normalizeQuantity(stir.duration) } : null,
+      cut: !!step.cut,
+      cuts: (Array.isArray(step.cuts) ? step.cuts : []).map(function (cut) { return { wait: normalizeQuantity(cut && cut.wait) }; }),
+      settle: normalizeQuantity(step.settle)
     };
   }
   function normalizeJson(payload) {
@@ -197,7 +232,8 @@
       id: outer.id || content.id || '',
       name: outer.name || localized(content.name) || t('unnamed'),
       process: content.process.map(normalizeStep),
-      aging: Array.isArray(content.aging) ? content.aging.slice() : []
+      aging: Array.isArray(content.aging) ? content.aging.slice() : [],
+      ingredients: normalizeIngredients(content.ingredients)
     };
   }
   function normalizeXml(text) {
@@ -215,6 +251,7 @@
       var params = directChild(step, 'PARAMS');
       var phNode = directChild(params, 'PH');
       var flocNode = directChild(params, 'FLOC');
+      var stirNode = directChild(params, 'STIR');
       return normalizeStep({
         n: step.getAttribute('n'), phase: step.getAttribute('phase'), code: step.getAttribute('code'),
         name: xmlLocalized(directChild(step, 'NAME')) || t('stage', {count: index + 1}),
@@ -222,11 +259,22 @@
         temp: xmlQuantity(directChild(params, 'TEMP')),
         time: xmlQuantity(directChild(params, 'TIME')),
         pH: phNode ? { value: finite(phNode.getAttribute('value')), min: finite(phNode.getAttribute('min')), max: finite(phNode.getAttribute('max')) } : null,
-        floc: flocNode ? { time: finite(flocNode.getAttribute('time')), unit: flocNode.getAttribute('unit'), multiplier: finite(flocNode.getAttribute('multiplier')) } : null
+        floc: flocNode ? { time: finite(flocNode.getAttribute('time')), unit: flocNode.getAttribute('unit'), multiplier: finite(flocNode.getAttribute('multiplier')) } : null,
+        additions: directChildren(params, 'ADDITION').map(function (node) {
+          return { role: node.getAttribute('role'), ref: node.getAttribute('ref'), amount: xmlQuantity(directChild(node, 'AMOUNT')) };
+        }),
+        stir: stirNode ? { intensity: stirNode.getAttribute('intensity'), every: stirNode.getAttribute('every'), unit: stirNode.getAttribute('unit'), duration: xmlQuantity(directChild(stirNode, 'DURATION')) } : null,
+        cut: !!directChild(params, 'CUT'),
+        cuts: directChildren(directChild(params, 'CUTS'), 'CUT').map(function (node) { return { wait: xmlQuantity(directChild(node, 'WAIT')) }; }),
+        settle: xmlQuantity(directChild(directChild(params, 'SETTLE'), 'DURATION'))
       }, index);
     });
     if (!steps.length) throw new Error(t('noSteps'));
-    return { id: recipe.getAttribute('id') || '', name: xmlLocalized(directChild(recipe, 'NAME')) || t('unnamed'), process: steps, aging: directChildren(directChild(recipe, 'AGING'), 'STAGE') };
+    var ingredients = {};
+    directChildren(directChild(recipe, 'INGREDIENTS'), 'INGREDIENT').forEach(function (node) {
+      if (node.getAttribute('id')) ingredients[node.getAttribute('id')] = xmlLocalized(directChild(node, 'NAME'));
+    });
+    return { id: recipe.getAttribute('id') || '', name: xmlLocalized(directChild(recipe, 'NAME')) || t('unnamed'), process: steps, aging: directChildren(directChild(recipe, 'AGING'), 'STAGE'), ingredients: ingredients };
   }
 
   function toCelsius(value, unit) {
@@ -286,9 +334,42 @@
     warnings.push(t('manual', {name: step.name}));
     return 'W;0;' + compactNumber(timeout) + ';' + manualAction(step) + ';0^0^0^0;0';
   }
-  function convertRecipe(recipe, choices) {
-    var warnings = [], rows = [], lastTemperature = null, blocked = false;
+  var DOSE_TIMEOUT = 10, MANUAL_TIMEOUT = 30, NO_MIXER = '0^0^0^0';
+  function mixerBlock(equipment, on, onSeconds, offSeconds) {
+    if (!on || !equipment.mixer) return NO_MIXER;
+    var schedule = '^' + (onSeconds || 0) + '^' + (offSeconds || 0);
+    return equipment.device === 2 ? '2^' + equipment.rpm + schedule : '1^0' + schedule;
+  }
+  function stirSchedule(step) {
+    var stir = step.stir;
+    if (!stir || stir.every === null) return [0, 0];
+    var on = timeMinutes(stir.duration, false);
+    var every = timeMinutes({ value: stir.every, min: null, max: null, si: null, unit: stir.unit }, false);
+    if (!on || !every || every <= on) return [0, 0];
+    return [Math.max(1, Math.round(on * 60)), Math.max(1, Math.round((every - on) * 60))];
+  }
+  function wantsStir(step) {
+    if (step.stir) return step.stir.intensity !== 'none';
+    return /stir|cook|wash/.test(step.code.toLowerCase()) || /^(stirring|cooking|washing)$/.test(step.phase);
+  }
+  function isCutStep(step) { return /(^|_)cut($|_)/.test(step.code.toLowerCase()) || step.cut || step.cuts.length > 0; }
+  function roleCode(role) { return role === 'culture' ? 1 : role === 'coagulant' ? 2 : 3; }
+  function additionLabel(recipe, addition) {
+    var name = recipe.ingredients[addition.ref] || catalogLabel('role', addition.role || 'other');
+    var amount = addition.amount && addition.amount.value !== null ? ', ' + compactNumber(addition.amount.value) + ' ' + addition.amount.unit : '';
+    return name + amount;
+  }
+  function convertRecipe(recipe, choices, equipment) {
+    var warnings = [], rows = [], memo = [], lastTemperature = null, blocked = false, agingSkipped = false;
+    if (equipment.doser && !(Number.isInteger(equipment.doserSteps) && equipment.doserSteps >= 1 && equipment.doserSteps <= 2147483647)) { warnings.push(t('doserStepsInvalid')); blocked = true; }
+    if (equipment.mixer && equipment.device === 2 && !(Number.isInteger(equipment.rpm) && equipment.rpm >= 1 && equipment.rpm <= 32767)) { warnings.push(t('rpmInvalid')); blocked = true; }
+    if (equipment.mixer === 2 && !validMinutes(equipment.cutMinutes)) { warnings.push(t('cutInvalid')); blocked = true; }
+    function push(step, line) { rows.push({ source: step.name, line: line }); }
+    function holdRow(step, temperature, minutes, mixer) {
+      push(step, 'P;' + compactNumber(temperature) + ';' + compactNumber(minutes) + ';' + compactNumber(Math.min(1440, minutes + 60)) + ';' + mixer + ';0');
+    }
     recipe.process.forEach(function (step) {
+      if (step.phase === 'aging' || step.phase === 'packaging') { agingSkipped = true; return; }
       var bounds = temperatureBounds(step.temp);
       var directTemperature = selectedTemperature(step, choices || {});
       if (bounds && bounds.value === null && (bounds.min !== null || bounds.max !== null) && directTemperature === null) {
@@ -299,20 +380,51 @@
       var target = directTemperature !== null ? directTemperature : lastTemperature;
       var timeout = timeMinutes(step.time, true);
       var code = step.code.toLowerCase();
+      var schedule = stirSchedule(step);
+      var stirMixer = mixerBlock(equipment, wantsStir(step), schedule[0], schedule[1]);
+      var anyMixer = mixerBlock(equipment, true, 0, 0);
+      var cutStep = isCutStep(step);
       var handled = false;
 
-      if (step.pH && Number.isFinite(step.pH.value) && step.pH.value > 0 && step.pH.value <= 14 && validTemperature(target)) {
+      step.additions.forEach(function (addition) {
+        if (equipment.doser) {
+          push(step, 'D;' + equipment.doserSteps + ';' + DOSE_TIMEOUT + ';0;' + anyMixer + ';3');
+          memo.push((memo.length + 1) + ') ' + additionLabel(recipe, addition));
+        } else {
+          push(step, 'W;0;' + MANUAL_TIMEOUT + ';' + roleCode(addition.role) + ';' + anyMixer + ';0');
+        }
+      });
+
+      if (cutStep) {
+        if (equipment.mixer === 2) {
+          (step.cuts.length ? step.cuts : [{ wait: null }]).forEach(function (pass) {
+            push(step, 'M;0;' + compactNumber(equipment.cutMinutes) + ';0;' + anyMixer + ';0');
+            var wait = timeMinutes(pass.wait, false);
+            if (validMinutes(wait) && validTemperature(target)) holdRow(step, target, wait, NO_MIXER);
+          });
+        } else {
+          push(step, makeManual(step, warnings));
+        }
+        handled = true;
+      }
+      var settle = timeMinutes(step.settle, false);
+      if (validMinutes(settle) && validTemperature(target)) {
+        holdRow(step, target, settle, NO_MIXER);
+        handled = true;
+      }
+
+      if (!cutStep && step.pH && Number.isFinite(step.pH.value) && step.pH.value > 0 && step.pH.value <= 14 && validTemperature(target)) {
         var phTimeout = timeout;
         if (directTemperature === null) warnings.push(t('previousTemp', {name: step.name, temp: compactNumber(target)}));
         if (!validMinutes(phTimeout)) { phTimeout = 120; warnings.push(t('phTimeout', {name: step.name})); }
-        rows.push({ source: step.name, line: 'N;' + compactNumber(target) + ';' + compactNumber(phTimeout) + ';' + compactNumber(step.pH.value) + ';0^0^0^0;0' });
+        push(step, 'N;' + compactNumber(target) + ';' + compactNumber(phTimeout) + ';' + compactNumber(step.pH.value) + ';' + stirMixer + ';0');
         warnings.push(t('phHold', {name: step.name, value: compactNumber(step.pH.value)}));
         handled = true;
       }
       if (step.floc) {
         var multiplier = step.floc.multiplier;
         if (!validTemperature(target) || !validMultiplier(multiplier)) {
-          rows.push({ source: step.name, line: makeManual(step, warnings) });
+          push(step, makeManual(step, warnings));
         } else {
           var flocTimeout = timeout;
           if (!validMinutes(flocTimeout)) {
@@ -320,29 +432,35 @@
             flocTimeout = flocTime && validMinutes(flocTime * multiplier) ? flocTime * multiplier : 60;
             warnings.push(t('flocTimeout', {name: step.name}));
           }
-          rows.push({ source: step.name, line: 'F;' + compactNumber(target) + ';' + compactNumber(flocTimeout) + ';' + compactNumber(multiplier) + ';0^0^0^0;0' });
+          push(step, 'F;' + compactNumber(target) + ';' + compactNumber(flocTimeout) + ';' + compactNumber(multiplier) + ';' + NO_MIXER + ';0');
         }
         handled = true;
       }
       if (!handled && directTemperature !== null) {
         if (/cool|chill/.test(code)) {
           if (!validMinutes(timeout)) { timeout = 60; warnings.push(t('coolingTimeout', {name: step.name})); }
-          rows.push({ source: step.name, line: 'C;' + compactNumber(directTemperature) + ';' + compactNumber(timeout) + ';0;0^0^0^0;0' });
+          push(step, 'C;' + compactNumber(directTemperature) + ';' + compactNumber(timeout) + ';0;' + stirMixer + ';0');
         } else {
           var hold = timeMinutes(step.time, false);
           if (validMinutes(hold) && hold < 1440) {
-            var totalTimeout = Math.min(1440, hold + 60);
-            rows.push({ source: step.name, line: 'P;' + compactNumber(directTemperature) + ';' + compactNumber(hold) + ';' + compactNumber(totalTimeout) + ';0^0^0^0;0' });
+            holdRow(step, directTemperature, hold, stirMixer);
             warnings.push(t('holdTimeout', {name: step.name}));
-          } else {
-            rows.push({ source: step.name, line: 'H;' + compactNumber(directTemperature) + ';60;1;0^0^0^0;0' });
+          } else if (!step.additions.length) {
+            push(step, 'H;' + compactNumber(directTemperature) + ';60;1;' + stirMixer + ';0');
             warnings.push(t('heatTimeout', {name: step.name}));
           }
         }
       } else if (!handled) {
-        rows.push({ source: step.name, line: makeManual(step, warnings) });
+        var stirMinutes = step.stir ? timeMinutes(step.stir.duration, false) : null;
+        if (wantsStir(step) && equipment.mixer && validMinutes(stirMinutes || timeout)) {
+          push(step, 'M;0;' + compactNumber(stirMinutes || timeout) + ';0;' + anyMixer + ';0');
+        } else if (!step.additions.length) {
+          push(step, makeManual(step, warnings));
+        }
       }
     });
+    if (memo.length) warnings.push(t('doserMemo', {list: memo.join('; ')}));
+    if (agingSkipped) warnings.push(t('agingSteps'));
     if (recipe.aging && recipe.aging.length) warnings.push(t('aging'));
     if (rows.length > PROGRAM_MAX) warnings.push(t('rowLimit', {count: PROGRAM_MAX}));
     return { rows: rows, warnings: warnings, program: rows.map(function (row) { return row.line; }).join('\n') + (rows.length ? '\n' : ''), valid: !blocked && rows.length > 0 && rows.length <= PROGRAM_MAX };
@@ -455,9 +573,26 @@
     Array.prototype.forEach.call(byId('temperatureChoices').querySelectorAll('input[data-step]'), function (input) { result[input.dataset.step] = input.value; });
     return result;
   }
+  function equipmentChoices() {
+    return {
+      doser: byId('doserMode').value === '1',
+      doserSteps: Number(byId('doserSteps').value),
+      mixer: Number(byId('mixerKind').value),
+      device: Number(byId('mixerDevice').value),
+      rpm: Number(byId('mixerRpm').value),
+      cutMinutes: Number(byId('cutMinutes').value)
+    };
+  }
+  function updateEquipmentVisibility() {
+    var mixer = Number(byId('mixerKind').value);
+    byId('doserStepsRow').hidden = byId('doserMode').value !== '1';
+    byId('mixerDeviceRow').hidden = !mixer;
+    byId('mixerRpmRow').hidden = !mixer || byId('mixerDevice').value !== '2';
+    byId('cutMinutesRow').hidden = mixer !== 2;
+  }
   function renderConversion() {
     if (!state.recipe) return;
-    var conversion = convertRecipe(state.recipe, temperatureChoices());
+    var conversion = convertRecipe(state.recipe, temperatureChoices(), equipmentChoices());
     state.conversion = conversion;
     byId('programPreview').value = conversion.program;
     var warnings = byId('recipeWarnings'); warnings.textContent = '';
@@ -500,15 +635,18 @@
   byId('recipePrev').addEventListener('click', function () { if (state.page > 1) { state.page--; loadCatalog(); } });
   byId('recipeNext').addEventListener('click', function () { if (state.page * state.perPage < state.total) { state.page++; loadCatalog(); } });
   byId('convertRecipe').addEventListener('click', renderConversion);
+  byId('equipmentChoices').addEventListener('change', function () { updateEquipmentVisibility(); if (state.conversion) renderConversion(); });
   byId('applyRecipe').addEventListener('click', applyProgram);
   byId('recipeFile').addEventListener('change', function () { if (this.files[0]) readLocalFile(this.files[0]).catch(function (error) { status(error.message, 'error'); }); });
 
   SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
   localizePage();
+  updateEquipmentVisibility();
   loadFilters();
   jsonRequest('/cheese-recipes-bootstrap', { cache: 'no-store' }).then(function (bootstrap) {
     state.token = typeof bootstrap.blynkToken === 'string' ? bootstrap.blynkToken : '';
     state.mode = Number(bootstrap.mode);
+    if (bootstrap.i2cMixer === true) byId('mixerDevice').value = '2';
     loadCatalog();
   }).catch(function () { state.token = ''; state.mode = null; loadCatalog(); });
 }());

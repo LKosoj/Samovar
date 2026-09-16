@@ -8,7 +8,11 @@
       <STYLE family="fresh" code="fresh.test"/>
       <BATCH><MILK_VOLUME value="1" unit="l" si="1"/><SCALE base="milk_volume" base_value="1" base_unit="l"/></BATCH>
       <MILK species="bos_taurus" treatment="pasteurized" homogenization="none"/>
-      <INGREDIENTS><INGREDIENT id="milk" role="base"><NAME><T xml:lang="ru">Молоко</T></NAME><AMOUNT value="1" unit="l" si="1"/></INGREDIENT></INGREDIENTS>
+      <INGREDIENTS>
+        <INGREDIENT id="milk" role="base"><NAME><T xml:lang="ru">Молоко</T></NAME><AMOUNT value="1" unit="l" si="1"/></INGREDIENT>
+        <INGREDIENT id="culture" role="culture"><NAME><T xml:lang="ru">Закваска</T></NAME><AMOUNT value="1" unit="DCU"/></INGREDIENT>
+        <INGREDIENT id="rennet" role="coagulant"><NAME><T xml:lang="ru">Фермент</T></NAME><AMOUNT value="2" unit="ml" si="0.002"/></INGREDIENT>
+      </INGREDIENTS>
       <PROCESS>
         <STEP n="1" phase="milk_prep" code="heat">
           <NAME><T xml:lang="ru">Нагрев</T></NAME><INSTRUCTION><T xml:lang="ru">Нагреть молоко</T></INSTRUCTION>
@@ -16,15 +20,27 @@
         </STEP>
         <STEP n="2" phase="coagulation" code="culture">
           <NAME><T xml:lang="ru">Закваска до pH</T></NAME><INSTRUCTION><T xml:lang="ru">Дождаться pH</T></INSTRUCTION>
-          <PARAMS><TEMP value="32" unit="C" si="32"/><TIME value="60" unit="min"/><PH value="6.4"/></PARAMS>
+          <PARAMS><TEMP value="32" unit="C" si="32"/><TIME value="60" unit="min"/><PH value="6.4"/><ADDITION role="culture" ref="culture"><AMOUNT value="1" unit="DCU"/></ADDITION></PARAMS>
         </STEP>
         <STEP n="3" phase="coagulation" code="rennet">
           <NAME><T xml:lang="ru">Флок</T></NAME><INSTRUCTION><T xml:lang="ru">Зафиксировать флок</T></INSTRUCTION>
-          <PARAMS><TEMP value="32" unit="C" si="32"/><TIME value="20" unit="min"/><PH value="6.35"/><FLOC time="8" unit="min" multiplier="2.5"/></PARAMS>
+          <PARAMS><TEMP value="32" unit="C" si="32"/><TIME value="20" unit="min"/><PH value="6.35"/><FLOC time="8" unit="min" multiplier="2.5"/><ADDITION role="coagulant" ref="rennet"><AMOUNT value="2" unit="ml" si="0.002"/></ADDITION></PARAMS>
         </STEP>
-        <STEP n="4" phase="pressing" code="press">
+        <STEP n="4" phase="cutting" code="cut">
+          <NAME><T xml:lang="ru">Нарезка</T></NAME><INSTRUCTION><T xml:lang="ru">Нарезать сгусток</T></INSTRUCTION>
+          <PARAMS><PH value="6.5"/><CUTS><CUT n="1" axis="vertical" pattern="columns"><WAIT value="5" unit="min"/></CUT><CUT n="2" axis="horizontal" pattern="cubes"/></CUTS><SETTLE kind="heal"><DURATION value="3" unit="min"/></SETTLE></PARAMS>
+        </STEP>
+        <STEP n="5" phase="cooking" code="cook">
+          <NAME><T xml:lang="ru">Постановка зерна</T></NAME><INSTRUCTION><T xml:lang="ru">Вымешивать при 38 °C</T></INSTRUCTION>
+          <PARAMS><TEMP value="38" unit="C" si="38"/><TIME value="30" unit="min"/><STIR intensity="moderate" every="10" unit="min"><DURATION value="2" unit="min"/></STIR></PARAMS>
+        </STEP>
+        <STEP n="6" phase="pressing" code="press">
           <NAME><T xml:lang="ru">Прессование</T></NAME><INSTRUCTION><T xml:lang="ru">Переложить под пресс</T></INSTRUCTION>
           <PARAMS><TIME value="30" unit="min"/></PARAMS>
+        </STEP>
+        <STEP n="7" phase="aging" code="age">
+          <NAME><T xml:lang="ru">Созревание</T></NAME><INSTRUCTION><T xml:lang="ru">Выдержать в камере</T></INSTRUCTION>
+          <PARAMS><TEMP value="12" unit="C" si="12"/><TIME value="7" unit="d"/></PARAMS>
         </STEP>
       </PROCESS>
       <AGING><STAGE n="1"><DURATION value="7" unit="d"/><TEMP value="12" unit="C" si="12"/></STAGE></AGING>
