@@ -208,7 +208,8 @@ BROWSER_TEST = r'''async page => {
   const listed = await page.locator("#tree li").count();
   if (listed !== 4) throw new Error("file list count=" + listed);
 
-  await page.locator("#tree li").filter({ hasText: "index.htm.gz" }).click();
+  // Стартовый файл - сжатый /index.htm.gz: на плате несжатого /index.htm нет (было 404).
+  await page.waitForFunction(() => document.getElementById("editor-filename").value === "/index.htm.gz");
   await page.waitForFunction(() => window.samovarAce &&
     window.samovarAce.getValue() === "<h1>gzip source</h1>\n");
   await page.evaluate(() => window.samovarAce.setValue("<h1>gzip changed</h1>\n"));

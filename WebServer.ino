@@ -1055,7 +1055,11 @@ void WebServerInit(void) {
     // ловил «HTTP 503» и требовал «Повторить»: запрос ставил flush, а SysTicker
     // после flush сразу пишет новую строку лога, и следующее чтение снова не READY.
     // На диске лежит согласованный CSV до последнего flush; свежие точки догоняет ajax.
-    if (schedule_log_flush_if_needed() == LOG_FLUSH_BUSY) {
+    // При QUEUED файл на диске ещё без свежих строк (а до первого flush - вообще пустой):
+    // помечаем ответ заголовком, chart.js по нему бросает скачивание и через секунду
+    // (flush делает SysTicker раз в секунду) запрашивает уже актуальный файл.
+    const uint8_t flushState = schedule_log_flush_if_needed();
+    if (flushState == LOG_FLUSH_BUSY) {
       request->send(503, "text/plain", "BUSY");
       return;
     }
@@ -1067,7 +1071,9 @@ void WebServerInit(void) {
 #endif
       return;
     }
-    request->send(SPIFFS, "/data.csv", "text/csv; charset=utf-8");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", "text/csv; charset=utf-8");
+    if (response && flushState == LOG_FLUSH_QUEUED) response->addHeader("X-Log-Flush", "queued");
+    request->send(response);
   });
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_ajax_json(request);

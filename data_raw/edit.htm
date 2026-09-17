@@ -555,7 +555,7 @@ function createEditor(element, file, lang, theme) {
         ext === "html" || ext === "json" || ext === "xml" || ext === "ini") return ext;
     return "plain";
   }
-  if (typeof file === "undefined") file = "/index.htm";
+  if (typeof file === "undefined") file = "/index.htm.gz";
   if (typeof lang === "undefined") lang = getLangFromFilename(file);
   if (typeof theme === "undefined") theme = aceTheme();
   var type = lang === "c_cpp" ? "text/plain" : "text/" + lang;
@@ -680,7 +680,7 @@ function onBodyLoad() {
   window.samovarAce = editor;
   var tree = createTree("tree", editor);
   createFileUploader(tree, editor);
-  if (typeof vars.file === "undefined") vars.file = "/index.htm";
+  if (typeof vars.file === "undefined") vars.file = "/index.htm.gz";
   editor.loadUrl(vars.file);
 }
 </script>

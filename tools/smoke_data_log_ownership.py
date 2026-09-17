@@ -202,9 +202,12 @@ if webserver_ino:
             "/data.csv 503 only when flush cannot be queued (BUSY), still serves on QUEUED",
             data_csv_body,
             [
-                "schedule_log_flush_if_needed() == LOG_FLUSH_BUSY",
+                "const uint8_t flushState = schedule_log_flush_if_needed();",
+                "flushState == LOG_FLUSH_BUSY",
                 'request->send(503, "text/plain", "BUSY")',
-                'request->send(SPIFFS, "/data.csv"',
+                'request->beginResponse(SPIFFS, "/data.csv"',
+                'if (response && flushState == LOG_FLUSH_QUEUED) response->addHeader("X-Log-Flush", "queued");',
+                "request->send(response);",
             ],
             errors,
         )

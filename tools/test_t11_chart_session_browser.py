@@ -30,6 +30,8 @@ BROWSER_TEST = r'''async page => {
   const csvD = __CSV_D__;
   let csvRequests = 0;
   let firstCsvBusy = true;
+  let firstCsvStale = true;
+  let staleServed = false;
   let manualFailure = "";
   let delayOldA = false;
   let oldAStarted = false;
@@ -52,6 +54,14 @@ BROWSER_TEST = r'''async page => {
     if (firstCsvBusy) {
       firstCsvBusy = false;
       await route.fulfill({status: 503, contentType: "text/plain", body: "BUSY"});
+      return;
+    }
+    if (firstCsvStale) {
+      // Журнал ещё не сброшен на диск: файл пуст, заголовок просит повторить.
+      firstCsvStale = false;
+      staleServed = true;
+      await route.fulfill({status: 200, contentType: "text/csv", headers: {"X-Log-Flush": "queued"},
+        body: "Date,Steam,Pipe,Water,Tank,Pressure\r\n"});
       return;
     }
     if (manualFailure) {
@@ -100,6 +110,8 @@ BROWSER_TEST = r'''async page => {
       chart: !!chart, rows: chart ? chart.rows.length : -1, status: chart ? chart.status.textContent : ""
     }))));
   }
+
+  if (!staleServed) throw new Error("stale (X-Log-Flush: queued) response was never served");
 
   await page.evaluate(() => renderTelemetry({
     sessionId: 101, crnt_tm: "A-first", stm: "00:00:00", SteamTemp: 71, PipeTemp: 70,

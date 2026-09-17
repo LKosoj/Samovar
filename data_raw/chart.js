@@ -18,6 +18,10 @@
   // первое открытие графика показывало ошибку и кнопку «Повторить».
   const BUSY_RETRY_DELAY_MS = 500;
   const BUSY_RETRY_LIMIT = 8;
+  // Заголовок X-Log-Flush: queued - свежие строки журнала ещё в памяти контроллера, файл
+  // на диске устарел (до первого сброса - пуст). Сброс идёт раз в секунду, поэтому тело
+  // не качаем, ждём и запрашиваем снова - один раз, чтобы не зациклиться.
+  const FLUSH_RETRY_DELAY_MS = 1200;
   const PAIR_OUTCOME_NAMES = ['возобновлено', 'смена строки', 'остановлено пользователем', 'процесс завершён', 'ошибка'];
 
   function parseNumber(value) {
@@ -659,6 +663,7 @@
     };
     this.setStatus('Загрузка графика...', false);
     let busyAttempt = 0;
+    let flushRetried = false;
     try {
       while (true) {
         const ctrl = new AbortController();
@@ -682,6 +687,15 @@
           busyAttempt += 1;
           await new Promise(function (resolve) {
             setTimeout(resolve, BUSY_RETRY_DELAY_MS);
+          });
+          if (!isCurrentLoad()) return false;
+          continue;
+        }
+        if (resp.ok && !flushRetried && resp.headers.get('X-Log-Flush') === 'queued') {
+          flushRetried = true;
+          ctrl.abort();
+          await new Promise(function (resolve) {
+            setTimeout(resolve, FLUSH_RETRY_DELAY_MS);
           });
           if (!isCurrentLoad()) return false;
           continue;
