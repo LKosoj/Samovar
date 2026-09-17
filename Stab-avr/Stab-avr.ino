@@ -87,6 +87,7 @@
 //
 #define U_LINE 230        // Номинальное значение действующего напряжения в сети, для которого указана номинальная мощность ТЭНа
 #define U_MIN 100         // Значение напряжения в сети, ниже которого сеть считается аварийной
+#define U_RAZGON 220      // Уставка напряжения (режим РМВ-К), выше которой включается разгон
 #define U_LINE_Q 52900    // Квадрат номинала сети, для которого указана номинальная мощность ТЭНа
 //
 #define MENU_TIMEOUT 40  // Таймаут выхода из меню в секундах (не более 255)
@@ -94,10 +95,8 @@
 //=====Настройки коммуникации по последовательному порту============
 #define USE_USART           // Раскомментить для инициализации общения стаба с внешним контроллером
   #ifdef USE_USART
-  #define USE_RMVK        // Раскомментить для включения общения с внешним контроллером по протоколу Samovar и/или РМВ-К
-  #ifndef USE_RMVK
-//    #define USE_ADprotocol  // По умолчанию используется универсальный протокол
-  #endif
+  #define USE_RMVK        // Раскомментить для включения общения с внешним контроллером по протоколу Samovar или РМВ-К (см. REG_MODE_VOLT)
+//  #define REG_MODE_VOLT   // Раскомментить для работы в вольтах по протоколу РМВ-К, иначе - в ваттах по протоколу Samovar
 #endif
 //==================================================================
 //==================================================================
@@ -245,7 +244,7 @@
   #undef LOGO
   #undef USE_USART
   #undef USE_RMVK
-  #undef USE_ADprotocol
+  #undef REG_MODE_VOLT
 #else
   #ifdef LOGO
     #include "logo.c"
@@ -253,6 +252,9 @@
   #ifdef USE_USART
     static uint8_t cnt_uartWDT;     // Счетчик секунд для организации отсчета ожидания окончания посылки по USART
   #endif
+#endif
+#ifndef USE_RMVK
+  #undef REG_MODE_VOLT  // Режим РМВ-К без обмена по USART не имеет смысла
 #endif
 //
 static uint16_t Pnom;             // Номинальная мощность ТЭНа (хранится в EEPROM и устанавливается из менюшки)
@@ -278,9 +280,12 @@ static volatile uint16_t pdm = 0;     // Текущий уровень PDM (пр
 static volatile int32_t pdm_err = 0;  // Ошибка дискретизации
 static volatile uint16_t PDMust = 0;  // PDM, соответствующий установленной мощности ТЭНа
 //
-static volatile uint32_t U_sum = 0;   // Среднеквадратичное в сети за секунду, умноженное на 10
+static volatile uint32_t U_sum = 0;   // Сумма квадратов отсчетов АЦП за секунду, готовая к обработке
 static uint16_t U_real = U_LINE;      // Среднеквадратичное за секунду (целая часть)
 static uint8_t U_real_dec = 0;        // Среднеквадратичное за секунду (дробная часть)
+#ifdef REG_MODE_VOLT
+static uint8_t Vust = 0;              // Уставка напряжения на выходе, заданная по USART (режим РМВ-К)
+#endif
 //
 static volatile uint8_t PID_ust = LINE_FREQ;// Данные для установки регистра сравнения таймера2
 //
@@ -292,7 +297,7 @@ static volatile struct flags {  // Флаги
   unsigned  PP : 1;           // Флаг полупериода сети на входе АЦП (отрицательная полуволна = 0, положительная = 1)
   unsigned  PP_fir : 1;       // Флаг полупериода после КИХ ФНЧ (отрицательная полуволна = 0, положительная = 1)
   unsigned  PP_tm : 1;        // Флаг полупериода по внутреннему таймеру (отрицательная полуволна = 0, положительная = 1)
-  unsigned  zero : 1;         // Флаг перехода через ноль
+  unsigned  : 1;              // Резерв (флаг перехода через ноль перенесен в ISR(ADC), раскладка битов сохранена)
   unsigned  NotZero : 1;      // Флаг аварии сети (не детектируются переходы через ноль)
   unsigned  sum : 1;          // Флаг готовности насуммированных данных к обработке
   unsigned  Tout : 1;         // Флаг включения ТЭНа (твердотельное реле)
@@ -306,8 +311,10 @@ static volatile struct flags {  // Флаги
   unsigned  butt : 1;         // Флаг опроса кнопок
   unsigned  writable : 1;     // Флаг записи уставок в EEPROM
   unsigned  uartUnhold : 1;   // Флаг разрешения передачи данных по USART
-  unsigned  uartReport : 1;   // Флаг разрешения отправки данных внешнему контроллеру
   unsigned  uartTimeout : 1;  // Флаг истечения времени приема посылки по USART
+#ifdef REG_MODE_VOLT
+  unsigned  out_off : 1;      // Флаг блокировки выхода командой AT+ON=0 (режим РМВ-К)
+#endif
 } fl = {};  // Инициализируем структуру с нулевыми членами
 //
 //static uint8_t fl_A;  // Байт флажков A
@@ -317,7 +324,6 @@ static volatile struct flags {  // Флаги
 //#define flA_dspTimeout  B00000010
 //#define flA_dspNewData  B00000100
 //#define flA_uartUnhold  B00001000
-//#define flA_uartReport  B00010000
 //#define flA_uartTimeout B00100000
 //#define flA_writable    B01000000
 //#define flA_butt        B10000000
@@ -331,8 +337,6 @@ static uint8_t cnt_dspMenu;     // Индикатор режима меню
 //
 byte X_position (const byte x, const uint16_t arg = 0, const byte pix = 6); // Функция возвращает начальную позицию по Х для десятичного числа, в зависимости от количества знаков в нём.
 byte X_centred (const byte len);    // Функция возвращает начальную позицию по Х для текста длинной len знаков, для размещения оного по центру дисплея.
-byte A_to_HEX (const char a);       // Функция переводит символ ASCII в шестнадцатиричную цифру
-char HEX_to_A (const byte x);       // Функция переводит шестнадцатиричную цифру в символ ASCII
 uint16_t calc_proportion(const uint16_t multiplier1, const uint16_t multiplier2 = Pnom, const uint16_t divider = CICLE);
 //
 //
@@ -370,31 +374,6 @@ byte X_centred (const byte len) { // len - Количество знакомес
   byte pix = 6;   // Ширина шрифта в пикселях
   if (len > wdt/pix) return 0;
   else return (wdt - (len * pix))/2;
-}
-//
-// Функция переводит символ ASCII в шестнадцатиричную цифру, при ошибке возвращает 255
-byte A_to_HEX (const char a) { // a - символ 0...F
-  if (a >= 48 && a <= 57) { // Если а - от 0 до 9
-    return byte(a-48);
-  }
-  else if (a >= 65 && a <= 70) { // Если а - от A до F
-    return byte(a-55);
-  }
-  else if (a >= 97 && a <= 102) { // Если а - от a до f
-    return byte(a-87);
-  }
-  else return 255;
-}
-//
-// Функция переводит шестнадцатиричную цифру в символ ASCII, при ошибке возвращает X
-char HEX_to_A (const byte x) {  // x - число, кое необходимо перевести в ASCII-код
-  if (x <= 9) {
-    return char(x + 48);
-  }
-  else if (x <= 15) {
-    return char(x + 55);
-  }
-  else return 'X';
 }
 //
 void stop_razgon(void) {  //===========Подпрограммка остановки режима "Разгон"================
@@ -458,11 +437,8 @@ uint16_t get_Power(void) {  // Функция возвращает значен�
     return 0;
   }
   else if (fl.razg_on || fl.Ulow) { // В разгоне и при недостаточном сетевом передаем расчетную текущую мощность
-    uint32_t tmp_u;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { // S-27: U_sum — 32-бит, пишется ISR(ADC), читаем атомарно
-      tmp_u = U_sum;
-    }
-    tmp_u = (long)tmp_u * tmp_u;
+    uint32_t tmp_u = U_real * 10 + U_real_dec;  // Среднеквадратичное в сети, умноженное на 10
+    tmp_u *= tmp_u;
     tmp_u /= 100;
     tmp_u *= Pnom;
     tmp_u /= U_LINE_Q;
@@ -485,192 +461,67 @@ void set_newPDM(uint16_t power) { // Функция установки теку�
     new_PDMust = calc_proportion(power, CICLE, Pnom);
   }
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { // S-28: PDMust — 16-бит, читается ISR(TIMER2), пишем атомарно
-    PDMust = new_PDMust;
+    if (!fl.stab_off) PDMust = new_PDMust;  // Аварийный останов мог прийти из ISR(TIMER2), пока считали уставку
   }
   //
   set_Pust();    // Пересчитаем Pust
-  fl.dspNewData = 1;  // Обновление информации на дисплее
+  ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: ISR пишут тот же байт fl
+    fl.dspNewData = 1;  // Обновление информации на дисплее
+  }
 }
 //
 #endif // USE_USART
-//
-#ifdef USE_ADprotocol //++++++++++++++++USART++++++++++++++++++++++++++++
-//
-//Байт "состав данных" b00010111 (основной параметр - мощность в нагрузке, доп. параметр - напряжение сети) в HEX-формате 0x17
-static char USART_InfoData[14] = {'T','1','7','0','0','0','0','0','0','0','0','0','0',0x0D};  // Массив готовых данных для передачи внешнему контроллеру
-static char USART_SetData[6];  // Массив управляющих символов от внешнего контроллера
-//
-void USART_parser(void) { // Парсим управляющую последовательность по универсальному протоколу
-  //
-  static byte index = 0;
-  static byte data_size;
-//
-  while (Serial.available() > 0) {
-    if (fl.stab_off) {
-      Serial.read(); // Вычитываем очередной байт, чтобы не засирать буфер
-    }
-    else if ( !index || fl.uartTimeout ) {   // Начало
-      USART_SetData[0] = Serial.read(); // Вычитываем очередной байт
-      fl.uartTimeout = 0;               // Сбросим флаг таймаута ожидания окончания посылки
-      cnt_uartWDT = 0;                  // Сбросим таймер ожидания окончания посылки
-      switch ( USART_SetData[0] ) {     // Ждём первый символ...
-        case 'M':
-        case 'm': {                     // ...запроса на изменение режима работы
-          data_size = 2;
-          index=1;
-          break;
-        }
-        case 'P':
-        case 'p': {                     // ...запроса на изменение уставки
-          data_size = 5;
-          index=1;
-          break;
-        }
-        default: {
-//          break;
-        }
-      }
-    }
-    else {
-      USART_SetData[index] = Serial.read(); // Вычитываем очередной байт
-      if ( USART_SetData[index] == 0x0D ) { // Ждем последнего символа посылки <CR>
-        if ( index == data_size ) {
-          switch (index) {
-            case 2: { // Парсим запрос на смену режима
-              switch ( USART_SetData[1] ) {
-                case '0': { // Переход в рабочий режим
-                  if ( fl.razg_on ) {
-                    stop_razgon();
-                  }
-                  break;
-                }
-                case '1': { // Переход в режим разгона
-                  if ((!fl.NotZero) & (!fl.Udown) & (!fl.razg_off)) {  // Если электросеть в дауне или разгон запрещен - не разгонишься
-                    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { // S-26: ISR(TIMER2) читает fl.razg_on/fl.razg
-                      fl.razg_on = 1;
-                      fl.razg = 1;
-                    }
-                  }
-                  break;
-                }
-                case '2': { // Отключение нагрузки
-                  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { PDMust = 0; } // S-28
-                  stop_razgon();
-                  Pust = 0;
-                  break;
-                }
-                default: {
-                  break;
-                }
-              }
-              break;
-            }
-            case 5: { // Парсим запрос на смену уставки
-              uint16_t tmp_p = 0;
-              byte b;
-              for (byte x=1; x <= 4; x++ ) {
-                tmp_p *= 16;
-                b = A_to_HEX (USART_SetData[x]);
-                if (b == 255) {
-                  break;
-                }
-                tmp_p += b;
-              }
-              if (b != 255) {
-                set_newPDM (tmp_p);   // Установим новую уставку мощности;
-              }
-              break;
-            }
-          }
-        index = 0;
-        fl.dspNewData = 1;  //Обновление информации на дисплее
-        }
-        else index = 0;
-      }
-      else if ( index++ == data_size ) {
-        index = 0;
-      }
-    }
-  }
-}
-//
-void USART_report(void) { //=====Отчет внешнему контроллеру по универсальному протоколу=====
-  uint16_t b;
-  //
-  if (fl.stab_off) {
-    b = 3;  // b000000(11) - аварийное отключение нагрузки (удаленное включение невозможно)
-  }
-  else if (fl.Udown || fl.NotZero) {
-    b = 6;  // b000001(10) - отсутствие сетевого напряжения, нагрузка отключена
-  }
-  else if (fl.razg_on) {
-    b = 1;  // b(000000)(01) - разгон
-  }
-  else if (PDMust == 0) {
-    b = 2;  // b000000(10) - нагрузка отключена
-  }
-  else if (fl.Ulow) {
-    b = 8;   // b000010(00) - напряжения сети недостаточно для достижения уставки
-  }
-  else {
-    b = 0;  // b000000(00) - режим рабочий, ошибок нет
-  }
-  // Закодируем состав данных
-  USART_InfoData[3] = HEX_to_A ( b / 16 );  // Старший разряд байта "Режим + ошибки"
-  USART_InfoData[4] = HEX_to_A ( b % 16 );  // Младший разряд байта "Режим + ошибки"
-  //
-  // Закодируем основной параметр - мощность на выходе
-  b = get_Power();  // Получим текущую мощщу
-  USART_InfoData[8] = HEX_to_A ( b % 16 );  // 0 разряд основного параметра
-  b /= 16;
-  USART_InfoData[7] = HEX_to_A ( b % 16 );  // 1 разряд основного параметра
-  b /= 16;
-  USART_InfoData[6] = HEX_to_A ( b % 16 );  // 2 разряд основного параметра
-  USART_InfoData[5] = HEX_to_A ( b / 16 );  // 3 разряд основного параметра
-  //
-  // Закодируем доп.параметр - напряжение сети
-  if (fl.NotZero) { // Если сети нет, то и на выходе пусто
-    USART_InfoData[12] = '0'; // 0 разряд основного параметра
-    USART_InfoData[11] = '0'; // 1 разряд основного параметра
-    USART_InfoData[10] = '0'; // 2 разряд основного параметра
-    USART_InfoData[9]  = '0'; // 3 разряд основного параметра
-  }
-  else {
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { // S-27: U_sum — 32-бит, пишется ISR(ADC), читаем атомарно
-      b = (uint16_t)U_sum;
-    }
-    USART_InfoData[12] = HEX_to_A ( b % 16 ); // 0 разряд основного параметра
-    b /= 16;
-    USART_InfoData[11] = HEX_to_A ( b % 16 ); // 1 разряд основного параметра
-    b /= 16;
-    USART_InfoData[10] = HEX_to_A ( b % 16 ); // 2 разряд основного параметра
-    USART_InfoData[9]  = HEX_to_A ( b / 16 ); // 3 разряд основного параметра
-  }
-  // Отправим
-  Serial.write(USART_InfoData, 14);
-}
-//
-#endif  //+++++++++++++++++++++++USART++++++++++++++++++++++++++++
 //
 #ifdef USE_RMVK //++++++++++++++++RMVK_/_Samovar++++++++++++++++++++++++++++
 #define SAMOVAR_LEGACY_UTF8_AT "\xD0\x90\xD0\xA2"
 #define SAMOVAR_LEGACY_UTF8_AT_CMD(suffix) SAMOVAR_LEGACY_UTF8_AT suffix
 
 uint16_t get_Uin(void) {     // Функция возвращает значение текущего напряжения без десятичного знака
-  return ((U_real_dec < 5)? U_real : (U_real + 1));
+  uint16_t u = (U_real_dec < 5)? U_real : (U_real + 1);
+#ifdef REG_MODE_VOLT
+  if (u > 254) u = 254; // 255 у Samovar зарезервировано под ошибку обмена с РМВ-К
+#endif
+  return u;
+}
+//
+#ifdef REG_MODE_VOLT //-----------Режим РМВ-К: уставка в вольтах-----------
+//
+uint16_t volt_to_PDM(const uint8_t volt) {  // Функция пересчета напряжения в PDM (мощность пропорциональна квадрату напряжения)
+  return calc_proportion((uint16_t)volt * volt, CICLE, U_LINE_Q);
+}
+//
+uint8_t get_Uset(const uint16_t l_PDMust) {  // Функция возвращает уставку напряжения, l_PDMust - атомарно считанный PDMust
+  if (volt_to_PDM(Vust) == l_PDMust) {  // Уставка задана по USART и кнопками не менялась - возвращаем её как есть
+    return Vust;
+  }
+  uint32_t u = (uint32_t)l_PDMust * 4 * U_LINE_Q / CICLE; // Учетверенный квадрат напряжения, соответствующий уставке PDM
+  u = sqrt(u);                                            // Корень с правильным округлением
+  u++; u /= 2;
+  return u;
 }
 //
 uint16_t get_Uout(const boolean getReal) {  // Функция возвращает расчетное значение текущего (если getReal=true) или желаемого (если getReal=false) напряжения
-  if ( fl.Udown || fl.NotZero || (PDMust == 0) ) {    // Если сеть в дауне или стаб в стопе - передаем ноль
+  uint16_t l_PDMust;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { // S-28: PDMust — 16-бит, пишется ISR(TIMER2), читаем атомарно
+    l_PDMust = PDMust;
+  }
+  if ( fl.Udown || fl.NotZero ) {         // Если сеть в дауне - передаем ноль
     return 0;
   }
-  else if ( getReal && ( fl.razg_on || fl.Ulow ) ) {  // В разгоне и при недостаточном сетевом передаем текущее сетевое, если надо
+  else if ( getReal && fl.razg_on ) {     // В разгоне (в том числе включенном кнопкой при нулевой уставке) передаем текущее сетевое, если надо
+    return get_Uin();
+  }
+  else if ( l_PDMust == 0 ) {             // Если стаб в стопе - передаем ноль
+    return 0;
+  }
+  else if ( getReal && fl.Ulow ) {        // При недостаточном сетевом передаем текущее сетевое, если надо
     return get_Uin();
   }
   else {    // В рабочем режиме - передаем уставку
-    return calc_proportion(PDMust, U_LINE);
+    return get_Uset(l_PDMust);
   }
 }
+#endif  //-----------Режим РМВ-К: уставка в вольтах-----------
 //
 void USART_parser(void) { // Парсим управляющую последовательность от RMVK_/_Samovar
 //
@@ -683,7 +534,9 @@ void USART_parser(void) { // Парсим управляющую последо�
       if ((inChar == 'A') || (byte(inChar) == 0xD0)) { // Ждём первый символ посылки "A" или первый байт UTF-кириллицы из протокола Samovar'a
         inoutString = inChar;
         index=1;
-        fl.uartTimeout = 0; // Сбросим флаг таймаута ожидания окончания посылки
+        ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: ISR(TIMER2) пишет тот же байт fl
+          fl.uartTimeout = 0; // Сбросим флаг таймаута ожидания окончания посылки
+        }
         cnt_uartWDT = 0;    // Сбросим таймер ожидания окончания посылки
       }
     }
@@ -691,8 +544,76 @@ void USART_parser(void) { // Парсим управляющую последо�
       if ( inChar == 0x0D ) {   // Ждем последнего символа посылки <CR>
         index = 0;
         // Парсим строку, поскольку кончилась
-        // Samovar power commands use a legacy UTF-8 Cyrillic A/T prefix.
-        // RMVK voltage commands use ASCII "AT"; keep both protocol meanings distinct.
+#ifdef REG_MODE_VOLT
+        // Режим РМВ-К: команды с ASCII "AT", уставка в вольтах
+        if ( inoutString == F("AT+VI?") ) {       // Запрос текущего напряжения сети
+          if (fl.NotZero) { // Если сети нет, то и на выходе пусто
+            inoutString = String(0);
+          }
+          else {
+            inoutString = String(get_Uin());
+          }
+        }
+        else if ( inoutString == F("AT+VO?") ) {  // Запрос текущего напряжения на выходе
+          inoutString = String(get_Uout(true));
+        }
+        else if ( inoutString == F("AT+VS?") ) {  // Запрос напряжения уставки на выходе
+          inoutString = String(get_Uout(false));
+        }
+        else if ( inoutString == F("AT+ON?") ) {  // Запрос состояния выхода
+          if (fl.out_off || fl.stab_off || fl.NotZero || fl.Udown) {  // Если выход заблокирован или авария
+            inoutString = String("OFF");
+          }
+          else {
+            inoutString = String("ON");
+          }
+        }
+        else if ( inoutString == F("AT+ON=0") ) { // Запрос на выключение и блокировку выхода
+          Vust = 0;
+          ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26/28: PDMust читает ISR(TIMER2), байт fl пишет он же
+            PDMust = 0;
+            fl.out_off = 1;
+            fl.dspNewData = 1;  //Обновление информации на дисплее
+          }
+          stop_razgon();
+          Pust = 0;
+          inoutString = "";
+        }
+        else if ( inoutString == F("AT+ON=1") ) { // Запрос на снятие блокировки выхода (нагрев начнется по AT+VS=)
+          ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: ISR(TIMER2) пишет тот же байт fl
+            fl.out_off = 0;
+          }
+          inoutString = "";
+        }
+        else if ( inoutString.substring(0,6) == F("AT+VS=") ) { // Запрос на изменение уставки
+          if (fl.out_off || fl.stab_off || fl.Udown || fl.NotZero) {  // Если выход заблокирован, авария или сеть в дауне - ничего не меняем, передаем ошибку
+            inoutString = String(F("error"));
+          }
+          else {
+            long tmp_u = inoutString.substring(6).toInt();
+            if ( tmp_u < 0 ) tmp_u = 0;
+            else if ( tmp_u > U_LINE ) tmp_u = U_LINE;
+            uint16_t new_PDMust = volt_to_PDM(tmp_u);
+            ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26/28: PDMust и fl.razg_on/fl.razg читает ISR(TIMER2)
+              if ( !fl.stab_off ) { // Аварийный останов мог прийти из ISR(TIMER2), пока считали уставку
+                Vust = tmp_u;
+                PDMust = new_PDMust;
+                if ( (Vust > U_RAZGON) && !fl.razg_off ) {  // Уставка выше порога - включаем разгон, если он не запрещен
+                  fl.razg_on = 1;
+                  fl.razg = 1;
+                }
+              }
+              fl.dspNewData = 1;  // Обновление информации на дисплее
+            }
+            if ( Vust <= U_RAZGON ) {
+              stop_razgon();
+            }
+            set_Pust();         // Посчитаем Pust
+            inoutString = String(Vust);
+          }
+        }
+#else
+        // Режим Samovar: команды с UTF-8 кириллицей "АТ", уставка в ваттах
         if (( inoutString == ("AT+VI?")) ||  // Запрос текущего напряжения сети
             ( inoutString == (SAMOVAR_LEGACY_UTF8_AT_CMD("+VI?")))) {
           if (fl.NotZero) { // Если сети нет, то и на выходе пусто
@@ -704,20 +625,6 @@ void USART_parser(void) { // Парсим управляющую последо�
         }
         else if (( inoutString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+VO?"))) || ( inoutString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+VS?")))) {  // Запрос текущей мощности от Samovar.
           inoutString = String(get_Power());
-        }
-        else if ( inoutString == F("AT+VO?") ) {  // Запрос текущего напряжения на выходе от РМВ-К
-          inoutString = String(get_Uout(true));
-        }
-        else if ( inoutString == F("AT+VS?") ) {  // Запрос напряжения уставки на выходе от РМВ-К
-          inoutString = String(get_Uout(false));
-        }
-        else if ( inoutString == F("AT+ON?") ) {  // Запрос состояния выхода от РМВ-К
-          if ((PDMust == 0) || (fl.NotZero) || (fl.Udown)) {  // Если на выходе 0
-            inoutString = String("OFF");
-          }
-          else {
-            inoutString = String("ON");
-          }
         }
         else if (( inoutString == F("AT+SS?")) ||   // Запрос режима от Samovar
                 ( inoutString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+SS?")))) {
@@ -737,50 +644,38 @@ void USART_parser(void) { // Парсим управляющую последо�
         else if (( inoutString == F("AT+ON=0")) ||  // Запрос на выключение стабилизатора
                 ( inoutString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+ON=0")))) {
           if (!fl.stab_off) {  // Если стаб не выключен аварийно...
-            ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { PDMust = 0; } // S-28
+            ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26/28: PDMust читает ISR(TIMER2), байт fl пишет он же
+              PDMust = 0;
+              fl.dspNewData = 1;  //Обновление информации на дисплее
+            }
             stop_razgon();
             Pust = 0;
-            fl.dspNewData = 1;  //Обновление информации на дисплее
-            inoutString = "";
           }
+          inoutString = "";
         }
         else if (( inoutString == F("AT+ON=1")) ||  // Запрос на включение режима "Разгон"
                 ( inoutString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+ON=1")))) {
-          if ((!fl.stab_off) && (!fl.NotZero) && (!fl.Udown) && (!fl.razg_off)) {  // Если авария, электросеть в дауне или разгон запрещен - не разгонишься
-            ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { // S-26: ISR(TIMER2) читает fl.razg_on/fl.razg
+          ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: ISR(TIMER2) читает fl.razg_on/fl.razg, условия проверяем под тем же запретом прерываний
+            if ((!fl.stab_off) && (!fl.NotZero) && (!fl.Udown) && (!fl.razg_off)) {  // Если авария, электросеть в дауне или разгон запрещен - не разгонишься
               fl.razg_on = 1;
               fl.razg = 1;
+              fl.dspNewData = 1;  //Обновление информации на дисплее
             }
-            fl.dspNewData = 1;  //Обновление информации на дисплее
           }
           inoutString = "";
         }
         else if ( inoutString.substring(0,8) == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+VS=")) ) {  // Запрос на изменение уставки от Samovar.
           if (!fl.stab_off) {  // Если стаб не выключен аварийно...
             //выключаем разгон, на всякий случай
-            stop_razgon();
-            set_newPDM (inoutString.substring(8).toInt());        // Установим новую уставку мощности
-            inoutString = "";
-          }
-        }
-        else if ( inoutString.substring(0,6) == F("AT+VS=") ) { // Запрос на изменение уставки от РМВ-К
-          if (fl.stab_off || fl.Udown || fl.NotZero) {  // Если авария или сеть в дауне - ничего не меняем, передаем ошибку
-            inoutString = String(F("error"));
-          }
-          else {
-            uint16_t tmp_u = inoutString.substring(6).toInt();
-            if ( tmp_u < U_LINE ) {
-              tmp_u *= CICLE;
-              ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { PDMust = tmp_u / U_LINE; } // S-28
+            long tmp_p = inoutString.substring(8).toInt();
+            if (tmp_p >= 0) {   // Отрицательную уставку не принимаем (в uint16_t она превратилась бы в полную мощность)
+              stop_razgon();
+              set_newPDM (tmp_p);        // Установим новую уставку мощности
             }
-            else { ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { PDMust = CICLE; } } // S-28
-            //выключаем разгон, на всякий случай
-            stop_razgon();
-            set_Pust();         // Посчитаем Pust
-            fl.dspNewData = 1;  // Обновление информации на дисплее
-            inoutString = String(get_Uout(false));
           }
+          inoutString = "";
         }
+#endif
         else {  // Неизвестная или закосяченная команда
           #ifdef Debug
             inoutString = String(F("(o_O unknown!)"));
@@ -896,6 +791,7 @@ void EEPROM_read_PDMs(void) { //===========Подпрограмма чтения
     PDMset[0][idx] = (long)value * (idx + 1);
   }
   PDMset[0][PDMset_ARR_SIZE - 1] = CICLE;
+  if (!fl.writable) return; // Уставки в EEPROM не пишутся - читать нечего, остаются значения по умолчанию
   //
   ////===Определим границы области для записи уставок
   //
@@ -1103,14 +999,15 @@ void Buttons_(void) { //==============Опрос кнопок===================
           if (fl.dspTimeout) {                  // Если кнопки слишком долго не нажимались...
             if (cnt_Pnom_count > 0) {           // и есть записанное значение (Pnom откалиброван), уходим
               cnt_Pnom_number = 0;              //
+              cnt_PDMcount = 0;                 // Сбрасываем счетчик, дальше он индексирует массив уставок
               Pnom = Pnom_arr[0]; // По умолчанию установим номинальную мощность из нулевой ячейки
               fl.writable = 1;                  // Уставки пишутся в EERPOM
               EEPROM_read_PDMs();               // Читаем уставки
               fl.uartUnhold = 1;                // Разрешим обращение к USART
               cnt_dspMenu = 0;                   // Выйдем из менюшки
-              fl.dspRefresh = 1;                // Ставим флаг обновления экрана
+              ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspRefresh = 1; }                // Ставим флаг обновления экрана
             }
-            fl.dspTimeout = 0;                  // Снимаем флаг таймаута выхода из меню
+            ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspTimeout = 0; }                  // Снимаем флаг таймаута выхода из меню
             break;
           }
           switch (butt) {
@@ -1129,7 +1026,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
                 }
               }
               else {  //Если выбираем из записанных в EEPROM...
-                if (++cnt_PDMcount > cnt_Pnom_count) cnt_PDMcount=0; // Перебираем значения уставок мощности ТЭНа
+                if ((++cnt_PDMcount > cnt_Pnom_count) || (cnt_PDMcount >= Pnom_ARR_SIZE)) cnt_PDMcount=0; // Перебираем значения уставок мощности ТЭНа (пустая ячейка для нового значения есть, пока массив не полон)
                 Pnom = Pnom_arr[cnt_PDMcount];
               }
               butt_force_count++;
@@ -1154,10 +1051,10 @@ void Buttons_(void) { //==============Опрос кнопок===================
               fl.writable = 1;  // Ставим флаг записи уставок в EEPROM
             }
             case 8: { //-----Кнопкой "Разгон" выходим из менюшки
-              if (Pnom < 10000) { // Если значение реальное...
+              if (Pnom && (Pnom < 10000)) { // Если значение реальное...
                 cnt_Pnom_number = cnt_PDMcount;               // Запомним порядковый номер выбранного Pnom
                 if (bt.no_select) {                           // Если значение НЕ выбрано из записанных в EEPROM, а введено...
-                  for (int8_t x = cnt_Pnom_count; x >= 0; x--) { // Проверим новое значение на совпадение с уже записанными
+                  for (int8_t x = cnt_Pnom_count - 1; x >= 0; x--) { // Проверим новое значение на совпадение с уже записанными
                     if (Pnom == Pnom_arr[x]) {                // Если такое значение уже есть в EEPROM...
                       cnt_Pnom_number = x;                    // Запомним порядковый номер совпавшего Pnom
                       bt.writePnom = 0;                       // Снимем флаг записи нового значения Pnom в EEPROM
@@ -1173,9 +1070,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
                 //
                 cnt_PDMcount=0;                               //Сбрасываем счетчик
                 //
-                if (fl.writable) {                            // Если уставки пишутся в EERPOM, то
-                  EEPROM_read_PDMs();                         // читаем ранее записанное
-                }
+                EEPROM_read_PDMs();                           // Заполняем массив уставок (он делит память с Pnom_arr), при записи в EERPOM - читаем ранее записанное
                 if (bt.writePnom) {   // Запишем новое значение Pnom, если необходимо
                   eeprom_update_word((uint16_t*)(cnt_Pnom_number * 2),Pnom);
                   bt.writePnom = 0; // и сбросим флаг записи нового значения Pnom
@@ -1185,7 +1080,11 @@ void Buttons_(void) { //==============Опрос кнопок===================
                 #ifdef USE_USART      //========================================
                   fl.uartUnhold = 1;  // Разрешим обращение к USART
                 #endif                //========================================
-                fl.dspRefresh = 1;  // Ставим флаг обновления экрана
+                ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspRefresh = 1; }  // Ставим флаг обновления экрана
+              }
+              else {              // Pnom не задан - остаемся в меню
+                bt.writePnom = 0; // и снимаем флаги записи, выставленные кнопкой "Стоп"
+                fl.writable = 0;
               }
               fl.butt = 0;        // После нажатия должна быть пауза
               break;              // Закончили
@@ -1198,8 +1097,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
         case 1:  {  //=============Если мы в меню выбора уставки, то...
           if (fl.dspTimeout) {  // Если кнопки слишком долго не нажимались, уходим
             cnt_dspMenu = 0;     // Выйдем из менюшки
-            fl.dspRefresh = 1;  // Ставим флаг обновления экрана
-            fl.dspTimeout = 0;  // Снимаем флаг таймаута выхода из меню
+            ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspRefresh = 1; fl.dspTimeout = 0; }  // S-26: Ставим флаг обновления экрана, снимаем флаг таймаута выхода из меню
             break;
           }
           switch (butt) {
@@ -1216,7 +1114,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
             case 4: { //=====По кнопке "стоп" записываем уставку, если нужно, принимаем и выходим
               // Безопасно без ATOMIC: вытеснить может только ISR(ADC), а он PDMust не трогает;
               // PDM_()/Razgon_() в том же ISR(TIMER2) — до sei(), конкурировать не могут;
-              // loop обращается к PDMust только внутри ATOMIC_BLOCK(cli).
+              // loop пишет PDMust только внутри ATOMIC_BLOCK(cli).
               PDMust = PDMset[0][cnt_PDMcount];//Устанавливаем выбранную мощность ТЭНа
               if (fl.writable) {  // Если уставки запоминаются...
                 if (!PDMset[1][cnt_PDMcount]) { // Если просят записать НЕ уже записанное...
@@ -1262,7 +1160,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
                 }
               }
               cnt_dspMenu = 0;           //Снимаем флаг перехода в меню
-              fl.dspRefresh = 1;        //Ставим флаг обновления экрана
+              ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspRefresh = 1; }        //Ставим флаг обновления экрана
               fl.butt = 0;              //После нажатия должна быть пауза
               break;                    //Закончили
             }
@@ -1270,7 +1168,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
               // Безопасно без ATOMIC: см. комментарий выше (case 4) — те же условия защиты.
               PDMust = PDMset[0][cnt_PDMcount];//Устанавливаем выбранную мощность ТЭНа
               cnt_dspMenu = 0;           //Снимаем флаг перехода в меню
-              fl.dspRefresh = 1;        //Ставим флаг обновления экрана
+              ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspRefresh = 1; }        //Ставим флаг обновления экрана
               fl.butt = 0;              //После нажатия должна быть пауза
               break;                    //Закончили
             }
@@ -1284,7 +1182,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
             case 1:
               // RMW PDMust безопасен без ATOMIC: ISR(ADC) PDMust не читает и не пишет;
               // PDM_()/Razgon_() в том же ISR(TIMER2) — до sei(), вытеснить не могут;
-              // loop читает/пишет PDMust только под ATOMIC_BLOCK(cli).
+              // loop пишет PDMust только под ATOMIC_BLOCK(cli).
               if (PDMust-- == 0) PDMust = 0; //Уменьшаем установленную мощность до минимума
               break;
             case 2:
@@ -1294,7 +1192,7 @@ void Buttons_(void) { //==============Опрос кнопок===================
             case 4:
               if (PDMust == 0) {    //Если мы не в меню и мощность ТЭНа нулевая, то...
                 cnt_dspMenu = 1;     //Ставим флаг перехода в меню
-                fl.dspRefresh = 1;  //Ставим флаг обновления экрана
+                ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspRefresh = 1; }  //Ставим флаг обновления экрана
               }
               else {                //Если мы не в меню и мощность ТЭНа НЕнулевая, то...
                 remember_last_power_setting();// Запомним последнюю уставку
@@ -1304,13 +1202,13 @@ void Buttons_(void) { //==============Опрос кнопок===================
               fl.butt = 0;          //После нажатия должна быть пауза
               break;
             case 8:
-              // RMW fl.razg_on/fl.razg/fl.TRelay безопасны без ATOMIC:
-              // ISR(ADC) эти поля не трогает; Razgon_()/PDM_() — до sei() в том же ISR(TIMER2),
-              // вытеснить Buttons_() не могут; loop читает их только в индикационных целях
-              // и не пишет под конкуренцией с данным ISR.
-              fl.razg_on = ((!fl.NotZero) & (!fl.Udown) & (!fl.razg_off) & (!fl.razg_on)); //Триггер режима разгона (гистерезис организован в обработке начала полупериода)
-              fl.razg |= fl.razg_on;                      //Если разгон включили, то твердотельное реле на максимум сразу
-              fl.TRelay &= fl.razg_on;                    //Если разгон выключили, то контактное реле выключаем сразу
+              // S-26: прерывания здесь уже разрешены, а ISR(ADC) при пропаже сети пишет тот же байт fl
+              // (stop_razgon(), fl.Tout) - поэтому RMW под ATOMIC.
+              ATOMIC_BLOCK(ATOMIC_FORCEON) {
+                fl.razg_on = ((!fl.NotZero) & (!fl.Udown) & (!fl.razg_off) & (!fl.razg_on)); //Триггер режима разгона (гистерезис организован в обработке начала полупериода)
+                fl.razg |= fl.razg_on;                      //Если разгон включили, то твердотельное реле на максимум сразу
+                fl.TRelay &= fl.razg_on;                    //Если разгон выключили, то контактное реле выключаем сразу
+              }
               fl.butt = 0;                                //После нажатия должна быть пауза
               break;
             default:
@@ -1319,15 +1217,21 @@ void Buttons_(void) { //==============Опрос кнопок===================
         }
       }
     }
+    else {
+      ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspTimeout = 0; }  // При аварийном останове меню не обслуживается - снимаем флаг таймаута, чтобы не срабатывать каждый вызов
+    }
     //
     if (butt) {  // Если нажата кнопка,
       cnt_menuWDT = 0;  // сбросим таймер ожидания выхода из меню
       fl.stab_off = 0;  // и сбросим флажок аварийного останова
+#ifdef REG_MODE_VOLT
+      fl.out_off = 0;   // и блокировку выхода (как кнопка К1 у РМВ-К)
+#endif
     }
     butt_count = 1;
     butt = 0;
     set_Pust();         // Пересчитаем Pust
-    fl.dspNewData = 1;  //Обновление информации на дисплее
+    ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspNewData = 1; }  //Обновление информации на дисплее
   }
   //
   if (pin_STAB_OFF_STATE && !fl.stab_off) { // Если есть сигнал аварийного останова
@@ -1337,13 +1241,15 @@ void Buttons_(void) { //==============Опрос кнопок===================
       Pust = 0;                     // Пересчитаем Pust
     }
     stop_razgon();    // Остановим разгон
-    fl.dspNewData = 1;//Обновление информации на дисплее
+    ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspNewData = 1; }//Обновление информации на дисплее
     fl.stab_off = 1;  // Поставим соответствующий флажок
   }
   else {
-    fl.razg_off = pin_RAZGON_OFF_STATE; // Прочитаем состояние вывода отключения разгона
+    ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: ISR(ADC) при пропаже сети пишет тот же байт fl
+      fl.razg_off = pin_RAZGON_OFF_STATE; // Прочитаем состояние вывода отключения разгона
+    }
     if (fl.razg_off && fl.razg_on) {  // Если разгон и есть внешний сигнал останова разгона...
-      fl.dspNewData = 1;  //Обновление информации на дисплее
+      ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspNewData = 1; }  //Обновление информации на дисплее
       stop_razgon();  // остановим разгон
     }
   }
@@ -1381,7 +1287,7 @@ sei(); // разрешим прерывания
     cnt_P_time = 0;
     //fl.dspNewData = 1;  // Раз в секунду не грех обновить дисплей, мало ли...
     if ((cnt_dspMenu > 0) && (++cnt_menuWDT == MENU_TIMEOUT)) { // Если мы в меню и слишком долго не жмутся кнопки
-      fl.dspTimeout = 1;                                        // Установим флаг таймаута
+      ATOMIC_BLOCK(ATOMIC_FORCEON) { fl.dspTimeout = 1; }                                        // Установим флаг таймаута
       cnt_menuWDT = 0;                                          // Сбросим таймер ожидания выхода из меню
     }
     //
@@ -1390,9 +1296,6 @@ sei(); // разрешим прерывания
         fl.uartTimeout = 1;       // Установим флаг таймаута ожидания окончания посылки
         cnt_uartWDT = 0;          // Сбросим таймер ожидания окончания посылки
       }
-    #endif
-    #ifdef USE_ADprotocol
-      fl.uartReport = 1;          // пора слать рапорт
     #endif
     //
   }
@@ -1410,6 +1313,7 @@ ISR(ADC_vect) { //===============Обработчик окончания пре�
   pin_DebugOut_HIGH;  //ОТЛАДКА
 #endif
   static uint8_t TM2_current;
+  static uint8_t zero = 0;           // Флаг перехода через ноль
   static int16_t Ufir = 0;           // Буферная переменная для НЧ-фильтрации
   static int16_t Udelta = 0;         // Буферная переменная для НЧ-фильтрации
 {
@@ -1431,7 +1335,7 @@ ISR(ADC_vect) { //===============Обработчик окончания пре�
   static uint8_t cnt_P_sum = 0;     // Счетчик полупериодов для суммирования отсчетов АЦП
   static uint16_t cnt_notzero = 0;  // Счетчик выборок АЦП без перехода через ноль
   //
-  if ((!fl.zero) &&
+  if ((!zero) &&
     (U_adc >= 0) &&
     (Ufir <= 0) &&
     (U_adc != Ufir)) { //=======переход через ноль детектед=======
@@ -1446,11 +1350,11 @@ ISR(ADC_vect) { //===============Обработчик окончания пре�
       sc = 0; sum = 0; cnt_P_sum = 0;     // Сбрасываем счетчик, сумматор и счетчик полупериодов
     } //===Проверка насуммированных отсчетов============================
     TM2_current = TM2_tmp;  // Запомним значение для дальнейшей обработки
-    fl.zero = 1;
+    zero = 1;
   }
   //
   else { //=======переход через ноль  NOT детектед=======
-    fl.zero = 0;
+    zero = 0;
     if (++cnt_notzero == ZSUM_MAX) {  // Насуммировали достаточно
       fl.NotZero = 1; cnt_notzero = 0;
       PID_ust = LINE_FREQ;
@@ -1471,7 +1375,7 @@ ISR(ADC_vect) { //===============Обработчик окончания пре�
   //
   sei(); // Следующие фрагменты длительны, но не требуют атомарности; разрешим прерывания
   //
-  if (fl.zero) {//===ПИД-подстройка частоты внутреннего таймера к частоте сети===
+  if (zero) {//===ПИД-подстройка частоты внутреннего таймера к частоте сети===
   static uint16_t PID_reg = PID_ust << Km;   // Функция управления ПИД
   static int32_t PID_err_old = 0;            // Разность фаз из предыдущего шага
   static int32_t PID_int = 0;                // Интегральная составляющая из предыдущего шага
@@ -1601,7 +1505,9 @@ void setup(void) {
   //
   pp_Delay(50);        // Подождем 600 полупериодов, пережидаем переходные процессы и любуемся заставкой
   //
-  fl.dspRefresh = 1;
+  ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: ISR пишут тот же байт fl
+    fl.dspRefresh = 1;
+  }
 
 #ifdef USE_USART//++++++++++++++++USART initialization++++++++++++++++++++++++++++
 //Если задействовано управление регулятором ТЭНа через UART, инициализируем оный
@@ -1632,6 +1538,7 @@ void loop(void) {
     l_U_sum *= 3;           //Нормированная сумма квадратов среднеквадратичного
     l_U_sum /= l_sc_sum;    //Нормированный квадрат среднеквадратичного
 #endif
+    if (l_U_sum > 65025) l_U_sum = 65025; // Сеть выше 255В считаем равной 255В, квадрат обязан влезать в 16-битный делитель calc_proportion
     //=====Корректируем pdm
 //    uint32_t tmp; // Величины великоваты, чтобы попасть в размерность приходится считать аккуратно
 //    //    pdm = U_LINE_Q*PDMust/(U_sum);
@@ -1641,7 +1548,17 @@ void loop(void) {
 //    tmp++;
 //    tmp /= 2;
     //
+#ifdef REG_MODE_VOLT
+    uint16_t tmp;
+    if (l_PDMust && (volt_to_PDM(Vust) == l_PDMust)) {  // Уставка задана в вольтах - считаем pdm сразу из квадратов напряжений, с одним округлением
+      tmp = calc_proportion((uint16_t)Vust * Vust, CICLE, l_U_sum);
+    }
+    else {                                // Уставку меняли кнопками - считаем от PDMust
+      tmp = calc_proportion(l_PDMust, U_LINE_Q, l_U_sum);
+    }
+#else
     uint16_t tmp = calc_proportion(l_PDMust, U_LINE_Q, l_U_sum);
+#endif
     //
     if (tmp > CICLE || fl.razg) { // Следим, чтобы pdm не превышала CICLE
       // S-26/28: атомарно пишем pdm и fl.Ulow (разный байт fl, но fl.Ulow соседствует с fl.Tout/TRelay из ISR)
@@ -1680,19 +1597,18 @@ void loop(void) {
     }
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       fl.sum = 0; // S-26: атомарный сброс fl.sum (ISR(ADC) пишет тот же байт fl)
+      fl.dspNewData = 1;  //Обновление информации на дисплее
     }
-    fl.dspNewData = 1;  //Обновление информации на дисплее
   } //======================Обработка данных от АЦП и корректировка выдаваемой мощности============
   //
-  #ifdef USE_ADprotocol
-  if (fl.uartReport && fl.uartUnhold) {  //==========Отправка отчета внешнему контроллеру============
-    USART_report();
-    fl.uartReport = 0;
-  } //=========================Отправка отчета внешнему контроллеру============
-  #endif
-  //
   if (fl.dspNewData) { //========================Вывод информации на дисплей=============
-    if (fl.dspRefresh) {
+    boolean l_dspRefresh;
+    ATOMIC_BLOCK(ATOMIC_FORCEON) { // S-26: флаги снимаем ДО отрисовки - запрос, пришедший из ISR во время рисования, останется на следующий проход
+      l_dspRefresh = fl.dspRefresh;
+      fl.dspRefresh = 0;
+      fl.dspNewData = 0;
+    }
+    if (l_dspRefresh) {
       RefreshMenu(); //Обновляем дисплей, если надо
     }
     //
@@ -1707,7 +1623,7 @@ void loop(void) {
           ASOled.printString_6x8(F("****"), X_position (6), 1);
 #endif
         }
-        else if ((Pnomold != Pnom) || fl.dspRefresh) {
+        else if ((Pnomold != Pnom) || l_dspRefresh) {
           Pnomold = Pnom;
 #ifdef INTERFACE_ALT
           ASOled.printString_12x16(F("    "), X_position (3,0,12), 0);
@@ -1717,12 +1633,11 @@ void loop(void) {
           ASOled.printNumber((long)Pnom, X_position (9,Pnom), 1);
 #endif
         }
-        fl.dspRefresh = 0;
         break;
       }
       case 1:  {  //=============Если мы в меню выбора уставки, то...
         static uint16_t PDMold = 0;
-        if ((PDMold != PDMset[0][cnt_PDMcount]) || fl.dspRefresh) {
+        if ((PDMold != PDMset[0][cnt_PDMcount]) || l_dspRefresh) {
           PDMold = PDMset[0][cnt_PDMcount];
           uint16_t p = calc_proportion(PDMold); // Считаем уставку с округлением
 #ifdef INTERFACE_ALT
@@ -1739,7 +1654,6 @@ void loop(void) {
           ASOled.printString_6x8(F(" "), X_position (20), 1);   // а если не записано - уберем
           }
         }
-        fl.dspRefresh = 0;
         break;
       }
       default: {  //=============А если не в меню, то...
@@ -1761,7 +1675,7 @@ void loop(void) {
         #define str_Relay 7
 #endif
         //
-        if (fl.dspRefresh) {  //Обновляем дисплей
+        if (l_dspRefresh) {  //Обновляем дисплей
           ASOled.clearDisplay();
 #ifdef INTERFACE_ALT
           ASOled.printString_6x8(F("Вт       ,  %"), X_position (8), str_ust);
@@ -1775,7 +1689,7 @@ void loop(void) {
         }
         //
         static uint16_t U_real_old = 0;
-        if ((U_real_old != U_real) || fl.dspRefresh) {
+        if ((U_real_old != U_real) || l_dspRefresh) {
           U_real_old = U_real;
 #ifdef INTERFACE_ALT
           ASOled.printString_12x16(F("   "), X_position (7,100,12) + 5, str_Ureal_big);
@@ -1786,7 +1700,7 @@ void loop(void) {
 #endif
         }
         static uint8_t U_real_dec_old = 0;
-        if ((U_real_dec_old != U_real_dec) || fl.dspRefresh) {
+        if ((U_real_dec_old != U_real_dec) || l_dspRefresh) {
           U_real_dec_old = U_real_dec;
 #ifdef INTERFACE_ALT
           ASOled.printString_12x16(F(" "), X_position (9,0,12), str_Ureal_big);
@@ -1796,7 +1710,7 @@ void loop(void) {
 #endif
         }
         static uint16_t Pust_old = 0;
-        if ((Pust_old != Pust) || fl.dspRefresh) {
+        if ((Pust_old != Pust) || l_dspRefresh) {
           Pust_old = Pust;
 #ifdef INTERFACE_ALT
           ASOled.printString_12x16(F("    "), 0, str_ust_big);
@@ -1808,7 +1722,7 @@ void loop(void) {
         }
         //
         static uint16_t PDMust_old = 0;
-        if ((PDMust_old != PDMust) || fl.dspRefresh) {
+        if ((PDMust_old != PDMust) || l_dspRefresh) {
           PDMust_old = PDMust;
           uint32_t x = 1000*(long)PDMust_old;
           x /= CICLE;
@@ -1866,14 +1780,12 @@ void loop(void) {
 //        else {
 //          ASOled.printString_6x8(F("        "), X_position (5), str_Relay);
 //        }
-        fl.dspRefresh = 0;
       }
     }
   //
-      fl.dspNewData = 0;
  }//========================Вывод информации на дисплей=============
   //
-  #ifdef USE_USART
+  #ifdef USE_RMVK
   if (fl.uartUnhold) {
   USART_parser();
   }

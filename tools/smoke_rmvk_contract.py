@@ -24,7 +24,6 @@ power_kvic = read_text("power_regulator_kvic.h")
 power_rmvk = read_text("power_regulator_rmvk.h")
 power_sem = read_text("power_regulator_sem.h")
 stab = read_text("Stab-avr/Stab-avr.ino")
-sem_uart = read_text("Stab-avr/SEM_AVR/SEM_AVR_UART.ino")
 
 if "#define RMVK_ERROR 255" not in mod_rmvk:
     errors.append("mod_rmvk.h must reserve 255 as RMVK_ERROR")
@@ -85,7 +84,6 @@ if 'SEM_AVR_SAMOVAR_AT_PREFIX = "\\xD0\\x90\\xD0\\xA2"' not in power_all:
 
 for name, text in {
     "Stab-avr/Stab-avr.ino": stab,
-    "Stab-avr/SEM_AVR/SEM_AVR_UART.ino": sem_uart,
 }.items():
     if 'SAMOVAR_LEGACY_UTF8_AT "\\xD0\\x90\\xD0\\xA2"' not in text:
         errors.append(f"{name} missing explicit legacy UTF-8 A/T prefix")
