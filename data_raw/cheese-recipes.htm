@@ -489,11 +489,15 @@
   }
   async function loadFilters() {
     try {
-      var options = await jsonRequest(new URL('recipes/filters', API_BASE).toString());
+      var filtersUrl = new URL('recipes/filters', API_BASE);
+      filtersUrl.searchParams.set('lang', language);
+      var options = await jsonRequest(filtersUrl.toString());
       Object.keys(state.filters).forEach(function (key) {
         var select = byId('recipe' + key.charAt(0).toUpperCase() + key.slice(1));
-        (Array.isArray(options[key]) ? options[key] : []).forEach(function (value) {
-          var label = key === 'difficulty' ? t('difficulty', {value: value}) : catalogLabel(key, value);
+        (Array.isArray(options[key]) ? options[key] : []).forEach(function (item) {
+          // Сервер отдаёт пары {code, label}; старый формат — просто строка с кодом.
+          var value = item && typeof item === 'object' ? item.code : item;
+          var label = key === 'difficulty' ? t('difficulty', {value: value}) : (item && item.label) || catalogLabel(key, value);
           select.appendChild(new Option(label, value));
         });
       });

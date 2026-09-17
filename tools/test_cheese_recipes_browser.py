@@ -35,7 +35,7 @@ BROWSER_TEST = r'''async page => {
     const request = route.request(), url = request.url();
     const catalogStyle = page.url().includes('?lang=en') ? 'acid_set.unknown_style' : 'acid_set.adygei';
     apiRequests.push({url:request.url(), authorization:request.headers().authorization || ''});
-    if (url.includes('/recipes/filters')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({family:['acid_set','hard'],style:['acid_set.adygei','hard.cheddar'],country:['RU','GB'],species:['bos_taurus','capra_hircus'],difficulty:['1','4']})});
+    if (url.includes('/recipes/filters')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({family:[{code:'acid_set',label:'Кислотный сыр'},{code:'hard',label:'Твёрдый сыр'}],style:[{code:'acid_set.adygei',label:'Адыгейский сыр'},{code:'hard.cheddar',label:'Чеддер'}],country:['RU','GB'],species:[{code:'bos_taurus',label:'Коровье молоко'},{code:'capra_hircus',label:'Козье молоко'}],difficulty:[{code:'1',label:'1'},{code:'4',label:'4'}]})});
     if (/\/me\/recipes\?/.test(url)) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({page:1,perPage:10,total:1,items:[{id:17,slug:'s5-fixture',name:'Тестовый сыр',catalog:'user',visibility:'private',revision:1,family:'acid_set',style:catalogStyle,country:'RU'}]})});
     if (url.includes('/me/recipes/17')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(recipe)});
     if (/\/recipes\?/.test(url)) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({page:Number((url.match(/[?&]page=(\d+)/)||[])[1]||1),perPage:10,total:21,items:[{id:17,slug:'s5-fixture',name:'Тестовый сыр',catalog:url.includes('catalog=user')?'user':'main',visibility:'public',revision:1,family:'acid_set',style:catalogStyle,country:'RU'}]})});
@@ -75,13 +75,15 @@ BROWSER_TEST = r'''async page => {
   expect(initialCatalogRequest.url.includes('lang=ru'), 'Russian is not the default language: ' + initialCatalogRequest.url);
   expect(!initialCatalogRequest.authorization, 'public catalogue received Authorization');
   await page.waitForFunction(() => document.querySelectorAll('#recipeFamily option').length === 3);
-  expect((await page.locator('#recipeFamily option').allTextContents()).join('|') === 'Все семейства|Кислотный|Твёрдый', 'family filter values were not localized');
+  expect((await page.locator('#recipeFamily option').allTextContents()).join('|') === 'Все семейства|Кислотный сыр|Твёрдый сыр', 'family filter values were not localized');
   expect((await page.locator('#recipeCountry option').allTextContents()).join('|') === 'Все страны|Россия|Великобритания', 'country filter values were not localized');
   expect((await page.locator('#recipeSpecies option').allTextContents()).join('|') === 'Любое молоко|Коровье молоко|Козье молоко', 'milk filter values were not localized');
   expect(await page.locator('#recipeList small').textContent() === 'Кислотный · Адыгейский · Россия', 'raw catalogue metadata was not localized to Russian');
 
   await page.locator('#recipeQuery').fill('сыр');
   await page.locator('#recipeFamily').selectOption('acid_set');
+  const filterLabels = await page.evaluate(() => Array.from(document.querySelectorAll('#recipeFamily option, #recipeStyle option, #recipeCountry option, #recipeDifficulty option')).map(o => o.textContent));
+  expect(!filterLabels.some(l => l.includes('[object')) && filterLabels.includes('Адыгейский сыр') && filterLabels.includes('Россия') && filterLabels.includes('Сложность 4'), 'filter labels are wrong: ' + filterLabels.join('|'));
   await page.locator('#recipeStyle').selectOption('acid_set.adygei');
   await page.locator('#recipeCountry').selectOption('RU');
   await page.locator('#recipeSpecies').selectOption('bos_taurus');
