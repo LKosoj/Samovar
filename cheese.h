@@ -157,6 +157,14 @@ inline bool cheese_in_temperature_band(float temperature, float target) {
   return fabsf(temperature - target) <= CHEESE_TEMPERATURE_DELTA;
 }
 
+// Вес зачёта времени выдержки: перегрев выше полосы не засчитывается совсем,
+// недогрев - плавно (см. hold_clock_weight в beer.h).
+inline float cheese_hold_clock_weight(const DSSensor& sensor, float target) {
+  const float band = hold_full_band(sensor);
+  if (sensor.avgTemp > target + band) return 0.0f;
+  return hold_clock_weight(target - sensor.avgTemp, band);
+}
+
 inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand) {
   if (!inBand) {
     cheeseRuntime.temperatureConfirmActive = false;
@@ -921,8 +929,9 @@ void cheese_stage_tick() {
       set_heater_state(row.Temp, sensor->avgTemp);
       const uint32_t elapsed = nowMs - cheeseRuntime.lastTickMs;
       cheeseRuntime.lastTickMs = nowMs;
-      if (cheese_in_temperature_band(sensor->avgTemp, row.Temp)) {
-        cheeseRuntime.holdAccumulatedMs += elapsed;
+      const float weight = cheese_hold_clock_weight(*sensor, row.Temp);
+      if (weight > 0.0f) {
+        cheeseRuntime.holdAccumulatedMs += static_cast<uint32_t>(elapsed * weight);
         runtime_pair_end(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED,
                          "Выдержка продолжена", NOTIFY_MSG);
       } else {

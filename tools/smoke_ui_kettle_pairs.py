@@ -63,9 +63,10 @@ def run_beer_hold_edges(block: str, expected_success: bool) -> bool:
     harness = r'''
 #include <cstdio>
 enum { WARNING_MSG = 1, NOTIFY_MSG = 2, RUNTIME_PAIR_RESUMED = 0, UI_WAIT_BEER_HOLD_CLOCK_FREEZE = 15 };
-#define BEER_TEMP_HYSTERESIS 0.5f
+#define HOLD_CLOCK_STOP_DEFICIT 3.0f
 typedef char ProgramType;
 struct DSSensor { float avgTemp; bool valid; } sensor;
+static float hold_full_band(const DSSensor&) { return 0.5f; }
 struct Row { float Temp; } program[1] = {{70}};
 static DSSensor* controlSensor = &sensor;
 static const char* controlSensorName = "tank";
@@ -89,7 +90,9 @@ int main() {
   sensor = {75, false}; tick();
   if (!check(processCalled && begins == 1 && ends == 0 && beerHoldClockFrozen && metadataUpdates == 1, "invalid sensor must not change q15 or hold metadata")) return 2;
   sensor = {75, true}; tick();
-  return check(ends == 1 && !beerHoldClockFrozen && metadataUpdates == 2, "valid warm P must END q15 as RESUMED") ? 0 : 3;
+  if (!check(ends == 1 && !beerHoldClockFrozen && metadataUpdates == 2, "valid warm P must END q15 as RESUMED")) return 3;
+  sensor = {68, true}; tick();
+  return check(begins == 1 && !beerHoldClockFrozen, "P 2 C below target only slows the hold clock, q15 must not BEGIN") ? 0 : 4;
 }
 '''.replace("@BODY@", block)
     with tempfile.TemporaryDirectory(prefix="samovar-beer-hold-pair-") as temp:
@@ -148,7 +151,7 @@ def main() -> int:
         "process_sensor_failed(\"Пиво\", controlSensorName);",
         "return;",
         "currentType == 'P' && begintime > 0",
-        "temp < program[ProgramNum].Temp - tempDelta",
+        "program[ProgramNum].Temp - temp >= HOLD_CLOCK_STOP_DEFICIT",
         "runtime_pair_begin(UI_WAIT_BEER_HOLD_CLOCK_FREEZE",
         "runtime_pair_end(UI_WAIT_BEER_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED",
     ], errors)

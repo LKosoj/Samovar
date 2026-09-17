@@ -739,7 +739,7 @@ bool mixer_status;                                              // Статус 
 bool rectManualPauseActive;            // Только attribution ручной паузы RECT для live UI
 bool beerManualPause;                  // Ручная пауза пива (НЕ PauseOn — тот только для ректификации)
 unsigned long beerStageIdleAccumMs;    // Накопленное время простоя текущей строки (ниже полосы гистерезиса на 'P' и/или ручная пауза)
-unsigned long beerStageIdleSinceMs;    // Момент начала текущего простоя, 0 = простоя нет сейчас
+unsigned long beerStageIdleSinceMs;    // Момент последнего учёта текущего простоя, 0 = простоя нет сейчас
 unsigned long beerBoilActiveAccumMs;   // [П13] Накопленное АКТИВНОЕ время разгона до кипения на строке 'B' (пауза не тикает)
 volatile bool alarm_event;                                      // Признак срабатывания кнопки тревоги
 bool acceleration_heater;                                       // Признак включенного разгонного тэна

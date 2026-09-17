@@ -25,7 +25,10 @@
 #define BEER_COOL_TIMEOUT_MS (120UL * 60UL * 1000UL)  // макс. время остывания на строке 'C'
 
 #ifndef BEER_TEMP_HYSTERESIS
-#define BEER_TEMP_HYSTERESIS 0.3f  // [P2 п.2] Ширина гистерезиса вокруг уставки для M/P/F (было: controlSensor->SetTemp — чужая величина датчика)
+#define BEER_TEMP_HYSTERESIS 0.3f  // Минимальная ширина полосы вокруг уставки для M/P/F; шире - настройкой "Вылет за уставку" датчика строки (см. hold_full_band)
+#endif
+#ifndef HOLD_CLOCK_STOP_DEFICIT
+#define HOLD_CLOCK_STOP_DEFICIT 3.0f  // Недогрев, °C, при котором выдержка (Пиво 'P', Сыр) перестаёт засчитываться совсем
 #endif
 
 // [Дефект 2 code review] Момент начала текущего непрерывного простоя ручной
@@ -36,6 +39,7 @@
 // (см. check_mixer_state()), а не вычитание из прошедшего времени.
 static unsigned long beerMixerPauseSinceMs = 0;
 static bool beerHoldClockFrozen = false;
+static float beerStageIdleShare = 0;  // Незасчитываемая доля времени с момента beerStageIdleSinceMs (1 = простой целиком)
 static bool beerPairErrorPending = false;
 
 #if USE_ADAPTIVE_PID
@@ -714,31 +718,52 @@ inline void beer_check_wort_overheat_limit() {
 }
 
 /**
- * @brief Обновляет накопитель простоя строки P/B/C: время ручной паузы, а также
- *        время ниже полосы гистерезиса (недогрев) на 'P', не должно засчитываться в
- *        выдержку строки (см. проверки в beer_stage_tick()).
+ * @brief Полоса полного зачёта выдержки: "Вылет за уставку" датчика строки из
+ *        настроек (меняется из веба без перезагрузки), не уже BEER_TEMP_HYSTERESIS
+ *        и не шире HOLD_CLOCK_STOP_DEFICIT.
+ */
+inline float hold_full_band(const DSSensor& sensor) {
+  return constrain(sensor.SetTemp, BEER_TEMP_HYSTERESIS, HOLD_CLOCK_STOP_DEFICIT);
+}
+
+/**
+ * @brief Вес зачёта времени выдержки при недогреве: 1 в пределах fullBand,
+ *        дальше линейно падает до 0 к HOLD_CLOCK_STOP_DEFICIT (ферменты/культуры
+ *        работают медленнее, но работают - время идёт, только медленнее).
+ * @param deficit Недогрев: уставка минус температура, °C (<= 0 при перегреве)
+ */
+inline float hold_clock_weight(float deficit, float fullBand) {
+  if (deficit <= fullBand) return 1.0f;
+  if (deficit >= HOLD_CLOCK_STOP_DEFICIT) return 0.0f;
+  return (HOLD_CLOCK_STOP_DEFICIT - deficit) / (HOLD_CLOCK_STOP_DEFICIT - fullBand);
+}
+
+/**
+ * @brief Обновляет накопитель простоя строки P/B/C: время ручной паузы целиком, а
+ *        время недогрева на 'P' - в доле 1 - hold_clock_weight(), не должно
+ *        засчитываться в выдержку строки (см. проверки в beer_stage_tick()).
+ *        Копит на каждом вызове (а не по выходу из простоя) - иначе строка могла
+ *        завершиться по времени, пока простой ещё длится.
  */
 inline void beer_update_stage_idle(ProgramType currentType, float temp, float tempDelta, unsigned long nowMs) {
-  bool idleNow = false;
+  float idleShare = 0;
   if (currentType == 'P' || currentType == 'B' || currentType == 'C') {
     // [П1] begintime > 0: пока строка ещё не стартовала, паузу не копим -
     // иначе накопитель простоя может обогнать реально прошедшее время
     // (см. beer_stage_elapsed_ms ниже).
     if (beerManualPause && begintime > 0) {
-      idleNow = true;
-    } else if (currentType == 'P' && begintime > 0 &&
-               // [Пиво 02.09 A4] Простой считаем только по недогреву - перегрев сверху
-               // таймер выдержки не останавливает.
-               temp < program[ProgramNum].Temp - tempDelta) {
-      idleNow = true;
+      idleShare = 1.0f;
+    } else if (currentType == 'P' && begintime > 0) {
+      // [Пиво 02.09 A4] Простой считаем только по недогреву - перегрев сверху
+      // таймер выдержки не останавливает.
+      idleShare = 1.0f - hold_clock_weight(program[ProgramNum].Temp - temp, tempDelta);
     }
   }
-  if (idleNow) {
-    if (beerStageIdleSinceMs == 0) beerStageIdleSinceMs = nowMs;
-  } else if (beerStageIdleSinceMs > 0) {
-    beerStageIdleAccumMs += nowMs - beerStageIdleSinceMs;
-    beerStageIdleSinceMs = 0;
+  if (beerStageIdleSinceMs > 0) {
+    beerStageIdleAccumMs += (unsigned long)((nowMs - beerStageIdleSinceMs) * beerStageIdleShare);
   }
+  beerStageIdleSinceMs = idleShare > 0 ? nowMs : 0;
+  beerStageIdleShare = idleShare;
 }
 
 /**
@@ -799,11 +824,12 @@ void beer_stage_tick() {
     return;
   }
   temp = controlSensor->avgTemp;
-  tempDelta = BEER_TEMP_HYSTERESIS;
+  tempDelta = hold_full_band(*controlSensor);
   ProgramType currentType = current_program_type();
   beer_update_stage_idle(currentType, temp, tempDelta, nowMs);
   const bool holdClockFrozen = currentType == 'P' && begintime > 0 &&
-      sensor_valid(*controlSensor) && temp < program[ProgramNum].Temp - tempDelta;
+      sensor_valid(*controlSensor) &&
+      program[ProgramNum].Temp - temp >= HOLD_CLOCK_STOP_DEFICIT;
   if (holdClockFrozen && !beerHoldClockFrozen) {
     runtime_pair_begin(UI_WAIT_BEER_HOLD_CLOCK_FREEZE,
                        "Пауза выдержки: температура ниже цели", WARNING_MSG);

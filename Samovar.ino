@@ -4558,7 +4558,7 @@ static UiStateDescriptor build_ui_state_from_loop() {
     const char* sensorName = "";
     if (currentType == 'P' && begintime > 0 &&
         beer_control_sensor(row.TempSensor, sensor, sensorName) && sensor_valid(*sensor) &&
-        sensor->avgTemp < row.Temp - BEER_TEMP_HYSTERESIS) {
+        row.Temp - sensor->avgTemp >= HOLD_CLOCK_STOP_DEFICIT) {
       value.waits[value.waitCount++] = {UI_WAIT_BEER_HOLD_CLOCK_FREEZE, UI_CONTINUATION_AUTO};
       value.phase = UI_PHASE_HOLD;
     }
@@ -4625,7 +4625,7 @@ static UiStateDescriptor build_ui_state_from_loop() {
           UI_END_OPERATION_ELAPSED, true, totalSeconds, UI_UNIT_S,
           remaining >= 0.0f, remaining >= 0.0f ? static_cast<uint32_t>(ceilf(remaining)) : 0};
       if (hasCheeseSensor &&
-          !cheese_in_temperature_band(cheeseSensor->avgTemp, row.Temp)) {
+          cheese_hold_clock_weight(*cheeseSensor, row.Temp) <= 0.0f) {
         value.waits[value.waitCount++] = {UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE,
                                           UI_CONTINUATION_AUTO};
       }

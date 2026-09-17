@@ -126,12 +126,12 @@ if beer:
             errors.append("beer pause finish condition still uses the overflow-prone inline cast formula")
 
         require_token(
-            "beer M/P/F hysteresis uses own constant, not the sensor's SetTemp",
+            "beer M/P/F band comes from the row sensor's setting, clamped by hold_full_band()",
             body,
-            "tempDelta = BEER_TEMP_HYSTERESIS;",
+            "tempDelta = hold_full_band(*controlSensor);",
         )
         if "tempDelta = controlSensor->SetTemp;" in body:
-            errors.append("beer hysteresis still borrows controlSensor->SetTemp")
+            errors.append("beer band uses raw controlSensor->SetTemp without the hold_full_band() clamp")
 
         try:
             autotune_block, _ = extract_braced_block_after(body, "if (currentType == 'A') {")

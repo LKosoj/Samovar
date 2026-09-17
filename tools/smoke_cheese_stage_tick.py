@@ -11,6 +11,7 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "cheese.h").read_text(encoding="utf-8")
+BEER_SOURCE = (ROOT / "beer.h").read_text(encoding="utf-8")
 
 
 def extracted(signature: str) -> str:
@@ -26,6 +27,9 @@ using std::isfinite;
 using std::min;
 #define USE_LUA
 #define CHEESE_TEMPERATURE_DELTA 0.3f
+#define BEER_TEMP_HYSTERESIS 0.3f
+#define HOLD_CLOCK_STOP_DEFICIT 3.0f
+#define constrain(v, lo, hi) ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 #define CHEESE_TEMPERATURE_CONFIRM_MS 10000UL
 #define CHEESE_PH_CONFIRM_MS 30000UL
 #define CHEESE_PH_INVALID_MS 10000UL
@@ -41,7 +45,7 @@ static void runtime_pair_begin(UiWaitReason, const char*, int) {}
 static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, int) {}
 enum CheeseStageKind : uint8_t { CHEESE_STAGE_INVALID=0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD, CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH, CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA, CHEESE_STAGE_FLOC };
 struct WProgram { ProgramType WType; float Temp; float Time; float Param; uint8_t TempSensor; };
-struct DSSensor { float avgTemp; } sensor;
+struct DSSensor { float avgTemp; float SetTemp; } sensor;
 struct CheeseRuntimeState { uint32_t enteredMs,lastTickMs,temperatureConfirmSinceMs,holdAccumulatedMs,mixerDeadlineMs,phReachedSinceMs,phInvalidSinceMs; float heatStartSetpoint; uint8_t mixerDevice; bool mixerRunning,mixerOneShotComplete,doserStarted,doserCompleted,drainOpen,temperatureConfirmActive,phReachedActive,phInvalidActive,flocFixed; uint32_t flocActualSeconds,flocMultiplierMilli,flocCutSeconds,flocTimeoutSeconds; } cheeseRuntime = {};
 enum CheeseLuaStagePhase : uint8_t { CHEESE_LUA_STAGE_IDLE=0, CHEESE_LUA_STAGE_ENTER_QUEUED, CHEESE_LUA_STAGE_RUNNING, CHEESE_LUA_STAGE_EXIT_REQUESTED, CHEESE_LUA_STAGE_EXIT_QUEUED };
 struct CheeseLuaStageState { CheeseLuaStagePhase phase; uint32_t ticket; uint8_t nextProgram; } cheeseLuaStage = {CHEESE_LUA_STAGE_IDLE, 0, 20};
@@ -56,6 +60,9 @@ inline bool cheese_time_elapsed(uint32_t nowMs, uint32_t startedMs, float minute
 inline float cheese_stage_timeout_minutes(const WProgram& row) { @TIMEOUT@ }
 inline uint32_t cheese_f_timeout_seconds(const WProgram& row) { @F_TIMEOUT@ }
 inline bool cheese_in_temperature_band(float temperature, float target) { @BAND@ }
+inline float hold_full_band(const DSSensor& sensor) { @FULL_BAND@ }
+inline float hold_clock_weight(float deficit, float fullBand) { @CLOCK_WEIGHT@ }
+inline float cheese_hold_clock_weight(const DSSensor& sensor, float target) { @CHEESE_WEIGHT@ }
 inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand) { @TEMP_CONFIRM@ }
 inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached) { @PH_CONFIRM@ }
 inline bool cheese_ph_invalid_too_long(uint32_t nowMs, bool valid) { @PH_INVALID@ }
@@ -85,7 +92,7 @@ int main() {
   fakeMs=0;
   reset('H'); sensor.avgTemp=15; tick(); sensor.avgTemp=20; for(int i=0;i<11;i++) tick(); tick(); check(transitions==1 && aborts==0 && heaterCalls>0,"H success/one transition");
   reset('H'); program[0].Time=.001f; sensor.avgTemp=10; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"H timeout");
-  reset('P'); program[0].Time=.06f; program[0].Param=10; sensor.avgTemp=20; tick(); check(transitions==0,"P completed before required hold"); sensor.avgTemp=19; tick(); check(transitions==0,"P advanced after leaving band"); sensor.avgTemp=20; tick(); tick(); check(transitions==0,"P did not pause accumulation outside band"); tick(); check(transitions==1 && aborts==0,"P pauses outside band then resumes");
+  reset('P'); program[0].Time=.06f; program[0].Param=10; sensor.avgTemp=20; tick(); check(transitions==0,"P completed before required hold"); sensor.avgTemp=15; tick(); check(transitions==0,"P advanced after leaving band"); sensor.avgTemp=20; tick(); tick(); check(transitions==0,"P did not pause accumulation outside band"); tick(); check(transitions==1 && aborts==0,"P pauses outside band then resumes");
   reset('P'); program[0].Param=.001f; sensor.avgTemp=10; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"P overall timeout");
   reset('C'); sensor.avgTemp=20; for(int i=0;i<11;i++) tick(); tick(); check(transitions==1 && coolingCalls>0,"C success/one transition");
   reset('C'); coolingOk=false; sensor.avgTemp=25; tick(); check(aborts==1,"C actuator failure");
@@ -108,7 +115,12 @@ int main() {
   reset('L'); cheeseLuaStage.phase=CHEESE_LUA_STAGE_RUNNING; luaResult=LUA_BEER_JOB_FAILED; tick(); check(aborts==1,"L error result");
   reset('L'); cheeseLuaStage.phase=CHEESE_LUA_STAGE_RUNNING; luaResult=LUA_BEER_JOB_SUCCEEDED; tick(); check(aborts==1,"L completion without next did not stop");
   reset('L'); cheeseLuaStage.phase=CHEESE_LUA_STAGE_EXIT_REQUESTED; cheeseLuaStage.nextProgram=1; tick(); check(aborts==0 && preparedProgram==1,"L confirmed requested exit did not prepare next row");
-  fakeMs=0xfffffff0UL; reset('P'); program[0].Param=10; sensor.avgTemp=20; tick(); check(cheeseRuntime.holdAccumulatedMs==1000,"P hold did not accumulate across millis rollover"); sensor.avgTemp=19; tick(); check(cheeseRuntime.holdAccumulatedMs==1000,"P hold grew outside the band"); sensor.avgTemp=20; tick(); check(cheeseRuntime.holdAccumulatedMs==2000,"P hold did not resume after the band");
+  fakeMs=0xfffffff0UL; reset('P'); program[0].Param=10; sensor.avgTemp=20; tick(); check(cheeseRuntime.holdAccumulatedMs==1000,"P hold did not accumulate across millis rollover"); sensor.avgTemp=15; tick(); check(cheeseRuntime.holdAccumulatedMs==1000,"P hold grew outside the band"); sensor.avgTemp=20; tick(); check(cheeseRuntime.holdAccumulatedMs==2000,"P hold did not resume after the band");
+  // Недогрев между полосой и 3 C засчитывается с весом, перегрев выше полосы - не засчитывается, полосу расширяет SetTemp датчика.
+  reset('P'); program[0].Param=10; sensor.SetTemp=1.0f; sensor.avgTemp=18; tick(); check(cheeseRuntime.holdAccumulatedMs==500,"P hold 2 C below target with 1 C band must count half of the time");
+  sensor.avgTemp=19; tick(); check(cheeseRuntime.holdAccumulatedMs==1500,"P hold inside the widened band must count in full");
+  sensor.avgTemp=21.5f; tick(); check(cheeseRuntime.holdAccumulatedMs==1500,"P hold grew while overheated above the band");
+  sensor.SetTemp=0;
   return failures;
 }
 '''
@@ -121,6 +133,9 @@ def build(tick_body: str, lua_body: str) -> str:
         "@TIMEOUT@": extracted("inline float cheese_stage_timeout_minutes(const WProgram& row)"),
         "@F_TIMEOUT@": extracted("inline uint32_t cheese_f_timeout_seconds(const WProgram& row)"),
         "@BAND@": extracted("inline bool cheese_in_temperature_band(float temperature, float target)"),
+        "@FULL_BAND@": extract_function_body(BEER_SOURCE, "inline float hold_full_band(const DSSensor& sensor)"),
+        "@CLOCK_WEIGHT@": extract_function_body(BEER_SOURCE, "inline float hold_clock_weight(float deficit, float fullBand)"),
+        "@CHEESE_WEIGHT@": extracted("inline float cheese_hold_clock_weight(const DSSensor& sensor, float target)"),
         "@TEMP_CONFIRM@": extracted("inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand)"),
         "@PH_CONFIRM@": extracted("inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached)"),
         "@PH_INVALID@": extracted("inline bool cheese_ph_invalid_too_long(uint32_t nowMs, bool valid)"),
@@ -161,7 +176,8 @@ def main() -> int:
         return 1
     for old, new, label in [
         ("cheese_temperature_confirmed(nowMs,", "false && cheese_temperature_confirmed(nowMs,", "H/C confirmation"),
-        ("cheeseRuntime.holdAccumulatedMs += elapsed;", "cheeseRuntime.holdAccumulatedMs -= elapsed;", "P accumulation"),
+        ("cheeseRuntime.holdAccumulatedMs += static_cast<uint32_t>(elapsed * weight);", "cheeseRuntime.holdAccumulatedMs -= static_cast<uint32_t>(elapsed * weight);", "P accumulation"),
+        ("static_cast<uint32_t>(elapsed * weight)", "elapsed", "P weighted accumulation"),
         ("if ((row.TempSensor == 2 || row.TempSensor == 3) && cheese_local_doser_complete())", "if (false)", "D completion"),
         ("kind != CHEESE_STAGE_HOLD && kind != CHEESE_STAGE_MIX", "false", "C timeout"),
         ("case CHEESE_STAGE_WAIT:\n      return;", "case CHEESE_STAGE_WAIT:\n      run_cheese_program(ProgramNum + 1); return;", "W manual transition"),

@@ -458,8 +458,8 @@ CheeseStageKind cheese_stage_kind(ProgramType type) {
     case 'L': return CHEESE_STAGE_LUA; default: return CHEESE_STAGE_INVALID;
   }
 }
-bool cheese_in_temperature_band(float actual, float target) {
-  return std::fabs(actual - target) <= 0.3f;
+float cheese_hold_clock_weight(const DSSensor& sensor, float target) {
+  return target - sensor.avgTemp >= 3.0f || sensor.avgTemp > target + 0.3f ? 0.0f : 1.0f;
 }
 volatile float WFflowRate = 1.25f;
 volatile uint32_t WFtotalMilliLitres = 456;
@@ -532,7 +532,7 @@ bool beer_control_sensor(uint8_t sensorId, const SensorFixture*& sensor, const c
   name = names[sensorId];
   return true;
 }
-#define BEER_TEMP_HYSTERESIS 0.3f
+#define HOLD_CLOCK_STOP_DEFICIT 3.0f
 // Состояние детектора примесей (impurity_detector.h): снимок читает его через
 // функции-доступы, а не через статики файла детектора.
 uint8_t detector_idle_reason_code() { return 5; }

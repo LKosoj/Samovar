@@ -29,6 +29,7 @@ from smoke_helpers import extract_function_body
 ROOT = Path(__file__).resolve().parents[1]
 
 BEER_UPDATE_STAGE_IDLE_SIGNATURE = "inline void beer_update_stage_idle(ProgramType currentType, float temp, float tempDelta, unsigned long nowMs)"
+HOLD_CLOCK_WEIGHT_SIGNATURE = "inline float hold_clock_weight(float deficit, float fullBand)"
 BEER_STAGE_ELAPSED_MS_SIGNATURE = "inline float beer_stage_elapsed_ms(unsigned long nowMs)"
 
 HARNESS_TEMPLATE = r'''
@@ -48,6 +49,10 @@ static unsigned long begintime = 0;
 static bool beerManualPause = false;
 static unsigned long beerStageIdleAccumMs = 0;
 static unsigned long beerStageIdleSinceMs = 0;
+static float beerStageIdleShare = 0;
+#define HOLD_CLOCK_STOP_DEFICIT 3.0f
+
+@HOLD_CLOCK_WEIGHT_BODY@
 
 @BEER_UPDATE_STAGE_IDLE_BODY@
 
@@ -69,6 +74,7 @@ static void reset_fixture() {
   beerManualPause = false;
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
+  beerStageIdleShare = 0;
 }
 
 // [P2 п.6] Ручная пауза на строке 'P' - простой должен копиться, пока пауза
@@ -84,8 +90,8 @@ static void test_manual_pause_accumulates_idle_on_pause_row() {
   check(beerStageIdleAccumMs == 0, "накопитель не должен расти, пока простой ещё не завершён");
 
   beer_update_stage_idle('P', 65, 0.3f, 4500);
-  check(beerStageIdleSinceMs == 1000, "простой продолжается - момент начала не должен сдвигаться");
-  check(beerStageIdleAccumMs == 0, "накопитель не должен расти во время непрерывного простоя");
+  check(beerStageIdleSinceMs == 4500, "простой продолжается - метка учёта должна сдвинуться на текущий вызов");
+  check(beerStageIdleAccumMs == 3500, "накопитель обязан расти и во время непрерывного простоя");
 
   beerManualPause = false;
   beer_update_stage_idle('P', 65, 0.3f, 6000);
@@ -165,6 +171,47 @@ static void test_P_out_of_band_idle_requires_started_row() {
   check(beerStageIdleAccumMs == 3000, "РЕГРЕСС: возврат в полосу гистерезиса не зачёл накопленный простой (3000мс)");
 }
 
+// Недогрев в пределах полосы (в т.ч. расширенной настройкой датчика) выдержку
+// не замедляет вовсе.
+static void test_P_small_deficit_counts_in_full() {
+  reset_fixture();
+  program[0].Temp = 65;
+  begintime = 1;
+  beer_update_stage_idle('P', 64.75f, 0.3f, 1000);
+  beer_update_stage_idle('P', 64.0f, 1.0f, 2000);  // полоса расширена до 1.0
+  beer_update_stage_idle('P', 64.0f, 1.0f, 3000);
+  check(beerStageIdleSinceMs == 0 && beerStageIdleAccumMs == 0,
+        "РЕГРЕСС: недогрев в пределах полосы не должен замедлять выдержку");
+}
+
+// Между полосой и HOLD_CLOCK_STOP_DEFICIT время идёт с весом: при полосе 1.0 и
+// недогреве 2.0 вес 0.5, т.е. из 4000 мс в простой уходит 2000.
+static void test_P_partial_deficit_counts_proportionally() {
+  reset_fixture();
+  program[0].Temp = 65;
+  begintime = 1;
+  beer_update_stage_idle('P', 63.0f, 1.0f, 1000);
+  beer_update_stage_idle('P', 63.0f, 1.0f, 5000);
+  check(beerStageIdleAccumMs == 2000,
+        "РЕГРЕСС: недогрев 2.0 при полосе 1.0 должен засчитывать ровно половину времени");
+  check(hold_clock_weight(3.0f, 0.3f) == 0.0f && hold_clock_weight(10.0f, 0.3f) == 0.0f,
+        "РЕГРЕСС: недогрев от HOLD_CLOCK_STOP_DEFICIT должен останавливать выдержку полностью");
+  check(hold_clock_weight(3.5f, 3.0f) == 0.0f && hold_clock_weight(2.9f, 3.0f) == 1.0f,
+        "РЕГРЕСС: полоса, равная порогу остановки, должна давать ступеньку без деления на ноль");
+}
+
+// Простой копится на каждом вызове, а не по выходу из него - иначе
+// beer_stage_elapsed_ms() досчитал бы строку до конца, пока сусло ещё холодное.
+static void test_P_idle_accumulates_while_still_cold() {
+  reset_fixture();
+  program[0].Temp = 65;
+  begintime = 1000;
+  beer_update_stage_idle('P', 40, 0.3f, 1000);
+  beer_update_stage_idle('P', 40, 0.3f, 61000);
+  check(beer_stage_elapsed_ms(61000) == 0.0f,
+        "РЕГРЕСС: пока недогрев длится, активное время строки не должно расти");
+}
+
 // [Пиво 02.09 A4] Перегрев выше полосы гистерезиса на 'P' простоем не считается -
 // таймер выдержки не должен останавливаться, пока температура не ниже цели.
 static void test_P_overheat_above_band_does_not_accumulate_idle() {
@@ -236,6 +283,9 @@ int main() {
   test_manual_pause_before_row_start_does_not_accumulate();
   test_P_out_of_band_idle_requires_started_row();
   test_P_overheat_above_band_does_not_accumulate_idle();
+  test_P_small_deficit_counts_in_full();
+  test_P_partial_deficit_counts_proportionally();
+  test_P_idle_accumulates_while_still_cold();
   test_B_type_ignores_temperature_band();
   test_other_types_never_accumulate_idle();
   test_elapsed_clamped_when_idle_exceeds_elapsed_wall_time();
@@ -257,7 +307,10 @@ def build_harness(beer_header_path: Path) -> str:
     )
     elapsed_body = extract_function_body(beer_source, BEER_STAGE_ELAPSED_MS_SIGNATURE)
     elapsed_fn = "float beer_stage_elapsed_ms(unsigned long nowMs) {" + elapsed_body + "}"
+    weight_body = extract_function_body(beer_source, HOLD_CLOCK_WEIGHT_SIGNATURE)
+    weight_fn = "float hold_clock_weight(float deficit, float fullBand) {" + weight_body + "}"
     harness = HARNESS_TEMPLATE.replace("@BEER_UPDATE_STAGE_IDLE_BODY@", idle_fn)
+    harness = harness.replace("@HOLD_CLOCK_WEIGHT_BODY@", weight_fn)
     return harness.replace("@BEER_STAGE_ELAPSED_MS_BODY@", elapsed_fn)
 
 
