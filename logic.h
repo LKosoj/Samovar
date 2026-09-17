@@ -671,7 +671,7 @@ String get_beer_status_text() {
     local = local + "Выполнение Lua скрипта";
   }
 
-  if (PowerOn && program_type_one_of(currentType, "PB") && begintime > 0) {
+  if (PowerOn && program_type_one_of(currentType, "PBF") && begintime > 0) {
     // [P2 п.5+6] Прогресс считается по времени "в работе": простой (ручная
     // пауза и/или выход за гистерезис на 'P') не засчитывается в выдержку строки.
     float elapsedMs = (float)(millis() - begintime) - (float)beerStageIdleAccumMs;

@@ -16,6 +16,7 @@ COOLING_DEMAND_SIGNATURE = "inline bool beer_cooling_pump_demanded()"
 ELAPSED_SIGNATURE = "inline float beer_stage_elapsed_ms(unsigned long nowMs)"
 
 HARNESS_TEMPLATE = r'''
+#include <cstdint>
 #include <iostream>
 
 #define USE_WATER_PUMP
@@ -30,7 +31,7 @@ enum ActuatorCommandResult {
 // [П13] Таймаут остывания 'C' - то же значение, что и в beer.h.
 #define BEER_COOL_TIMEOUT_MS (120UL * 60UL * 1000UL)
 
-struct WProgram { float Temp = 0; };
+struct WProgram { float Temp = 0; float Time = 0; };
 static WProgram program[1];
 static unsigned char ProgramNum = 0;
 static bool valve_status = false;
@@ -102,6 +103,7 @@ static void check(bool condition, const char* message) {
 
 static void reset_fixture() {
   program[0].Temp = 20;
+  program[0].Time = 0;
   valve_status = false;
   PowerOn = true;
   beerCoolingPumpActive = false;
@@ -179,6 +181,19 @@ int main() {
   run_f_branch();
   check(!valve_status && !beerCoolingPumpActive && emergencyCalls == 1,
         "F продолжил работу после неподтверждённого запуска насоса");
+
+  // Время строки F: 0 - таймер не заводится (бесконечно), >0 - идёт со входа в строку.
+  reset_fixture();
+  run_f_branch();
+  check(begintime == 0, "F с временем 0 завёл таймер строки");
+
+  reset_fixture();
+  program[0].Time = 60;
+  run_f_branch();
+  check(begintime == fakeMillis, "F с заданным временем не завёл таймер со входа в строку");
+  fakeMillis += 5000;
+  run_f_branch();
+  check(begintime == fakeMillis - 5000, "F перезавёл таймер строки на следующем тике");
 
   reset_fixture();
   temp = 25;

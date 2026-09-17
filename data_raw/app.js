@@ -164,7 +164,8 @@
   // (check_program) и brewxml.htm (validateBeerProgramText); зеркало
   // program_io.h::program_validate_beer_row_semantics.
   function beerRowTypeOk(type, temp, time, noDevice, sensor) {
-    if (type === 'M' || type === 'C' || type === 'F') return temp > 0 && time === 0;
+    if (type === 'M' || type === 'C') return temp > 0 && time === 0;
+    if (type === 'F') return temp > 0 && time >= 0;
     if (type === 'P') return temp > 0 && time > 0;
     if (type === 'B') return temp === 0 && time > 0;
     if (type === 'W') return temp === 0 && time === 0;

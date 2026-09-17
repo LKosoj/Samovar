@@ -82,14 +82,28 @@
     }
 
 
-    function check_program (str) {
-      if (str.trim() == "") return true;
+    // Правила строк - те же, что в SamovarApp.beerRowTypeOk и в прошивке (program_io.h).
+    var PROGRAM_ROW_RULES = {
+      M: '«Темп. закладки солода» - нужна температура больше 0, время 0',
+      C: '«Охлаждение» - нужна температура больше 0, время 0',
+      F: '«Брожение» - нужна температура больше 0 (время 0 - держать бесконечно)',
+      P: '«Пауза» - нужны температура и время больше 0',
+      B: '«Кипячение» - нужно время больше 0, температура 0',
+      W: '«Ожидание» - температура и время должны быть 0',
+      L: '«Lua Скрипт» - нужны файл .lua и тайм-аут от 1 до 65535 мин, температура и датчик 0',
+      A: '«Автотюнинг» - нужна температура больше 0, время 0, без мешалки'
+    };
+
+    // Возвращает причину, по которой программа не принимается, или '' если всё верно.
+    function program_error (str) {
+      if (str.trim() == "") return '';
       var arrayOfStrings = str.split("\n");
       for (var i = 0; i < arrayOfStrings.length; i++) {
+        var row = 'Строка ' + (i + 1) + ': ';
         var line = arrayOfStrings[i].trim();
-        if (line == "") return i == arrayOfStrings.length - 1;
+        if (line == "") return i == arrayOfStrings.length - 1 ? '' : row + 'пустая строка внутри программы';
         var arrayOfDelim = arrayOfStrings[i].split(";");
-        if (arrayOfDelim.length != 5) return false;
+        if (arrayOfDelim.length != 5) return row + 'должно быть 5 полей через «;»';
         var type = arrayOfDelim[0];
         var temp = Number(arrayOfDelim[1]);
         var time = Number(arrayOfDelim[2]);
@@ -98,29 +112,39 @@
           var luaParts = arrayOfDelim[3].split('^');
           if (temp !== 0 || !Number.isInteger(time) || time < 1 || time > 65535 ||
               sensor !== 0 || !/\.lua$/.test(luaParts[0]) ||
-              luaParts.some(function(value) { return value === ''; })) return false;
+              luaParts.some(function(value) { return value === ''; })) return row + PROGRAM_ROW_RULES.L;
           continue;
         }
-        if (char_count(arrayOfDelim[3], "^") != 3) return false;
+        if (char_count(arrayOfDelim[3], "^") != 3) return row + 'поле «Мешалка» должно иметь вид 0^0^0^0';
         var device = arrayOfDelim[3].split("^").map(Number);
         if (!Number.isFinite(temp) || !Number.isFinite(time) ||
             device.length != 4 || device.some(function(v) { return !Number.isInteger(v); }) ||
-            !Number.isInteger(sensor) || sensor < 0 || sensor > 4 || time < 0) return false;
+            !Number.isInteger(sensor) || sensor < 0 || sensor > 4 || time < 0) return row + 'температура, время, мешалка и датчик должны быть числами, время не меньше 0';
+        var timeMax = type === 'F' ? 43200 : 1440;
+        if (time > timeMax) return row + 'время не больше ' + timeMax + ' минут';
         var noDevice = device.every(function(v) { return v === 0; });
         var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[2] > 0;
-        if (!(noDevice || scheduledDevice)) return false;
-        if (!SamovarApp.beerRowTypeOk(type, temp, time, noDevice, sensor)) return false;
+        if (!(noDevice || scheduledDevice)) return row + 'мешалка - либо 0^0^0^0, либо устройство 1..3 с временем работы больше 0';
+        if (!SamovarApp.beerRowTypeOk(type, temp, time, noDevice, sensor)) return row + (PROGRAM_ROW_RULES[type] || 'неизвестный тип «' + type + '»');
       }
-      return true;
+      return '';
+    }
+
+    function check_program (str) {
+      return program_error(str) === '';
+    }
+
+    // Сообщает причину отказа; true - программа верна.
+    function program_ok_or_notify () {
+      var err = program_error(document.getElementById('WProgram').value);
+      if (err) SamovarApp.notify("Ошибка программы. " + err, 1);
+      return !err;
     }
 
 
     async function set_program () {
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replaceAll(",", ".");
-      if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
-        return;
-      }
+      if (!program_ok_or_notify()) return;
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) { SamovarApp.notify(result.err || 'Программа не установлена', 0); return; }
@@ -180,10 +204,9 @@
     };
 
     function calc_program () {
-      if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
-        return;
-      }
+      // Текст строится из строк таблицы. Старый текст здесь НЕ проверяем: пока строку
+      // заполняют по одному полю, он неизбежно неверен (тип «Пауза» с ещё пустым временем),
+      // и проверка навсегда запирала бы правку полей. Проверка - при установке программы.
       var t = document.getElementsByClassName("prgline");
       var k, s;
       s = "";
@@ -311,12 +334,9 @@
     }
 
     function getProgram () {
-      if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
-        return;
-      }
+      if (!program_ok_or_notify()) return;
       var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-temperature" class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-time" class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;<label id="beer-program-col-mixer" class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label id="beer-program-col-sensor" class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
+      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-temperature" class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-time" class="tooltip">Время<span class="tooltiptext">Задается в минутах для программ "Пауза", "Кипячение" и "Брожение" (у брожения 0 - держать бесконечно, максимум 43200 - 30 суток)</span></label>&nbsp;&nbsp;&nbsp;<label id="beer-program-col-mixer" class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label id="beer-program-col-sensor" class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
       SamovarApp.enhanceTooltips();
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
@@ -428,10 +448,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
-        if (!check_program(document.getElementById('WProgram').value)) {
-          SamovarApp.notify("Ошибка программы, проверьте её.", 1);
-          return;
-        }
+        if (!program_ok_or_notify()) return;
         var element = document.getElementById("prg");
         while (element.firstChild) {
           element.removeChild(element.firstChild);
@@ -576,7 +593,7 @@
             <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре),</span></p>
             <p><span>B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры),</span></p>
             <p><span>W - wait (режим ожидания, ничего не делает до смены строки программы)</span></p>
-            <p><span>F - ferment (ферментирование; ручная пауза выключает и нагрев, и охлаждение до продолжения).</span></p>
+            <p><span>F - ferment (ферментирование; время 0 - держать температуру бесконечно, время в минутах - перейти к следующей строке по его истечении; ручная пауза выключает и нагрев, и охлаждение до продолжения).</span></p>
             <p><span>L - Lua скрипт: все параметры строки должны быть нулевыми. Вход ждёт подтверждённый запуск Lua-job, выход ждёт его остановку; ошибка Lua останавливает варку.</span></p>
             <p><span>Варочный порядок (All-in-one / HERMS / RIMS) задаётся в Настройках, вкладка «Пиво». Импорт BeerXML подставляет датчик и насос из этого порядка; TYPE шага (Infusion/Temperature/Decoction) берётся из рецепта.</span></p>
             <p><span>&nbsp;</span></p>

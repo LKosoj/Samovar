@@ -52,6 +52,8 @@ constexpr float PROGRAM_POWER_MIN = -PROGRAM_POWER_MAX;
 // реальный этап варки (мэш-паузы обычно до нескольких часов, кипячение — до пары часов).
 constexpr float PROGRAM_TIME_MIN = 0.0f;
 constexpr float PROGRAM_TIME_MAX = 1440.0f;
+// Строка 'F' (ферментация) пива длится сутками: потолок 30 суток.
+constexpr float PROGRAM_BEER_F_TIME_MAX = 43200.0f;
 
 struct ProgramDraft {
   WProgram rows[PROGRAM_MAX];
@@ -338,9 +340,13 @@ inline bool program_validate_beer_row_semantics(
   switch (type) {
     case 'M':
     case 'C':
-    case 'F':
       if (temp > 0.0f && timeMin == 0.0f) return true;
-      errorMessage = "Ошибка программы: для типа M/C/F Temp больше 0 и Time=0";
+      errorMessage = "Ошибка программы: для типа M/C Temp больше 0 и Time=0";
+      return false;
+    case 'F':
+      // Time=0 - держать температуру бесконечно, Time>0 - перейти дальше через Time минут.
+      if (temp > 0.0f) return true;
+      errorMessage = "Ошибка программы: для типа F Temp больше 0";
       return false;
     case 'P':
       if (temp > 0.0f && timeMin > 0.0f) return true;
@@ -607,7 +613,8 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   }
   ok = ok &&
             parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, PROGRAM_TEMP_MAX, temp).ok() &&
-            parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
+            parse_bounded_float(tokTime, PROGRAM_TIME_MIN,
+                parsedType == 'F' ? PROGRAM_BEER_F_TIME_MAX : PROGRAM_TIME_MAX, timeMin).ok() &&
             parse_bounded_long(tokSensor, 0, 4, sensor).ok();
 
   long devType = 0;

@@ -130,6 +130,25 @@ static void test_manual_pause_accumulates_idle_on_cooling_row() {
   check(beerStageIdleAccumMs == 400, "РЕГРЕСС: ручная пауза на охлаждении не зачлась в накопитель после снятия");
 }
 
+// Строка 'F' со временем: ручная пауза не засчитывается во время брожения, а
+// переворот millis() (~49.7 суток) не обнуляет прошедшее время строки.
+static void test_manual_pause_accumulates_idle_on_ferment_row() {
+  reset_fixture();
+  begintime = 1;
+  beerManualPause = true;
+
+  beer_update_stage_idle('F', 18, 0.3f, 5000);
+  check(beerStageIdleSinceMs == 5000, "ручная пауза на брожении не зафиксировала начало простоя");
+
+  beerManualPause = false;
+  beer_update_stage_idle('F', 18, 0.3f, 5600);
+  check(beerStageIdleAccumMs == 600, "ручная пауза на брожении не зачлась в накопитель после снятия");
+
+  reset_fixture();
+  begintime = 0xFFFFFFFFUL - 999UL;
+  check(beer_stage_elapsed_ms(1000) == 2000.0f, "переворот millis() сломал счёт времени строки");
+}
+
 // [П1] Ручная пауза до старта строки (begintime==0) не должна начинать
 // копить простой - иначе накопитель может обогнать прошедшее время ещё до
 // того, как строка вообще стартовала (см. beer_stage_elapsed_ms).
@@ -280,6 +299,7 @@ int main() {
   test_manual_pause_accumulates_idle_on_pause_row();
   test_manual_pause_accumulates_idle_on_boil_row();
   test_manual_pause_accumulates_idle_on_cooling_row();
+  test_manual_pause_accumulates_idle_on_ferment_row();
   test_manual_pause_before_row_start_does_not_accumulate();
   test_P_out_of_band_idle_requires_started_row();
   test_P_overheat_above_band_does_not_accumulate_idle();

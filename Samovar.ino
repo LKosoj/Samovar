@@ -4569,7 +4569,7 @@ static UiStateDescriptor build_ui_state_from_loop() {
     if (currentType == 'C') value.phase = UI_PHASE_COOLING;
     else if (currentType == 'P' || currentType == 'B' || currentType == 'F') {
       value.phase = currentType == 'B' && begintime == 0 ? UI_PHASE_HEATING : UI_PHASE_HOLD;
-      if ((currentType == 'P' || currentType == 'B') && begintime > 0) {
+      if (begintime > 0) {
         value.end = {true, UI_END_ELAPSED, UI_END_SOURCE_TIMER, UI_END_OPERATION_ELAPSED,
             true, row.Time * 60.0f, UI_UNIT_S, false, 0};
       }

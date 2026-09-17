@@ -31,13 +31,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 BOIL_DETECT_TOKEN = "if (begintime == 0) {\n      //Определяем начало кипения"
 HOP_REMINDER_TOKEN = "if (begintime > 0 && msgfl && (beer_stage_elapsed_ms(millis())"
-BOTTOM_TRANSITION_TOKEN = "if (begintime > 0 && (currentType == 'B' || currentType == 'P')"
+BOTTOM_TRANSITION_TOKEN = "if (begintime > 0 && (currentType == 'B' || currentType == 'P' || currentType == 'F')"
 ROW_ENTRY_RESET_TOKEN = (
     "if (program[ProgramNum].WType == 'B' &&\n"
     "      (ProgramNum == 0 || program_type_at(ProgramNum - 1) != 'B')) {"
 )
 
 HARNESS_TEMPLATE = r'''
+#include <cstdint>
 #include <iostream>
 #include <string>
 

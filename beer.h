@@ -747,7 +747,7 @@ inline float hold_clock_weight(float deficit, float fullBand) {
  */
 inline void beer_update_stage_idle(ProgramType currentType, float temp, float tempDelta, unsigned long nowMs) {
   float idleShare = 0;
-  if (currentType == 'P' || currentType == 'B' || currentType == 'C') {
+  if (currentType == 'P' || currentType == 'B' || currentType == 'C' || currentType == 'F') {
     // [П1] begintime > 0: пока строка ещё не стартовала, паузу не копим -
     // иначе накопитель простоя может обогнать реально прошедшее время
     // (см. beer_stage_elapsed_ms ниже).
@@ -779,7 +779,8 @@ inline void beer_update_stage_idle(ProgramType currentType, float temp, float te
  * @return Прошедшее активное время строки, мс (>= 0)
  */
 inline float beer_stage_elapsed_ms(unsigned long nowMs) {
-  float elapsed = (float)nowMs - (float)begintime - (float)beerStageIdleAccumMs;
+  // Беззнаковая разность переживает переворот millis() (~49.7 суток): строка 'F' длится сутками.
+  float elapsed = (float)(uint32_t)(nowMs - begintime) - (float)beerStageIdleAccumMs;
   if (elapsed < 0) elapsed = 0;
   return elapsed;
 }
@@ -956,6 +957,8 @@ void beer_stage_tick() {
   //Если режим Брага
   if (currentType == 'F') {
     // [П12] Ручная пауза обрабатывается единой точкой входа выше по функции.
+    // Время строки 'F' (если задано) идёт со входа в строку; Time=0 - держим бесконечно.
+    if (begintime == 0 && program[ProgramNum].Time > 0) begintime = millis();
     //Если температура меньше целевой - греем, иначе охлаждаем.
     if (temp < program[ProgramNum].Temp - tempDelta) {
       if ((valve_status || beer_cooling_pump_demanded()) &&
@@ -1098,7 +1101,7 @@ void beer_stage_tick() {
   }
 
   //Проверяем, что еще нужно держать паузу
-  if (begintime > 0 && (currentType == 'B' || currentType == 'P') && (beer_stage_elapsed_ms(millis()) / 60000.0f >= program[ProgramNum].Time)) {
+  if (begintime > 0 && (currentType == 'B' || currentType == 'P' || currentType == 'F') && (beer_stage_elapsed_ms(millis()) / 60000.0f >= program[ProgramNum].Time)) {
     //Запускаем следующую программу
     run_beer_program(ProgramNum + 1);
   }

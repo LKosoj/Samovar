@@ -96,6 +96,13 @@ int main() {
   // Верхняя граница включительно - PROGRAM_TIME_MAX ровно на потолке должна проходить.
   check(parse_row("P;65;1440;0^0^0^0;0", row), "время ровно на верхней границе (1440 мин) должно проходить");
   check(row.Time == 1440.0f, "row.Time должен сохранить граничное значение без искажений");
+  check(!parse_row("P;65;1441;0^0^0^0;0", row), "пауза дольше 1440 мин обязана отвергаться");
+
+  // Строка F (ферментация): время необязательно, потолок свой - 30 суток.
+  check(parse_row("F;18;0;0^0^0^0;0", row) && row.Time == 0.0f, "F с временем 0 (бесконечно) должна проходить");
+  check(parse_row("F;18;43200;0^0^0^0;0", row) && row.Time == 43200.0f, "F на 30 суток должна проходить");
+  check(!parse_row("F;18;43201;0^0^0^0;0", row), "F дольше 30 суток обязана отвергаться");
+  check(!parse_row("F;0;60;0^0^0^0;0", row), "F без температуры обязана отвергаться");
 
   // Чуть выше границы - обязано отвергаться.
   check(!parse_row("P;65;1440.01;0^0^0^0;0", row), "время чуть выше верхней границы обязано отвергаться");
@@ -112,7 +119,7 @@ int main() {
 
 def build_harness(program_io: str) -> str:
     const_start = program_io.find("constexpr float PROGRAM_TEMP_MIN")
-    const_end = program_io.find("constexpr float PROGRAM_TIME_MAX")
+    const_end = program_io.find("constexpr float PROGRAM_BEER_F_TIME_MAX")
     const_end = program_io.find(";", const_end) + 1
     if const_start < 0 or const_end <= 0:
         raise ValueError("PROGRAM_TEMP_MIN..PROGRAM_TIME_MAX constants not found")

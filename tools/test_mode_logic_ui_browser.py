@@ -216,6 +216,34 @@ BROWSER_TEST = r'''async page => {
       expect(beerProgramPosts.length === beerPostCount + 1 && beerWPost.includes("W;0;0;0^0^0^0;4"),
              "Beer W row with sensor 4 was not sent to /program");
 
+      // Жалоба с форума 17.09.2026: после смены типа строки на «Пауза» текст программы
+      // становился неверным (время ещё 0), и calc_program() отказывалась переносить
+      // в него дальнейшие правки полей - программа не устанавливалась без причины.
+      const beerRowSync = await page.evaluate(() => {
+        document.getElementById("WProgram").value = "W;0;0;0^0^0^0;1";
+        document.getElementById("WProgram").dispatchEvent(new Event("change"));
+        const row = document.getElementsByClassName("prgline")[1].childNodes;
+        row[1].value = "P"; row[1].dispatchEvent(new Event("change"));
+        row[2].value = "61.00"; row[2].dispatchEvent(new Event("change"));
+        const broken = document.getElementById("WProgram").value;
+        row[3].value = "20.00"; row[3].dispatchEvent(new Event("change"));
+        return {
+          broken:broken,
+          text:document.getElementById("WProgram").value,
+          reason:program_error("P;61.00;0.00;0^0^0^0;1"),
+          fermentTimed:check_program("F;18;4320;0^0^0^0;0") && check_program("F;18;0;0^0^0^0;0"),
+          fermentTooLong:program_error("F;18;43201;0^0^0^0;0")
+        };
+      });
+      expect(beerRowSync.text.split("\n")[0].startsWith("P;61.00;20.00;"),
+             "Beer row fields were not copied into program text after a temporarily invalid row: " +
+             JSON.stringify(beerRowSync));
+      expect(beerRowSync.reason.includes("Строка 1") && beerRowSync.reason.includes("Пауза"),
+             "Beer program error does not name the row and the reason: " + beerRowSync.reason);
+      expect(beerRowSync.fermentTimed, "Beer F row must accept time 0 and time > 0");
+      expect(beerRowSync.fermentTooLong.includes("43200"),
+             "Beer F row longer than 30 days must be rejected with the limit named");
+
       // П46: та же проверка реального состояния для кнопки нагрева на beer.htm.
       await page.evaluate(() => {
         document.getElementById("power").value = "Включить нагрев";
