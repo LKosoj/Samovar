@@ -17,9 +17,11 @@ BKPower - мощность режима "бражная колонна" (БК) �
      форму и отбивается при КАЖДОМ сохранении - а одно поле вне диапазона
      отбивает весь запрос, поэтому настройки перестают сохраняться целиком.
 
-Тест пинит СОГЛАСИЕ (что все три места используют именно
-power_work_mode_threshold()/%BKPowerFloor%), а не число - число само по себе
-меняется от сборки к сборке (KVIC/RMVK: 40, SEM_AVR: 100).
+Тест пинит СОГЛАСИЕ (что kSaveFloatFields использует именно константу
+POWER_WORK_MODE_THRESHOLD, а setupKeyProcessor()/setup.htm - функцию
+power_work_mode_threshold()/%BKPowerFloor%, которая эту же константу
+оборачивает), а не число - число само по себе меняется от сборки к сборке
+(KVIC/RMVK: 40, SEM_AVR: 100).
 """
 import re
 import sys
@@ -49,7 +51,7 @@ def main() -> int:
             print(f" - {error}")
         return 1
 
-    # --- (1) kSaveFloatFields: минимум BKPower - вызов, а не литерал -------------
+    # --- (1) kSaveFloatFields: минимум BKPower - константа регулятора, а не литерал ---
     field_match = re.search(
         r'\{"BKPower",\s*&SetupEEPROM::BKPower,\s*([^,]+),\s*([^}]+)\}', web
     )
@@ -59,10 +61,10 @@ def main() -> int:
         )
     else:
         min_expr = field_match.group(1).strip()
-        if min_expr != "power_work_mode_threshold()":
+        if min_expr != "POWER_WORK_MODE_THRESHOLD":
             errors.append(
                 "WebServer.ino: kSaveFloatFields[BKPower].minValue должно быть "
-                f"power_work_mode_threshold(), а не {min_expr!r} - форма снова "
+                f"POWER_WORK_MODE_THRESHOLD, а не {min_expr!r} - форма снова "
                 "примет значение ниже рабочего порога регулятора"
             )
 

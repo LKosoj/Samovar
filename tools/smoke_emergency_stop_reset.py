@@ -231,6 +231,8 @@ BEER_STAGE_STATE_FIELDS = [
     ("beerStageIdleSinceMs = 0;", "метка начала простоя текущей строки"),
     ("beerMixerPauseSinceMs = 0;", "метка начала простоя мешалки"),
     ("beerSkipConfirmProgramNum = 0xFF;", "ожидание подтверждения пропуска охлаждения"),
+    ("aTune = nullptr;", "объект автонастройки ПИД в куче (~1 КБ) - иначе утечёт при сбросе во время тюнинга"),
+    ("tuning = false;", "флаг активной автонастройки ПИД"),
 ]
 
 beer_text = read_text("beer.h")

@@ -115,7 +115,7 @@ int main() {
   tick_check_systicker_liveness();
   check(emergencyStopCalls == 1,
         "request_emergency_stop вызван не ровно один раз при превышении порога живучести");
-  check(lastReason == "Аварийное отключение: задача надзора SysTicker зависла",
+  check(lastReason == "Аварийное отключение! Задача надзора SysTicker зависла",
         "неверная причина аварийной отсечки при зависании SysTicker");
   check(sendMsgAlarmCalls == 1, "SendMsg(..., ALARM_MSG) не вызван при зависании SysTicker");
   check(vTaskDelayCalls == 1, "vTaskDelay не вызван при зависании SysTicker");

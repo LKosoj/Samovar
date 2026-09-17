@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <new>
 #include "Samovar.h"
 #include "samovar_api.h"
 #include "runtime_helpers.h"
@@ -114,7 +115,7 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
   if (active) {
     if (!valve_status &&
         open_valve(true, false) != ACTUATOR_COMMAND_APPLIED) {
-      request_emergency_stop("Аварийное отключение: не удалось открыть охлаждение");
+      request_emergency_stop("Аварийное отключение! Не удалось открыть охлаждение");
       return ACTUATOR_COMMAND_FAILED;
     }
     if (beer_set_cooling_pump(true) == ACTUATOR_COMMAND_APPLIED) {
@@ -122,15 +123,15 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
     }
     if (valve_status &&
         open_valve(false, false) != ACTUATOR_COMMAND_APPLIED) {
-      request_emergency_stop("Аварийное отключение: не удалось вернуть охлаждение в безопасное состояние");
+      request_emergency_stop("Аварийное отключение! Не удалось вернуть охлаждение в безопасное состояние");
     } else {
-      request_emergency_stop("Аварийное отключение: не удалось включить насос охлаждения");
+      request_emergency_stop("Аварийное отключение! Не удалось включить насос охлаждения");
     }
     return ACTUATOR_COMMAND_FAILED;
   }
 
   if (beer_set_cooling_pump(false) != ACTUATOR_COMMAND_APPLIED) {
-    request_emergency_stop("Аварийное отключение: не удалось выключить насос охлаждения");
+    request_emergency_stop("Аварийное отключение! Не удалось выключить насос охлаждения");
     return ACTUATOR_COMMAND_FAILED;
   }
   if (!valve_status ||
@@ -138,9 +139,9 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
     return ACTUATOR_COMMAND_APPLIED;
   }
   if (beer_set_cooling_pump(true) != ACTUATOR_COMMAND_APPLIED) {
-    request_emergency_stop("Аварийное отключение: не удалось вернуть охлаждение в рабочее состояние");
+    request_emergency_stop("Аварийное отключение! Не удалось вернуть охлаждение в рабочее состояние");
   } else {
-    request_emergency_stop("Аварийное отключение: не удалось закрыть охлаждение");
+    request_emergency_stop("Аварийное отключение! Не удалось закрыть охлаждение");
   }
   return ACTUATOR_COMMAND_FAILED;
 }
@@ -215,6 +216,17 @@ inline void beer_reset_stage_state() {
   beerHoldClockFrozen = false;
   beerPairErrorPending = false;
   beerSkipConfirmProgramNum = 0xFF;
+  // Сброс/смена режима могли застать автонастройку ПИД на середине - без этого
+  // объект ~1 КБ (aTune в куче, см. Samovar.h) утекал бы до перезагрузки платы.
+  // heaterPID.SetMode(ATuneModeRemember) сюда не добавляем: heaterPID используется
+  // только внутри beer.h, и следующий же вызов set_heater_state()/StartAutoTune()
+  // сам выставляет ей нужный режим - восстанавливать его здесь среди одних полей
+  // (без приводов, локов и I2C) незачем.
+  if (aTune != nullptr) {
+    delete aTune;
+    aTune = nullptr;
+  }
+  tuning = false;
 #if USE_ADAPTIVE_PID
   reset_adaptive_heater_controller();
 #endif
@@ -361,7 +373,8 @@ inline bool beer_validate_program(String& errorMessage) {
             program[i].capacity_num, static_cast<long>(program[i].Speed),
             program[i].Volume, program[i].Power, program[i].TempSensor,
             semanticError)) {
-      errorMessage = String(semanticError ? semanticError : "Ошибка программы") +
+      errorMessage = (semanticError ? String("Ошибка программы: ") + semanticError
+                                     : String("Ошибка программы")) +
                      " в строке " + String(i + 1);
       return false;
     }
@@ -1221,7 +1234,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	        bool rollbackFailed = mixerStepperStarted && !set_stepper_by_time(0, 0, 0);
 	        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	        if (rollbackFailed) {
-          request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");
+          request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
         }
 	        return ACTUATOR_COMMAND_FAILED;
       }
@@ -1232,7 +1245,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
           if (mixerStepperStarted && !set_stepper_by_time(0, 0, 0)) rollbackFailed = true;
           if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	          if (rollbackFailed) {
-            request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");
+            request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
           }
           return ACTUATOR_COMMAND_FAILED;
         }
@@ -1245,7 +1258,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         }
         if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
         if (rollbackFailed) {
-          request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");
+          request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
         }
         return ACTUATOR_COMMAND_FAILED;
       }
@@ -1293,7 +1306,7 @@ void set_heater_state(float setpoint, float temp, float boostTarget) {
     heaterPID.SetMode(AUTOMATIC);
     Setpoint = setpoint;
     Input = temp;
-    if (aTune.Runtime()) FinishAutoTune();
+    if (aTune && aTune->Runtime()) FinishAutoTune();
     const double dutyCycle = constrain(Output / 100.0, 0.0, 1.0);
 #ifdef SAMOVAR_USE_POWER
     set_heater_regulator(dutyCycle);
@@ -1369,7 +1382,7 @@ void set_heater_state(float setpoint, float temp, float boostTarget) {
 
     if (tuning)  // run the auto-tuner
     {
-      if (aTune.Runtime())  // returns 'true' when done
+      if (aTune && aTune->Runtime())  // returns 'true' when done
       {
         FinishAutoTune();
       }
@@ -1501,17 +1514,29 @@ String get_beer_program() {
  * @brief Запускает автотюнинг ПИД-регулятора.
  */
 void StartAutoTune() {
+  // Выделение памяти - первым действием: если её не хватит, ни ATuneModeRemember,
+  // ни Output, ни режим PID не должны успеть измениться - программа пива штатно
+  // пойдёт дальше (currentType == 'A' && !tuning ведёт к SAMOVAR_BEER_NEXT).
+  if (aTune != nullptr) {
+    delete aTune;  // повторный старт без FinishAutoTune - не течём памятью
+  }
+  aTune = new (std::nothrow) PID_ATune(&Input, &Output);
+  if (aTune == nullptr) {
+    SendMsg("Автонастройка ПИД не запущена: не хватает памяти", WARNING_MSG);
+    return;
+  }
+
   // REmember the mode we were in
   ATuneModeRemember = heaterPID.GetMode();
 
   Output = 50;
 
-  aTune.SetControlType(1);
+  aTune->SetControlType(1);
 
   // set up the auto-tune parameters
-  aTune.SetNoiseBand(aTuneNoise);
-  aTune.SetOutputStep(aTuneStep);
-  aTune.SetLookbackSec((int)aTuneLookBack);
+  aTune->SetNoiseBand(aTuneNoise);
+  aTune->SetOutputStep(aTuneStep);
+  aTune->SetLookbackSec((int)aTuneLookBack);
   tuning = true;
 }
 
@@ -1519,14 +1544,18 @@ void StartAutoTune() {
  * @brief Завершает автотюнинг ПИД-регулятора, применяет параметры и сохраняет профиль.
  */
 void FinishAutoTune() {
-  aTune.Cancel();
+  if (aTune == nullptr) {
+    tuning = false;
+    return;
+  }
+  aTune->Cancel();
   tuning = false;
 
   SetupEEPROM profileCandidate{};
   profileCandidate = SamSetup;
-  profileCandidate.Kp = aTune.GetKp();
-  profileCandidate.Ki = aTune.GetKi();
-  profileCandidate.Kd = aTune.GetKd();
+  profileCandidate.Kp = aTune->GetKp();
+  profileCandidate.Ki = aTune->GetKi();
+  profileCandidate.Kd = aTune->GetKd();
 
   const PersistResult persistResult = save_profile_nvs(profileCandidate);
   if (persistResult == PERSIST_OK) {
@@ -1549,6 +1578,8 @@ void FinishAutoTune() {
   heaterPID.SetSampleTime(1000);
   set_heater_state(0, 50);
   heaterPID.SetMode(ATuneModeRemember);
+  delete aTune;
+  aTune = nullptr;
 }
 
 /**

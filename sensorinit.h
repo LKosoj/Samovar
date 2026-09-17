@@ -90,7 +90,7 @@ ProgramParseResult prepare_default_program_for_mode(
       return program_parse_result(
           PROGRAM_PARSE_UNSUPPORTED_MODE,
           0,
-          "Ошибка default-программы: неподдерживаемый режим");
+          "неподдерживаемый режим default-программы");
   }
   return prepare_program_for_mode(mode, String(defaultProgram), draft);
 }

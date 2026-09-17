@@ -416,7 +416,6 @@ TaskHandle_t PowerStatusTask = NULL;
 #endif
 
 AsyncWebServer server(80);
-AsyncEventSource events("/events");
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -500,7 +499,7 @@ double aTuneNoise = 1;
 unsigned int aTuneLookBack = 9;
 boolean tuning = false;
 
-PID_ATune aTune(&Input, &Output);
+PID_ATune *aTune = nullptr;  //объект ~1 КБ нужен только на время автонастройки ПИД в режиме пива - выделяется в куче по требованию
 
 #ifdef WHLS_HIGH_PULL
 #ifndef USE_HEAD_LEVEL_SENSOR
@@ -649,20 +648,24 @@ struct DSSensor {
 };
 
 struct WProgram {
-  ProgramType WType;                                           //тип отбора - головы или тело
-  uint16_t Volume;                                             //объем отбора в мл
   float Speed;                                                 //скорость отбора в л/ч
-  uint8_t capacity_num;                                        //номер емкости для отбора
   float Temp;                                                  //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
   float Power;                                                 //напряжение, при которой отбирается эта часть погона.
-  uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
   float Time;                                                  //время, необходимое для отбора программы
   union {
     float Param;                                               //параметр программы для типов, кроме F и шагового D
     uint32_t FlocMultiplierMilli;                              //F: round-half-up(множитель * 1000)
   };
+  uint16_t Volume;                                             //объем отбора в мл
   uint16_t LuaTextOffset;                                      //смещение текста строки L в общем буфере программы
+  ProgramType WType;                                           //тип отбора - головы или тело
+  uint8_t capacity_num;                                        //номер емкости для отбора
+  uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
 };
+// Порядок полей подобран под выравнивание (float/union по 4 байта первыми,
+// затем uint16_t, затем однобайтовые) - экономит 8 байт на каждую запись:
+// 30 строк в program[], слот операции профиля и черновик на стеке.
+static_assert(sizeof(WProgram) == 28, "WProgram: неожиданный размер структуры - проверь порядок полей и выравнивание");
 
 enum ProgramWaitType : uint8_t {
   PROGRAM_WAIT_NONE = 0,

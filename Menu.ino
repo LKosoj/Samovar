@@ -77,7 +77,41 @@ LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
 LiquidScreen main_screen5(lql_tank_temp, lql_atm, lql_water_temp, lql_time);
 
-static SetupEEPROM menuSetupCandidate{};
+// [M2] Раньше здесь держался целый SetupEEPROM (492 байта постоянно в ОЗУ) ради 9 полей,
+// которые реально правит LCD-меню. Полный SetupEEPROM собирается на стеке только на время
+// сохранения - см. setup_go_back().
+struct MenuSetupFields {
+  float DeltaSteamTemp, DeltaPipeTemp, DeltaWaterTemp, DeltaTankTemp;
+  float SetSteamTemp, SetPipeTemp, SetWaterTemp, SetTankTemp;
+  uint16_t StepperStepMl;
+
+  // Забрать 9 полей из полного SetupEEPROM (профиль/SamSetup).
+  void load_from(const SetupEEPROM& src) {
+    DeltaSteamTemp = src.DeltaSteamTemp;
+    DeltaPipeTemp = src.DeltaPipeTemp;
+    DeltaWaterTemp = src.DeltaWaterTemp;
+    DeltaTankTemp = src.DeltaTankTemp;
+    SetSteamTemp = src.SetSteamTemp;
+    SetPipeTemp = src.SetPipeTemp;
+    SetWaterTemp = src.SetWaterTemp;
+    SetTankTemp = src.SetTankTemp;
+    StepperStepMl = src.StepperStepMl;
+  }
+
+  // Записать 9 полей обратно в полный SetupEEPROM перед сохранением.
+  void store_to(SetupEEPROM& dst) const {
+    dst.DeltaSteamTemp = DeltaSteamTemp;
+    dst.DeltaPipeTemp = DeltaPipeTemp;
+    dst.DeltaWaterTemp = DeltaWaterTemp;
+    dst.DeltaTankTemp = DeltaTankTemp;
+    dst.SetSteamTemp = SetSteamTemp;
+    dst.SetPipeTemp = SetPipeTemp;
+    dst.SetWaterTemp = SetWaterTemp;
+    dst.SetTankTemp = SetTankTemp;
+    dst.StepperStepMl = StepperStepMl;
+  }
+};
+static MenuSetupFields menuSetupCandidate{};
 
 LiquidLine lql_setup_steam_temp(0, 0, str_Steam_T, menuSetupCandidate.DeltaSteamTemp);
 LiquidLine lql_setup_pipe_temp(0, 1, str_Pipe_T, menuSetupCandidate.DeltaPipeTemp);
@@ -283,7 +317,7 @@ void set_menu_screen(uint8_t param) {
 }
 
 void menu_setup() {
-  menuSetupCandidate = SamSetup;
+  menuSetupCandidate.load_from(SamSetup);
   reset_focus();
   set_menu_screen(1);
   //menu.change_menu(setup_menu);
@@ -294,16 +328,23 @@ void setup_go_back() {
   reset_focus();
   set_menu_screen(2);
 
-  const PersistResult persistResult = save_profile_nvs(menuSetupCandidate);
+  // [M2] menuSetupCandidate хранит только 9 полей - полный кандидат для save_profile_nvs
+  // и SamSetup собираем на стеке. [Осознанное изменение поведения] База берётся из ЖИВОГО
+  // SamSetup в момент сохранения, а не из снимка на входе в меню - правки через веб,
+  // сделанные пока открыто LCD-меню, больше не откатываются.
+  SetupEEPROM profileCandidate = SamSetup;
+  menuSetupCandidate.store_to(profileCandidate);
+
+  const PersistResult persistResult = save_profile_nvs(profileCandidate);
   if (persistResult == PERSIST_OK) {
     // [T29] см. configMux в Samovar.ino - без спинлока async_tcp мог бы
     // прочитать SamSetup наполовину скопированной.
     portENTER_CRITICAL(&configMux);
-    SamSetup = menuSetupCandidate;
+    SamSetup = profileCandidate;
     portEXIT_CRITICAL(&configMux);
     apply_config_runtime();
   } else {
-    menuSetupCandidate = SamSetup;
+    menuSetupCandidate.load_from(SamSetup);
     String message = "Настройки меню не сохранены: ";
     message += persist_result_code(persistResult);
     SendMsg(message, ALARM_MSG);

@@ -85,7 +85,7 @@ static bool SetScriptOff = false;
 static String script2;
 static int script2_ref = LUA_NOREF;
 static int lua_program_script_ref = LUA_NOREF;
-static String lua_program_script_text;
+static bool lua_program_script_present = false;
 static String lua_program_call_text;
 static String lua_program_script_name;
 static bool lua_program_job = false;

@@ -322,7 +322,10 @@ String lua_type_script;
 // просит loop() перечитать скрипт через pending_lua_reload_flag - тот же
 // приём, а не прямое присваивание lua_type_script (см. комментарий там же).
 volatile bool lua_type_script_pending = false;
-String script1, script2;
+// Решение владельца: текст Lua-скриптов в ОЗУ не держим - только факт, что он
+// загружен и непуст. Для show_lua_script (отладочная печать) текст при
+// необходимости перечитывается из файла в момент печати, а не хранится тут.
+bool script1_present = false, script2_present = false;
 int script1_ref = LUA_NOREF;
 int script2_ref = LUA_NOREF;
 extern String lua_script_list_cache;
@@ -396,7 +399,9 @@ volatile uint32_t lua_beer_job_next_ticket = 0;
 volatile uint32_t lua_beer_job_ticket = 0;
 volatile LuaBeerJobResult lua_beer_job_result = LUA_BEER_JOB_IDLE;
 static int lua_program_script_ref = LUA_NOREF;
-static String lua_program_script_text;
+// Как и script1_present/script2_present выше - только факт наличия, текст не
+// хранится.
+static bool lua_program_script_present = false;
 static String lua_program_call_text;
 static String lua_program_script_name;
 static volatile bool lua_program_job = false;
@@ -636,7 +641,7 @@ inline bool request_compiled_program_lua_job(const String& script, const String&
     runtime_state_unlock(true);
     return false;
   }
-  lua_program_script_text = script;
+  lua_program_script_present = true;
   lua_program_call_text = call;
   lua_program_script_name = fileName;
   lua_program_job = true;
@@ -715,7 +720,7 @@ inline bool reload_program_lua_job(const String& changedFile) {
   if (compileError.length() == 0) {
     lua_program_script_ref = newRef;
     newRef = LUA_NOREF;
-    lua_program_script_text = script;
+    lua_program_script_present = true;
   } else {
     lua_program_script_ref = LUA_NOREF;
     lua_beer_job_result = LUA_BEER_JOB_FAILED_RUNTIME;
@@ -2325,8 +2330,8 @@ bool load_lua_script() {
     WriteConsoleLog(F("Lua reload busy"));
     return false;
   }
-  script1 = s1;
-  script2 = s2;
+  script1_present = s1.length() > 0;
+  script2_present = s2.length() > 0;
   lua_script_list_cache = btnList;
   runtime_state_unlock(true);
   lua_state_unlock(lua_locked);
@@ -2435,22 +2440,23 @@ void do_lua_script(void *parameter) {
         vTaskDelay(500 / portTICK_PERIOD_MS);
         continue;
       }
-      String local_s1, local_s2, localProgramCall, localScriptName;
+      bool local_s1_present = false, local_s2_present = false;
+      String localProgramCall, localScriptName;
       int local_script1_ref = script1_ref;
       int local_script2_ref = script2_ref;
       bool localProgramJob = false;
       {
         bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
         if (locked) {
-          local_s1 = script1;
+          local_s1_present = script1_present;
           localProgramJob = lua_program_job;
           if (localProgramJob) {
-            local_s2 = lua_program_script_text;
+            local_s2_present = lua_program_script_present;
             local_script2_ref = lua_program_script_ref;
             localProgramCall = lua_program_call_text;
             localScriptName = lua_program_script_name;
           } else {
-            local_s2 = script2;
+            local_s2_present = script2_present;
             localScriptName = lua_type_script;
           }
           runtime_state_unlock(true);
@@ -2461,10 +2467,15 @@ void do_lua_script(void *parameter) {
         }
       }
 
-      if (local_s1.length() > 0 && lua_chunk_ref_valid(local_script1_ref) && !lua_script1_disabled) {
+      if (local_s1_present && lua_chunk_ref_valid(local_script1_ref) && !lua_script1_disabled) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(local_s1);
+          // Текст в ОЗУ не хранится - для печати перечитываем файл. Если его
+          // успели поправить, но ещё не перезагрузить, в лог попадёт уже
+          // новая версия - это принятое поведение.
+          // Файл читается под lua_state_lock (десятки мс) - только при включённой
+          // отладочной печати; сам скрипт держит этот лок заметно дольше.
+          WriteConsoleLog(get_lua_script("script.lua"));
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua_exec_chunk_locked(local_script1_ref);
@@ -2487,11 +2498,15 @@ void do_lua_script(void *parameter) {
 
       bool periodicFailed = false;
       bool periodicTimedOut = false;
-      if (local_s2.length() > 0 && lua_chunk_ref_valid(local_script2_ref)) {
+      if (local_s2_present && lua_chunk_ref_valid(local_script2_ref)) {
         if (localProgramJob) lua_install_program_args_locked(localProgramCall);
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(local_s2);
+          // localScriptName - реальное имя файла и для режимного скрипта
+          // (lua_type_script), и для программного (lua_program_script_name,
+          // тоже читается get_lua_script() при постановке job'а) - перечитать
+          // безопасно в обоих случаях.
+          WriteConsoleLog(get_lua_script(localScriptName));
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua_exec_chunk_locked(local_script2_ref, true);
@@ -2568,6 +2583,9 @@ inline String lua_prelude_number(float value) {
 
 bool get_global_variables(String& Variables) {
   Variables = "";
+  // Типичный размер готовой прелюдии ~1036 байт - резервируем заранее, чтобы
+  // не плодить перевыделения при каждом += ниже.
+  Variables.reserve(1100);
   Variables += "bme_pressure = " + String(bme_pressure) + "\r\n";
   Variables += "capacity_num = " + String(capacity_num) + "\r\n";
   Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
@@ -2686,8 +2704,9 @@ String get_lua_mode_name(bool filename) {
     // безопасна для обоих потребителей: get_lua_script("") у пустого/несуществующего
     // имени возвращает "" (SPIFFS.open("/") открывается как директория, но
     // readString() на директории отдаёт "" - без ошибки и без побочных эффектов), а
-    // load_lua_script()/do_lua_script() трактуют пустой script2 как "режимного
-    // скрипта нет" и просто его не запускают.
+    // load_lua_script() выставит script2_present = false (s2.length() == 0),
+    // а do_lua_script() трактует это как "режимного скрипта нет" и просто его
+    // не запускает.
     fl = "";
   } else {
     if (filename) {

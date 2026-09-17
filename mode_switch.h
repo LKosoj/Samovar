@@ -184,23 +184,23 @@ static bool mode_actuators_idle() {
 static const char* mode_actuator_cleanup_warning(OperationError error) {
   switch (error) {
     case OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED:
-      return "Смена режима завершена принудительно: I2C-мешалка не подтвердила остановку";
+      return "I2C-мешалка не подтвердила остановку";
     case OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED:
-      return "Смена режима завершена принудительно: I2C-насос не подтвердил остановку";
+      return "I2C-насос не подтвердил остановку";
     case OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED:
-      return "Смена режима завершена принудительно: шаговый двигатель не остановился";
+      return "шаговый двигатель не остановился";
     case OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED:
-      return "Смена режима завершена принудительно: клапан не закрылся";
+      return "клапан не закрылся";
     case OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED:
-      return "Смена режима завершена принудительно: мешалка не остановилась";
+      return "мешалка не остановилась";
     case OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED:
-      return "Смена режима завершена принудительно: насос охлаждения не остановился";
+      return "насос охлаждения не остановился";
     case OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED:
-      return "Смена режима завершена принудительно: не завершилась калибровка насоса";
+      return "не завершилась калибровка насоса";
     case OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED:
-      return "Смена режима завершена принудительно: не подтвердился нагрев";
+      return "не подтвердился нагрев";
     default:
-      return "Смена режима завершена принудительно: не подтвердился привод";
+      return "не подтвердился привод";
   }
 }
 
@@ -261,8 +261,9 @@ void stop_active_process_for_mode() {
 // Провал смены режима больше не запирает автомат в терминальной фазе: нагрев
 // принудительно снимается, SafetyModeSwitchState возвращается в IDLE, а барьер
 // mode_switch_barrier_active снимается ровно как на успехе. Строка предупреждения
-// передаётся вызывающей стороной литералом — без промежуточного буфера, чтобы
-// длинное сообщение в UTF-8 не обрезалось молча (см. snprintf-ловушку).
+// передаётся вызывающей стороной литералом БЕЗ общего префикса (он один на все
+// причины и приклеивается здесь через String, тоже без промежуточного буфера,
+// чтобы длинное сообщение в UTF-8 не обрезалось молча — см. snprintf-ловушку).
 static ModeSwitchResult force_complete_mode_switch_failed(
     OperationError error, const char* warning) {
   if (active_profile_operation.terminalError == OPERATION_ERROR_NONE) {
@@ -275,7 +276,9 @@ static ModeSwitchResult force_complete_mode_switch_failed(
   portEXIT_CRITICAL(&emergencyStopMux);
   notify_power_worker();
   modeActuatorCleanup = {};
-  SendMsg(warning, WARNING_MSG);
+  String message = "Смена режима завершена принудительно: ";
+  message += warning;
+  SendMsg(message, WARNING_MSG);
   return MODE_SWITCH_FAILED;
 }
 
@@ -306,8 +309,8 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
                 ? OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED
                 : OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
             !stopRequested
-                ? "Смена режима завершена принудительно: не подтвердился Lua"
-                : "Смена режима завершена принудительно: не подтвердился очередь");
+                ? "не подтвердился Lua"
+                : "не подтвердился очередь");
       }
       return MODE_SWITCH_PENDING;
     }
@@ -348,38 +351,38 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
       );
 
   if (safety_deadline_expired(millis(), modeActuatorCleanup.deadline) && !cleanupReady) {
-    const char* warning = "Смена режима завершена принудительно: не подтвердилась готовность";
+    const char* warning = "не подтвердилась готовность";
     OperationError error = OPERATION_ERROR_MODE_SWITCH_FAILED;
     if (!modeSwitchState.logCloseRequested || logClosePending) {
-      warning = "Смена режима завершена принудительно: не подтвердился лог";
+      warning = "не подтвердился лог";
       error = OPERATION_ERROR_MODE_SWITCH_LOG_FAILED;
     } else if (!luaIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился Lua";
+      warning = "не подтвердился Lua";
       error = OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED;
     } else if (!queuesIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился очередь";
+      warning = "не подтвердился очередь";
       error = OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED;
     } else if (!actuatorsIdle) {
       const OperationError actuatorError = mode_actuator_cleanup_error();
       warning = mode_actuator_cleanup_warning(actuatorError);
       error = actuatorError;
     } else if (heaterPowerOn) {
-      warning = "Смена режима завершена принудительно: не подтвердился нагрев";
+      warning = "не подтвердился нагрев";
       error = OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED;
     } else if (powerTransitionActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился переход мощности";
+      warning = "не подтвердился переход мощности";
       error = OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED;
     } else if (nbkTransitionActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился переход НБК";
+      warning = "не подтвердился переход НБК";
       error = OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED;
     } else if (modeHeatingActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился старт нагрева";
+      warning = "не подтвердился старт нагрева";
       error = OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED;
     } else if (selfTestActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился самотест";
+      warning = "не подтвердился самотест";
       error = OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED;
     } else if (!ownerIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился владелец режима";
+      warning = "не подтвердился владелец режима";
       error = OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED;
     }
     return force_complete_mode_switch_failed(error, warning);
@@ -412,7 +415,7 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
     if (++modeSwitchState.luaReloadAttempts >= 10) {
       return force_complete_mode_switch_failed(
           OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED,
-          "Смена режима завершена принудительно: скрипт Lua не перечитан");
+          "скрипт Lua не перечитан");
     }
     return MODE_SWITCH_PENDING;
   }
@@ -420,7 +423,7 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
   if (active_profile_operation.terminalError != OPERATION_ERROR_NONE) {
     return force_complete_mode_switch_failed(
         active_profile_operation.terminalError,
-        "Смена режима завершена принудительно: профиль не сохранён");
+        "профиль не сохранён");
   }
   portENTER_CRITICAL(&emergencyStopMux);
   safety_mode_switch_complete(modeSwitchState);

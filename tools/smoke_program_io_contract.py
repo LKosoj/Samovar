@@ -145,8 +145,8 @@ if program_io:
 
     specs = {
         "rect_program_parse_spec": [
-            "Ошибка программы: слишком длинная строка (rect)",
-            "Ошибка программы: неверный формат строки rect",
+            "слишком длинная строка (rect)",
+            "неверный формат строки rect",
             "\"HBCTPL\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_VOLUME",
@@ -158,8 +158,8 @@ if program_io:
             "program_parse_rect_row",
         ],
         "dist_program_parse_spec": [
-            "Ошибка программы: слишком длинная строка (dist)",
-            "Ошибка программы: неверный формат строки dist",
+            "слишком длинная строка (dist)",
+            "неверный формат строки dist",
             "\"TASPRL\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_SPEED",
@@ -169,8 +169,8 @@ if program_io:
             "program_parse_dist_row",
         ],
         "bk_program_parse_spec": [
-            "Ошибка программы: слишком длинная строка (bk)",
-            "Ошибка программы: неверный формат строки bk",
+            "слишком длинная строка (bk)",
+            "неверный формат строки bk",
             "\"TASPRL\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_SPEED",
@@ -181,8 +181,8 @@ if program_io:
             "program_parse_bk_row",
         ],
         "beer_program_parse_spec": [
-            "Ошибка программы: слишком длинная строка (beer)",
-            "Ошибка программы: неверный формат строки beer",
+            "слишком длинная строка (beer)",
+            "неверный формат строки beer",
             "\"MPBCFWLA\"",
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_TEMP",
@@ -193,17 +193,17 @@ if program_io:
             "program_parse_beer_row",
         ],
         "nbk_program_parse_spec": [
-            "Ошибка программы: слишком длинная строка (nbk)",
-            "Ошибка программы: неверный формат строки nbk",
-            "Ошибка программы: НБК должна содержать 4 строки H/S/O/W",
+            "слишком длинная строка (nbk)",
+            "неверный формат строки nbk",
+            "НБК должна содержать 4 строки H/S/O/W",
             "\"HSOW\"",
             "static const ProgramType expectedTypes[NBK_PROGRAM_MAX] = {'H', 'S', 'O', 'W'};",
             "NBK_PROGRAM_MAX",
             "program_parse_nbk_row",
         ],
         "cheese_program_parse_spec": [
-            "Ошибка программы: слишком длинная строка (cheese)",
-            "Ошибка программы: неверный формат строки cheese",
+            "слишком длинная строка (cheese)",
+            "неверный формат строки cheese",
             '"HPCMDNWSFL"',
             "PROGRAM_FIELD_TYPE",
             "PROGRAM_FIELD_TEMP",
@@ -253,7 +253,7 @@ if program_io:
         [
             "parse_program_type(tokType, spec.allowedTypes, parsedType)",
             "program_parse_beer_device",
-            "errorMessage = \"Ошибка программы: неверный шаблон устройства beer\";",
+            "errorMessage = \"неверный шаблон устройства beer\";",
         ],
         errors,
     )
@@ -263,7 +263,7 @@ if program_io:
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
-    require_token("beer serializer keeps fractional time", body, "out += (String)row.Time + \";\";")
+    require_token("beer serializer keeps fractional time", body, "out += row.Time;")
     forbid_token("beer serializer keeps fractional time", body, "(int)row.Time")
 
 wrappers = [

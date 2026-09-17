@@ -1828,7 +1828,7 @@ void triggerEmergencyButton(void *parameter) {
   (void)parameter;
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    request_emergency_stop("Аварийное отключение: нажата аварийная кнопка");
+    request_emergency_stop("Аварийное отключение! Нажата аварийная кнопка");
     vTaskDelay(pdMS_TO_TICKS(30));
   }
 }
@@ -2792,7 +2792,7 @@ static bool setup_check_ap_button_hold() {
 static void setup_start_alarm_button_task() {
 #ifdef ALARM_BTN_PIN
   if (!initEmergencyButtonTask()) {
-    request_emergency_stop("Аварийное отключение: задача аварийной кнопки не запущена");
+    request_emergency_stop("Аварийное отключение! Задача аварийной кнопки не запущена");
   }
 #endif
 }
@@ -3048,7 +3048,6 @@ static void setup_connect_wifi_and_notify() {
 #endif
 
 #ifdef USE_UPDATE_OTA
-  //Send OTA events to the browser
   ArduinoOTA.onStart([]() {
     ota_running = true;  // Устанавливаем флаг активного OTA обновления
     // [T30] ArduinoOTA::_runUpdate() (framework-arduinoespressif32/libraries/ArduinoOTA)
@@ -3059,16 +3058,10 @@ static void setup_connect_wifi_and_notify() {
     // иначе любое обновление прошивки по OTA гарантированно перезагружало бы устройство
     // на середине передачи. onEnd()/onError() ниже включают его обратно.
     disableLoopWDT();
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH)
-      type = "Sketch";
-    else {  // U_SPIFFS
-      type = "Filesystem";
+    if (ArduinoOTA.getCommand() != U_FLASH) {  // U_SPIFFS
       SPIFFS.end();
     }
-    type = type + " update start";
-    events.send(type.c_str(), "ota");
-    
+
     // Отключаем другие сервисы для освобождения ресурсов
 #ifdef SAMOVAR_USE_BLYNK
     {
@@ -3086,15 +3079,8 @@ static void setup_connect_wifi_and_notify() {
     // обновлении сюда обычно не доходит (ниже по _runUpdate() следует ESP.restart()),
     // но если рестарт на этой сборке отключён, loop() обязан остаться под сторожем.
     enableLoopWDT();
-    events.send(("Update End"), "ota");
   });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    char p[32];
-    const uint32_t percent = (total > 0) ? (progress * 100U) / total : 0U;
-    strcpy(p, "Progress: ");
-    ultoa(percent, p + strlen(p), 10);
-    strcat(p, "%\n");
-    events.send(p, "ota");
+  ArduinoOTA.onProgress([](unsigned int, unsigned int) {
     yield();  // Даем возможность другим задачам выполниться
   });
   ArduinoOTA.onError([](ota_error_t error) {
@@ -3102,15 +3088,7 @@ static void setup_connect_wifi_and_notify() {
     // [T30] Неудачная OTA НЕ перезагружает устройство (см. _runUpdate()) - без этого
     // вызова loop() остался бы без сторожа до следующей перезагрузки.
     enableLoopWDT();
-    if (error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
-    else if (error == OTA_BEGIN_ERROR)
-      events.send(("Begin Failed"), "ota");
-    else if (error == OTA_CONNECT_ERROR)
-      events.send(("Connect Failed"), "ota");
-    else if (error == OTA_RECEIVE_ERROR)
-      events.send(("Recieve Failed"), "ota");
-    else if (error == OTA_END_ERROR)
-      events.send(("End Failed"), "ota");
+    (void)error;  // тип ошибки раньше уходил в /events для браузера, канал удалён
   });
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   // Увеличиваем таймауты для более стабильной передачи
@@ -3347,7 +3325,7 @@ void setup() {
     //На всякий случай пошлем команду выключения питания на UART
     set_power_mode(POWER_SLEEP_MODE);
   } else {
-    request_emergency_stop("Аварийное отключение: задача регулятора не запущена");
+    request_emergency_stop("Аварийное отключение! Задача регулятора не запущена");
   }
 #endif
 
@@ -3454,7 +3432,7 @@ static void tick_check_stack_headroom() {
   const UBaseType_t loopStackFree = uxTaskGetStackHighWaterMark(NULL);
   if (loopStackFree < 1024) {
     print_critical_stack_details("loopTask", loopStackFree);
-    request_emergency_stop("Аварийное отключение: критически малый остаток стека");
+    request_emergency_stop("Аварийное отключение! Критически малый остаток стека");
     SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();
@@ -3472,7 +3450,7 @@ static void tick_check_stack_headroom() {
     const UBaseType_t stackFree = uxTaskGetStackHighWaterMark(handle);
     if (stackFree < 1024) {
       print_critical_stack_details(stackWatchTable[i].name, stackFree);
-      request_emergency_stop(String("Аварийное отключение: критически малый остаток стека задачи ") + stackWatchTable[i].name);
+      request_emergency_stop(String("Аварийное отключение! Критически малый остаток стека задачи ") + stackWatchTable[i].name);
       SendMsg(String("Стек задачи ") + stackWatchTable[i].name + " переполнился. Перезагрузка", ALARM_MSG);
       vTaskDelay(5000);
       ESP.restart();
@@ -3504,7 +3482,7 @@ static void tick_check_systicker_liveness() {
   }
 
   if (millis() - lastChangeMs > 10000) {
-    request_emergency_stop("Аварийное отключение: задача надзора SysTicker зависла");
+    request_emergency_stop("Аварийное отключение! Задача надзора SysTicker зависла");
     SendMsg("Задача надзора SysTicker зависла. Перезагрузка", ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();
@@ -5658,6 +5636,11 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   printRuntimeEventPublishFailure(WebSerial, F("Msg"), publishResult, m.length());
 #endif
   printRuntimeEventPublishFailure(Serial, F("Msg"), publishResult, m.length());
+}
+
+// Для вызовов с литералом: String строится один раз здесь, а не в каждом месте вызова.
+void SendMsg(const char* m, MESSAGE_TYPE msg_type) {
+  SendMsg(String(m), msg_type);
 }
 
 void WriteConsoleLog(String StringLogMsg) {

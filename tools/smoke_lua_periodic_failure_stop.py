@@ -17,8 +17,8 @@ lua.h (через extract_function_body - без переписывания ло
 прогоны в СТАБЕ finish_beer_lua_periodic_result() (реальный do_lua_script
 зовёт её РОВНО один раз в конце каждого периодического прогона) и завершённые
 one-shot job'ы в СТАБЕ finish_lua_job(), и кидает C++-исключение, когда нужное
-число прогонов набрано - деструкторы String-локалей (sr/local_s1/local_s2) при
-этом отрабатывают штатно.
+число прогонов набрано - деструкторы String-локалей (sr/localProgramCall/
+localScriptName) при этом отрабатывают штатно.
 
 Проверяемое поведение:
 1. 5 подряд неуспешных прогонов ТОЛЬКО script1 -> loop_lua_fl остаётся true
@@ -202,12 +202,12 @@ static void finish_lua_periodic_run() { lua_finished = true; }
 // --- скрипты и их компилированные ссылки -----------------------------------
 // script1_ref/script2_ref намеренно РАЗНЫЕ значения - lua_exec_chunk_locked
 // ниже различает по ref, какой из двух скриптов сейчас исполняется.
-static String script1, script2;
+static bool script1_present = false, script2_present = false;
 static int script1_ref = 7;
 static int script2_ref = 8;
 static String lua_type_script = "beer.lua";
 static bool lua_program_job = false;
-static String lua_program_script_text;
+static bool lua_program_script_present = false;
 static String lua_program_call_text;
 static String lua_program_script_name;
 static int lua_program_script_ref = LUA_NOREF;
@@ -320,8 +320,8 @@ static void reset_fixture() {
   SetScriptOff = false;
   lua_start_requested = false;
   lua_finished = true;
-  script1 = String("");
-  script2 = String("");
+  script1_present = false;
+  script2_present = false;
   script1_ref = 7;
   script2_ref = 8;
   lua_type_script = String("beer.lua");
@@ -333,6 +333,7 @@ static void reset_fixture() {
   script2CallCount = 0;
   takeLuaJobReturn = false;
   oneShotJobResult.clear();
+  getScriptStub.clear();
   lockAvailable = true;
   lua_periodic_failure_count_script1 = 0;
   lua_periodic_failure_count_script2 = 0;
@@ -356,8 +357,8 @@ static void run_do_lua_script_once() {
 static void test_five_script1_failures_disable_script1_without_stopping_loop() {
   reset_fixture();
   loop_lua_fl = true;
-  script1 = String("bad-script1");
-  script2 = String("mode-script");
+  script1_present = true;
+  script2_present = true;
   chunkResultsScript1 = {"boom1", "boom2", "boom3", "boom4", "boom5"};
   // script2 всегда успешен (очередь пуста - стаб отдаёт "" по умолчанию).
   // 7 прогонов: 5, на которых script1 копит ошибки и отключается, и ещё 2 -
@@ -390,7 +391,7 @@ static void test_five_script1_failures_disable_script1_without_stopping_loop() {
 static void test_five_script2_failures_stop_the_loop() {
   reset_fixture();
   loop_lua_fl = true;
-  script2 = String("bad-mode-script");
+  script2_present = true;
   lua_type_script = String("beer.lua");
   chunkResultsScript2 = {"boom1", "boom2", "boom3", "boom4", "boom5"};
   periodicIterationsTarget = 5;
@@ -412,7 +413,7 @@ static void test_five_script2_failures_stop_the_loop() {
 static void test_success_between_failures_resets_script1_counter() {
   reset_fixture();
   loop_lua_fl = true;
-  script1 = String("script1-body");
+  script1_present = true;
   // script2 пуст - изолируем поведение script1 от script2.
   chunkResultsScript1 = {"e1", "e2", "e3", "e4", "", "e5", "e6", "e7", "e8"};
   periodicIterationsTarget = 9;
@@ -426,7 +427,7 @@ static void test_success_between_failures_resets_script1_counter() {
 static void test_success_between_failures_resets_script2_counter() {
   reset_fixture();
   loop_lua_fl = true;
-  script2 = String("script2-body");
+  script2_present = true;
   // script1 пуст - изолируем поведение script2 от script1.
   lua_type_script = String("dist.lua");
   chunkResultsScript2 = {"e1", "e2", "e3", "e4", "", "e5", "e6", "e7", "e8"};
@@ -477,6 +478,23 @@ static void test_oneshot_job_failure_does_not_touch_either_counter() {
   check(!loop_lua_fl, "a one-shot job must never turn the periodic loop on");
 }
 
+// [L2] Текст скрипта в ОЗУ больше не хранится - show_lua_script перечитывает
+// его через get_lua_script() в момент печати. Стаб меняет возвращаемое
+// значение ПОСЛЕ момента, когда script1_present стал true, - если бы
+// печатался закешированный текст, новое значение стаба в лог бы не попало.
+static void test_show_lua_script_prints_text_read_at_call_time() {
+  reset_fixture();
+  loop_lua_fl = true;
+  script1_present = true;
+  show_lua_script = true;
+  getScriptStub = "FRESH-TEXT-FROM-DISK-AT-PRINT-TIME";
+  periodicIterationsTarget = 1;
+  run_do_lua_script_once();
+  check(count_occurrences("FRESH-TEXT-FROM-DISK-AT-PRINT-TIME") == 1,
+        "show_lua_script must log the text get_lua_script() returns at call time, "
+        "not a value cached earlier - production no longer keeps script text in RAM");
+}
+
 int main() {
   (void)sendMsgUsedMarker;
   try {
@@ -487,6 +505,7 @@ int main() {
     test_load_lua_script_busy_lock_returns_false_and_preserves_readiness();
     test_load_lua_script_resets_both_counters_and_reenables_script1();
     test_oneshot_job_failure_does_not_touch_either_counter();
+    test_show_lua_script_prints_text_read_at_call_time();
   } catch (const SafetyCapHit&) {
     std::cerr << "FAIL: safety cap hit - do_lua_script never reached the expected stopping point (infinite loop?)\n";
     return 1;

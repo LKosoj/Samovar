@@ -143,7 +143,7 @@ static String lua_type_script;
 // скомпилировалось как есть.
 static bool lua_type_script_pending = false;
 static String get_lua_mode_name() { return lua_type_script; }
-static String script1, script2;
+static bool script1_present = false, script2_present = false;
 static int script1_ref = 7;
 static int script2_ref = 7;
 static String lua_script_list_cache;

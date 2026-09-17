@@ -731,7 +731,13 @@
 ** (It must fit into max(size_t)/32.)
 */
 #if LUAI_IS32INT
-#define LUAI_MAXSTACK		1000000
+/* 1 000 000 слотов = до 8 МБ ОЗУ - на ESP32 рекурсивный (не хвостовой) Lua-
+** скрипт раньше исчерпывал кучу контроллера раньше, чем упирался в этот
+** предел. Теперь переполнение стека - штатная ошибка Lua "stack overflow",
+** а не падение прошивки по нехватке памяти. */
+#ifndef LUAI_MAXSTACK
+#define LUAI_MAXSTACK		6000
+#endif
 #else
 #define LUAI_MAXSTACK		15000
 #endif

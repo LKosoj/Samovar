@@ -55,7 +55,7 @@ static bool runtimeLockAvailable = true;
 static bool luaLockAvailable = true;
 static bool lua_program_job = true;
 static String lua_program_script_name("stage.lua");
-static String lua_program_script_text("old body");
+static bool lua_program_script_present = false;
 static int lua_program_script_ref = 17;
 static LuaBeerJobResult lua_beer_job_result = LUA_BEER_JOB_RUNNING;
 static String storedScript("new body");
@@ -98,7 +98,7 @@ static void reset() {
   luaLockAvailable = true;
   lua_program_job = true;
   lua_program_script_name = String("stage.lua");
-  lua_program_script_text = String("old body");
+  lua_program_script_present = false;
   lua_program_script_ref = 17;
   lua_beer_job_result = LUA_BEER_JOB_RUNNING;
   storedScript = String("new body");
@@ -119,7 +119,7 @@ int main() {
         "selected Lua upload must be processed");
   check(readCount == 1 && compileCount == 1,
         "selected Lua upload must read and compile exactly once");
-  check(lua_program_script_ref == 29 && lua_program_script_text == String("new body") &&
+  check(lua_program_script_ref == 29 && lua_program_script_present &&
             unrefOldCount == 1,
         "successful compile must atomically replace the old active chunk and its source");
 
@@ -175,7 +175,7 @@ def main() -> int:
             "const String script = get_lua_script(fileName);",
             "lua_compile_chunk_locked",
             "lua_program_script_ref = newRef;",
-            "lua_program_script_text = script;",
+            "lua_program_script_present = true;",
         ],
         errors,
     )
@@ -213,6 +213,11 @@ def main() -> int:
         (
             "lua_program_script_ref = newRef;",
             "lua_program_script_ref = oldRef;",
+            "successful compile must atomically replace the old active chunk and its source",
+        ),
+        (
+            "lua_program_script_present = true;",
+            "lua_program_script_present = false;",
             "successful compile must atomically replace the old active chunk and its source",
         ),
         (

@@ -789,6 +789,107 @@ void test_power_first_row_scope() {
         "dist no-blank-lines physical line number mismatch");
 }
 
+// [P1, 17.09.2026] Посимвольный эталон сериализации всех шести program_append_*_row:
+// приём "out += (String)x + \";\"" (два временных String на каждое поле) заменён на
+// последовательные "out += x; out += ';';". Эталонные строки сняты СО СТАРОГО кода
+// (до правки, git show HEAD:program_io.h) на тех же контрольных значениях
+// (uint8_t=255, uint16_t=65535, uint32_t=4294967295, дробные, отрицательные, 0) -
+// после правки они обязаны остаться теми же байт в байт.
+void test_serializer_reference_values() {
+  auto run = [](ProgramRowSerializer serializer, const WProgram& row) {
+    String out;
+    serializer(out, row, nullptr);
+    return std::string(out.c_str());
+  };
+
+  {
+    WProgram row{};
+    row.WType = 'H'; row.Volume = 65535; row.Speed = -3.5f;
+    row.capacity_num = 255; row.Temp = 0.0f; row.Power = -0.1f;
+    check(run(program_append_rect_row, row) == "H;65535;-3.50;255;0.00;-0.10\n",
+          "rect serializer reference value mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'L'; row.Time = 65535.0f;
+    check(run(program_append_rect_row, row) == "L;65535;;0;0;0\n",
+          "rect serializer reference L-row mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'A'; row.Speed = -7.25f; row.capacity_num = 255; row.Power = 0.0f;
+    check(run(program_append_dist_row, row) == "A;-7.25;255;0.00\n",
+          "dist serializer reference value mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'L'; row.Time = 65535.0f;
+    check(run(program_append_dist_row, row) == "L;65535;0;\n",
+          "dist serializer reference L-row mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'S'; row.Speed = 0.0f; row.capacity_num = 0; row.Power = -45.5f; row.Temp = 999.25f;
+    check(run(program_append_bk_row, row) == "S;0.00;0;-45.50;999.25\n",
+          "bk serializer reference value mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'L'; row.Time = 65535.0f;
+    check(run(program_append_bk_row, row) == "L;65535;0;;0\n",
+          "bk serializer reference L-row mismatch");
+  }
+  {
+    WProgram row{};
+    // Не 12.375: на точной половине настоящий dtostrf и snprintf заглушки округляют по-разному.
+    row.WType = 'M'; row.Temp = -12.36f; row.Time = -0.001f; row.capacity_num = 255;
+    row.Speed = -3.5f; row.Volume = 65535; row.Power = -0.1f; row.TempSensor = 255;
+    check(run(program_append_beer_row, row) == "M;-12.36;-0.00;255^-3^65535^0;255\n",
+          "beer serializer reference value mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'L'; row.Time = 65535.0f;
+    check(run(program_append_beer_row, row) == "L;0;65535;;0\n",
+          "beer serializer reference L-row mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'C'; row.Temp = -12.375f; row.Time = -0.001f; row.Param = 999.125f;
+    row.capacity_num = 255; row.Speed = -3.5f; row.Volume = 65535; row.Power = -0.1f; row.TempSensor = 255;
+    check(run(program_append_cheese_row, row) == "C;-12.375000;-0.001000;999.125000;255^-3^65535^0;255\n",
+          "cheese serializer reference default-branch mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'D'; row.TempSensor = 3;
+    program_store_cheese_doser_steps(row, 4294967295u);
+    row.Time = 12.5f; row.capacity_num = 0; row.Speed = 0.0f; row.Volume = 0; row.Power = 0.0f;
+    check(run(program_append_cheese_row, row) == "D;4294967295;12.500000;0;0^0^0^0;3\n",
+          "cheese serializer reference doser-branch mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'F'; row.TempSensor = 7;
+    program_store_cheese_f_multiplier(row, 4294967295u);
+    row.Temp = -55.5f; row.Time = 88.125f; row.capacity_num = 1; row.Speed = 1.0f; row.Volume = 1; row.Power = 1.0f;
+    check(run(program_append_cheese_row, row) == "F;-55.500000;88.125000;4294967.295;1^1^1^1;7\n",
+          "cheese serializer reference F-branch mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'L'; row.Time = 65535.0f;
+    check(run(program_append_cheese_row, row) == "L;0;65535;0;;0\n",
+          "cheese serializer reference L-row mismatch");
+  }
+  {
+    WProgram row{};
+    row.WType = 'H'; row.Speed = -3.5f; row.Power = 999.99f;
+    check(run(program_append_nbk_row, row) == "H;-3.50;999.99\n",
+          "nbk serializer reference value mismatch");
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -805,6 +906,7 @@ int main() {
   test_mode_mapping_and_defaults();
   test_power_first_row_scope();
   test_lua_rows();
+  test_serializer_reference_values();
 
   if (failures != 0) return 1;
   std::cout << "Program atomic parse/commit behavioral checks passed (draft "
@@ -982,8 +1084,8 @@ def main() -> int:
 
         mutated_serializer = (ROOT / "program_io.h").read_text(encoding="utf-8")
         mutated_serializer = mutated_serializer.replace(
-            "out += String(row.Param, 6) + \";\";",
-            "out += String(row.Param, 2) + \";\";",
+            "out += String(row.Param, 6);",
+            "out += String(row.Param, 2);",
             1,
         )
         if mutated_serializer == (ROOT / "program_io.h").read_text(encoding="utf-8"):

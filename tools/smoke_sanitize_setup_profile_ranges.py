@@ -212,6 +212,7 @@ struct SaveU8Field  { const char* name; uint8_t  SetupEEPROM::* member; long min
 // численные константы-заглушки, реальные значения зависят от варианта платы
 // KVIC/RMVK/SEM_AVR и подключаются через #ifdef, которого у хост-харнесса нет).
 inline float power_work_mode_threshold() { return 40.0f; }              // power_regulator.h: POWER_WORK_MODE_THRESHOLD (KVIC/RMVK)
+static constexpr float POWER_WORK_MODE_THRESHOLD = 40.0f;                // power_regulator.h (реальное значение, KVIC/RMVK) - её напрямую использует kSaveFloatFields[BKPower]
 static const float CONTROL_HEATER_R_MIN = 2.0f;                          // control_numeric_input.h (реальное значение)
 static const float CONTROL_HEATER_R_MAX = 65.0f;                         // control_numeric_input.h (реальное значение)
 

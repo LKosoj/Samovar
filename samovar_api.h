@@ -67,6 +67,7 @@ enum PumpCalibrationResult : uint8_t {
 void writeString(String Str, uint8_t num);
 void WriteConsoleLog(String StringLogMsg);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+void SendMsg(const char* m, MESSAGE_TYPE msg_type);
 #include "runtime_pair_events.h"
 void runtime_pair_begin(UiWaitReason reason, const char* tail, MESSAGE_TYPE level);
 void runtime_pair_end(UiWaitReason reason, RuntimePairOutcome outcome,

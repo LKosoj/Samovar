@@ -200,7 +200,7 @@ void test_below_lower_bound_rejected() {
   ProgramParseResult result = program_parse_lines(String("T;93;1;0;29.9\n"), bk_program_parse_spec(), draft);
   check(!result.ok(), "BK row with Temp=29.9 (below lower bound) was accepted");
   check(result.errorMessage != nullptr &&
-            std::string(result.errorMessage) == "Ошибка программы: Т пара: 0 или 30..100",
+            std::string(result.errorMessage) == "Т пара: 0 или 30..100",
         "BK row error message mismatch for out-of-range Temp");
 }
 
@@ -209,7 +209,7 @@ void test_above_upper_bound_rejected() {
   ProgramParseResult result = program_parse_lines(String("T;93;1;0;100.1\n"), bk_program_parse_spec(), draft);
   check(!result.ok(), "BK row with Temp=100.1 (above upper bound) was accepted");
   check(result.errorMessage != nullptr &&
-            std::string(result.errorMessage) == "Ошибка программы: Т пара: 0 или 30..100",
+            std::string(result.errorMessage) == "Т пара: 0 или 30..100",
         "BK row error message mismatch for out-of-range Temp");
 }
 

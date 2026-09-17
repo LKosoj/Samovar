@@ -451,7 +451,7 @@ inline bool cheese_apply_safe_outputs(bool closeDrain) {
   cheeseRuntime.doserCompleted = false;
   if (closeDrain) cheese_set_drain(false);
   if (!applied) {
-    request_emergency_stop("Аварийное отключение: не удалось выключить оборудование сыроварения");
+    request_emergency_stop("Аварийное отключение! Не удалось выключить оборудование сыроварения");
   }
   return applied;
 }
@@ -574,7 +574,8 @@ inline bool cheese_validate_program(String& error) {
             row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 :
             row.WType == 'D' && row.TempSensor == 3 ? 0.0 : row.Param,
             semanticError)) {
-      error = String(semanticError ? semanticError : "Ошибка программы") +
+      error = (semanticError ? String("Ошибка программы: ") + semanticError
+                             : String("Ошибка программы")) +
           " в строке " + String(i + 1);
       return false;
     }

@@ -141,11 +141,6 @@ FsInitResult FS_init(void) {
 }
 
 void FS_register_web_handlers(void) {
-  events.onConnect([](AsyncEventSourceClient * client) {
-    client->send("hello!", NULL, millis(), 1000);
-  });
-  server.addHandler(&events);
-
   // DIY device: /edit stays local-network only and intentionally unauthenticated.
   // Решение владельца от 23.08.2026 (подтверждено): аутентификации в /edit и во всём
   // веб-интерфейсе нет и намеренно не будет без отдельного нового решения владельца.

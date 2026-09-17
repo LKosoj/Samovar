@@ -358,8 +358,6 @@ if fs_init_body:
 
 handler_body = body(fs_text, "void FS_register_web_handlers(void)")
 handler_groups = (
-    "events.onConnect(",
-    "server.addHandler(&events)",
     "server.addHandler(new SPIFFSEditor(SPIFFS))",
     "server.onNotFound(",
     "server.onFileUpload(",
@@ -371,6 +369,10 @@ for token in handler_groups:
         root_firmware_text.count(token) == 1,
         f"FS handler registration must have one production owner: {token}",
     )
+require(
+    "AsyncEventSource" not in root_firmware_text,
+    "unused SSE channel must not come back: no page listens on /events",
+)
 
 web_init_body = body(web_text, "void WebServerInit(void)")
 if web_init_body:

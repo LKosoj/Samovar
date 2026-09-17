@@ -1973,9 +1973,11 @@ static const SaveFloatField kSaveFloatFields[] = {
     {"BVolt", &SetupEEPROM::BVolt, 0.0f, 10000.0f},
     // [T16] Нижняя граница поднята с 0: BKPower - мощность БК (BK.h::check_alarm_bk)
     // после закипания. Если задать её ниже рабочего порога регулятора
-    // (power_work_mode_threshold()), регулятор уйдёт в спящий режим и нагрев
-    // тихо остановится - без этой границы форма примет такое значение молча.
-    {"BKPower", &SetupEEPROM::BKPower, power_work_mode_threshold(), 10000.0f},
+    // (POWER_WORK_MODE_THRESHOLD, power_regulator.h), регулятор уйдёт в спящий режим
+    // и нагрев тихо остановится - без этой границы форма примет такое значение молча.
+    // [M1] Константа, а не вызов power_work_mode_threshold(): значение то же самое, но
+    // так весь массив остаётся константным выражением и уходит во флеш, а не в .data.
+    {"BKPower", &SetupEEPROM::BKPower, POWER_WORK_MODE_THRESHOLD, 10000.0f},
     {"MaxPressureValue", &SetupEEPROM::MaxPressureValue, 0.0f, 10000.0f},
     // [WP7 п.11] Нижняя граница поднята с 0: условие окончания - TankSensor.avgTemp >=
     // DistTemp (distiller.h/BK.h/alarm.h) - при DistTemp=0 выполняется на первой же

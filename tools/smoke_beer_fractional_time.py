@@ -264,8 +264,8 @@ def main() -> int:
             return run_result.returncode
 
         source = copied_program_io.read_text(encoding="utf-8")
-        old = "out += (String)row.Time + \";\";"
-        mutant = source.replace(old, "out += (String)(int)row.Time + \";\";", 1)
+        old = "out += row.Time;"
+        mutant = source.replace(old, "out += (int)row.Time;", 1)
         if mutant == source:
             print("fractional Time mutation anchor is missing", file=sys.stderr)
             return 1

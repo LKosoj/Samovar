@@ -166,6 +166,12 @@ static unsigned long begintime = 0;
 static bool beerFinishPending = false;
 static bool beerHoldClockFrozen = false;
 static bool beerPairErrorPending = false;
+// beer_reset_stage_state() (реальное тело) освобождает aTune в куче и гасит
+// tuning - заглушки нужны только для компиляции, сама автонастройка ПИД вне
+// области этого теста (гонка насоса/мешалки).
+struct FakeAutoTune {};
+static FakeAutoTune *aTune = nullptr;
+static bool tuning = false;
 
 constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
 static int16_t startval = 5;
@@ -974,7 +980,7 @@ def main() -> int:
         return 1
 
     emergency_mutant = harness.replace(
-        'request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");',
+        'request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");',
         "(void)0;",
         1,
     )

@@ -2787,6 +2787,11 @@ pid_harness = (
           float GetKi() const { return ki; }
           float GetKd() const { return kd; }
         };
+        // Реальный aTune (Samovar.h) - указатель в куче, выделяемый StartAutoTune()
+        // и освобождаемый FinishAutoTune()/beer_reset_stage_state(). Тело
+        // FinishAutoTune() ниже - настоящее (извлечено из beer.h) и само зовёт
+        // "delete aTune" - объект обязан быть создан через new, иначе delete
+        // на статическом объекте испортит кучу.
 
         struct FakePid {
           float kp;
@@ -2818,7 +2823,7 @@ pid_harness = (
         };
 
         static SetupEEPROM SamSetup{};
-        static FakeTune aTune{};
+        static FakeTune *aTune = nullptr;
         static FakePid heaterPID{};
         static bool tuning = false;
         static uint8_t ATuneModeRemember = 7;
@@ -2878,9 +2883,14 @@ pid_harness = (
           SamSetup.Kp = 10.0f;
           SamSetup.Ki = 20.0f;
           SamSetup.Kd = 30.0f;
-          aTune.kp = 101.0f;
-          aTune.ki = 202.0f;
-          aTune.kd = 303.0f;
+          // FinishAutoTune() (настоящее тело) заканчивается "delete aTune" -
+          // пересоздаём объект перед каждым кейсом, чтобы не утекать и не
+          // словить двойной delete.
+          if (aTune != nullptr) delete aTune;
+          aTune = new FakeTune();
+          aTune->kp = 101.0f;
+          aTune->ki = 202.0f;
+          aTune->kd = 303.0f;
           heaterPID = {};
           heaterPID.mode = 99;
           tuning = true;
@@ -2940,9 +2950,35 @@ pid_harness = (
           assert_restore_order();
         }
 
+        static void test_finish_without_atune() {
+          events.clear();
+          SamSetup = {};
+          SamSetup.Kp = 10.0f;
+          SamSetup.Ki = 20.0f;
+          SamSetup.Kd = 30.0f;
+          if (aTune != nullptr) { delete aTune; aTune = nullptr; }
+          heaterPID = {};
+          heaterPID.mode = 99;
+          tuning = true;
+          ATuneModeRemember = 7;
+          configuredPersistResult = PERSIST_OK;
+          persistedCandidate = {};
+          persistCalls = 0;
+          alarmCalls = 0;
+          logCalls = 0;
+
+          FinishAutoTune();
+
+          assert(!tuning);
+          assert(persistCalls == 0);
+          assert(alarmCalls == 0);
+          assert(events.empty());
+        }
+
         int main() {
           test_persist_success();
           test_persist_failure();
+          test_finish_without_atune();
           return 0;
         }
         '''

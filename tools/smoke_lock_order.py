@@ -483,7 +483,7 @@ CONFIGMUX_SITES = [
     ("logic.h", "PumpCalibrationResult pump_calibrate(int stpspeed)",
      "SamSetup = profileCandidate;"),
     ("Menu.ino", "void setup_go_back()",
-     "SamSetup = menuSetupCandidate;"),
+     "SamSetup = profileCandidate;"),
     ("program_io.h",
      "inline String program_serialize_rows(uint8_t start, uint8_t end, ProgramRowSerializer serializer)",
      "memcpy(snapshot, program, sizeof(snapshot));\n"
