@@ -7,7 +7,7 @@
 (MIN_BOILING_TEMP) недостижим из-за низкого давления, нагрев идёт бесконечно
 на полной мощности. Симметрично 'C' ждёт остывания без таймаута.
 
-Фикс: два таймаута по BEER_BOIL_TIMEOUT_MS / BEER_COOL_TIMEOUT_MS (120 минут),
+Фикс: два таймаута по BEER_BOIL_TIMEOUT_MS (120 минут) / BEER_COOL_TIMEOUT_MS (24 часа),
 реакция - beer_abort_config_error (снимает мощность через stop_process, но не
 взводит аварийную защёлку - это ошибка конфигурации/процесса, а не авария
 оборудования).
@@ -42,7 +42,7 @@ using ProgramType = char;
 
 // [П13] Те же значения, что и в beer.h.
 #define BEER_BOIL_TIMEOUT_MS (120UL * 60UL * 1000UL)
-#define BEER_COOL_TIMEOUT_MS (120UL * 60UL * 1000UL)
+#define BEER_COOL_TIMEOUT_MS (24UL * 60UL * 60UL * 1000UL)
 constexpr int NOTIFY_MSG = 2;
 
 static bool beerManualPause = false;
