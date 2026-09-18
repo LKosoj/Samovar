@@ -905,6 +905,20 @@ inline void set_power_mode(String Mode) {
     return;
   }
   portENTER_CRITICAL(&emergencyStopMux);
+  // Пока идёт включение нагрева, отложенная команда разгона перебила бы «сон»
+  // (первая строка 'C'/'W' пива грела куб на полной мощности). Откладываем «сон»
+  // тем же путём, что и set_current_power(): как нулевую уставку после разгона.
+  if (regulatorMode == SAFETY_REGULATOR_MODE_SLEEP && PowerOn &&
+      power_transition_start_pending_locked()) {
+    target_power_volt = 0;
+    powerTransition.pendingPowerValue = 0;
+    powerTransition.pendingPowerValueSet = true;
+    powerTransition.pendingPowerGeneration =
+        safety_regulator_next_generation(regulatorRequestState);
+    powerTransition.pendingPowerRegulatorGeneration = 0;
+    portEXIT_CRITICAL(&emergencyStopMux);
+    return;
+  }
   const uint64_t generation = request_regulator_state_locked(
     regulatorMode, false, 0, regulatorMode == SAFETY_REGULATOR_MODE_SLEEP
   );
