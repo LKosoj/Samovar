@@ -405,7 +405,8 @@ if blynk:
 
     snapshot_log_body = body(
         blynk,
-        "static bool blynk_snapshot_pending_log_line(char (&line)[sizeof(s_pendingV34Line)], uint32_t& revision)",
+        # " {" отличает определение от ручного прототипа выше (он нужен Arduino IDE).
+        "static bool blynk_snapshot_pending_log_line(char (&line)[sizeof(s_pendingV34Line)], uint32_t& revision) {",
     )
     for problem in pending_v34_snapshot_errors(snapshot_log_body):
         errors.append(f"blynk_snapshot_pending_log_line contract: {problem}")

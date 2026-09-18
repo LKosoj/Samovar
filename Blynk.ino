@@ -604,6 +604,8 @@ static bool s_blynkPushResendAll = true;
 // Итого 20+72+144 = 236 байт. Буфер 288 - запас ~50 байт сверх расчётного максимума.
 static portMUX_TYPE s_blynkLogLineMux = portMUX_INITIALIZER_UNLOCKED;
 static char s_pendingV34Line[288];
+// Ручной прототип: автопрототип Arduino IDE встал бы выше s_pendingV34Line.
+static bool blynk_snapshot_pending_log_line(char (&line)[sizeof(s_pendingV34Line)], uint32_t& revision);
 static volatile bool s_pendingV34Ready = false;
 static uint32_t s_pendingV34Revision = 0;
 #ifdef USE_MQTT
