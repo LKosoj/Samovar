@@ -131,6 +131,14 @@
     async function set_program () {
       calc_program();
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",", ".");
+      // Паузу без времени прошивка отбивает общим "неверный формат строки" - называем причину сами.
+      let lines = document.getElementsByClassName("prgline");
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].childNodes[1].value === 'P' && !(Number(lines[i].childNodes[2].value) >= 1)) {
+          SamovarApp.notify("Программа не установлена: строка " + (i + 1) + " - для паузы укажите время в секундах в поле «Выход».", 0);
+          return;
+        }
+      }
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
@@ -460,8 +468,8 @@
       e.insertAdjacentHTML("afterbegin", `
       <div class="flex_row program_header" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
         <div class="flex_row_center"><label class="tooltip">№</label></div>
-        <div class="flex_row_center"><label id="index-program-col-type" class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label></div>
-        <div class="flex_row_center"><label id="index-program-col-volume" class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label></div>
+        <div class="flex_row_center"><label id="index-program-col-type" class="tooltip">Тип<span class="tooltiptext">Для типа Пауза время паузы в секундах задаётся в поле "Выход"</span></label></div>
+        <div class="flex_row_center"><label id="index-program-col-volume" class="tooltip">Выход<span class="tooltiptext">Объем в мл. Для типа Пауза - время паузы в секундах</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-speed" class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-container" class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-power" class="tooltip">${programPwrLabel}<span class="tooltiptext">Мощность/напряжение регулятора для этой строки. 0 — не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число — сдвиг от текущего значения, а не точная величина.</span></label></div>

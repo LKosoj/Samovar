@@ -994,6 +994,10 @@ function set_num(){
 	    var pauseSec = Math.round(Number(String(e[i].childNodes[2].value).replace(",", ".")));
 	    if (!Number.isFinite(pauseSec) || pauseSec < 0) pauseSec = 0;
 	    // [Ф8] Поле "Объём" прошивки - uint16, разборщик отбивает больше 65535 общей ошибкой.
+	    // Паузу без времени прошивка отбивает общим "неверный формат строки" - называем причину сами.
+	    if (pauseSec < 1) {
+	      volumeErrors.push("Строка " + i + ": для паузы укажите время в секундах в поле «Скорость».");
+	    }
 	    if (pauseSec > 65535) {
 	      volumeErrors.push("Строка " + i + ": пауза больше 65535 с, разбейте строку.");
 	    }
