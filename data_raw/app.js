@@ -1019,8 +1019,13 @@
   function updateHeaterAlarmLatched(latched, reason) {
     heaterAlarmLatched = latched;
     if (latched) {
-      const present = messages.some(function (entry) { return entry.msg === reason; });
-      if (!present) pushMessage(reason, 0);
+      // Живое сообщение об аварии уже на экране - не дублируем. Иначе (страница
+      // открыта позже, в т.ч. уже в другом режиме) поясняем, что это запомненная
+      // авария, а не новая: причина может называть прежний режим.
+      const present = messages.some(function (entry) { return entry.msg.indexOf(reason) !== -1; });
+      if (!present) {
+        pushMessage('Нагрев заблокирован до перезагрузки контроллера. Причина: ' + reason, 0);
+      }
     }
     showMessages();
   }

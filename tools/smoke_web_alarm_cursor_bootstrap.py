@@ -176,6 +176,9 @@ async function scenarioHardwareLatchSoundsWithoutAnyMessage() {
   check(elements.messages.innerHTML.indexOf(reason) !== -1,
     "защёлка обязана показать heaterAlarmReason даже когда кольцо пусто " +
     "(причина не живёт только в вытесняемом SendMsg)");
+  check(elements.messages.innerHTML.indexOf("Нагрев заблокирован до перезагрузки контроллера") !== -1,
+    "причина защёлки без живого сообщения обязана пояснять, что это запомненная авария " +
+    "(страница могла открыться уже в другом режиме)");
   check(audio.length === 1 && audio[0].playing === true,
     "heaterAlarmLatched=1 must sound the siren even with an empty event ring " +
     "(covers reload/second-tab mid-alarm)");
@@ -220,6 +223,21 @@ async function scenarioFirstEventEverOnEmptyRingIsNotSwallowed() {
     "sequence 1 после пустого кольца - это не разрыв последовательности");
   check(audio.length === 0 || audio[0].playing !== true,
     "первое событие-авария без heaterAlarmLatched не включает сирену");
+}
+
+async function scenarioLatchReasonDoesNotDuplicateLiveMessage() {
+  const reason = "Аварийное отключение! Сыр: нет данных датчика куба";
+  const fetchImpl = makeFetch([
+    { events: [{ messageSequence: 1, Msg: "bootstrap filler", msglvl: 2 }],
+      heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 1 },
+    { events: [{ messageSequence: 2, Msg: reason, msglvl: 0 }],
+      heaterAlarmLatched: 1, heaterAlarmReason: reason, latestMessageSequence: 2 },
+  ]);
+  const { app, elements } = loadApp(fetchImpl);
+  await app.pollAjax(noopRender);
+  await app.pollAjax(noopRender);
+  check(elements.messages.innerHTML.split(reason).length === 2,
+    "живое сообщение об аварии уже на экране - причина защёлки не дублируется");
 }
 
 async function scenarioDismissingToastKeepsSirenWhileLatched() {
@@ -370,6 +388,7 @@ async function main() {
   await scenarioHardwareLatchSoundsWithoutAnyMessage();
   await scenarioLiveAlarmMessageStillSounds();
   await scenarioFirstEventEverOnEmptyRingIsNotSwallowed();
+  await scenarioLatchReasonDoesNotDuplicateLiveMessage();
   await scenarioDismissingToastKeepsSirenWhileLatched();
   await scenarioBatchDeliversConsecutiveEventsWithoutGap();
   await scenarioTypedPairDisplaysHumanTextOnly();
@@ -380,7 +399,7 @@ async function main() {
     for (const message of failures) console.error("FAIL: " + message);
     process.exit(1);
   }
-  console.log("web alarm cursor bootstrap smoke passed (10 scenarios)");
+  console.log("web alarm cursor bootstrap smoke passed (11 scenarios)");
 }
 
 main().catch(function (err) {
