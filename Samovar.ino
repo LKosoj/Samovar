@@ -36,8 +36,6 @@ class asyncHTTPrequest;
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
-SET_LOOP_TASK_STACK_SIZE(9 * 1024);
-
 #include <esp_wifi.h>
 
 #if defined(ARDUINO_ESP32S3_DEV)
@@ -213,6 +211,10 @@ static bool is_notification_token_invalid() {
 // Инициализация сенсоров и функции работы с сенсорами
 //**************************************************************************************************************
 #include "sensorinit.h"
+
+// Макрос разворачивается в функцию. Arduino IDE ставит автопрототипы перед первой
+// функцией скетча, поэтому он обязан стоять ниже всех #include с типами.
+SET_LOOP_TASK_STACK_SIZE(9 * 1024);
 
 // Определения буфера времени для LCD (см. extern в Samovar.h)
 char tst[32] = "00:00:00   00:00:00";
