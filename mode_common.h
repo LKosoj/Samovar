@@ -33,6 +33,30 @@ inline bool mode_should_open_cooling(bool requirePower, bool includeAcp, bool in
   return includeTank && PowerOn && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP;
 }
 
+// Выдержка охлаждения после аварии (решение владельца 19.09.2026): в ректификации,
+// дистилляции, БК и НБК вода и насос после аварийного останова работают ещё 3 минуты -
+// колонна успевает остыть, пар не прорывается в помещение. Жёсткий таймер, а не
+// "пока не остынет": он же ограничивает залив, если причиной аварии был шланг.
+// Взводит perform_emergency_stop() (loop()), читает mode_should_close_cooling()
+// (SysTicker) - поэтому volatile и порядок "сначала срок, потом флаг".
+static volatile uint32_t emergencyCoolingHoldDeadline = 0;
+static volatile bool emergencyCoolingHoldArmed = false;
+
+// true - охлаждение оставлено работать, вызывающий НЕ должен закрывать воду и насос.
+inline bool mode_arm_emergency_cooling_hold() {
+  if (emergencyCoolingHoldArmed) return true;
+  if (!valve_status) return false;
+  if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE && Samovar_Mode != SAMOVAR_DISTILLATION_MODE &&
+      Samovar_Mode != SAMOVAR_BK_MODE && Samovar_Mode != SAMOVAR_NBK_MODE) return false;
+#ifdef USE_WATERSENSOR
+  // Воды нет (обрыв шланга, перекрыт кран) - держать нечего, а насос крутился бы всухую.
+  if (WFAlarmCount > WF_ALARM_COUNT) return false;
+#endif
+  emergencyCoolingHoldDeadline = safety_deadline_after(millis(), 3UL * 60 * 1000);
+  emergencyCoolingHoldArmed = true;
+  return true;
+}
+
 // [П10] Раньше клапан закрывался ТОЛЬКО по остыванию воды охлаждения ниже
 // closeTemp: летом (тёплая проточная вода) порог почти никогда не достигается -
 // клапан не закрывается вовсе; при уже холодной воде клапан захлопывается СРАЗУ
@@ -62,7 +86,14 @@ inline bool mode_should_close_cooling(float closeTemp, bool requireAcpCoolEnough
   }
   modeCoolingWasPowerOn = PowerOn;
 
+  if (!valve_status) emergencyCoolingHoldArmed = false;
   if (PowerOn || is_self_test || !valve_status) return false;
+  // После аварии охлаждение закрывает только таймер выдержки - ни раньше, ни позже.
+  if (emergencyCoolingHoldArmed) {
+    if (!safety_deadline_expired(millis(), emergencyCoolingHoldDeadline)) return false;
+    emergencyCoolingHoldArmed = false;
+    return true;
+  }
   // Пока нагрев ни разу не выключался в этой сессии прошивки, modeHeatOffDeadlineArmed
   // остаётся false - выдержка считается уже прошедшей, как и было до этой правки.
   // Отдельный флаг (а не сравнение дедлайна с 0) нужен, потому что
@@ -130,12 +161,7 @@ inline void mode_update_water_pump_pid(float acpBoostThreshold) {
 #ifdef USE_WATER_PUMP
   if (!valve_status) return;
   if (sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp) {
-#if USE_ADAPTIVE_PID
-    set_pump_speed_pid_control(
-        SamSetup.SetWaterTemp + 3, WaterSensor.avgTemp, false);
-#else
-    set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
-#endif
+    set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);
   } else {
     set_pump_speed_pid(WaterSensor.avgTemp);
   }

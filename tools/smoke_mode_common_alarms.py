@@ -151,7 +151,7 @@ if mode_common:
                 "sensor_reading_valid(ACPSensor)",
                 "ACPSensor.avgTemp > acpBoostThreshold",
                 "ACPSensor.avgTemp > WaterSensor.avgTemp",
-                "set_pump_speed_pid(SamSetup.SetWaterTemp + 3)",
+                "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false)",
                 "set_pump_speed_pid(WaterSensor.avgTemp)",
             ],
         ),

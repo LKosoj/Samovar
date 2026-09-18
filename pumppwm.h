@@ -5,9 +5,6 @@
 #include <Arduino.h>
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
-#if USE_ADAPTIVE_PID
-#include "adaptive_pid.h"
-#endif
 
 #ifndef PUMP_PWM_FREQ
 #define PUMP_PWM_FREQ 15
@@ -17,9 +14,6 @@
 
 static ESP32PWM pump_pwm;
 static GyverPID pump_regulator(6.5, 0.3, 30, 1023);
-#if USE_ADAPTIVE_PID
-static AdaptivePumpState adaptivePumpState = {};
-#endif
 
 void init_pump_pwm(uint8_t pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
@@ -28,9 +22,6 @@ void init_pump_pwm(uint8_t pin, int freq) {
   //pump_regulator.setMode(ON_RATE);
   pump_regulator.setpoint = SamSetup.SetWaterTemp;     // сообщаем регулятору температуру, которую он должен поддерживать
   pump_started = false;
-#if USE_ADAPTIVE_PID
-  adaptive_pump_reset(adaptivePumpState, PWM_LOW_VALUE / 100.0f);
-#endif
 }
 
 ActuatorCommandResult set_pump_pwm(float duty) {
@@ -72,30 +63,24 @@ ActuatorCommandResult set_pump_pwm(float duty) {
   return ACTUATOR_COMMAND_APPLIED;
 }
 
-#if USE_ADAPTIVE_PID
-inline void set_pump_speed_pid_control(
-    float controlTemp, float measuredTemp, bool learningAllowed) {
-  const float minimumDuty = PWM_LOW_VALUE / 100.0f;
-  if (!pump_started) adaptive_pump_reset(adaptivePumpState, minimumDuty);
-  const bool canLearn = learningAllowed && pump_started && wp_count >= 10;
-  const uint32_t nowMs = millis();
-  const float duty = adaptive_pump_step(
-      adaptivePumpState, SamSetup.SetWaterTemp, controlTemp, measuredTemp,
-      minimumDuty, nowMs, canLearn);
-  const ActuatorCommandResult result = set_pump_pwm(duty * 1023.0f);
-  adaptive_pump_note_command(
-      adaptivePumpState, nowMs,
-      canLearn && result == ACTUATOR_COMMAND_APPLIED);
+// У нижнего предела ШИМ поток насоса меняется от оборотов очень круто (насос едва
+// пересиливает высоту подъёма), и ПИД с общими коэффициентами там раскачивается.
+// Множитель ослабляет отклонение температуры на малом ШИМ; выше ~40% он равен 1,
+// и регулятор работает как раньше.
+inline float pump_pid_soften_factor(float pwm) {
+  return constrain((pwm - PWM_LOW_VALUE * 10 + 60.0f) / 350.0f, 0.15f, 1.0f);
 }
 
-inline void set_pump_speed_pid(float temp) {
-  set_pump_speed_pid_control(temp, temp, true);
-}
-#else
-void set_pump_speed_pid(float temp) {
+// soften == false - ветка горячей ТСА (mode_common.h): подставленная "уставка + 3"
+// обязана дойти до регулятора целиком. Во время мягкого пуска (wp_count < 10)
+// множитель тоже не применяется - старт остаётся прежним.
+void set_pump_speed_pid(float temp, bool soften) {
   pump_regulator.setpoint = SamSetup.SetWaterTemp;
+  if (soften && pump_started && wp_count >= 10) {
+    temp = SamSetup.SetWaterTemp +
+           (temp - SamSetup.SetWaterTemp) * pump_pid_soften_factor(water_pump_speed);
+  }
   pump_regulator.input = temp;
   set_pump_pwm(pump_regulator.getResultNow());
 }
-#endif
 #endif

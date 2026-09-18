@@ -39,6 +39,7 @@ SENSOR_VALID_SIGNATURE = "inline bool sensor_valid(const DSSensor& sensor)"
 DEADLINE_EXPIRED_SIGNATURE = "inline bool safety_deadline_expired(uint32_t now, uint32_t deadline)"
 DEADLINE_AFTER_SIGNATURE = "inline uint32_t safety_deadline_after(uint32_t now, uint32_t delayMs)"
 SHOULD_CLOSE_SIGNATURE = "inline bool mode_should_close_cooling(float closeTemp, bool requireAcpCoolEnough)"
+ARM_HOLD_SIGNATURE = "inline bool mode_arm_emergency_cooling_hold()"
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
@@ -74,6 +75,17 @@ static DSSensor ACPSensor;
 static bool PowerOn = false;
 static bool is_self_test = false;
 static bool valve_status = true;
+
+#define USE_WATERSENSOR
+#define WF_ALARM_COUNT 20
+enum { SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE,
+       SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE };
+static int Samovar_Mode = SAMOVAR_BEER_MODE;
+static volatile int WFAlarmCount = 0;
+static volatile uint32_t emergencyCoolingHoldDeadline = 0;
+static volatile bool emergencyCoolingHoldArmed = false;
+
+@ARM_HOLD_BODY@
 
 @SHOULD_CLOSE_BODY@
 
@@ -218,6 +230,61 @@ int main() {
   check(mode_should_close_cooling(closeTemp, false) == false, "уже закрытый клапан не требует повторного закрытия");
   valve_status = true;
 
+  // --- Группа F: выдержка охлаждения 3 минуты после аварии (ректификация,
+  // дистилляция, БК, НБК). Обычные критерии к этому моменту давно готовы закрыть
+  // клапан (вода холодная, выдержка прошлой сессии истекла) - держит только таймер.
+  PowerOn = false;
+  WaterSensor.avgTemp = closeTemp - 5.0f;
+  TankSensor.avgTemp = 20.0f;
+  check(mode_should_close_cooling(closeTemp, false) == true,
+        "предусловие группы F: без аварии обычные критерии закрывают клапан");
+
+  Samovar_Mode = SAMOVAR_BEER_MODE;
+  check(!mode_arm_emergency_cooling_hold() && !emergencyCoolingHoldArmed,
+        "в режиме Пиво авария закрывает охлаждение сразу, как раньше");
+  Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+  valve_status = false;
+  check(!mode_arm_emergency_cooling_hold() && !emergencyCoolingHoldArmed,
+        "закрытое охлаждение авария не открывает");
+  valve_status = true;
+  WFAlarmCount = WF_ALARM_COUNT + 1;
+  check(!mode_arm_emergency_cooling_hold() && !emergencyCoolingHoldArmed,
+        "без протока воды охлаждение закрывается сразу - держать нечего");
+  WFAlarmCount = WF_ALARM_COUNT;
+
+  for (const int mode : {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE,
+                         SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE}) {
+    Samovar_Mode = mode;
+    check(mode_arm_emergency_cooling_hold(), "авария в режиме с колонной обязана оставить охлаждение");
+    check(mode_should_close_cooling(closeTemp, false) == false,
+          "сразу после аварии охлаждение не закрывается, хотя обычные критерии готовы");
+    fake_millis_value += 2UL * 60 * 1000;
+    check(mode_arm_emergency_cooling_hold(), "повторная авария подтверждает уже идущую выдержку");
+    fake_millis_value += 59UL * 1000;
+    check(mode_should_close_cooling(closeTemp, false) == false,
+          "через 2 мин 59 с после аварии охлаждение ещё работает");
+    fake_millis_value += 2UL * 1000;
+    configure_sensor(ACPSensor, true);
+    ACPSensor.avgTemp = MAX_ACP_TEMP;
+    check(mode_should_close_cooling(closeTemp, true) == true,
+          "через 3 минуты после первой аварии охлаждение закрывается: повторная авария срок "
+          "не продлевает, горячий ТСА закрытие не откладывает");
+    configure_sensor(ACPSensor, false);
+    check(!emergencyCoolingHoldArmed, "после закрытия выдержка снята");
+  }
+
+  // Клапан закрыли раньше срока (смена режима) - выдержка снимается и не закрывает
+  // охлаждение, открытое позже по другой причине.
+  check(mode_arm_emergency_cooling_hold(), "выдержка взводится заново");
+  valve_status = false;
+  mode_should_close_cooling(closeTemp, false);
+  valve_status = true;
+  WaterSensor.avgTemp = closeTemp + 5.0f;
+  TankSensor.avgTemp = OPEN_VALVE_TANK_TEMP + 10.0f;
+  fake_millis_value += 4UL * 60 * 1000;
+  check(mode_should_close_cooling(closeTemp, false) == false,
+        "снятая выдержка не закрывает заново открытое охлаждение");
+
   if (failures != 0) return 1;
   std::cout << "mode_should_close_cooling behaviour checks passed\n";
   return 0;
@@ -245,6 +312,8 @@ def build_harness(mode_common_source: str, safety_source: str, alarm_source: str
     harness = harness.replace(
         "@DEADLINE_EXPIRED_BODY@", DEADLINE_EXPIRED_SIGNATURE + " {" + deadline_expired_body + "}"
     )
+    arm_hold_body = extract_function_body(mode_common_source, ARM_HOLD_SIGNATURE)
+    harness = harness.replace("@ARM_HOLD_BODY@", ARM_HOLD_SIGNATURE + " {" + arm_hold_body + "}")
     harness = harness.replace("@SHOULD_CLOSE_BODY@", SHOULD_CLOSE_SIGNATURE + " {" + should_close_body + "}")
     return harness
 
@@ -352,6 +421,29 @@ def main() -> int:
     )
     if rc != 0:
         return rc
+
+    # --- Мутации 4-9: выдержка охлаждения после аварии (группа F).
+    hold_mutations = (
+        ("авария закрывает охлаждение сразу",
+         "    if (!safety_deadline_expired(millis(), emergencyCoolingHoldDeadline)) return false;\n", ""),
+        ("выдержка 30 минут вместо 3",
+         "emergencyCoolingHoldDeadline = safety_deadline_after(millis(), 3UL * 60 * 1000);",
+         "emergencyCoolingHoldDeadline = safety_deadline_after(millis(), 30UL * 60 * 1000);"),
+        ("выдержка без протока воды",
+         "if (WFAlarmCount > WF_ALARM_COUNT) return false;",
+         "if (WFAlarmCount > WF_ALARM_COUNT && false) return false;"),
+        ("выдержка в любом режиме",
+         "Samovar_Mode != SAMOVAR_NBK_MODE) return false;",
+         "Samovar_Mode != SAMOVAR_NBK_MODE && false) return false;"),
+        ("повторная авария продлевает выдержку",
+         "  if (emergencyCoolingHoldArmed) return true;\n", ""),
+        ("выдержка переживает закрытие клапана",
+         "  if (!valve_status) emergencyCoolingHoldArmed = false;\n", ""),
+    )
+    for label, old, new in hold_mutations:
+        rc = run_mutation(label, mode_common_source, safety_source, alarm_source, old, new)
+        if rc != 0:
+            return rc
 
     print("mode_should_close_cooling mutation checks: FAIL as expected (mutations killed)")
     return 0

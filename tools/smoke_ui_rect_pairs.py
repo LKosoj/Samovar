@@ -183,18 +183,26 @@ int main(){ impurityDetector={7,3,9}; tick('H'); if(!check(impurityDetector.dete
     emergency_cpp = r'''#include <cstdio>
 #include <cstring>
 struct String { String(const char*) {} };
-enum { ALARM_MSG=0, SAMOVAR_NBK_MODE=4, RUNTIME_PAIR_ERROR=4, RELE_CHANNEL2=2 };
+#define USE_WATER_PUMP
+enum { ALARM_MSG=0, WARNING_MSG=1, SAMOVAR_NBK_MODE=4, RUNTIME_PAIR_ERROR=4, RELE_CHANNEL2=2 };
 struct Setup { bool rele2; } SamSetup = {false};
 static int Samovar_Mode=0, order=0, powerOffOrder=0, closeOrder=0; static bool alarm_event=false, mixer_status=true;
 static bool pending_emergency_stop_flag=true, pending_emergency_stop_reason_flag=true; static char pending_emergency_stop_reason[32]="alarm";
 const int EMERGENCY_STOP_REASON_LEN=32; static int emergencyStopMux;
 static void portENTER_CRITICAL(int*) {} static void portEXIT_CRITICAL(int*) {}
 static void SendMsg(String,int) {} static void nbk_emergency_finish() {} static void set_power(bool on){if(!on)powerOffOrder=++order;}
-static void open_valve(bool,bool){} static void stopService(){} static void attempt_i2c_pump_emergency_stop(){}
+static bool coolingHoldResult=false, valveClosed=false, pumpStopped=false;
+static bool mode_arm_emergency_cooling_hold(){return coolingHoldResult;}
+static void set_pump_pwm(float duty){if(duty==0)pumpStopped=true;}
+static void open_valve(bool open,bool){if(!open)valveClosed=true;} static void stopService(){} static void attempt_i2c_pump_emergency_stop(){}
 static void digitalWrite(int,bool){} static void reset_process_state(){} static void cancel_pending_emergency_actions(){}
 static void runtime_pair_close_mode(int,int,const char*,int){closeOrder=++order;}
 void perform_emergency_stop() { @BODY@ }
-int main(){perform_emergency_stop(); if(!(alarm_event&&powerOffOrder>0&&closeOrder>powerOffOrder)){std::fprintf(stderr,"FAIL: аварийный off должен предшествовать ERROR close\\n");return 1;} return 0;}'''.replace("@BODY@", emergency)
+int main(){perform_emergency_stop(); if(!(alarm_event&&powerOffOrder>0&&closeOrder>powerOffOrder)){std::fprintf(stderr,"FAIL: аварийный off должен предшествовать ERROR close\\n");return 1;}
+if(!(valveClosed&&pumpStopped)){std::fprintf(stderr,"FAIL: без выдержки авария обязана закрыть воду и насос сразу\\n");return 1;}
+valveClosed=false; pumpStopped=false; coolingHoldResult=true; perform_emergency_stop();
+if(valveClosed||pumpStopped){std::fprintf(stderr,"FAIL: при выдержке охлаждения авария не трогает воду и насос\\n");return 1;}
+return 0;}'''.replace("@BODY@", emergency)
     code, output = compile_run(emergency_cpp)
     if code:
         print("FAIL: emergency hook harness:\n" + output, file=sys.stderr); return 1
@@ -204,6 +212,17 @@ int main(){perform_emergency_stop(); if(!(alarm_event&&powerOffOrder>0&&closeOrd
     if code == 0 or expected not in output:
         print("FAIL: emergency-off mutation survived behavioural assert:\n" + output, file=sys.stderr); return 1
     print("emergency off-before-close mutation rejected")
+    for old, new, expected in (
+        ("if (coolingHeld) {", "if (coolingHeld && false) {", "при выдержке охлаждения авария не трогает воду и насос"),
+        ("if (!coolingHeld) set_pump_pwm(0);", "set_pump_pwm(0);", "при выдержке охлаждения авария не трогает воду и насос"),
+        ("    open_valve(false, true);\n", "", "без выдержки авария обязана закрыть воду и насос сразу"),
+    ):
+        if emergency_cpp.count(old) != 1:
+            print(f"FAIL: emergency cooling mutation anchor is not unique: {old}", file=sys.stderr); return 1
+        code, output = compile_run(emergency_cpp.replace(old, new), quiet=True)
+        if code == 0 or expected not in output:
+            print(f"FAIL: emergency cooling mutation survived ({old}):\n" + output, file=sys.stderr); return 1
+    print("emergency cooling hold mutations rejected")
 
     # PROGRAM_END закрывает активные пары до сброса состояния.
     try:

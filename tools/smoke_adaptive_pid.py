@@ -26,9 +26,13 @@ require(beer, "set_heater_regulator(adaptiveResult.duty, SamSetup.BVolt, &genera
 require((ROOT / "cheese.h").read_text(encoding="utf-8"),
         "set_heater_state(target, sensor->avgTemp, row.Temp);", errors)
 require(beer, "heaterPID.Compute();", errors)
-require(pump, "adaptive_pump_step(", errors)
+# Насос охлаждения всегда на обычном PID: адаптивная модель "обороты задают скорость
+# остывания" для проточного охладителя неверна и раскачивала насос.
 require(pump, "pump_regulator.getResultNow()", errors)
-require(mode_common, "SamSetup.SetWaterTemp + 3, WaterSensor.avgTemp, false", errors)
+for name, text in (("pumppwm.h", pump), ("mode_common.h", mode_common),
+                   ("adaptive_pid.h", adaptive_source)):
+    if "adaptive_pump" in text or "AdaptivePump" in text or "USE_ADAPTIVE_PID" in text:
+        errors.append(f"{name} must not route the cooling pump through adaptive PID")
 
 try:
     regulator_body = extract_function_body(
@@ -145,81 +149,6 @@ int main() {
         "long heater pause must not integrate inactive time");
   check(!pausedHeater.boostAllowed,
         "long pause and moving setpoint must preserve the boost latch");
-
-  AdaptivePumpState coolPump{};
-  adaptive_pump_reset(coolPump, 0.1f);
-  const float hotDuty = adaptive_pump_step(
-      coolPump, 48.0f, 55.0f, 55.0f, 0.1f, 0, false);
-  check(hotDuty > 0.1f, "hot cooling water must increase pump duty");
-
-  AdaptivePumpState coldPump{};
-  adaptive_pump_reset(coldPump, 0.1f);
-  const float coldDuty = adaptive_pump_step(
-      coldPump, 48.0f, 45.0f, 45.0f, 0.1f, 0, false);
-  check(std::fabs(coldDuty - 0.1f) < 0.0001f,
-        "pump output must respect configured minimum duty");
-
-  AdaptivePumpState flatPump{};
-  adaptive_pump_reset(flatPump, 0.1f);
-  adaptive_pump_step(flatPump, 48.0f, 49.0f, 49.0f, 0.1f, 0, false);
-  const float flatPumpDuty = adaptive_pump_step(
-      flatPump, 48.0f, 50.0f, 49.0f, 0.1f, 1000, false);
-  AdaptivePumpState risingPump{};
-  adaptive_pump_reset(risingPump, 0.1f);
-  adaptive_pump_step(risingPump, 48.0f, 49.0f, 49.0f, 0.1f, 0, false);
-  const float risingPumpDuty = adaptive_pump_step(
-      risingPump, 48.0f, 50.0f, 50.0f, 0.1f, 1000, false);
-  check(risingPumpDuty > flatPumpDuty,
-        "pump prediction must react more strongly to rising water temperature");
-
-  AdaptivePumpState learningPump{};
-  adaptive_pump_reset(learningPump, 0.1f);
-  adaptive_pump_step(learningPump, 48.0f, 55.0f, 55.0f, 0.1f, 0, false);
-  adaptive_pump_note_command(learningPump, 0, false);
-  for (int second = 1; second <= 9; ++second) {
-    adaptive_pump_step(
-        learningPump, 48.0f, 55.0f - second * 0.05f,
-        55.0f - second * 0.05f, 0.1f,
-        static_cast<uint32_t>(second) * 1000U, true);
-    adaptive_pump_note_command(
-        learningPump, static_cast<uint32_t>(second) * 1000U, true);
-  }
-  check(std::fabs(learningPump.dutyForOneDegreePerMinute - 0.35f) > 0.0001f,
-        "pump must learn when stable operation allows learning");
-
-  AdaptivePumpState blockedLearningPump{};
-  adaptive_pump_reset(blockedLearningPump, 0.1f);
-  adaptive_pump_step(blockedLearningPump, 48.0f, 55.0f, 55.0f, 0.1f, 0, false);
-  adaptive_pump_note_command(blockedLearningPump, 0, false);
-  for (int second = 1; second <= 7; ++second) {
-    adaptive_pump_step(
-        blockedLearningPump, 48.0f, 55.0f - second * 0.05f,
-        55.0f - second * 0.05f, 0.1f,
-        static_cast<uint32_t>(second) * 1000U, true);
-    adaptive_pump_note_command(
-        blockedLearningPump, static_cast<uint32_t>(second) * 1000U, true);
-  }
-  check(std::fabs(blockedLearningPump.dutyForOneDegreePerMinute - 0.35f) < 0.0001f,
-        "pump must block delayed startup or ACP response for eight seconds");
-
-  AdaptivePumpState afterOverridePump{};
-  adaptive_pump_reset(afterOverridePump, 0.1f);
-  adaptive_pump_step(afterOverridePump, 48.0f, 55.0f, 55.0f, 0.1f, 0, true);
-  adaptive_pump_note_command(afterOverridePump, 0, false);
-  adaptive_pump_step(afterOverridePump, 48.0f, 54.95f, 54.95f, 0.1f, 1000, true);
-  adaptive_pump_note_command(afterOverridePump, 1000, true);
-  check(std::fabs(afterOverridePump.dutyForOneDegreePerMinute - 0.35f) < 0.0001f,
-        "failed pump command must block learning of its delayed response");
-
-  AdaptivePumpState pausedPump{};
-  adaptive_pump_reset(pausedPump, 0.1f);
-  adaptive_pump_step(pausedPump, 48.0f, 49.0f, 49.0f, 0.1f, 0, false);
-  pausedPump.integral = 0.2f;
-  adaptive_pump_step(pausedPump, 48.0f, 49.0f, 49.0f, 0.1f, 600000, true);
-  check(std::fabs(pausedPump.integral - 0.2f) < 0.0001f,
-        "long pump pause must not integrate inactive time");
-  check(std::fabs(pausedPump.filteredRate) < 0.0001f,
-        "long pump pause must discard the stale cooling rate");
 
   const uint32_t nearWrap = 0xFFFFFFFFU - 1000U;
   const uint32_t wrappedDeadline = nearWrap + 8000U;
@@ -348,9 +277,6 @@ if not errors:
         "if (!state.boostActive &&",
         1,
     )
-    pump_gap_prefix, pump_gap_suffix = adaptive_source.rsplit(
-        "if (elapsedMs > 5000U) {", 1)
-    pump_gap_mutation = pump_gap_prefix + "if (false) {" + pump_gap_suffix
     mutations = (
         (
             "boost target replaced by moving setpoint",
@@ -384,21 +310,6 @@ if not errors:
             "failed heater command learned",
             failed_heater_mutation,
             "failed heater command must block learning of its response",
-        ),
-        (
-            "pump reaction delay ignored",
-            adaptive_source.replace(
-                "if (learningAllowed && state.lastCommandLearnable &&\n"
-                "        adaptive_pid_deadline_reached(nowMs, state.learningBlockedUntilMs) &&",
-                "if (learningAllowed && state.lastCommandLearnable &&",
-                1,
-            ),
-            "pump must block delayed startup or ACP response for eight seconds",
-        ),
-        (
-            "long pump gap integrated",
-            pump_gap_mutation,
-            "long pump pause must not integrate inactive time",
         ),
         (
             "millis wrap compared without signed delta",

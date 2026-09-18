@@ -346,11 +346,7 @@ void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
 void get_task_stack_usage();
 void init_pump_pwm(uint8_t pin, int freq);
 ActuatorCommandResult set_pump_pwm(float duty);
-void set_pump_speed_pid(float temp);
-#if USE_ADAPTIVE_PID
-inline void set_pump_speed_pid_control(
-    float controlTemp, float measuredTemp, bool learningAllowed);
-#endif
+void set_pump_speed_pid(float temp, bool soften = true);
 void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true,
                     UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 
