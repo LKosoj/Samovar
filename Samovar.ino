@@ -22,6 +22,8 @@ struct AjaxTelemetrySnapshot;
 struct UiEndDescriptor;
 struct UiStateDescriptor;
 struct WifiDisconnectEvent;
+// uint8_t здесь ещё не объявлен; на ESP32 это unsigned char.
+enum ProfileOperationPhase : unsigned char;
 class String;
 // Конфигурация Blynk подключается ниже; вызов защищён в defer_typed_pair_until_v35().
 bool blynk_session_start_pending();
