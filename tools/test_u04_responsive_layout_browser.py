@@ -748,6 +748,8 @@ BROWSER_TEST = r'''async page => {
   // 05.09.2026: согласованные подсказки MPX, второго I2C-насоса и НБК увеличили
   // фактическое число проверяемых подсказок до 24. Три старые настройки Cheese
   // позже удалены вместе с их подсказками; текущая разметка содержит 23.
+  // 18.09.2026: подсказки к уставкам датчиков воды и ТСА (в Пиве/Сыре это
+  // допуск вокруг температуры строки), сумма 23 -> 25.
   await page.setViewportSize({ width: 320, height: 800 });
   let setupTooltipTotal = 0;
   for (const tab of setupTabs) {
@@ -755,7 +757,7 @@ BROWSER_TEST = r'''async page => {
     await openSetupTab(tab);
     setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
   }
-  const SETUP_TOOLTIP_TOTAL_EXPECTED = 23;
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 25;
   if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
     throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
       " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);
