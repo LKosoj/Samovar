@@ -262,15 +262,18 @@ inline bool i2c_stepper_refresh(I2CStepperDevice& device, bool force = false,
   return true;
 }
 
-inline bool i2c_stepper_probe(I2CStepperDevice& device) {
+inline bool i2c_stepper_probe(I2CStepperDevice& device, bool* lockBusyOut = nullptr) {
   bool lockBusy = false;
+  if (lockBusyOut) *lockBusyOut = false;
   if (!i2c_stepper_read_identity(device, I2C_CACHE_LOCK_WAIT_MS, &lockBusy)) {
     if (!lockBusy) i2c_stepper_note_refresh_failure(device);
+    if (lockBusyOut) *lockBusyOut = lockBusy;
     return false;
   }
   if (!i2c_stepper_read_config(device, I2C_CACHE_LOCK_WAIT_MS, &lockBusy) ||
       !i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS, false, &lockBusy)) {
     if (!lockBusy) i2c_stepper_note_refresh_failure(device);
+    if (lockBusyOut) *lockBusyOut = lockBusy;
     return false;
   }
   return true;
@@ -285,7 +288,10 @@ inline void i2c_stepper_scan_begin() {
 inline void i2c_stepper_scan_step() {
   if (!i2cStepperScanActive) return;
   I2CStepperDevice* device = i2c_stepper_device(i2cStepperScanAddress);
-  if (device) i2c_stepper_probe(*device);
+  bool lockBusy = false;
+  if (device) i2c_stepper_probe(*device, &lockBusy);
+  // Шина была занята (обычно экраном): адрес не проверен, повторяем его на следующем шаге.
+  if (lockBusy) return;
   if (i2cStepperScanAddress == I2CSTEPPER_V3_ADDRESS_MAX) {
     i2cStepperScanActive = false;
   } else {

@@ -110,7 +110,8 @@ int main() {
 
   // Identity is read first; the following config read sees the occupied semaphore.
   busyOnTake = 2;
-  if (i2c_stepper_probe(device)) return 1;
+  bool lockBusy = false;
+  if (i2c_stepper_probe(device, &lockBusy) || !lockBusy) return 1;
   if (!device.present || notedFailures != 0 || semaphoreWaits.size() != 2 ||
       semaphoreWaits[0] != I2C_CACHE_LOCK_WAIT_MS ||
       semaphoreWaits[1] != I2C_CACHE_LOCK_WAIT_MS) return 2;
@@ -121,7 +122,8 @@ int main() {
   notedFailures = 0;
   device.present = true;
   Wire.failRead = true;
-  if (i2c_stepper_probe(device)) return 3;
+  lockBusy = true;
+  if (i2c_stepper_probe(device, &lockBusy) || lockBusy) return 3;
   return !device.present && notedFailures == 1 ? 0 : 4;
 }
 '''
@@ -141,7 +143,7 @@ def build_source() -> str:
           "inline bool i2c_stepper_read_config(I2CStepperDevice& device, TickType_t lockWaitMs = I2C_LOCK_WAIT_MS, bool* lockBusy = nullptr)"),
       "@PROBE@": function(
           "inline bool i2c_stepper_probe",
-          "inline bool i2c_stepper_probe(I2CStepperDevice& device)"),
+          "inline bool i2c_stepper_probe(I2CStepperDevice& device, bool* lockBusyOut = nullptr)"),
   }
   for token, value in replacements.items():
     source = source.replace(token, value)

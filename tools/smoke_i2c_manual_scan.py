@@ -34,7 +34,10 @@ volatile bool i2cStepperScanActive = true;
 @DEVICE@
 uint8_t probed[20] = {};
 uint8_t probeCount = 0;
-bool i2c_stepper_probe(I2CStepperDevice& device) {
+bool probeLockBusy = false;
+bool i2c_stepper_probe(I2CStepperDevice& device, bool* lockBusyOut) {
+  *lockBusyOut = probeLockBusy;
+  if (probeLockBusy) return false;
   probed[probeCount++] = device.address;
   return true;
 }
@@ -64,9 +67,15 @@ int main() {
   if (probeCount != 10) return 4;
   i2c_stepper_scan_begin();
   if (!i2cStepperScanActive || i2cStepperScanAddress != 1) return 5;
+  // Занятая шина не должна «съедать» адрес: он проверяется повторно.
+  probeLockBusy = true;
   nowMs = 5001;
   i2c_stepper_tick();
-  if (probeCount != 11 || probed[10] != 1) return 6;
+  if (probeCount != 10 || i2cStepperScanAddress != 1 || !i2cStepperScanActive) return 8;
+  probeLockBusy = false;
+  nowMs = 5101;
+  i2c_stepper_tick();
+  if (probeCount != 11 || probed[10] != 1 || i2cStepperScanAddress != 2) return 6;
   i2cStepperScanActive = false;
   i2cSteppers[1].present = true;
   i2cSteppers[1].lastHeartbeatMs = 0;
