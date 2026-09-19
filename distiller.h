@@ -164,8 +164,7 @@ void distiller_proc() {
           SAMOVAR_STATUS_DISTILLATION,
           "Ошибка создания файла лога. Старт дистилляции отменён.",
           "Описание сессии занято. Старт дистилляции отменён.",
-          "Включен нагрев дистиллятора",
-          true) != MODE_HEATING_START_SUCCEEDED) return;
+          "Включен нагрев дистиллятора") != MODE_HEATING_START_SUCCEEDED) return;
     run_dist_program(0);
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER

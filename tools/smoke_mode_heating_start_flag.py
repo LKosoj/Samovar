@@ -28,7 +28,7 @@ mode_warn_log_close_failed, mode_clear_heating_start, mode_fail_heating_start,
 mode_begin_heating_session из mode_common.h, реальный SafetyTransition/enum из
 safety_transition.h (через -I ROOT), и компилирует их в харнесс с
 не-static-моками истинно внешних зависимостей (heater_safety_latched,
-power_transition_active, create_data, reset_heat_loss_calculation,
+power_transition_active, create_data,
 request_data_log_close, set_power, SendMsg).
 """
 import subprocess
@@ -51,8 +51,7 @@ FUNCTIONS = [
     "  int16_t activeStatus,\n"
     "  const char* createLogError,\n"
     "  const char* sessionBusyError,\n"
-    "  const char* heatingMessage,\n"
-    "  bool resetHeatLoss\n"
+    "  const char* heatingMessage\n"
     ")",
 ]
 
@@ -108,8 +107,6 @@ static bool createDataReturn = true;
 static int createDataCalls = 0;
 bool create_data() { createDataCalls++; return createDataReturn; }
 
-static int resetHeatLossCalls = 0;
-void reset_heat_loss_calculation() { resetHeatLossCalls++; }
 
 static bool requestDataLogCloseReturn = true;
 bool request_data_log_close() { return requestDataLogCloseReturn; }
@@ -168,7 +165,6 @@ static void reset_fixture() {
   powerTransitionActiveReturn = false;
   createDataReturn = true;
   createDataCalls = 0;
-  resetHeatLossCalls = 0;
   requestDataLogCloseReturn = true;
   setPowerCalls = 0;
   lastSetPowerOn = false;
@@ -185,7 +181,7 @@ int main() {
   reset_fixture();
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started"
     );
     check(result == MODE_HEATING_START_FAILED, "1: без взведённого флага должен быть отказ");
     check(createDataCalls == 0, "1: create_data не должен вызываться без взведённого флага");
@@ -207,11 +203,10 @@ int main() {
   mode_request_heating_start(TEST_ACTIVE_STATUS);
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started"
     );
     check(result == MODE_HEATING_START_PENDING, "2: со взведённым флагом сессия должна успешно начаться (PENDING)");
     check(createDataCalls == 1, "2: create_data должен быть вызван - проверка флага пройдена");
-    check(resetHeatLossCalls == 1, "2: resetHeatLoss должен быть применён");
     check(setPowerCalls == 1 && lastSetPowerOn == true, "2: set_power(true) должен быть вызван в конце");
     check(PowerOn == true, "2: PowerOn должен стать true после успешного старта");
   }
@@ -230,7 +225,7 @@ int main() {
   reset_fixture();
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started"
     );
     check(result == MODE_HEATING_START_FAILED, "4: без повторного взвода флага новая попытка должна снова быть отклонена");
     check(createDataCalls == 0, "4: create_data не должен вызываться без повторного взвода флага");
@@ -263,7 +258,7 @@ int main() {
   mode_request_heating_start(OTHER_ACTIVE_STATUS);
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started"
     );
     check(result == MODE_HEATING_START_FAILED, "6: взвод для чужого статуса не должен запускать сессию текущего статуса");
     check(createDataCalls == 0, "6: create_data не должен вызываться при чужом взводе флага");

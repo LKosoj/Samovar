@@ -108,15 +108,6 @@ void test_power_and_scalars() {
         "fractional PWM changed output");
   check(!parse_control_water_pwm("1024", pwm).ok() && pwm == 55,
         "PWM overflow changed output");
-
-  float vless = 8.0f;
-  check(parse_control_vless("0.001", vless).ok() && vless == 0.001f,
-        "vless lower bound failed");
-  check(parse_control_vless("10000", vless).ok() && vless == 10000.0f,
-        "vless upper bound failed");
-  vless = 8.0f;
-  check(!parse_control_vless("0", vless).ok() && vless == 8.0f,
-        "invalid vless changed output");
 }
 
 void test_rates_and_nbk() {

@@ -235,7 +235,6 @@ for name, text, proc_signature, expected_sensor in [
                 "Ошибка создания файла лога. Старт дистилляции отменён.",
                 "Описание сессии занято. Старт дистилляции отменён.",
                 "Включен нагрев дистиллятора",
-                "true",
                 "run_dist_program(0);",
             ],
             errors,
@@ -253,7 +252,6 @@ for name, text, proc_signature, expected_sensor in [
                 "Ошибка создания файла лога. Старт БК отменён.",
                 "Описание сессии занято. Старт БК отменён.",
                 "Включен нагрев бражной колонны",
-                "false",
             ],
             errors,
         )
@@ -269,7 +267,6 @@ if mode_common_text:
         begin_body,
         [
             "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
-            "if (resetHeatLoss) reset_heat_loss_calculation();",
             "create_data()",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "copy_start_session_description",

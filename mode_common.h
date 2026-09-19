@@ -350,8 +350,7 @@ inline ModeHeatingStartResult mode_begin_heating_session(
   int16_t activeStatus,
   const char* createLogError,
   const char* sessionBusyError,
-  const char* heatingMessage,
-  bool resetHeatLoss
+  const char* heatingMessage
 ) {
   if (safety_transition_active(modeHeatingStart.transition)) {
     return modeHeatingStart.activeStatus == activeStatus
@@ -380,7 +379,6 @@ inline ModeHeatingStartResult mode_begin_heating_session(
     return MODE_HEATING_START_FAILED;
   }
 
-  if (resetHeatLoss) reset_heat_loss_calculation();
   if (!create_data()) {
     mode_cancel_process_start(createLogError);
     return MODE_HEATING_START_FAILED;
@@ -426,14 +424,13 @@ inline ModeHeatingStartResult mode_run_heating_start(
   int16_t activeStatus,
   const char* createLogError,
   const char* sessionBusyError,
-  const char* heatingMessage,
-  bool resetHeatLoss
+  const char* heatingMessage
 ) {
   if (mode_heating_start_pending(activeStatus)) {
     return mode_tick_heating_session(activeStatus);
   }
   return mode_begin_heating_session(
     activeStatus, createLogError, sessionBusyError,
-    heatingMessage, resetHeatLoss
+    heatingMessage
   );
 }

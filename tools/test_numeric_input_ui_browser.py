@@ -514,20 +514,18 @@ BROWSER_TEST = r'''async page => {
       };
       headsAsInput.value = "8";
       headsAsInput.dispatchEvent(new Event("input", { bubbles: true }));
-      for (const value of ["0.001", "10000", "1,5"]) {
-        volume.value = value;
-        window.__numericStatus = 202;
-        await SamovarApp.postProgram(form);
-      }
+      // Объём сырца нужен только калькулятору страницы: в /program он не уходит,
+      // но кнопка «Установить» (set_program) с негодным объёмом запрос не шлёт.
+      window.__numericStatus = 202;
+      await SamovarApp.postProgram(form);
       const last = window.__numericRequests.at(-1);
       const keys = last.body.map(entry => entry[0]);
-      const allowlist = keys.every(key => ["WProgram", "vless", "Descr"].includes(key)) &&
-        keys.includes("WProgram") && keys.includes("vless") &&
-        last.body.some(entry => entry[0] === "vless" && entry[1] === "1.5");
+      const allowlist = keys.every(key => ["WProgram", "Descr"].includes(key)) &&
+        keys.includes("WProgram");
       const before = window.__numericRequests.length;
       for (const value of ["", "garbage", "NaN", "Inf", "1e999", "1e-40", "0", "10000.1"]) {
         volume.value = value;
-        await SamovarApp.postProgram(form);
+        await set_program();
       }
       const invalidBlocked = window.__numericRequests.length === before;
       volume.value = "1";

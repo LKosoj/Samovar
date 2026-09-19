@@ -360,7 +360,6 @@ if web_program_body:
             "if (!result.ok())",
             "programAction = PROGRAM_UPDATE_REPLACE;",
             "uint8_t metadataFlags = 0;",
-            "parse_control_vless(",
             "const bool hasMetadata = metadataFlags != 0;",
             "queue_profile_operation(",
             "send_program_operation_accepted(request, responseProgram, operationId);",
@@ -398,7 +397,7 @@ if app_js.exists():
     if post_program_body:
         for token in [
             "const body = new FormData();",
-            "const allowedFields = ['WProgram', 'vless', 'Descr'];",
+            "const allowedFields = ['WProgram', 'Descr'];",
             "form.querySelectorAll('[name=\"' + name + '\"]')",
             "body.append(name, fields[0].value);",
             "await fetch('/program', { method: 'POST', body: body })",

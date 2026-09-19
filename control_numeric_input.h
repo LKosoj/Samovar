@@ -5,8 +5,6 @@
 #include <I2CStepperV3.h>
 #include "numeric_parse.h"
 
-static const float CONTROL_VLESS_MIN = 0.001f;
-static const float CONTROL_VLESS_MAX = 10000.0f;
 // Доверенный диапазон сопротивления ТЭНа. 2..65 Ом - это 26450..813 Вт при 230 В.
 // Нижняя граница - не реальный потолок мощности, а заслон от абсурдно малых значений;
 // верхняя (65 Ом → 813 Вт) - самый слабый ТЭН, который стоит поддерживать.
@@ -187,10 +185,6 @@ inline NumericParseResult parse_control_i2c_pump(
   parsed.targetMl = volumeMl;
   out = parsed;
   return numeric_parse_result(NUMERIC_PARSE_OK);
-}
-
-inline NumericParseResult parse_control_vless(const char* text, float& out) {
-  return parse_bounded_float(text, CONTROL_VLESS_MIN, CONTROL_VLESS_MAX, out);
 }
 
 inline NumericParseResult parse_control_calibration_speed(const char* text, uint16_t& out) {

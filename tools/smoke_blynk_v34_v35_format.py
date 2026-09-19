@@ -133,7 +133,7 @@ if samovar:
             "SamSetup.PackDens",
             "format_float(SamSetup.ColHeight, 2)",
             "format_float(SamSetup.ColDiam, 1)",
-            "format_float(CurrentHeatLoss, 0)",
+            's += ",0";',
             "program_type_to_string(logProgramType)",
             "String((int)Samovar_Mode)",
         ],
@@ -234,9 +234,9 @@ for file_name, source, fn_signature, call_token in START_SITES:
 # 2-3 знака (11+11+10+10+10+10+10+10+10=92) + temp_delta format_float(,3)(11)
 # + detectorStatus/PackDens uint8_t до 3 цифр(4+4=8) + event_code 0/1(2)
 # + col_height format_float(,2)(10) + col_diameter format_float(,1)(","+8=9)
-# + heat_loss format_float(,0)(","+6=7) + program_type 0-1 символ(2)
-# + mode (int)Samovar_Mode(","+2=3) = 144.
-V34_WORST_CASE_BYTES = 20 + 72 + 144  # 236
+# + heat_loss константа "0"(","+1=2) + program_type 0-1 символ(2)
+# + mode (int)Samovar_Mode(","+2=3) = 139.
+V34_WORST_CASE_BYTES = 20 + 72 + 139  # 231
 
 # V35: sessionId uint32_t(10) + "," + resume "0"/"1"(1) + "," + chipId uint32_t(10) + ","
 # + SamSetup.TimeZone uint8_t(3) + "," + SAMOVAR_VERSION "7.00"(4) + "," + resetReason,

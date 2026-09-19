@@ -1970,7 +1970,7 @@
 
   async function postProgramRequest(form) {
     const body = new FormData();
-    const allowedFields = ['WProgram', 'vless', 'Descr'];
+    const allowedFields = ['WProgram', 'Descr'];
     for (let i = 0; i < allowedFields.length; i++) {
       const name = allowedFields[i];
       const fields = form.querySelectorAll('[name="' + name + '"]');
@@ -1980,14 +1980,7 @@
         return { ok: false, err: err, program: '', httpStatus: 0, queued: false };
       }
       if (fields.length === 0 || fields[0].disabled) continue;
-      if (name === 'vless') {
-        const volume = readNumericInput(fields[0], {
-          label: 'Объём спирта-сырца', min: 0.001, max: 10000
-        });
-        if (!volume) {
-          return { ok: false, err: byId('request_error').textContent, program: '', httpStatus: 0, queued: false };
-        }
-      } else if (name === 'Descr') {
+      if (name === 'Descr') {
         const byteLength = descriptionByteLength(fields[0].value);
         if (byteLength > 250) {
           const err = 'Описание длиннее 250 байт.';

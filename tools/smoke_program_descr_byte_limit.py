@@ -9,8 +9,7 @@ String::length()). Клиентская разметка <textarea maxlength='25
 
 postProgram() (data_raw/app.js) теперь считает РЕАЛЬНЫЕ байты через
 TextEncoder ДО отправки запроса - при превышении 250 байт показывает причину
-через showRequestError() и не шлёт /program вовсе (тот же контракт, что и
-соседняя проверка vless).
+через showRequestError() и не шлёт /program вовсе.
 
 Дополнение к tools/test_numeric_input_ui_browser.py (тот же сценарий 130
 кириллических символов встроен в testProgram() того файла): та проверка

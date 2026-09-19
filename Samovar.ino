@@ -258,7 +258,6 @@ RuntimeEventRing runtimeEventRing{};
 enum ProfileOperationFlags : uint8_t {
   PROFILE_OPERATION_HAS_SETTINGS = 0x01,
   PROFILE_OPERATION_HAS_PROGRAM = 0x02,
-  PROFILE_OPERATION_METADATA_VOLUME = 0x04,
   PROFILE_OPERATION_METADATA_DESCRIPTION = 0x08,
   PROFILE_OPERATION_MODE_CHANGE = 0x10,
   PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE = 0x20,
@@ -286,7 +285,6 @@ struct ProfileOperationSlot {
   ProgramDraft program;
   char description[251];
   OperationId id;
-  float boilerVolume;
   uint8_t flags;
   uint8_t sensorResetMask;
   uint8_t sourceMode;
@@ -319,7 +317,6 @@ static void reset_profile_operation_slot() {
   memset(active_profile_operation.description, 0,
          sizeof(active_profile_operation.description));
   active_profile_operation.id = 0;
-  active_profile_operation.boilerVolume = 0.0f;
   active_profile_operation.flags = 0;
   active_profile_operation.sensorResetMask = 0;
   active_profile_operation.sourceMode = 0;
@@ -348,7 +345,6 @@ static OperationError queue_profile_operation(
     const ProgramDraft* programDraft,
     ProgramUpdateAction programAction,
     uint8_t metadataFlags,
-    float boilerVolume,
     const char* description,
     bool requireProgramIdle,
     bool modeChange,
@@ -422,8 +418,7 @@ static OperationError commit_profile_operation() {
       (active_profile_operation.flags & PROFILE_OPERATION_HAS_PROGRAM) != 0;
   const bool hasMetadata =
       (active_profile_operation.flags &
-       (PROFILE_OPERATION_METADATA_VOLUME |
-        PROFILE_OPERATION_METADATA_DESCRIPTION)) != 0;
+       PROFILE_OPERATION_METADATA_DESCRIPTION) != 0;
   const bool modeChange =
       (active_profile_operation.flags & PROFILE_OPERATION_MODE_CHANGE) != 0;
 
@@ -504,12 +499,6 @@ static OperationError commit_profile_operation() {
   if ((active_profile_operation.flags &
        PROFILE_OPERATION_METADATA_DESCRIPTION) != 0) {
     SessionDescription = escapedDescription;
-  }
-  if ((active_profile_operation.flags &
-       PROFILE_OPERATION_METADATA_VOLUME) != 0) {
-    BoilerVolume = active_profile_operation.boilerVolume;
-    heatLossCalculated = false;
-    heatStartMillis = 0;
   }
   if (hasSettings) {
     apply_setup_sensor_fields(active_profile_operation.sensorResetMask);
@@ -941,7 +930,7 @@ static String format_v34_tail_fields() {
   s += ","; s += String(SamSetup.PackDens); // 19: packing_density
   s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
   s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
-  s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
+  s += ",0"; // 22: heat_loss - расчёт теплопотерь удалён, поле оставлено ради формата из 25 полей
 
   // Тип программы: H=головы, B=тело, C=предзахлеб, T=хвосты, P=пауза, пусто=нет программы
   String programType = "";
@@ -964,10 +953,8 @@ static void tick_publish_log_line(const String &baseLine) {
     // Расчет ФЧ (целевого)
     float vaporSpeed = 0;
 #ifdef SAMOVAR_USE_POWER
-    float netPower = (float)current_power_p - CurrentHeatLoss;
-    if (netPower < 0) netPower = 0;
     // Скорость испарения мл/час (используем константу из column_math.h)
-    vaporSpeed = netPower * EVAPORATION_FACTOR;
+    vaporSpeed = (float)current_power_p * EVAPORATION_FACTOR;
 #endif
     if (ActualVolumePerHour > 0.001f) {
       CalculatedTargetFR = (vaporSpeed / (ActualVolumePerHour * 1000.0f)) - 1.0f;
@@ -2143,9 +2130,6 @@ void triggerSysTicker(void *parameter) {
 #ifdef SAMOVAR_USE_POWER
       get_current_power();
 #endif
-      
-      // Авто-расчет теплопотерь при нагреве (п. 5)
-      update_heat_loss_calculation();
 
       bool rescanDs = false;
       {

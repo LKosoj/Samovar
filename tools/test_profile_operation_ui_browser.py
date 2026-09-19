@@ -524,7 +524,7 @@ BROWSER_TEST = r'''async page => {
     };
   });
   if (editedProgramSuccess.leave || editedProgramSuccess.volume !== "3" ||
-      !editedProgramSuccess.body.some(entry => entry[0] === "vless" && entry[1] === "2") ||
+      editedProgramSuccess.body.some(entry => entry[0] === "vless") ||
       editedProgramSuccess.message !== "Программа применена.") {
     throw new Error(scenario + " stale revision/payload mismatch: " + JSON.stringify(editedProgramSuccess));
   }

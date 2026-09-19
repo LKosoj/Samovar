@@ -196,7 +196,6 @@ if mode_common:
             "inline ModeHeatingStartResult mode_begin_heating_session",
             [
                 "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
-                "if (resetHeatLoss) reset_heat_loss_calculation();",
                 "create_data()",
                 "copy_start_session_description",
                 "MODE_HEATING_PHASE_WAIT_POWER",

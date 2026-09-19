@@ -193,8 +193,7 @@ void bk_proc() {
           SAMOVAR_STATUS_BK,
           "Ошибка создания файла лога. Старт БК отменён.",
           "Описание сессии занято. Старт БК отменён.",
-          "Включен нагрев бражной колонны",
-          false) != MODE_HEATING_START_SUCCEEDED) return;
+          "Включен нагрев бражной колонны") != MODE_HEATING_START_SUCCEEDED) return;
     bk_work_power_pending = true;
     runtime_pair_begin(
         UI_WAIT_BK_WORK_POWER,

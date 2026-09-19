@@ -700,7 +700,6 @@ void reset_process_state(void) {
 	  alcohol_s = 0;
 	  boiling_evidence = BOILING_EVIDENCE_NONE;
 	  b_t_time_delay = 0;
-	  reset_heat_loss_calculation();
 
 	  // [C-7] xSemaphore и xSemaphoreAVR — бинарные мьютексы UART.
   // Безусловный Give здесь некорректен: reset_sensor_counter() не захватывала

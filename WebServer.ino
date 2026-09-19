@@ -111,15 +111,13 @@ static OperationError queue_profile_operation(
     const ProgramDraft* programDraft,
     ProgramUpdateAction programAction,
     uint8_t metadataFlags,
-    float boilerVolume,
     const char* description,
     bool requireProgramIdle,
     bool modeChange,
     SAMOVAR_MODE sourceMode,
     SAMOVAR_MODE targetMode,
     OperationId& operationId) {
-  const uint8_t allowedMetadata = PROFILE_OPERATION_METADATA_VOLUME |
-                                  PROFILE_OPERATION_METADATA_DESCRIPTION;
+  const uint8_t allowedMetadata = PROFILE_OPERATION_METADATA_DESCRIPTION;
   if ((kind != OPERATION_KIND_SAVE && kind != OPERATION_KIND_PROGRAM) ||
       (kind == OPERATION_KIND_SAVE && !settings) ||
       (kind == OPERATION_KIND_SAVE && metadataFlags != 0) ||
@@ -187,7 +185,6 @@ static OperationError queue_profile_operation(
     memcpy(active_profile_operation.description, description, descriptionLength + 1);
   }
   active_profile_operation.id = reservedId;
-  active_profile_operation.boilerVolume = boilerVolume;
   active_profile_operation.sensorResetMask = sensorResetMask;
   active_profile_operation.sourceMode = static_cast<uint8_t>(sourceMode);
   active_profile_operation.targetMode = static_cast<uint8_t>(targetMode);
@@ -2355,7 +2352,6 @@ void handleSave(AsyncWebServerRequest *request) {
       programDraftPtr,
       programDraftPtr ? PROGRAM_UPDATE_REPLACE : PROGRAM_UPDATE_NONE,
       0,
-      0.0f,
       nullptr,
       wProgramCount == 1,
       hasSwitchMode,
@@ -2712,6 +2708,8 @@ void web_program(AsyncWebServerRequest *request) {
 
   for (size_t index = 0; index < request->params(); index++) {
     const AsyncWebParameter *param = request->getParam(index);
+    // "vless" прошивке больше не нужен (расчёт теплопотерь удалён), но имя остаётся
+    // известным: старая страница программы его ещё присылает, а незнакомое поле = 400.
     const bool known = param && (param->name() == "clear" ||
         param->name() == "WProgram" || param->name() == "vless" ||
         param->name() == "Descr");
@@ -2725,9 +2723,8 @@ void web_program(AsyncWebServerRequest *request) {
 
   const uint8_t clearCount = request_param_count(request, "clear");
   const uint8_t wProgramCount = request_param_count(request, "WProgram");
-  const uint8_t vlessCount = request_param_count(request, "vless");
   const uint8_t descriptionCount = request_param_count(request, "Descr");
-  if (wProgramCount > 1 || vlessCount > 1 || descriptionCount > 1) {
+  if (wProgramCount > 1 || descriptionCount > 1) {
     send_program_json_response(
         request,
         400,
@@ -2794,24 +2791,7 @@ void web_program(AsyncWebServerRequest *request) {
   }
 
   uint8_t metadataFlags = 0;
-  float boilerVolume = 0.0f;
   char descriptionValue[251] = "";
-  const AsyncWebParameter *vlessParam = vlessCount == 1
-      ? get_request_param(request, "vless")
-      : nullptr;
-  if (vlessParam) {
-    NumericParseResult result = vlessParam->isFile()
-        ? numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT)
-        : parse_control_vless(vlessParam->value().c_str(), boilerVolume);
-    if (!result.ok()) {
-      String error = "Invalid vless: ";
-      error += numeric_parse_error_code(result.error);
-      send_program_json_response(request, 400, false, error, String());
-      return;
-    }
-    metadataFlags |= PROFILE_OPERATION_METADATA_VOLUME;
-  }
-
   const AsyncWebParameter *descriptionParam = descriptionCount == 1
       ? get_request_param(request, "Descr")
       : nullptr;
@@ -2848,7 +2828,6 @@ void web_program(AsyncWebServerRequest *request) {
       programDraftPtr,
       programAction,
       metadataFlags,
-      boilerVolume,
       (metadataFlags & PROFILE_OPERATION_METADATA_DESCRIPTION) != 0
           ? descriptionValue
           : nullptr,

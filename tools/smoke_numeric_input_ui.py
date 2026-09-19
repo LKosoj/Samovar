@@ -65,7 +65,7 @@ require_ordered_tokens(
     post_program,
     [
         "const body = new FormData();",
-        "const allowedFields = ['WProgram', 'vless', 'Descr'];",
+        "const allowedFields = ['WProgram', 'Descr'];",
         "form.querySelectorAll",
         "fields.length > 1",
         "body.append(name, fields[0].value);",

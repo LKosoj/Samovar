@@ -368,7 +368,6 @@ inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
         !heaterSafetyState.exclusiveOwnerActive && !mode_switch_barrier_active && !PowerOn &&
         !power_transition_start_pending_locked() &&
         !power_transition_phase_is_off(powerTransition.transition.phase)) {
-      if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) reset_heat_loss_calculation();
       started = heater_outputs_enable_locked(SAFETY_HEATER_OUTPUT_MAIN, true);
       if (started) {
         reg_online = false;

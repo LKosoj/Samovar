@@ -188,9 +188,6 @@ String lua_type_script;
 // заявка на смену имени скрипта откладывается сюда, а не теряется; флаг
 // применяется первым делом внутри load_lua_script() (см. smoke_lua_type_script_lock.py).
 bool lua_type_script_pending = false;
-float BoilerVolume = 0.0f;
-bool heatLossCalculated = true;
-uint32_t heatStartMillis = 9;
 portMUX_TYPE emergencyStopMux = 0;
 portMUX_TYPE configMux = 0;  // [T29] commit_profile_operation() пишет SamSetup под этим спинлоком
 
@@ -463,7 +460,6 @@ static OperationError queue_profile_operation(
     const ProgramDraft* programDraft,
     ProgramUpdateAction programAction,
     uint8_t metadataFlags,
-    float boilerVolume,
     const char* description,
     bool requireProgramIdle,
     bool modeChange,
@@ -523,7 +519,6 @@ static bool profile_slot_is_reset() {
          active_profile_operation.program.value == 0 &&
          profile_description_is_reset() &&
          active_profile_operation.id == 0 &&
-         active_profile_operation.boilerVolume == 0.0f &&
          active_profile_operation.flags == 0 &&
          active_profile_operation.sensorResetMask == 0 &&
          active_profile_operation.sourceMode == 0 &&
@@ -542,9 +537,6 @@ static void reset_fixture() {
   Samovar_CR_Mode = SAMOVAR_RECTIFICATION_MODE;
   SamSetup = {10, SAMOVAR_RECTIFICATION_MODE};
   SessionDescription = "old";
-  BoilerVolume = 1.0f;
-  heatLossCalculated = true;
-  heatStartMillis = 9;
   lua_type_script = "";
   pendingLockResults.clear();
   sessionActive = false;
@@ -624,7 +616,6 @@ static OperationError queue_save(
       draft,
       draft ? PROGRAM_UPDATE_REPLACE : PROGRAM_UPDATE_NONE,
       0,
-      0.0f,
       nullptr,
       requireProgramIdle,
       modeChange,
@@ -638,7 +629,6 @@ static OperationError queue_program(
     const ProgramDraft* draft,
     ProgramUpdateAction action,
     uint8_t metadataFlags = 0,
-    float volume = 0.0f,
     const char* description = nullptr) {
   return queue_profile_operation(
       OPERATION_KIND_PROGRAM,
@@ -647,7 +637,6 @@ static OperationError queue_program(
       draft,
       action,
       metadataFlags,
-      volume,
       description,
       true,
       false,
@@ -703,7 +692,6 @@ static void test_queue_failures_and_atomic_id() {
   memset(active_profile_operation.description, 'x',
          sizeof(active_profile_operation.description));
   active_profile_operation.id = 93;
-  active_profile_operation.boilerVolume = 94.0f;
   active_profile_operation.flags = 0xff;
   active_profile_operation.sensorResetMask = 0xff;
   active_profile_operation.sourceMode = SAMOVAR_DISTILLATION_MODE;
@@ -720,7 +708,6 @@ static void test_queue_failures_and_atomic_id() {
             active_profile_operation.settings.Mode == settings.Mode &&
             active_profile_operation.program.value == 0 &&
             profile_description_is_reset() &&
-            active_profile_operation.boilerVolume == 0.0f &&
             active_profile_operation.flags == PROFILE_OPERATION_HAS_SETTINGS &&
             active_profile_operation.sensorResetMask ==
                 PROFILE_SENSOR_RESET_STEAM &&
@@ -738,31 +725,31 @@ static void test_invalid_combinations() {
   OperationId id = 0;
   check(queue_profile_operation(
             OPERATION_KIND_SAVE, nullptr, 0, nullptr, PROGRAM_UPDATE_NONE,
-            0, 0, nullptr, false, false,
+            0, nullptr, false, false,
             SAMOVAR_RECTIFICATION_MODE, SAMOVAR_RECTIFICATION_MODE, id) ==
             OPERATION_ERROR_INTERNAL,
         "SAVE without settings was accepted");
   check(queue_profile_operation(
             OPERATION_KIND_SAVE, &settings, 0, nullptr, PROGRAM_UPDATE_NONE,
-            PROFILE_OPERATION_METADATA_VOLUME, 2, nullptr, false, false,
+            PROFILE_OPERATION_METADATA_DESCRIPTION, "x", false, false,
             SAMOVAR_RECTIFICATION_MODE, SAMOVAR_RECTIFICATION_MODE, id) ==
             OPERATION_ERROR_INTERNAL,
         "SAVE metadata was accepted");
   check(queue_profile_operation(
             OPERATION_KIND_PROGRAM, &settings, 0, &draft,
-            PROGRAM_UPDATE_REPLACE, 0, 0, nullptr, true, false,
+            PROGRAM_UPDATE_REPLACE, 0, nullptr, true, false,
             SAMOVAR_RECTIFICATION_MODE, SAMOVAR_RECTIFICATION_MODE, id) ==
             OPERATION_ERROR_INTERNAL,
         "PROGRAM settings were accepted");
   check(queue_profile_operation(
             OPERATION_KIND_PROGRAM, nullptr, 1, &draft,
-            PROGRAM_UPDATE_REPLACE, 0, 0, nullptr, true, false,
+            PROGRAM_UPDATE_REPLACE, 0, nullptr, true, false,
             SAMOVAR_RECTIFICATION_MODE, SAMOVAR_RECTIFICATION_MODE, id) ==
             OPERATION_ERROR_INTERNAL,
         "PROGRAM sensor reset was accepted");
   check(queue_profile_operation(
             OPERATION_KIND_PROGRAM, nullptr, 0, nullptr,
-            PROGRAM_UPDATE_NONE, 0, 0, nullptr, true, false,
+            PROGRAM_UPDATE_NONE, 0, nullptr, true, false,
             SAMOVAR_RECTIFICATION_MODE, SAMOVAR_RECTIFICATION_MODE, id) ==
             OPERATION_ERROR_INTERNAL,
         "empty PROGRAM operation was accepted");
@@ -863,13 +850,11 @@ static void test_save_program_metadata_and_two_saves() {
         "standalone program clear failed");
   check(queue_program(
             id, nullptr, PROGRAM_UPDATE_NONE,
-            PROFILE_OPERATION_METADATA_VOLUME |
-                PROFILE_OPERATION_METADATA_DESCRIPTION,
-            9.5f, "new%description") == OPERATION_ERROR_NONE &&
+            PROFILE_OPERATION_METADATA_DESCRIPTION,
+            "new%description") == OPERATION_ERROR_NONE &&
             run_to_terminal(id).state == OPERATION_STATE_SUCCEEDED,
         "standalone metadata update failed");
-  check(std::fabs(BoilerVolume - 9.5f) < 0.001f &&
-            SessionDescription.value() == "new&#37;description",
+  check(SessionDescription.value() == "new&#37;description",
         "metadata owner commit mismatch");
 }
 
@@ -893,7 +878,7 @@ static void test_failures_preserve_owner_state() {
   runtimeLockResult = false;
   check(queue_program(
             id, &draft, PROGRAM_UPDATE_REPLACE,
-            PROFILE_OPERATION_METADATA_DESCRIPTION, 0, "new") ==
+            PROFILE_OPERATION_METADATA_DESCRIPTION, "new") ==
             OPERATION_ERROR_NONE,
         "runtime-failure setup queue failed");
   record = run_to_terminal(id);
@@ -1466,7 +1451,6 @@ def static_checks() -> list[str]:
             "active_profile_operation.program = ProgramDraft{};",
             "memset(active_profile_operation.description, 0,",
             "active_profile_operation.id = 0;",
-            "active_profile_operation.boilerVolume = 0.0f;",
             "active_profile_operation.flags = 0;",
             "active_profile_operation.sensorResetMask = 0;",
             "active_profile_operation.sourceMode = 0;",

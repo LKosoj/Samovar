@@ -868,12 +868,7 @@ float old_pressure_value ;                                      // старое 
 bool use_pressure_sensor;                                       // Использовать датчик давления (по результатам инициализации)
 
 // Переменные для расширенного логирования и анализа (п. 5)
-volatile float BoilerVolume = 30.0f;     // Объем залитого сырья, л (дефолт 30л)
-volatile float CurrentHeatLoss = 0;      // Вычисленные теплопотери, Вт
 volatile float CalculatedTargetFR = 0;    // Текущее целевое ФЧ
-unsigned long heatStartMillis = 0;        // Время старта замера (при 40°C)
-float heatStartTemp = 0;                  // Температура старта замера
-bool heatLossCalculated = false;          // Флаг завершения расчета
 
 String test_str_val;                                            // Тестовое строковое значение
 String Lua_status;                                              // Статус Lua

@@ -46,20 +46,20 @@ require_ordered_tokens(
     program,
     [
         "for (size_t index = 0; index < request->params(); index++)",
+        'param->name() == "vless"',
         "!known || !param->isPost() || param->isFile()",
-        'request_param_count(request, "vless")',
         'request_param_count(request, "Descr")',
         'char descriptionValue[251] = "";',
-        "parse_control_vless(",
         "description.length() > 250",
         "metadataFlags |= PROFILE_OPERATION_METADATA_DESCRIPTION;",
         "queue_profile_operation(",
     ],
     errors,
 )
-for token in ["BoilerVolume =", "heatLossCalculated =", "heatStartMillis ="]:
+# vless остаётся известным именем ради старой страницы программы, но значение не читается.
+for token in ["parse_control_vless(", 'get_request_param(request, "vless")']:
     if token in program:
-        errors.append(f"web_program mutates runtime before loop: {token}")
+        errors.append(f"web_program still reads vless: {token}")
 require_ordered_tokens(
     "profile owner applies program metadata after race checks",
     process + commit,
@@ -70,7 +70,6 @@ require_ordered_tokens(
         "runtime_state_lock(pdMS_TO_TICKS(500))",
         "program_commit(active_profile_operation.program);",
         "SessionDescription = escapedDescription;",
-        "BoilerVolume = active_profile_operation.boilerVolume;",
     ],
     errors,
 )

@@ -599,9 +599,9 @@ static bool s_blynkPushResendAll = true;
 // pressure_value 10, target_fr 10, actual_fr 10 = 92) + temp_delta format_float(,3) (11)
 // + detectorStatus/PackDens uint8_t до 3 цифр (","+3=4 каждый, 8) + event_code 0/1 (2)
 // + col_height format_float(,2) (10) + col_diameter format_float(,1) (","+8=9)
-// + heat_loss format_float(,0) (","+6=7) + program_type 0-1 символ (2)
-// + mode (int)Samovar_Mode 0-7 (","+1=2, с запасом до 2 цифр - 3) = 144.
-// Итого 20+72+144 = 236 байт. Буфер 288 - запас ~50 байт сверх расчётного максимума.
+// + heat_loss константа "0" (","+1=2) + program_type 0-1 символ (2)
+// + mode (int)Samovar_Mode 0-7 (","+1=2, с запасом до 2 цифр - 3) = 139.
+// Итого 20+72+139 = 231 байт. Буфер 288 - запас ~55 байт сверх расчётного максимума.
 static portMUX_TYPE s_blynkLogLineMux = portMUX_INITIALIZER_UNLOCKED;
 static char s_pendingV34Line[288];
 // Ручной прототип: автопрототип Arduino IDE встал бы выше s_pendingV34Line.

@@ -123,8 +123,6 @@ enum DetectorIdleReason : uint8_t {
 };
 static DetectorIdleReason detector_idle_reason = DETECTOR_IDLE_OFF;
 
-static const float HEAT_LOSS_MIN_DELTA_T = 15.0f;
-
 // [M-29] Предыдущее состояние источника датчика (для детекции смены)
 // -1 = не инициализировано, 0 = пар, 1 = царга
 static int8_t detector_last_pipe_sensor = -1;
@@ -232,13 +230,6 @@ inline void detector_reset_full(unsigned long lastCorrectionTimeValue) {
  */
 void init_impurity_detector() {
   detector_reset_full(0);
-}
-
-void reset_heat_loss_calculation() {
-  CurrentHeatLoss = 0;
-  heatStartMillis = 0;
-  heatStartTemp = 0;
-  heatLossCalculated = false;
 }
 
 /**
@@ -1019,50 +1010,6 @@ inline uint16_t detector_steam_wait_left_sec() {
   if (detector_steam_stability_reason != DETECTOR_STEAM_HOLDING) return DETECTOR_STEAM_STABLE_MS / 1000;
   const uint32_t held = millis() - detector_steam_stable_since;
   return held >= DETECTOR_STEAM_STABLE_MS ? 0 : static_cast<uint16_t>((DETECTOR_STEAM_STABLE_MS - held) / 1000);
-}
-
-/**
- * Автоматический расчет теплопотерь при нагреве до 70°C (п. 5)
- */
-void update_heat_loss_calculation() {
-  if (heatLossCalculated || BoilerVolume <= 0 || !PowerOn) return;
-
-  // Инициализация замера при достижении 40°C
-  if (heatStartMillis == 0 && TankSensor.avgTemp >= 40.0) {
-    heatStartMillis = millis();
-    heatStartTemp = TankSensor.avgTemp;
-  }
-
-  // Финальный расчет при достижении 70°C
-  if (heatStartMillis > 0 && TankSensor.avgTemp >= 70.0) {
-    float timeSec = (millis() - heatStartMillis) / 1000.0;
-    if (timeSec > 60) { // Минимум 1 минута замера для точности
-      float deltaT = TankSensor.avgTemp - heatStartTemp;
-      if (deltaT < HEAT_LOSS_MIN_DELTA_T) return;
-
-      // Энергия на нагрев: Q = m * c * deltaT (c воды = 4187 Дж/(кг*К))
-      // Принимаем плотность сырца за 1 кг/л
-#ifdef SAMOVAR_USE_POWER
-      float energyUsed = BoilerVolume * 4187.0f * deltaT;
-      float powerEffective = energyUsed / timeSec;
-
-      // Теплопотери = Поданная мощность - Эффективная мощность
-      CurrentHeatLoss = (float)current_power_p - powerEffective;
-#else
-      CurrentHeatLoss = 0; // Если нет датчика мощности, не можем вычислить потери автоматически
-#endif
-
-      if (CurrentHeatLoss < 0) CurrentHeatLoss = 0;
-      if (CurrentHeatLoss > 1500) CurrentHeatLoss = 1500; // Ограничение здравого смысла
-
-      heatLossCalculated = true;
-      if (CurrentHeatLoss > 0) {
-        SendMsg("Расчет теплопотерь завершен: " + String(CurrentHeatLoss, 0) + " Вт", NOTIFY_MSG);
-      } else {
-        SendMsg("Теплопотери не определены (проверьте мощность)", WARNING_MSG);
-      }
-    }
-  }
 }
 
 #endif
