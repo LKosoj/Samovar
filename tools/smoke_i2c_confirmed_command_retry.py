@@ -11,6 +11,7 @@ from smoke_helpers import extract_function_body
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 SIGNATURE = "inline bool i2c_stepper_send_command(I2CStepperDevice& device, uint8_t command)"
+NEXT_SEQ_SIGNATURE = "inline uint32_t i2c_stepper_next_command_seq(const I2CStepperDevice& device)"
 
 
 def compile_and_run(body: str, name: str) -> subprocess.CompletedProcess[str]:
@@ -19,7 +20,8 @@ def compile_and_run(body: str, name: str) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory(prefix="samovar-i2c-command-") as directory:
         source = Path(directory) / f"{name}.cpp"
         binary = Path(directory) / name
-        source.write_text(HARNESS.replace("@BODY@", body), encoding="utf-8")
+        source.write_text(HARNESS.replace("@BODY@", body).replace("@NEXT_SEQ@", NEXT_SEQ_BODY),
+                          encoding="utf-8")
         built = subprocess.run(
             [compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I", str(PROTOCOL),
              str(source), "-o", str(binary)], capture_output=True, text=True, check=False)
@@ -27,6 +29,8 @@ def compile_and_run(body: str, name: str) -> subprocess.CompletedProcess[str]:
             return built
         return subprocess.run([str(binary)], capture_output=True, text=True, check=False)
 
+
+NEXT_SEQ_BODY = ""
 
 HARNESS = r'''
 #include <assert.h>
@@ -65,12 +69,20 @@ bool i2c_stepper_refresh(I2CStepperDevice& device, bool) {
 uint32_t millis() { return now; }
 void vTaskDelay(TickType_t delay) { now += uint32_t(delay); }
 
+#define I2CSTEPPER_DEVICE_COUNT 10
+uint32_t i2cStepperLastSentSeq[I2CSTEPPER_DEVICE_COUNT] = {};
+inline uint32_t i2c_stepper_next_command_seq(const I2CStepperDevice& device) {
+@NEXT_SEQ@
+}
+
 inline bool i2c_stepper_send_command(I2CStepperDevice& device, uint8_t command) {
 @BODY@
 }
 
 static void reset(int ack) {
   writes.clear(); now = 0; sends = 0; ack_on_send = ack;
+  // Каждый сценарий - «свежая» Nano: память об отправленных номерах не переносится.
+  for (uint32_t& sent : i2cStepperLastSentSeq) sent = 0;
 }
 static void check_frames(uint8_t command, uint32_t sequence, int count) {
   assert(sends == count && int(writes.size()) == count);
@@ -110,6 +122,9 @@ def main() -> int:
     except ValueError as error:
         print(f"FAIL: v3 command helper missing: {error}", file=sys.stderr)
         return 1
+    global NEXT_SEQ_BODY
+    NEXT_SEQ_BODY = extract_function_body(
+        (ROOT / "I2CStepper.h").read_text(encoding="utf-8", errors="ignore"), NEXT_SEQ_SIGNATURE)
     result = compile_and_run(body, "command_retry")
     if result.returncode != 0:
         print(result.stdout + result.stderr, file=sys.stderr)

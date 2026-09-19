@@ -13,6 +13,8 @@
 #define I2C_CACHE_LOCK_WAIT_MS 10
 #define I2CSTEPPER_HEARTBEAT_MS 250UL
 #define I2CSTEPPER_SCAN_MS 100UL
+// Бит optionFlags «обратное направление» (I2CSTEPPER_FLAG_DIRECTION в прошивке Nano).
+#define I2CSTEPPER_OPTION_DIRECTION 0x04U
 
 struct I2CStepperDevice {
   bool present;
@@ -48,6 +50,9 @@ uint32_t i2cStepperLastScanMs = 0;
 volatile bool i2cStepperScanActive = true;
 uint8_t i2cStepperSessionMixerAddress = 0;
 uint8_t i2cStepperSessionPumpAddress = 0;
+// Номер последнего отправленного кадра команды по каждому адресу. Хранится отдельно от
+// device.status: статус мог не прочитаться после записи, а копии-кандидаты отбрасываются.
+uint32_t i2cStepperLastSentSeq[I2CSTEPPER_DEVICE_COUNT] = {};
 
 inline I2CStepperDevice* i2c_stepper_device(uint8_t address) {
   if (!i2cstepper_v3_address_valid(address)) return nullptr;
@@ -369,12 +374,23 @@ inline bool i2c_stepper_write_motion(I2CStepperDevice& device) {
                                  motion, sizeof(motion));
 }
 
+// Новый номер обязан быть позже и подтверждённого Nano, и уже отправленного нами: иначе
+// команда совпадёт с предыдущим кадром (например heartbeat, чей статус не прочитался),
+// Nano отбросит её как дубликат, а чужой SUCCESS будет принят за её результат.
+inline uint32_t i2c_stepper_next_command_seq(const I2CStepperDevice& device) {
+  uint32_t& sent = i2cStepperLastSentSeq[device.address - I2CSTEPPER_V3_ADDRESS_MIN];
+  const uint32_t base = i2cstepper_v3_sequence_after(sent, device.status.commandSeq)
+      ? sent : device.status.commandSeq;
+  sent = i2cstepper_v3_sequence_next(base);
+  return sent;
+}
+
 inline bool i2c_stepper_send_command(I2CStepperDevice& device, uint8_t command) {
   if (!i2c_stepper_command_begin(device)) return false;
   I2CStepperV3CommandFrame frame{};
   frame.address = device.address;
   frame.command = command;
-  frame.commandSeq = i2cstepper_v3_sequence_next(device.status.commandSeq);
+  frame.commandSeq = i2c_stepper_next_command_seq(device);
   uint8_t bytes[I2CSTEPPER_V3_COMMAND_SIZE] = {};
   i2cstepper_v3_encode_command(bytes, &frame);
   const uint32_t deadline = millis() + 3000UL;
@@ -385,7 +401,9 @@ inline bool i2c_stepper_send_command(I2CStepperDevice& device, uint8_t command) 
     i2c_stepper_write_block(device.address, I2CSTEPPER_V3_REG_COMMAND,
                             bytes, sizeof(bytes));
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    if (i2c_stepper_refresh(device, true) && device.status.ackSeq == frame.commandSeq) {
+    // PENDING: Nano приняла команду и ещё выполняет её (запись EEPROM) - ждём итог.
+    if (i2c_stepper_refresh(device, true) && device.status.ackSeq == frame.commandSeq &&
+        device.status.commandResult != I2CSTEPPER_V3_RESULT_PENDING) {
       succeeded = device.status.commandResult == I2CSTEPPER_V3_RESULT_SUCCESS &&
                   device.status.error == I2CSTEPPER_V3_ERR_NONE;
       break;
@@ -402,7 +420,7 @@ inline bool i2c_stepper_send_heartbeat(I2CStepperDevice& device) {
   I2CStepperV3CommandFrame frame{};
   frame.address = device.address;
   frame.command = I2CSTEPPER_V3_CMD_HEARTBEAT;
-  frame.commandSeq = i2cstepper_v3_sequence_next(device.status.commandSeq);
+  frame.commandSeq = i2c_stepper_next_command_seq(device);
   uint8_t bytes[I2CSTEPPER_V3_COMMAND_SIZE] = {};
   i2cstepper_v3_encode_command(bytes, &frame);
   const bool written = i2c_stepper_write_block(device.address,
@@ -481,20 +499,21 @@ inline float i2c_get_liquid_rate_by_step(uint32_t stepsPerSecond) {
   return round(i2c_get_liquid_volume_by_step(stepsPerSecond) * 3.6f * 1000.0f) / 1000.0f;
 }
 
-inline bool set_stepper_by_time(uint32_t speedStepsPerSecond, uint8_t direction,
-                                uint32_t seconds) {
+// Скорость мешалки задаётся в об/мин (так её передают Пиво, Сыр и Lua). Число шагов на
+// оборот знает только Nano, поэтому шлём ей настройки мешалки и START_CONFIGURED, а не
+// готовые шаги/с. Паузу обнуляем: циклом «работа/пауза» управляет Самовар.
+inline bool set_stepper_by_time(uint32_t rpm, uint8_t direction, uint32_t seconds) {
   I2CStepperDevice* device = i2c_stepper_selected_mixer();
   if (!device || !device->present) return false;
+  if (rpm == 0) return i2c_stepper_stop(*device);
   device->config.mode = I2CSTEPPER_V3_MODE_MIXER;
-  device->motion.mode = I2CSTEPPER_V3_MODE_MIXER;
-  device->motion.direction = direction;
-  device->motion.speedStepsPerSec = speedStepsPerSecond;
-  if (seconds != 0 && speedStepsPerSecond >
-      I2CSTEPPER_V3_TARGET_STEPS_MAX / seconds) return false;
-  device->motion.targetSteps = seconds == 0 ? 0 : speedStepsPerSecond * seconds;
-  if (speedStepsPerSecond == 0) return i2c_stepper_stop(*device);
-  return seconds == 0 ? i2c_stepper_start_continuous(*device) :
-      i2c_stepper_start_finite(*device);
+  device->config.mixerRpm = rpm;
+  device->config.mixerRunSec = seconds;
+  device->config.mixerPauseSec = 0;
+  if (direction) device->config.optionFlags |= I2CSTEPPER_OPTION_DIRECTION;
+  else device->config.optionFlags &= uint8_t(~I2CSTEPPER_OPTION_DIRECTION);
+  return i2c_stepper_apply(*device) &&
+         i2c_stepper_send_command(*device, I2CSTEPPER_V3_CMD_START_CONFIGURED);
 }
 
 inline float i2c_get_speed_from_rate(float litersPerHour) {

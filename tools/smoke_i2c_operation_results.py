@@ -141,6 +141,7 @@ struct I2CStepperDevice {
   uint32_t lastHeartbeatMs;
 };
 volatile uint32_t i2c_config_in_flight = 0;
+uint32_t i2cStepperLastSentSeq[I2CSTEPPER_DEVICE_COUNT] = {};
 bool i2c_stepper_config_busy(const I2CStepperDevice&) { return false; }
 int refreshFailures = 0;
 void i2c_stepper_note_refresh_failure(I2CStepperDevice& device) {
@@ -165,6 +166,9 @@ struct FakeNano {
   std::vector<uint32_t> commandSeqs;
   uint32_t processedSeq = 0;
   bool dropAckOnce = false;
+  std::vector<uint8_t> executed;
+  int failStatusReads = 0;
+  int pendingReads = 0;
 } nano;
 
 class FakeWire {
@@ -197,7 +201,10 @@ class FakeWire {
         nano.active = nano.staged;
         nano.status.generation++;
       }
-      if (command.commandSeq != nano.processedSeq) nano.processedSeq = command.commandSeq;
+      if (command.commandSeq != nano.processedSeq) {
+        nano.processedSeq = command.commandSeq;
+        nano.executed.push_back(command.command);
+      }
       nano.status.commandSeq = command.commandSeq;
       nano.status.commandResult = I2CSTEPPER_V3_RESULT_SUCCESS;
       nano.status.error = I2CSTEPPER_V3_ERR_NONE;
@@ -210,9 +217,18 @@ class FakeWire {
     return 0;
   }
   uint8_t requestFrom(uint8_t, uint8_t len) {
+    if (nano.failStatusReads > 0) {
+      nano.failStatusReads--;
+      return 0;
+    }
     nano.rx.assign(len, 0);
     if (nano.currentReg == I2CSTEPPER_V3_REG_STATUS) {
-      i2cstepper_v3_encode_status(nano.rx.data(), &nano.status);
+      I2CStepperV3StatusSnapshot published = nano.status;
+      if (nano.pendingReads > 0) {
+        nano.pendingReads--;
+        published.commandResult = I2CSTEPPER_V3_RESULT_PENDING;
+      }
+      i2cstepper_v3_encode_status(nano.rx.data(), &published);
     }
     nano.readAt = 0;
     return len;
@@ -238,6 +254,7 @@ bool i2c_stepper_refresh(I2CStepperDevice& device, bool = false,
 
 @WRITE_CONFIG@
 @WRITE_MOTION@
+@NEXT_SEQ@
 @SEND_COMMAND@
 @HEARTBEAT@
 @APPLY@
@@ -317,6 +334,30 @@ int main() {
         "busy heartbeat was marked as a sent command");
   check(device.present && refreshFailures == 0,
         "busy heartbeat marked the Nano unavailable");
+
+  // Heartbeat записан, но статус после него не прочитался: следующая команда обязана
+  // получить НОВЫЙ номер, иначе Nano отбросит STOP как дубликат heartbeat.
+  nano.executed.clear();
+  nano.failStatusReads = 1;
+  check(!i2c_stepper_send_heartbeat(device), "heartbeat without status readback succeeded");
+  check(i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_STOP), "STOP after lost heartbeat status failed");
+  check(nano.executed.size() == 2 && nano.executed[0] == I2CSTEPPER_V3_CMD_HEARTBEAT &&
+        nano.executed[1] == I2CSTEPPER_V3_CMD_STOP,
+        "STOP reused the heartbeat sequence and was dropped as a duplicate");
+
+  // Отброшенная копия-кандидат не должна возвращать номер назад.
+  I2CStepperDevice candidate = device;
+  check(i2c_stepper_send_command(candidate, I2CSTEPPER_V3_CMD_RELAY), "candidate RELAY failed");
+  nano.executed.clear();
+  check(i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_STOP) &&
+        nano.executed.size() == 1 && nano.executed[0] == I2CSTEPPER_V3_CMD_STOP,
+        "command after a discarded candidate reused its sequence");
+
+  // PENDING (Nano пишет EEPROM) - не отказ: ждём итоговый результат.
+  nano.pendingReads = 3;
+  check(i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_SAVE),
+        "PENDING result was reported as a failed command");
+  check(nano.pendingReads == 0, "PENDING polling stopped early");
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -338,6 +379,9 @@ def main() -> int:
       "@WRITE_MOTION@": function(
           "inline bool i2c_stepper_write_motion",
           "inline bool i2c_stepper_write_motion(I2CStepperDevice& device)"),
+      "@NEXT_SEQ@": function(
+          "inline uint32_t i2c_stepper_next_command_seq",
+          "inline uint32_t i2c_stepper_next_command_seq(const I2CStepperDevice& device)"),
       "@SEND_COMMAND@": function(
           "inline bool i2c_stepper_send_command",
           "inline bool i2c_stepper_send_command(I2CStepperDevice& device, uint8_t command)"),
