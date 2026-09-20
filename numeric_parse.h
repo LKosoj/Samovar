@@ -375,6 +375,11 @@ inline NumericParseResult checked_truncating_product_u32(
   return numeric_parse_result(NUMERIC_PARSE_OK);
 }
 
+// Потолок скорости отбора ректификации, л/ч. Насос физически может больше, но на домашней
+// колонне такой отбор недостижим - число выше почти наверняка опечатка (150 В, введённые
+// в поле скорости). Один предел на ручной ввод (веб, Blynk V17, меню) и строки программы.
+constexpr float RECT_RATE_MAX_LPH = 20.0f;
+
 inline NumericParseResult checked_rate_to_step_speed(
     double rateLph,
     uint16_t stepsPerMl,

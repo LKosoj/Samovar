@@ -420,7 +420,8 @@ inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, c
             parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, PROGRAM_TEMP_MAX, temp).ok() &&
             parse_bounded_float(tokPower, PROGRAM_POWER_MIN, PROGRAM_POWER_MAX, power).ok();
 
-  if (ok && parsedType != 'P' && speed <= 0.0f) ok = false;
+  // У паузы 'P' в поле скорости лежат секунды, поэтому потолок расхода - только для отбора.
+  if (ok && parsedType != 'P' && (speed <= 0.0f || speed > RECT_RATE_MAX_LPH)) ok = false;
   if (ok && parsedType == 'P' && volume <= 0) ok = false;
   // [Ф2] Строка отбора без объёма и температуры не завершится никогда (переход по
   // объёму требует цель != 0). validate_rect_program_startable() ловит это только при

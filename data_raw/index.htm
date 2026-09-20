@@ -158,7 +158,7 @@
 
     async function sendpumpspeed () {
       return await SamovarApp.sendNumericCommand('pumpspeed', 'pumpspeed', {
-        label: 'Скорость отбора', exclusiveMin: 0
+        label: 'Скорость отбора', exclusiveMin: 0, max: 20
       }, { successMessage: 'Скорость отбора принята.' });
     };
 

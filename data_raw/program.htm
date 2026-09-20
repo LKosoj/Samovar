@@ -588,6 +588,9 @@ function validateProgramFileText(text) {
     if (f[3].length !== 1 || PROGRAM_FILE_TYPES.indexOf(f[3]) === -1) {
       return "строка " + n + ": тип «" + f[3] + "» неизвестен, допустимо H/B/C/T/P.";
     }
+    if (f[3] !== "P" && speed > 20) {
+      return "строка " + n + ": скорость отбора «" + f[1] + "» больше 20 л/ч.";
+    }
     var powerErr = validateProgramPowerField(f[4], "вольты", n);
     if (powerErr) return powerErr;
     if (expectedFields === 6) {
@@ -1006,6 +1009,10 @@ function set_num(){
 	    prgc = prgc + String(pauseSec);
       }
       else {
+        // Потолок прошивки RECT_RATE_MAX_LPH (numeric_parse.h): называем причину сами.
+        if (Number(String(e[i].childNodes[2].value).replace(",", ".")) > 20) {
+          volumeErrors.push("Строка " + i + ": скорость отбора больше 20 л/ч.");
+        }
         v.value = ll.toFixed(3);
         a = v.value / e[i].childNodes[2].value;
         var volumeMl = Math.round(Number(ll) * 1000);

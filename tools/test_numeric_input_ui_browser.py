@@ -398,16 +398,26 @@ BROWSER_TEST = r'''async page => {
       window.__numericStatus = 200;
       const input = document.getElementById("pumpspeed");
       const before = window.__numericRequests.length;
-      input.value = "0";
-      await sendpumpspeed();
+      // 150 - вольты, введённые не в то поле; 20.01 - сразу за потолком отбора.
+      for (const value of ["0", "150", "20.01"]) {
+        input.value = value;
+        await sendpumpspeed();
+      }
+      const blocked = window.__numericRequests.length === before;
+      input.value = "20";
+      const ceilingOk = await sendpumpspeed();
+      const ceilingBody = window.__numericRequests.at(-1).body;
       input.value = "1,5";
       const ok = await sendpumpspeed();
       return {
-        ok, delta: window.__numericRequests.length - before,
+        ok, blocked, ceilingOk, ceilingBody,
+        delta: window.__numericRequests.length - before,
         body: window.__numericRequests.at(-1).body
       };
     });
-    if (!result.ok || result.delta !== 1 || result.body !== "pumpspeed=1.5") {
+    if (!result.ok || !result.blocked || !result.ceilingOk ||
+        result.ceilingBody !== "pumpspeed=20" || result.delta !== 2 ||
+        result.body !== "pumpspeed=1.5") {
       throw new Error("index pumpspeed mismatch: " + JSON.stringify(result));
     }
   }
@@ -529,6 +539,31 @@ BROWSER_TEST = r'''async page => {
       }
       const invalidBlocked = window.__numericRequests.length === before;
       volume.value = "1";
+      // Потолок скорости отбора 20 л/ч; у паузы в том же поле секунды, её не трогаем.
+      // Строки перерисовываются из текста программы, поэтому поле ищем заново и
+      // сообщаем о правке событием change, как это делает ввод с клавиатуры.
+      const typeRate = value => {
+        const input = Array.from(form.querySelectorAll('input[name^="speed"]'))
+          .find(item => item.parentNode.childNodes[4].value !== "P");
+        const previous = input.value;
+        input.value = value;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return previous;
+      };
+      const rateOriginal = typeRate("150");
+      const rateBlocked = [];
+      for (const value of ["150", "20.01"]) {
+        typeRate(value);
+        const beforeRate = window.__numericRequests.length;
+        await set_program();
+        rateBlocked.push(window.__numericRequests.length === beforeRate &&
+          document.getElementById("request_error").textContent.includes("больше 20 л/ч"));
+      }
+      typeRate("20");
+      const beforeCeiling = window.__numericRequests.length;
+      await set_program();
+      const rateCeilingSent = window.__numericRequests.length === beforeCeiling + 1;
+      typeRate(rateOriginal);
       // [T27.3] Байтовый лимит Descr на клиенте: <textarea maxlength='250'> считает
       // СИМВОЛЫ, а кириллица в UTF-8 - 2 байта на символ, поэтому 250 введённых
       // символов браузер пропускает, а сервер (web_program(), String::length() в
@@ -561,7 +596,7 @@ BROWSER_TEST = r'''async page => {
       const heater = document.getElementById("heaterMaxPower");
       return {
         initialSummary, headsShort, bothInvalid, restored, immediateHeadsUpdate,
-        allowlist, invalidBlocked, bad400: bad400.ok, bad503: bad503.ok,
+        allowlist, invalidBlocked, rateBlocked, rateCeilingSent, bad400: bad400.ok, bad503: bad503.ok,
         descrBlocked, descrErrorText, descrWithinLimitSent,
         heaterValue: heater.value, heaterDisabled: heater.disabled
       };
@@ -592,6 +627,7 @@ BROWSER_TEST = r'''async page => {
         !result.restored || result.immediateHeadsUpdate.percent !== "9%" ||
         result.immediateHeadsUpdate.volume !== "400\u00a0мл" ||
         !result.allowlist || !result.invalidBlocked || result.bad400 || result.bad503 ||
+        !result.rateBlocked.every(Boolean) || !result.rateCeilingSent ||
         !result.descrBlocked || !result.descrErrorText.includes("250") || !result.descrWithinLimitSent ||
         result.heaterValue !== "5290" || result.heaterDisabled || !state.errorVisible) {
       throw new Error("program contract mismatch: " + JSON.stringify({ result, state }));

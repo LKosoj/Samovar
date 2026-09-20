@@ -131,8 +131,13 @@ void test_rates_and_nbk() {
   check(parse_control_nbk("7999.9999", 1, command).ok() &&
             command.kind == CONTROL_NBK_ABSOLUTE && command.stepSpeed == 2222,
         "NBK value below sentinel was rounded into a tag or rejected");
-  check(parse_control_rate_steps("10000", 1, steps).ok() && steps == 2778,
-        "general rate parser incorrectly uses the NBK domain cap");
+  check(parse_control_rate_steps("20", 1000, steps).ok() && steps == 5556,
+        "rectification rate ceiling itself must be accepted");
+  steps = 99;
+  check(!parse_control_rate_steps("20.01", 1000, steps).ok() && steps == 99,
+        "rate above the rectification ceiling was accepted");
+  check(!parse_control_rate_steps("150", 1, steps).ok() && steps == 99,
+        "voltage typed into the rate field was accepted");
   const char* invalid[] = {
       "-1", "8000.0", "8000.0001", "8999", "8999.9999",
       "9000.0", "9000.0001", "nan", "inf"};

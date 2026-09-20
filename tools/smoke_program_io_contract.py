@@ -133,7 +133,7 @@ if program_io:
         "rect parser pause rows use parsed type",
         body,
         [
-            "if (ok && parsedType != 'P' && speed <= 0.0f) ok = false;",
+            "if (ok && parsedType != 'P' && (speed <= 0.0f || speed > RECT_RATE_MAX_LPH)) ok = false;",
             "if (ok && parsedType == 'P' && volume <= 0) ok = false;",
             "row.WType = parsedType;",
             "if (parsedType == 'P')",

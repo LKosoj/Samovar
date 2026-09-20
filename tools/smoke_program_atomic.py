@@ -488,6 +488,26 @@ void test_dist_row_type_bounds() {
   }
 }
 
+void test_rect_row_rate_ceiling() {
+  struct Case {
+    const char* text;
+    bool expectOk;
+  };
+  const Case cases[] = {
+      {"B;450;20;1;0;45\n", true},
+      {"B;450;20.01;1;0;45\n", false},
+      {"H;450;150;1;0;45\n", false},
+      // У паузы в поле скорости лежат секунды - потолок расхода к ней не относится.
+      {"P;300;300;0;0;45\n", true},
+  };
+  for (const Case& test : cases) {
+    ProgramDraft draft{};
+    ProgramParseResult result = program_parse_lines(String(test.text), rect_program_parse_spec(), draft);
+    std::string message = std::string("rect row rate ceiling mismatch for: ") + test.text;
+    check(result.ok() == test.expectOk, message.c_str());
+  }
+}
+
 void test_beer_row_semantics() {
   struct Case {
     ProgramType type;
@@ -900,6 +920,7 @@ int main() {
   test_delimiter_structure_is_atomic();
   test_blank_lines_and_all_formats_round_trip();
   test_dist_row_type_bounds();
+  test_rect_row_rate_ceiling();
   test_beer_row_semantics();
   test_cheese_row_semantics();
   test_cheese_field_mapping();

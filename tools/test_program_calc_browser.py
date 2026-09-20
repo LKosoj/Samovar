@@ -279,11 +279,11 @@ BROWSER_TEST = r'''async page => {
     loadedProgramPowerUnit = "V";
     columnRecommendationsApplied = false;
     document.getElementById("WProgram1").value =
-      "0;50;100.0;H;135\n" +
-      "0;50;25.0;C;140\n" +
-      "0;50;25.0;C;140\n" +
-      "0;50;25.0;C;140\n" +
-      "0;50;25.0;B;140";
+      "0;1;100.0;H;135\n" +
+      "0;1;25.0;C;140\n" +
+      "0;1;25.0;C;140\n" +
+      "0;1;25.0;C;140\n" +
+      "0;1;25.0;B;140";
     calc_program();
     const toleratedBodyClass = document.getElementById("summaryBodyDistribution").className;
     const toleratedProgramErr = programerr;
@@ -296,11 +296,11 @@ BROWSER_TEST = r'''async page => {
     // объяснить, оператор реально не заполнил бюджет тела. "Записать" обязана
     // отклонить программу с той же меткой "Тело B+C" в тексте ошибки.
     document.getElementById("WProgram1").value =
-      "0;50;100.0;H;135\n" +
-      "0;50;10.0;C;140\n" +
-      "0;50;10.0;C;140\n" +
-      "0;50;10.0;C;140\n" +
-      "0;50;10.0;B;140";
+      "0;1;100.0;H;135\n" +
+      "0;1;10.0;C;140\n" +
+      "0;1;10.0;C;140\n" +
+      "0;1;10.0;C;140\n" +
+      "0;1;10.0;B;140";
     calc_program();
     const brokenBodyClass = document.getElementById("summaryBodyDistribution").className;
     const brokenProgramErr = programerr;

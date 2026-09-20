@@ -93,7 +93,9 @@ inline NumericParseResult parse_control_rate_steps(
   float rate = 0.0f;
   NumericParseResult result = parse_finite_float(text, rate);
   if (!result.ok()) return result;
-  if (rate <= 0.0f) return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
+  if (rate <= 0.0f || rate > RECT_RATE_MAX_LPH) {
+    return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
+  }
   return checked_rate_to_step_speed(rate, stepsPerMl, out);
 }
 

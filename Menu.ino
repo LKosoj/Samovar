@@ -375,6 +375,7 @@ void writeString(String Str, uint8_t num) {
 }
 
 void menu_pump_speed_up() {
+  if (ActualVolumePerHour + 0.01 * multiplier > RECT_RATE_MAX_LPH) return;
   set_pump_speed(get_speed_from_rate(ActualVolumePerHour + 0.01 * multiplier), true,
                  true, UI_CONTROL_SOURCE_MANUAL);
 }
