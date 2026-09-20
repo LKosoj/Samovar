@@ -232,6 +232,8 @@ CHECK_SETUP_SAVE = r'''async page => {
     'setup save must target the selected address: ' + saved);
   check(saved.includes('newAddress=2') && saved.includes('stepsPerMl=160'),
     'setup save must send Nano configuration: ' + saved);
+  check(saved.includes('generation=1'),
+    'setup save must carry the config generation the form was filled from: ' + saved);
   check(!s.consoleError, s.consoleError || 'console error');
   return 'setup-save';
 }'''

@@ -61,6 +61,12 @@ require_ordered_tokens(
         "command != \"status\"",
         "parse_i2c_stepper_patch(",
         "if (!result.ok())",
+        # Устаревшая форма настроек (на Nano их уже поменяли) отклоняется ДО постановки в очередь.
+        'get_request_param(request, "generation")',
+        'command != "save"',
+        "generation != dev->status.generation || generation != dev->configGeneration",
+        "request, 409,",
+        "return;",
         "pendingCmd.address = address;",
         'if (command == "relay")',
         "pendingCmd.relay = relay;",

@@ -369,7 +369,7 @@ static bool i2c_stepper_config_param(const String& name) {
 
 static bool i2c_stepper_known_param(const String& name) {
   return name == "address" || name == "cmd" || name == "relay" ||
-         name == "state" || i2c_stepper_config_param(name);
+         name == "state" || name == "generation" || i2c_stepper_config_param(name);
 }
 
 static NumericParseResult parse_i2c_stepper_patch(
@@ -700,6 +700,24 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     if (!result.ok()) {
       send_i2c_numeric_error(request, errorField, result.error);
       return;
+    }
+    // Страница настроек присылает поколение настроек Nano, с которым заполняла форму. Если
+    // их с тех пор поменяли (меню Nano, запуск из процесса), форма устарела: не сохраняем.
+    const AsyncWebParameter *generationParam = get_request_param(request, "generation");
+    if (generationParam) {
+      uint32_t generation = 0;
+      if (command != "save" ||
+          !parse_bounded_uint32(generationParam->value().c_str(), 0, UINT32_MAX, generation).ok()) {
+        send_i2c_numeric_error(request, "generation", NUMERIC_PARSE_INVALID_ARGUMENT);
+        return;
+      }
+      if (generation != dev->status.generation || generation != dev->configGeneration) {
+        send_no_store_response(
+            request, 409, "application/json",
+            build_error_envelope("stale", "generation",
+                                 "Настройки изменились на самом устройстве. Обновите страницу и повторите."));
+        return;
+      }
     }
     I2CStepperDevice staged = *dev;
     staged.config = config;

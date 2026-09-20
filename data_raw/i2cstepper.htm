@@ -16,6 +16,7 @@ let selected = null;
 let refreshTimer = 0;
 let commandInFlight = false;
 let motionFieldsLoaded = false;
+let refreshErrorShown = false;
 
 function deviceName(device) {
   return device.address & 1 ? 'Мешалка' : 'Насос';
@@ -82,10 +83,15 @@ async function refresh() {
     devices = Array.isArray(payload.devices) ? payload.devices : [];
     selected = payload.selected || null;
     render();
-    SamovarApp.clearRequestError();
+    // Гасим только свою ошибку: иначе автообновление за 2 с стирает отказ команды.
+    if (refreshErrorShown) {
+      refreshErrorShown = false;
+      SamovarApp.clearRequestError();
+    }
   } catch (error) {
     selected = null;
     render();
+    refreshErrorShown = true;
     SamovarApp.showRequestError(String(error));
   }
 }
@@ -110,6 +116,7 @@ async function command(command, values) {
     const acceptance = await SamovarApp.readOperationAcceptance(response);
     await SamovarApp.waitForOperation(acceptance.operationId);
     await refresh();
+    if (!refreshErrorShown) SamovarApp.clearRequestError();
     return true;
   } catch (error) {
     SamovarApp.showRequestError(String(error));

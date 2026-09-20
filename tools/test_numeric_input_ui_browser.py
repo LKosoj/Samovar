@@ -790,6 +790,9 @@ BROWSER_TEST = r'''async page => {
       const relayUrl = mutations().at(-1).url;
       window.__numericStatus = 400;
       const failedStop = await command("stop");
+      // Автообновление раз в 2 с не должно стирать сообщение об отказе команды.
+      window.__numericStatus = 200;
+      await refresh();
       const error = document.getElementById("request_error");
       return {
         operationalOnly, keptTyped, firstResult, concurrentStop, relayResult, failedStop,

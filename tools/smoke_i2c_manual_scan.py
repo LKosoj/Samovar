@@ -46,6 +46,8 @@ bool i2c_stepper_probe(I2CStepperDevice& device, bool* lockBusyOut) {
 uint32_t nowMs = 0;
 uint32_t millis() { return nowMs; }
 uint8_t heartbeatCount = 0;
+int configSyncs = 0;
+void i2c_stepper_sync_config(I2CStepperDevice&) { configSyncs++; }
 bool i2c_stepper_send_heartbeat(I2CStepperDevice&) {
   heartbeatCount++;
   return true;

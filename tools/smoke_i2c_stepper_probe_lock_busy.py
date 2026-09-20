@@ -50,6 +50,7 @@ struct I2CStepperDevice {
   I2CStepperV3Config config;
   I2CStepperV3StatusSnapshot status;
   uint32_t lastStopEventSeq;
+  uint32_t configGeneration;
 };
 int notedFailures = 0;
 void i2c_stepper_note_refresh_failure(I2CStepperDevice& device) {

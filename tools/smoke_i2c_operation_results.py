@@ -127,6 +127,7 @@ enum { ALARM_MSG = 0 };
 void SendMsg(const String&, int) {}
 
 #define I2C_LOCK_WAIT_MS 1000
+#define I2C_CACHE_LOCK_WAIT_MS 10
 #define I2CSTEPPER_DEVICE_COUNT 10U
 #define I2CSTEPPER_V3_TARGET_STEPS_MAX 2147483647UL
 struct I2CStepperDevice {
@@ -139,6 +140,7 @@ struct I2CStepperDevice {
   I2CStepperV3StatusSnapshot status;
   uint32_t lastStopEventSeq;
   uint32_t lastHeartbeatMs;
+  uint32_t configGeneration;
 };
 volatile uint32_t i2c_config_in_flight = 0;
 uint32_t i2cStepperLastSentSeq[I2CSTEPPER_DEVICE_COUNT] = {};
@@ -152,6 +154,8 @@ void i2c_stepper_note_refresh_failure(I2CStepperDevice& device) {
 @COMMAND_BIT@
 @COMMAND_BEGIN@
 @COMMAND_END@
+@CONFIG_BEGIN@
+@CONFIG_END@
 
 struct FakeNano {
   I2CStepperV3Config active{};
@@ -169,6 +173,7 @@ struct FakeNano {
   std::vector<uint8_t> executed;
   int failStatusReads = 0;
   int pendingReads = 0;
+  int configReads = 0;
 } nano;
 
 class FakeWire {
@@ -229,6 +234,11 @@ class FakeWire {
         published.commandResult = I2CSTEPPER_V3_RESULT_PENDING;
       }
       i2cstepper_v3_encode_status(nano.rx.data(), &published);
+    } else if (nano.currentReg == I2CSTEPPER_V3_REG_CONFIG_A) {
+      nano.configReads++;
+      i2cstepper_v3_encode_config_a(nano.rx.data(), &nano.active);
+    } else if (nano.currentReg == I2CSTEPPER_V3_REG_CONFIG_B) {
+      i2cstepper_v3_encode_config_b(nano.rx.data(), &nano.active);
     }
     nano.readAt = 0;
     return len;
@@ -259,6 +269,8 @@ bool i2c_stepper_refresh(I2CStepperDevice& device, bool = false,
 @HEARTBEAT@
 @APPLY@
 @START_FINITE@
+@READ_CONFIG@
+@SYNC_CONFIG@
 
 static int failures = 0;
 void check(bool value, const char* message) {
@@ -278,6 +290,7 @@ int main() {
   device.address = 2;
   device.config = nano.active;
   device.status = nano.status;
+  device.configGeneration = nano.status.generation;
 
   device.config.pumpMlHour = 321;
   check(i2c_stepper_write_config(device), "config staging write failed");
@@ -290,6 +303,10 @@ int main() {
   check(i2c_stepper_apply(device), "APPLY acknowledgement/retry failed");
   check(nano.active.pumpMlHour == 321 && nano.status.generation == 8,
         "APPLY did not atomically publish staged configuration");
+  // Поколение выросло только от нашего APPLY: копия настроек свежая, перечитывать незачем.
+  i2c_stepper_sync_config(device);
+  check(device.configGeneration == 8 && nano.configReads == 0,
+        "own APPLY must not force a config re-read");
   check(nano.commandSeqs.size() == 2 && nano.commandSeqs[0] == nano.commandSeqs[1],
         "ambiguous ACK retry changed command sequence");
 
@@ -358,6 +375,25 @@ int main() {
   check(i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_SAVE),
         "PENDING result was reported as a failed command");
   check(nano.pendingReads == 0, "PENDING polling stopped early");
+
+  // Калибровку сохранили с меню Nano: после ближайшего «пульса» копия обязана обновиться.
+  nano.active.stepsPerMl = 250;
+  nano.status.generation++;
+  check(i2c_stepper_send_heartbeat(device), "heartbeat before config sync failed");
+  i2c_stepper_sync_config(device);
+  check(device.config.stepsPerMl == 250 && nano.configReads == 1 &&
+        device.configGeneration == nano.status.generation,
+        "config saved from the Nano menu was not re-read");
+  i2c_stepper_sync_config(device);
+  check(nano.configReads == 1, "unchanged generation must not re-read config");
+
+  // Сохранение с меню попало между нашими командами: поколение ушло на 2, копии верить нельзя.
+  nano.status.generation++;
+  check(i2c_stepper_apply(device) && device.configGeneration != nano.status.generation,
+        "APPLY hid a concurrent local config change");
+  i2c_stepper_sync_config(device);
+  check(nano.configReads == 2 && device.configGeneration == nano.status.generation,
+        "config was not re-read after a concurrent local change");
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -394,6 +430,18 @@ def main() -> int:
       "@START_FINITE@": function(
           "inline bool i2c_stepper_start_finite",
           "inline bool i2c_stepper_start_finite(I2CStepperDevice& device)"),
+      "@CONFIG_BEGIN@": function(
+          "inline bool i2c_stepper_config_begin",
+          "inline bool i2c_stepper_config_begin(const I2CStepperDevice& device)"),
+      "@CONFIG_END@": function(
+          "inline void i2c_stepper_config_end",
+          "inline void i2c_stepper_config_end(const I2CStepperDevice& device)"),
+      "@READ_CONFIG@": function(
+          "inline bool i2c_stepper_read_config",
+          "inline bool i2c_stepper_read_config(I2CStepperDevice& device,\n                                    TickType_t lockWaitMs = I2C_LOCK_WAIT_MS,\n                                    bool* lockBusy = nullptr)"),
+      "@SYNC_CONFIG@": function(
+          "inline void i2c_stepper_sync_config",
+          "inline void i2c_stepper_sync_config(I2CStepperDevice& device)"),
       "@CONFIG_BIT@": function(
           "inline uint32_t i2c_stepper_config_bit",
           "inline uint32_t i2c_stepper_config_bit(uint8_t address)"),

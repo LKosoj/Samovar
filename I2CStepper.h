@@ -26,6 +26,7 @@ struct I2CStepperDevice {
   I2CStepperV3StatusSnapshot status;
   uint32_t lastStopEventSeq;
   uint32_t lastHeartbeatMs;
+  uint32_t configGeneration;  // поколение настроек Nano, с которым прочитана копия config
 };
 
 inline I2CStepperDevice make_i2c_stepper_device(uint8_t address) {
@@ -222,6 +223,7 @@ inline bool i2c_stepper_read_config(I2CStepperDevice& device,
         !i2cstepper_v3_mode_supported(config.address, config.mode)) return false;
     device.config = config;
     device.status = statusAfter;
+    device.configGeneration = statusAfter.generation;
     return true;
   }
   return false;
@@ -437,8 +439,11 @@ inline bool i2c_stepper_send_heartbeat(I2CStepperDevice& device) {
 }
 
 inline bool i2c_stepper_apply(I2CStepperDevice& device) {
-  return i2c_stepper_write_config(device) &&
-         i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_APPLY);
+  if (!i2c_stepper_write_config(device) ||
+      !i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_APPLY)) return false;
+  // Поколение выросло ровно на наш APPLY: копия config совпадает с Nano, перечитывать незачем.
+  if (device.status.generation == device.configGeneration + 1) device.configGeneration++;
+  return true;
 }
 
 inline bool i2c_stepper_save(I2CStepperDevice& device) {
@@ -466,6 +471,15 @@ inline bool i2c_stepper_stop(I2CStepperDevice& device) {
   return i2c_stepper_send_command(device, I2CSTEPPER_V3_CMD_STOP);
 }
 
+// Настройки сохранили с меню Nano (поколение в статусе ушло вперёд): обновляем копию, иначе
+// следующий запуск вернёт в Nano устаревшие значения и посчитает дозу по старой калибровке.
+inline void i2c_stepper_sync_config(I2CStepperDevice& device) {
+  if (device.status.generation == device.configGeneration ||
+      !i2c_stepper_config_begin(device)) return;
+  i2c_stepper_read_config(device, I2C_CACHE_LOCK_WAIT_MS);
+  i2c_stepper_config_end(device);
+}
+
 inline void i2c_stepper_tick() {
   const uint32_t now = millis();
   if (i2cStepperScanActive && now - i2cStepperLastScanMs >= I2CSTEPPER_SCAN_MS) {
@@ -476,6 +490,7 @@ inline void i2c_stepper_tick() {
     I2CStepperDevice& device = i2cSteppers[index];
     if (!device.present || now - device.lastHeartbeatMs < I2CSTEPPER_HEARTBEAT_MS) continue;
     if (i2c_stepper_send_heartbeat(device)) device.lastHeartbeatMs = now;
+    i2c_stepper_sync_config(device);
   }
 }
 

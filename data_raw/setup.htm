@@ -391,6 +391,8 @@
        'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
         params.set(name, setupI2cValue(name).value);
       });
+      // Поколение настроек, с которым заполнена форма: Самовар откажет, если их уже поменяли на Nano.
+      params.set('generation', String(setupI2cSelected.status.generation));
       const button = setupI2cValue('save');
       button.disabled = true;
       try {
