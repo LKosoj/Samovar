@@ -278,6 +278,8 @@
     let setupI2cScanning = false;
     // Бит optionFlags «плавный разгон и торможение» (I2CSTEPPER_FLAG_SMOOTH_START в прошивке Nano).
     const SETUP_I2C_OPTION_SMOOTH = 2;
+    // Бит capabilities «умеет наполнение» (I2CSTEPPER_V3_CAP_FILLING): есть только у платы-насоса.
+    const SETUP_I2C_CAP_FILLING = 4;
 
     function setupI2cValue(id) {
       return document.getElementById('i2c-' + id);
@@ -343,14 +345,17 @@
     function updateSetupI2cFields() {
       const mixer = Boolean(Number(setupI2cValue('newAddress').value) & 1);
       const mode = setupI2cValue('mode');
-      if (mixer) mode.value = '1';
-      else if (mode.value === '1') mode.value = '2';
-      mode.options[0].hidden = !mixer;
+      // В списке только занятия насоса. У платы, которая была мешалкой, сохранённого занятия насоса нет.
+      if (!mode.value) mode.value = '2';
       setupI2cValue('modeRow').hidden = mixer;
       setupI2cValue('mixerGroup').hidden = !mixer;
-      setupI2cValue('pumpGroup').hidden = mode.value !== '2';
-      setupI2cValue('fillingGroup').hidden = mode.value !== '3';
+      setupI2cValue('pumpGroup').hidden = mixer || mode.value !== '2';
+      setupI2cValue('fillingGroup').hidden = mixer || mode.value !== '3';
       setupI2cValue('calibrationGroup').hidden = mixer;
+      // Калибруется сама плата по её нынешнему адресу: мешалку, которой только выбрали адрес насоса, калибровать нельзя.
+      const canCalibrate = !(setupI2cAddress & 1) && Boolean(setupI2cSelected.capabilities & SETUP_I2C_CAP_FILLING);
+      setupI2cValue('calibrateRow').hidden = !canCalibrate;
+      setupI2cValue('calibrateHint').hidden = !canCalibrate;
     }
 
     async function refreshSetupI2c() {
@@ -416,6 +421,8 @@
        'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
         params.set(name, setupI2cValue(name).value);
       });
+      // У мешалки режим один, и в списке «Что делает насос» его нет.
+      if (Number(setupI2cValue('newAddress').value) & 1) params.set('mode', '1');
       // Меняем только свой бит: остальные биты optionFlags (направление, реверс после паузы) не трогаем.
       const optionFlags = setupI2cSelected.config.optionFlags;
       params.set('optionFlags', String(setupI2cValue('smoothStart').checked
@@ -547,7 +554,7 @@
           <legend>Подключение</legend>
           <div class="i2c-row"><label for="i2c-newAddress">Адрес на шине I2C</label> <select id="i2c-newAddress" onchange="updateSetupI2cFields()"></select></div>
           <div class="hint">Тип платы задаёт адрес: нечётный — мешалка, чётный — насос. Новый адрес начнёт работать после перезагрузки Nano.</div>
-          <div class="i2c-row" id="i2c-modeRow"><label for="i2c-mode">Что делает насос</label> <select id="i2c-mode" onchange="updateSetupI2cFields()"><option value="1">Мешалка</option><option value="2">Постоянная подача</option><option value="3">Наполнение объёма</option></select></div>
+          <div class="i2c-row" id="i2c-modeRow"><label for="i2c-mode">Что делает насос</label> <select id="i2c-mode" onchange="updateSetupI2cFields()"><option value="2">Постоянная подача</option><option value="3">Наполнение объёма</option></select></div>
         </fieldset>
         <fieldset class="i2c-group" id="i2c-mixerGroup">
           <legend>Мешалка</legend>
@@ -570,6 +577,8 @@
           <legend>Калибровка насоса</legend>
           <div class="i2c-row"><label for="i2c-stepsPerMl">Шагов мотора на 1&nbsp;мл</label> <input id="i2c-stepsPerMl" type="number" min="1"></div>
           <div class="hint">По этому числу мл/ч пересчитываются в скорость мотора. Если насос наливает больше, чем задано, — увеличьте число, если меньше — уменьшите.</div>
+          <p id="i2c-calibrateRow"><button id="i2c-calibrate" type="button" class="button" onclick="if (confirmLeaveIfDirty()) location.assign('/calibrate.htm?address=' + setupI2cAddress)">Калибровка насоса I2CStepper</button></p>
+          <div class="hint" id="i2c-calibrateHint">На странице калибровки насос наливает 100&nbsp;мл в мерную ёмкость, и число шагов на 1&nbsp;мл считается само.</div>
         </fieldset>
         <fieldset class="i2c-group">
           <legend>Мотор</legend>

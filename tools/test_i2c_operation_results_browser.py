@@ -230,11 +230,25 @@ CHECK_SETUP_SAVE = r'''async page => {
   check(await shown() === 'modeRow,fillingGroup,calibrationGroup', 'filling pump must show only its own fields: ' + await shown());
   await page.selectOption('#i2c-mode', '2');
   check(await shown() === 'modeRow,pumpGroup,calibrationGroup', 'feeding pump must show only its own fields: ' + await shown());
+  // Калибровка доступна только плате-насосу и открывается для её нынешнего адреса.
+  const calibrateShown = () => page.evaluate(() => document.getElementById('i2c-calibrate').offsetParent !== null);
+  check(await calibrateShown(), 'pump must offer the calibration page');
+  check((await page.getAttribute('#i2c-calibrate', 'onclick')).includes("'/calibrate.htm?address=' + setupI2cAddress"),
+    'calibration link must carry the selected pump address');
   await page.selectOption('#i2c-newAddress', '3');
+  check(!await calibrateShown(), 'mixer address must hide the calibration link');
   check(await shown() === 'mixerGroup', 'mixer address must show only mixer fields: ' + await shown());
-  check(await page.inputValue('#i2c-mode') === '1', 'mixer address must force the mixer mode');
+  // «Мешалки» в списке занятий насоса нет вовсе: Safari не прячет пункты списка атрибутом hidden.
+  check(await page.evaluate(() => Array.from(document.getElementById('i2c-mode').options).map(o => o.value).join()) === '2,3',
+    'pump job list must not contain the mixer mode');
   await page.selectOption('#i2c-newAddress', '2');
-  check(await page.inputValue('#i2c-mode') === '2', 'pump address must not keep the mixer mode');
+  check(await page.inputValue('#i2c-mode') === '2', 'pump address must keep the chosen pump job');
+  // Плате без возможности наполнения калибровка не предлагается, даже когда группа насоса на экране.
+  await page.evaluate(() => { setupI2cSelected.capabilities = 9; updateSetupI2cFields(); });
+  check(!await calibrateShown() && await page.isVisible('#i2c-stepsPerMl'),
+    'a board that cannot fill must not offer calibration');
+  await page.evaluate(() => { setupI2cSelected.capabilities = 12; updateSetupI2cFields(); });
+  check(await calibrateShown(), 'calibration link must return for the pump');
   await page.selectOption('#i2c-mode', '3');
   await page.unroute('**/i2cstepper?*');
   let saved = '';
@@ -257,6 +271,12 @@ CHECK_SETUP_SAVE = r'''async page => {
     'unchecked smooth start must clear only its own optionFlags bit: ' + saved);
   check(saved.includes('generation=1'),
     'setup save must carry the config generation the form was filled from: ' + saved);
+  check(/[?&]mode=3(?:&|$)/.test(saved), 'pump save must carry the chosen pump job: ' + saved);
+  // Плату переводят на адрес мешалки: режим мешалки уходит сам, хотя в списке его нет.
+  await page.selectOption('#i2c-newAddress', '3');
+  await page.evaluate(async () => { await saveSetupI2c(); });
+  check(/[?&]newAddress=3(?:&|$)/.test(saved) && /[?&]mode=1(?:&|$)/.test(saved),
+    'mixer address must be saved with the mixer mode: ' + saved);
   check(!s.consoleError, s.consoleError || 'console error');
   return 'setup-save';
 }'''
