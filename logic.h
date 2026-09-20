@@ -93,6 +93,8 @@ inline bool rect_stop_second_i2c_pump_if_running() {
 }
 
 inline bool rect_apply_second_pump_for_row(const WProgram& row) {
+  i2cStepperPumpRateOverride = 0.0f;  // скорость и направление оператора действуют до смены строки
+  i2cStepperPumpDirOverride = 0;
   if (!rect_second_i2c_pump_enabled()) {
     if (!rect_stop_second_i2c_pump_if_running()) return false;
     rectSecondPumpHeadsRow = false;

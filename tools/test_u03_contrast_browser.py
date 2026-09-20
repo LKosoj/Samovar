@@ -653,7 +653,7 @@ BROWSER_TEST = r'''async page => {
 
     await gotoPage("default", "i2cstepper.htm", theme, 180);
     for (const [state, selector] of [
-      ["start", "#panel button[onclick*=\"command('start'\"]"],
+      ["start", "#panel button#start"],
       ["stop", "#panel button[onclick*=\"command('stop'\"]"]
     ]) {
       const result = await page.evaluate(selector => {

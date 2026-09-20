@@ -59,6 +59,8 @@ static bool stopResult = true;
 static int stopCalls = 0;
 static bool startResult = true;
 static int startCalls = 0;
+static float i2cStepperPumpRateOverride = 0.0f;
+static uint8_t i2cStepperPumpDirOverride = 0;
 
 bool stop_second_i2c_pump() {
   stopCalls++;
@@ -120,8 +122,13 @@ int main() {
   rectSecondPumpPaused = true;
   stopResult = false;
   WProgram bodyRow{'B', 0.0f, 0};
+  i2cStepperPumpRateOverride = 1.5f;
+  i2cStepperPumpDirOverride = 2;
   check(!rect_apply_second_pump_for_row(bodyRow),
         "disabling during B/C must fail until physical STOP is confirmed");
+  check(i2cStepperPumpDirOverride == 0, "row change must drop the manual pump direction");
+  check(i2cStepperPumpRateOverride == 0.0f,
+        "row change must drop the manual pump rate override");
   check(rectSecondPumpRunning,
         "disabling during B/C must preserve running state after failed STOP");
 

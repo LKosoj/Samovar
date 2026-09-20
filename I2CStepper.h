@@ -54,6 +54,17 @@ uint8_t i2cStepperSessionPumpAddress = 0;
 // Номер последнего отправленного кадра команды по каждому адресу. Хранится отдельно от
 // device.status: статус мог не прочитаться после записи, а копии-кандидаты отбрасываются.
 uint32_t i2cStepperLastSentSeq[I2CSTEPPER_DEVICE_COUNT] = {};
+// Оператор сам остановил или запустил мешалку процесса (энкодер Nano, вкладка I2CStepper).
+// Пока флаг стоит, расписание режима её не трогает; снимается сменой строки программы,
+// концом процесса или кнопкой «Вернуть управление программе».
+volatile bool i2cStepperMixerManualHold = false;
+// Поправка скорости оператором на время процесса: подменяет скорость, которую задаёт программа
+// (мешалка - об/мин, насос - л/ч; 0 = поправки нет). Иначе программа возвращает свою скорость.
+uint16_t i2cStepperMixerRpmOverride = 0;
+float i2cStepperPumpRateOverride = 0.0f;
+// Направление с вкладки I2CStepper вместо программного: 0 - как в программе, 1 - прямое, 2 - обратное.
+uint8_t i2cStepperMixerDirOverride = 0;
+uint8_t i2cStepperPumpDirOverride = 0;
 
 inline I2CStepperDevice* i2c_stepper_device(uint8_t address) {
   if (!i2cstepper_v3_address_valid(address)) return nullptr;
@@ -239,6 +250,11 @@ inline void i2c_stepper_note_refresh_failure(I2CStepperDevice& device) {
   device.present = false;
 }
 
+// Адрес мешалки сессии вне процесса равен 0, поэтому флаг ставится только во время процесса.
+inline void i2c_stepper_note_manual_control(uint8_t address) {
+  if (address == i2cStepperSessionMixerAddress) i2cStepperMixerManualHold = true;
+}
+
 inline bool i2c_stepper_refresh(I2CStepperDevice& device, bool force = false,
                                 TickType_t lockWaitMs = I2C_LOCK_WAIT_MS,
                                 bool noteFailure = true, bool* lockBusy = nullptr) {
@@ -265,6 +281,7 @@ inline bool i2c_stepper_refresh(I2CStepperDevice& device, bool force = false,
     device.lastStopEventSeq = status.stopEventSeq;
     SendMsg(String(F("Локальный останов I2C степпера, адрес ")) + device.address,
             ALARM_MSG);
+    i2c_stepper_note_manual_control(device.address);
   }
   return true;
 }
@@ -329,11 +346,21 @@ inline void i2c_stepper_session_begin() {
   I2CStepperDevice* pump = i2c_stepper_lowest_present(false);
   i2cStepperSessionMixerAddress = mixer ? mixer->address : 0;
   i2cStepperSessionPumpAddress = pump ? pump->address : 0;
+  i2cStepperMixerManualHold = false;
+  i2cStepperMixerRpmOverride = 0;
+  i2cStepperPumpRateOverride = 0.0f;
+  i2cStepperMixerDirOverride = 0;
+  i2cStepperPumpDirOverride = 0;
 }
 
 inline void i2c_stepper_session_end() {
   i2cStepperSessionMixerAddress = 0;
   i2cStepperSessionPumpAddress = 0;
+  i2cStepperMixerManualHold = false;
+  i2cStepperMixerRpmOverride = 0;
+  i2cStepperPumpRateOverride = 0.0f;
+  i2cStepperMixerDirOverride = 0;
+  i2cStepperPumpDirOverride = 0;
 }
 
 inline bool i2c_stepper_session_active() {
@@ -521,6 +548,8 @@ inline bool set_stepper_by_time(uint32_t rpm, uint8_t direction, uint32_t second
   I2CStepperDevice* device = i2c_stepper_selected_mixer();
   if (!device || !device->present) return false;
   if (rpm == 0) return i2c_stepper_stop(*device);
+  if (i2cStepperMixerRpmOverride) rpm = i2cStepperMixerRpmOverride;
+  if (i2cStepperMixerDirOverride) direction = i2cStepperMixerDirOverride - 1;
   device->config.mode = I2CSTEPPER_V3_MODE_MIXER;
   device->config.mixerRpm = rpm;
   device->config.mixerRunSec = seconds;
@@ -560,12 +589,13 @@ inline bool set_stepper_target(uint32_t speedStepsPerSecond, uint8_t direction,
 inline bool start_second_i2c_pump_steps(float rateLitersPerHour, uint32_t targetSteps) {
   I2CStepperDevice* device = i2c_stepper_selected_pump();
   if (!device || !device->present || rateLitersPerHour <= 0.0f) return false;
+  if (i2cStepperPumpRateOverride > 0.0f) rateLitersPerHour = i2cStepperPumpRateOverride;
   const float speed = i2c_get_speed_from_rate(rateLitersPerHour);
   if (speed <= 0.0f || speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) return false;
   if (targetSteps == 0) return false;
   device->config.mode = I2CSTEPPER_V3_MODE_FILLING;
   device->motion.mode = device->config.mode;
-  device->motion.direction = 0;
+  device->motion.direction = i2cStepperPumpDirOverride ? i2cStepperPumpDirOverride - 1 : 0;
   device->motion.speedStepsPerSec = uint32_t(speed);
   if (targetSteps > I2CSTEPPER_V3_TARGET_STEPS_MAX) return false;
   device->motion.targetSteps = targetSteps;
@@ -575,12 +605,13 @@ inline bool start_second_i2c_pump_steps(float rateLitersPerHour, uint32_t target
 inline bool start_second_i2c_pump(float rateLitersPerHour, uint16_t volumeMl) {
   I2CStepperDevice* device = i2c_stepper_selected_pump();
   if (!device || !device->present || rateLitersPerHour <= 0.0f) return false;
+  if (i2cStepperPumpRateOverride > 0.0f) rateLitersPerHour = i2cStepperPumpRateOverride;
   if (volumeMl == 0) {
     const float speed = i2c_get_speed_from_rate(rateLitersPerHour);
     if (speed <= 0.0f || speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) return false;
     device->config.mode = I2CSTEPPER_V3_MODE_PUMP;
     device->motion.mode = I2CSTEPPER_V3_MODE_PUMP;
-    device->motion.direction = 0;
+    device->motion.direction = i2cStepperPumpDirOverride ? i2cStepperPumpDirOverride - 1 : 0;
     device->motion.speedStepsPerSec = uint32_t(speed);
     device->motion.targetSteps = 0;
     return i2c_stepper_start_continuous(*device);
@@ -589,6 +620,43 @@ inline bool start_second_i2c_pump(float rateLitersPerHour, uint16_t volumeMl) {
   const uint64_t targetSteps = uint64_t(volumeMl) * device->config.stepsPerMl;
   return targetSteps <= I2CSTEPPER_V3_TARGET_STEPS_MAX &&
       start_second_i2c_pump_steps(rateLitersPerHour, uint32_t(targetSteps));
+}
+
+// Новая скорость и направление с вкладки I2CStepper (direction: 0 - как в программе, 1 - прямое,
+// 2 - обратное). Если привод сейчас крутится - перезапускаем его (время и остаток шагов
+// прежние); стоит - применится при пуске.
+inline bool i2c_stepper_override_mixer_rpm(uint16_t rpm, uint8_t direction) {
+  I2CStepperDevice* device = i2c_stepper_selected_mixer();
+  if (!device || !device->present || rpm == 0) return false;
+  // Допустимые обороты знает только Nano (шаги на оборот): проверяем через APPLY, и лишь
+  // потом запоминаем скорость - иначе недопустимое число сорвало бы все пуски по расписанию.
+  const I2CStepperV3Config previous = device->config;
+  device->config.mixerRpm = rpm;
+  if (direction == 2) device->config.optionFlags |= I2CSTEPPER_OPTION_DIRECTION;
+  else if (direction == 1) device->config.optionFlags &= uint8_t(~I2CSTEPPER_OPTION_DIRECTION);
+  if (!i2c_stepper_apply(*device)) {
+    device->config = previous;
+    return false;
+  }
+  i2cStepperMixerRpmOverride = rpm;
+  i2cStepperMixerDirOverride = direction;
+  if (i2cStepperMixerManualHold ||
+      (device->status.status & I2CSTEPPER_V3_STATUS_RUNNING) == 0) return true;
+  return i2c_stepper_send_command(*device, I2CSTEPPER_V3_CMD_START_CONFIGURED);
+}
+
+inline bool i2c_stepper_override_pump_rate(float rateLitersPerHour, uint8_t direction) {
+  I2CStepperDevice* device = i2c_stepper_selected_pump();
+  if (!device || !device->present) return false;
+  const float speed = i2c_get_speed_from_rate(rateLitersPerHour);
+  if (speed < 1.0f || speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) return false;
+  i2cStepperPumpRateOverride = rateLitersPerHour;
+  i2cStepperPumpDirOverride = direction;
+  if ((device->status.status & I2CSTEPPER_V3_STATUS_RUNNING) == 0) return true;
+  if (device->motion.targetSteps == 0) return start_second_i2c_pump(rateLitersPerHour, 0);
+  if (!i2c_stepper_refresh(*device, true)) return false;
+  return device->status.remainingSteps == 0 ||
+         start_second_i2c_pump_steps(rateLitersPerHour, device->status.remainingSteps);
 }
 
 inline bool stop_second_i2c_pump() {

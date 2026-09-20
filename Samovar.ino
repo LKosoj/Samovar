@@ -1361,6 +1361,57 @@ static void report_blynk_i2c_v37_execution_failure(
   SendMsg(message, WARNING_MSG);
 }
 
+// Поправка скорости привода, занятого процессом (вкладка I2CStepper): мешалке - об/мин,
+// насосу - мл/ч. Работает с самим устройством, а не с копией-кандидатом.
+// Команда «скорость» с вкладки I2CStepper: об/мин мешалки или мл/ч насоса. Привод занят
+// процессом - новая скорость заменяет программную; свободен - запускается с этой скоростью.
+// direction: 0 - не задано (как в программе / как было), 1 - прямое, 2 - обратное.
+static bool apply_i2c_speed_command(I2CStepperDevice& device, const I2CStepperV3Config& config,
+                                    uint8_t direction) {
+  I2CStepperDevice candidate = device;
+  bool started = false;
+  if (i2cstepper_v3_address_is_mixer(device.address)) {
+    if (device.address == i2cStepperSessionMixerAddress) {
+      return i2c_stepper_override_mixer_rpm(uint16_t(config.mixerRpm), direction);
+    }
+    candidate.config.mode = I2CSTEPPER_V3_MODE_MIXER;
+    candidate.config.mixerRpm = config.mixerRpm;
+    candidate.config.mixerRunSec = 0;
+    candidate.config.mixerPauseSec = 0;
+    if (direction == 2) candidate.config.optionFlags |= I2CSTEPPER_OPTION_DIRECTION;
+    else if (direction == 1) candidate.config.optionFlags &= uint8_t(~I2CSTEPPER_OPTION_DIRECTION);
+    started = i2c_stepper_apply(candidate) &&
+        i2c_stepper_send_command(candidate, I2CSTEPPER_V3_CMD_START_CONFIGURED);
+  } else if (device.address == i2cStepperSessionPumpAddress) {
+    if (!i2c_stepper_override_pump_rate(config.pumpMlHour / 1000.0f, direction)) return false;
+    // На головах отбор ведёт I2C-насос: показываем оператору новую скорость, а не программную.
+    if (rectSecondPumpHeadsRow) ActualVolumePerHour = i2cStepperPumpRateOverride;
+    return true;
+  } else {
+    const float speed = roundf(config.pumpMlHour * float(device.config.stepsPerMl) / 3600.0f);
+    uint64_t targetSteps = uint64_t(config.fillingMl) * device.config.stepsPerMl;
+    // Насос уже отмеряет объём, а новый объём не задан: меняем только скорость, докачиваем остаток.
+    if (targetSteps == 0 && device.motion.targetSteps != 0 &&
+        (device.status.status & I2CSTEPPER_V3_STATUS_RUNNING) != 0) {
+      if (!i2c_stepper_refresh(device, true)) return false;
+      if (device.status.remainingSteps == 0) return true;
+      targetSteps = device.status.remainingSteps;
+      candidate = device;
+    }
+    if (speed < 1.0f || speed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC ||
+        targetSteps > I2CSTEPPER_V3_TARGET_STEPS_MAX) return false;
+    candidate.config.mode = targetSteps ? I2CSTEPPER_V3_MODE_FILLING : I2CSTEPPER_V3_MODE_PUMP;
+    candidate.motion.mode = candidate.config.mode;
+    if (direction) candidate.motion.direction = direction - 1;
+    candidate.motion.speedStepsPerSec = uint32_t(speed);
+    candidate.motion.targetSteps = uint32_t(targetSteps);
+    started = targetSteps ? i2c_stepper_start_finite(candidate)
+                          : i2c_stepper_start_continuous(candidate);
+  }
+  if (started) device = candidate;
+  return started;
+}
+
 static OperationError execute_pending_i2c_stepper(
     const PendingI2CStepperCmd& command) {
   if (strcmp(command.cmd, "scan") == 0) {
@@ -1382,6 +1433,12 @@ static OperationError execute_pending_i2c_stepper(
     report_blynk_i2c_v37_execution_failure(
         command.cmd, command.address, OPERATION_ERROR_I2C_CONFIG_BUSY, device);
     return OPERATION_ERROR_I2C_CONFIG_BUSY;
+  }
+
+  if (strcmp(command.cmd, "speed") == 0) {
+    const bool applied = apply_i2c_speed_command(*device, command.config, command.motion.direction);
+    i2c_stepper_config_end(*device);
+    return applied ? OPERATION_ERROR_NONE : OPERATION_ERROR_I2C_COMMAND_FAILED;
   }
 
   I2CStepperDevice candidate = *device;
@@ -1435,7 +1492,14 @@ static OperationError execute_pending_i2c_stepper(
 
   if (result == OPERATION_ERROR_NONE) result = i2c_command_result(commandSucceeded, candidate);
   if (result == OPERATION_ERROR_NONE && !skipReadback) result = confirm_i2c_candidate(candidate);
-  if (result == OPERATION_ERROR_NONE) *device = candidate;
+  if (result == OPERATION_ERROR_NONE) {
+    *device = candidate;
+    // Ручной «Стоп»/«Запустить» мешалки процесса: иначе расписание режима тут же её перезапустит.
+    if (strcmp(command.cmd, "stop") == 0 || strcmp(command.cmd, "blynk_stop") == 0 ||
+        strcmp(command.cmd, "start") == 0 || strcmp(command.cmd, "blynk_start") == 0) {
+      i2c_stepper_note_manual_control(command.address);
+    }
+  }
   i2c_stepper_config_end(*device);
   report_blynk_i2c_v37_execution_failure(command.cmd, command.address, result, &candidate);
   return result;
@@ -4545,7 +4609,7 @@ static UiStateDescriptor build_ui_state_from_loop() {
           false, 0, UI_UNIT_S, false, 0};
     } else if (currentType == 'A') value.phase = UI_PHASE_ACTUATOR_WAIT;
     else if (currentType == 'L') value.phase = UI_PHASE_UNKNOWN;
-    if (mixer_status) {
+    if (mixer_status && !i2cStepperMixerManualHold) {
       ui_add_control(value, UI_CONTROL_MIXER, false, 0, true, 1,
                      UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);
     }
@@ -5084,7 +5148,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.stepperStepMl = SamSetup.StepperStepMl;
   snapshot.steamBodyTemp = SteamSensor.BodyTemp;
   snapshot.pipeBodyTemp = PipeSensor.BodyTemp;
-  snapshot.mixer = mixer_status;
+  snapshot.mixer = mixer_status && !i2cStepperMixerManualHold;
   // [9b] Читаем глобалы bk_water_auto/bk_steam_setpoint напрямую - это
   // ЕДИНСТВЕННОЕ место их изменения не здесь (BK.h), а тут только снимок;
   // без USE_WATER_PUMP они не выходят из дефолта false/0.0f (см. BK.h).

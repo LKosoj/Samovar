@@ -369,7 +369,8 @@ static bool i2c_stepper_config_param(const String& name) {
 
 static bool i2c_stepper_known_param(const String& name) {
   return name == "address" || name == "cmd" || name == "relay" ||
-         name == "state" || name == "generation" || i2c_stepper_config_param(name);
+         name == "state" || name == "generation" || name == "value" || name == "volume" ||
+         i2c_stepper_config_param(name);
 }
 
 static NumericParseResult parse_i2c_stepper_patch(
@@ -463,6 +464,32 @@ static NumericParseResult parse_i2c_stepper_patch(
     errorField = "cmd";
     return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
   }
+  if (command == "speed") {
+    // Новая скорость привода: value = об/мин для мешалки, мл/ч для насоса; volume = объём
+    // насоса в мл (нет = без остановки). Это не настройки Nano, поэтому параметры свои;
+    // до loop() значения едут в копии config.
+    errorField = "value";
+    uint32_t value = 0;
+    const I2CStepperParam *valueParam = get_request_param(request, "value");
+    const I2CStepperParam *volumeParam = get_request_param(request, "volume");
+    // direction уже разобран выше (0/1); до loop() едет как 0 - не задано, 1 - прямое, 2 - обратное.
+    const bool hasDirection = request_param_count(request, "direction") == 1;
+    motion.direction = hasDirection ? motion.direction + 1 : 0;
+    if (!valueParam || request->params() != size_t(3 + (volumeParam ? 1 : 0) + (hasDirection ? 1 : 0))) return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+    result = parse_bounded_uint32(valueParam->value().c_str(), 1, 65535, value);
+    if (!result.ok()) return result;
+    config.fillingMl = 0;
+    if (i2cstepper_v3_address_is_mixer(current.address)) config.mixerRpm = value;
+    else config.pumpMlHour = value;
+    if (volumeParam) {
+      errorField = "volume";
+      if (i2cstepper_v3_address_is_mixer(current.address)) return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+      result = parse_bounded_uint32(volumeParam->value().c_str(), 1, 100000, config.fillingMl);
+      if (!result.ok()) return result;
+    }
+    motion.mode = config.mode;
+    return numeric_parse_result(NUMERIC_PARSE_OK);
+  }
   if (command == "relay" && (!hasRelay || hasConfig)) {
     errorField = "relay";
     return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
@@ -545,6 +572,7 @@ bool i2c_stepper_command_supported(const I2CStepperDevice& dev, const String& cm
   if (cmd == "relay") return (dev.capabilities & I2CSTEPPER_V3_CAP_RELAY) != 0;
   if (cmd == "calstart" || cmd == "calfinish") return (dev.capabilities & I2CSTEPPER_V3_CAP_FILLING) != 0;
   if (cmd == "apply" || cmd == "save" || cmd == "start") return i2c_stepper_mode_supported(dev);
+  if (cmd == "speed") return true;
   if (cmd == "stop") return (dev.capabilities & (I2CSTEPPER_V3_CAP_MIXER | I2CSTEPPER_V3_CAP_PUMP | I2CSTEPPER_V3_CAP_FILLING)) != 0;
   return false;
 }
@@ -588,6 +616,30 @@ void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev
   response->addHeader("Cache-Control", "no-store");
   response->print("{\"scanning\":");
   response->print(i2cStepperScanActive ? 1 : 0);
+  response->print(",\"manualHold\":");
+  response->print(i2cStepperMixerManualHold ? i2cStepperSessionMixerAddress : 0);
+  // Скорость и остаток в единицах оператора: мешалка - об/мин, насос - л/ч и мл.
+  const bool mixerDevice = i2cstepper_v3_address_is_mixer(dev.address);
+  const bool running = (dev.status.status & I2CSTEPPER_V3_STATUS_RUNNING) != 0;
+  response->print(",\"speedNow\":");
+  if (mixerDevice) response->print(running ? dev.config.mixerRpm : 0);
+  else response->print(dev.config.stepsPerMl ? dev.status.currentSpeedStepsPerSec * 3.6f / dev.config.stepsPerMl : 0.0f, 3);
+  response->print(",\"remainingMl\":");
+  response->print(mixerDevice || !dev.config.stepsPerMl ? 0 : dev.status.remainingSteps / dev.config.stepsPerMl);
+  response->print(",\"directionNow\":");
+  response->print(mixerDevice ? ((dev.config.optionFlags & I2CSTEPPER_OPTION_DIRECTION) ? 1 : 0) : dev.motion.direction);
+  response->print(",\"dirOverride\":");
+  response->print(dev.address == i2cStepperSessionMixerAddress ? i2cStepperMixerDirOverride
+                  : dev.address == i2cStepperSessionPumpAddress ? i2cStepperPumpDirOverride : 0);
+  // Привод занят процессом: новая скорость с вкладки заменяет программную.
+  response->print(",\"processMixer\":");
+  response->print(i2cStepperSessionMixerAddress);
+  response->print(",\"processPump\":");
+  response->print(i2cStepperSessionPumpAddress);
+  response->print(",\"mixerSpeedOverride\":");
+  response->print(i2cStepperMixerRpmOverride);
+  response->print(",\"pumpRateOverride\":");
+  response->print(i2cStepperPumpRateOverride, 3);
   response->print(",\"selected\":");
   write_i2c_stepper_json(*response, dev);
   response->print(",\"devices\":[");
@@ -641,7 +693,7 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
   if (command != "status" && command != "apply" && command != "save" &&
       command != "start" && command != "stop" && command != "calstart" &&
       command != "calfinish" && command != "relay" && command != "lease" &&
-      command != "scan") {
+      command != "scan" && command != "resume" && command != "speed") {
     send_i2c_numeric_error(request, "cmd", NUMERIC_PARSE_NOT_ALLOWED);
     return;
   }
@@ -675,6 +727,12 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
   }
   if (command == "lease") {
     i2c_stepper_web_lease_touch(address);
+    send_no_store_response(request, 204, "text/plain", "");
+    return;
+  }
+  if (command == "resume") {
+    // Оператор возвращает мешалку расписанию режима (см. i2cStepperMixerManualHold).
+    if (address == i2cStepperSessionMixerAddress) i2cStepperMixerManualHold = false;
     send_no_store_response(request, 204, "text/plain", "");
     return;
   }

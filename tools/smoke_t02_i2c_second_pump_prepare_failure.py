@@ -25,6 +25,8 @@ I2CStepperDevice* selected = &pump;
 I2CStepperDevice* i2c_stepper_selected_pump() { return selected; }
 float i2c_get_speed_from_rate(float rate) { return rate * 10.0f; }
 int finite = 0;
+float i2cStepperPumpRateOverride = 0.0f;
+uint8_t i2cStepperPumpDirOverride = 0;
 bool i2c_stepper_start_finite(I2CStepperDevice&) { finite++; return true; }
 @FUNCTION@
 int main() {
@@ -33,6 +35,18 @@ int main() {
   if (!start_second_i2c_pump_steps(2.0f, 1300) || finite != 1 ||
       pump.motion.mode != I2CSTEPPER_V3_MODE_FILLING || pump.motion.targetSteps != 1300) return 2;
   if (start_second_i2c_pump_steps(2.0f, 0)) return 3;
+  // Поправка скорости из веба перебивает скорость строки программы.
+  if (pump.motion.speedStepsPerSec != 20) return 5;
+  i2cStepperPumpRateOverride = 3.0f;
+  if (!start_second_i2c_pump_steps(2.0f, 1300) || pump.motion.speedStepsPerSec != 30) return 6;
+  i2cStepperPumpRateOverride = 0.0f;
+  if (!start_second_i2c_pump_steps(2.0f, 1300) || pump.motion.speedStepsPerSec != 20) return 7;
+  // Направление с вкладки: 2 - обратное; без него программа качает только вперёд.
+  if (pump.motion.direction != 0) return 8;
+  i2cStepperPumpDirOverride = 2;
+  if (!start_second_i2c_pump_steps(2.0f, 1300) || pump.motion.direction != 1) return 9;
+  i2cStepperPumpDirOverride = 0;
+  if (!start_second_i2c_pump_steps(2.0f, 1300) || pump.motion.direction != 0) return 10;
   selected = nullptr;
   return start_second_i2c_pump_steps(2.0f, 1300) ? 4 : 0;
 }

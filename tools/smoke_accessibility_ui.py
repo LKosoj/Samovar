@@ -57,7 +57,7 @@ PAGE_LABELS = {
         "trest", "sum",
     ),
     "calibrate.htm": ("kstepperspd", "stepperstepml"),
-    "i2cstepper.htm": ("speedStepsPerSec", "targetSteps"),
+    "i2cstepper.htm": ("speed", "volume", "direction"),
     # [Пиво 02.09 D1] выбор рецепта при нескольких RECIPE в файле.
     "brewxml.htm": ("recipe-select",),
 }

@@ -99,7 +99,7 @@ BROWSER_TEST = r'''async page => {
     config: {relayMask: 0, stepsPerMl: 43200}, motion: {speedStepsPerSec: 1200, targetSteps: 100},
     status: {flags: 0, currentSpeedStepsPerSec: 0, remainingSteps: 0}
   };
-  const i2cPayload = {devices:[i2cDevice], selected:i2cDevice};
+  const i2cPayload = {devices:[i2cDevice], selected:i2cDevice, speedNow: 1.2, remainingMl: 100};
   const consoleProblems = [];
   const lifecycleEvents = [];
   const covered = [];
@@ -769,19 +769,20 @@ BROWSER_TEST = r'''async page => {
   async function testI2cStepper() {
     await installRecorder("/i2cstepper", "json");
     const result = await page.evaluate(async () => {
-      const speed = document.getElementById("speedStepsPerSec");
-      const target = document.getElementById("targetSteps");
+      const speed = document.getElementById("speed");
+      const target = document.getElementById("volume");
       const operationalOnly = !document.getElementById("newAddress") &&
         !document.getElementById("stepsPerMl") && !document.getElementById("pump_type");
-      // Устройство сообщает 1200/100; набранное пользователем обновление стирать не должно.
-      const loadedFromDevice = speed.value === "1200" && target.value === "100";
+      // Самовар сообщает 1.2 л/ч; набранное пользователем обновление стирать не должно.
+      const loadedFromDevice = speed.value === "1.2" && target.value === "" &&
+        document.getElementById("now").textContent === "Скорость: 1.2 л/ч; осталось: 100 мл; направление: прямое.";
       speed.value = "777";
       target.value = "555";
       await refresh();
       const keptTyped = loadedFromDevice && speed.value === "777" && target.value === "555";
-      speed.value = "18000";
-      target.value = "2147483647";
-      const first = command("start", commandValues());
+      speed.value = "65.535";
+      target.value = "100000";
+      const first = startWithSpeed();
       const concurrentStop = await command("stop");
       const firstResult = await first;
       const mutations = () => window.__numericRequests.filter(request => request.url.includes("&cmd=") || request.url.includes("?address=2&cmd="));
@@ -794,18 +795,66 @@ BROWSER_TEST = r'''async page => {
       window.__numericStatus = 200;
       await refresh();
       const error = document.getElementById("request_error");
+      const errorVisible = !!error && getComputedStyle(error).display !== "none" && error.textContent.trim() !== "";
+      // Кнопка возврата видна только пока мешалка процесса на ручном удержании.
+      const resume = document.getElementById("resume");
+      const resumeHiddenByDefault = resume.hidden;
+      manualHold = 2;
+      render();
+      const resumeShown = !resume.hidden;
+      await resumeProgram();
+      const resumeUrl = mutations().at(-1).url;
+      // Подпись кнопки реле следует за состоянием, которое сообщает устройство.
+      const relayButton = document.getElementById("relay");
+      selected.config.relayMask = 0;
+      render();
+      const relayOffLabel = relayButton.textContent;
+      selected.config.relayMask = 1;
+      render();
+      const relayOnLabel = relayButton.textContent;
+      selected.config.relayMask = 0;
+      // Поле скорости одно. Привод занят процессом: объём прячется, кнопка меняет скорость программы.
+      const volumeRow = document.getElementById("volumeRow");
+      const startButton = document.getElementById("start");
+      // Свободный привод: направление только прямое/обратное; в процессе добавляется «как в программе».
+      const directionSelect = document.getElementById("direction");
+      const optionTexts = () => Array.from(directionSelect.options).map(option => option.textContent).join("|");
+      const freeView = !volumeRow.hidden && startButton.textContent === "Запустить" &&
+        optionTexts() === "прямое|обратное" && directionSelect.value === "1";
+      processInfo = {processMixer: 0, processPump: 2, mixerSpeedOverride: 0, pumpRateOverride: 0};
+      render();
+      const processView = volumeRow.hidden && startButton.textContent === "Применить скорость" &&
+        optionTexts() === "как в программе|прямое|обратное" && directionSelect.value === "0";
+      speed.value = "1.5";
+      await startWithSpeed();
+      const processSpeedUrl = mutations().at(-1).url;
+      directionSelect.value = "2";
+      render();
+      const keptDirection = directionSelect.value === "2";
+      await startWithSpeed();
+      const reverseUrl = mutations().at(-1).url;
+      const singleSpeedField = document.querySelectorAll("#panel input[type=number]").length === 2;
       return {
+        relayOffLabel, relayOnLabel, freeView, processView, processSpeedUrl, singleSpeedField,
+        keptDirection, reverseUrl,
+        resumeHiddenByDefault, resumeShown, resumeUrl, resumeHiddenAfter:resume.hidden,
         operationalOnly, keptTyped, firstResult, concurrentStop, relayResult, failedStop,
         startUrl, relayUrl, operationRequests:window.__numericOperationRequests.slice(),
         released:!commandInFlight,
-        errorVisible:!!error && getComputedStyle(error).display !== "none" && error.textContent.trim() !== "",
-        bounds:speed.min === "1" && speed.max === "18000" && target.min === "1" && target.max === "2147483647",
+        errorVisible,
+        bounds:speed.min === "0.001" && speed.max === "65.535" && target.min === "1" && target.max === "100000",
         calibrationUrl:String(document.getElementById("calibrate").getAttribute("onclick") || "")
       };
     });
     if (!result.operationalOnly || !result.keptTyped || !result.firstResult || result.concurrentStop !== false ||
         !result.relayResult || result.failedStop !== false || !result.released || !result.errorVisible ||
-        !result.bounds || result.startUrl !== "/i2cstepper?address=2&cmd=start&speedStepsPerSec=18000&targetSteps=2147483647" ||
+        !result.resumeHiddenByDefault || !result.resumeShown || !result.resumeHiddenAfter ||
+        result.resumeUrl !== "/i2cstepper?address=2&cmd=resume" ||
+        result.relayOffLabel !== "Включить реле 1" || result.relayOnLabel !== "Выключить реле 1" ||
+        !result.freeView || !result.processView || !result.singleSpeedField || !result.keptDirection ||
+        result.reverseUrl !== "/i2cstepper?address=2&cmd=speed&value=1500&direction=1" ||
+        result.processSpeedUrl !== "/i2cstepper?address=2&cmd=speed&value=1500" ||
+        !result.bounds || result.startUrl !== "/i2cstepper?address=2&cmd=speed&value=65535&direction=0&volume=100000" ||
         result.relayUrl !== "/i2cstepper?address=2&cmd=relay&relay=1&state=1" ||
         result.operationRequests.length !== 2 || !result.operationRequests.every(url => url === "/ajax?operationId=901") ||
         !result.calibrationUrl.includes("/calibrate.htm?address=' + selectedAddress")) {

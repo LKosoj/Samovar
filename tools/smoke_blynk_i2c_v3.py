@@ -290,6 +290,14 @@ static bool i2c_stepper_config_begin(const I2CStepperDevice&) {{
   return true;
 }}
 static void i2c_stepper_config_end(const I2CStepperDevice&) {{ configLock = false; }}
+static uint8_t manualControlAddress = 0;
+static void i2c_stepper_note_manual_control(uint8_t address) {{ manualControlAddress = address; }}
+static int speedOverrideCalls = 0;
+static bool speedOverrideSucceeds = true;
+static bool apply_i2c_speed_command(I2CStepperDevice&, const I2CStepperV3Config&, uint8_t) {{
+  speedOverrideCalls++;
+  return speedOverrideSucceeds;
+}}
 
 static uint8_t freshRelayMask = 0;
 static bool readConfigSucceeds = true;
@@ -382,7 +390,8 @@ static void reset() {{
   writeConfigSucceeds = true;
   sendSucceeds = true; sendError = I2CSTEPPER_V3_ERR_NONE;
   readConfigCalls = writeConfigCalls = confirmCalls = saveCalls = finiteStartCalls = 0;
-  scanBeginCalls = 0;
+  scanBeginCalls = 0; manualControlAddress = 0;
+  speedOverrideCalls = 0; speedOverrideSucceeds = true;
   writtenRelayMask = 0; sentCommands.clear(); lastMessage.clear();
 }}
 static PendingI2CStepperCmd command(const char* text) {{
@@ -418,6 +427,44 @@ int main() {{
         readConfigCalls == 0 && writeConfigCalls == 0 && confirmCalls == 0,
         "Blynk stop must send only STOP");
   check(cached_fields_unchanged(), "Blynk STOP must preserve cached config and motion");
+
+  // Ручной пуск/стоп отбирает мешалку у расписания режима; остальные команды - нет.
+  for (const char* manualCommand : {{"stop", "blynk_stop", "start", "blynk_start"}}) {{
+    reset();
+    PendingI2CStepperCmd manual = command(manualCommand);
+    manual.config = cachedConfig;
+    manual.motion = cachedMotion;
+    check(execute_pending_i2c_stepper(manual) == OPERATION_ERROR_NONE &&
+          manualControlAddress == 2, "manual start/stop must report manual control");
+  }}
+  for (const char* failedCommand : {{"stop", "blynk_stop", "blynk_start"}}) {{
+    reset();
+    sendSucceeds = false;
+    PendingI2CStepperCmd failed = command(failedCommand);
+    execute_pending_i2c_stepper(failed);
+    check(manualControlAddress == 0, "failed start/stop must not report manual control");
+  }}
+  {{
+    // Поправка скорости идёт своей дорогой: без записи настроек и с отпущенным замком.
+    reset();
+    PendingI2CStepperCmd speed = command("speed");
+    check(execute_pending_i2c_stepper(speed) == OPERATION_ERROR_NONE &&
+          speedOverrideCalls == 1 && !configLock && manualControlAddress == 0,
+          "speed must go through the override helper and release the config lock");
+    reset();
+    speedOverrideSucceeds = false;
+    PendingI2CStepperCmd rejected = command("speed");
+    check(execute_pending_i2c_stepper(rejected) == OPERATION_ERROR_I2C_COMMAND_FAILED &&
+          !configLock, "rejected speed override must report failure and release the lock");
+  }}
+  for (const char* otherCommand : {{"apply", "calstart", "calfinish"}}) {{
+    reset();
+    PendingI2CStepperCmd other = command(otherCommand);
+    other.config = cachedConfig;
+    other.motion = cachedMotion;
+    execute_pending_i2c_stepper(other);
+    check(manualControlAddress == 0, "only start/stop may report manual control");
+  }}
 
   for (const char* runtimeCommand : {{"stop", "calfinish"}}) {{
     reset();

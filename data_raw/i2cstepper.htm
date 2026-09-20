@@ -15,8 +15,10 @@ let devices = [];
 let selected = null;
 let refreshTimer = 0;
 let commandInFlight = false;
-let motionFieldsLoaded = false;
+let speedFieldLoaded = false;
 let refreshErrorShown = false;
+let manualHold = 0;
+let processInfo = {};
 
 function deviceName(device) {
   return device.address & 1 ? 'Мешалка' : 'Насос';
@@ -54,20 +56,43 @@ function render() {
   }
   field('missing').hidden = true;
   field('panel').hidden = false;
-  const motion = selected.motion;
   const status = selected.status;
   field('title').textContent = deviceName(selected) + ', адрес ' + selected.address;
   field('state').textContent = status.flags & I2C_RUNNING ? 'Работает' : 'Остановлен';
-  field('speedNow').textContent = status.currentSpeedStepsPerSec;
-  field('remaining').textContent = status.remainingSteps;
-  // Поля ввода заполняем один раз: иначе автообновление раз в 2 с затирает набранное.
-  if (!motionFieldsLoaded) {
-    motionFieldsLoaded = true;
-    field('speedStepsPerSec').value = motion.speedStepsPerSec || '';
-    field('targetSteps').value = motion.targetSteps || '';
+  // Единицы всегда одни: мешалка - об/мин, насос - л/ч и мл (пересчёт делает Самовар).
+  const mixer = Boolean(selected.address & 1);
+  const inProcess = selected.address === Number(mixer ? processInfo.processMixer : processInfo.processPump);
+  const programSpeed = inProcess && (Number(mixer ? processInfo.mixerSpeedOverride : processInfo.pumpRateOverride) || 0);
+  const speedNow = Number(processInfo.speedNow) || 0;
+  field('now').textContent = 'Скорость: ' + speedNow + (mixer ? ' об/мин' : ' л/ч; осталось: ' +
+    (Number(processInfo.remainingMl) || 0) + ' мл') +
+    '; направление: ' + (Number(processInfo.directionNow) ? 'обратное.' : 'прямое.');
+  field('speedLabel').textContent = mixer ? 'Скорость, об/мин' : 'Скорость, л/ч';
+  field('speed').max = mixer ? '65535' : '65.535';
+  field('speed').min = field('speed').step = mixer ? '1' : '0.001';
+  // Поле ввода заполняем один раз: иначе автообновление раз в 2 с затирает набранное.
+  // «Как в программе» есть только у привода, занятого процессом; список собираем при смене состояния.
+  const direction = field('direction');
+  if (direction.dataset.inProcess !== String(inProcess)) {
+    direction.dataset.inProcess = String(inProcess);
+    direction.replaceChildren();
+    (inProcess ? [[0, 'как в программе'], [1, 'прямое'], [2, 'обратное']] : [[1, 'прямое'], [2, 'обратное']])
+      .forEach(([value, text]) => direction.append(new Option(text, value)));
+    direction.value = inProcess ? Number(processInfo.dirOverride) || 0 : (Number(processInfo.directionNow) ? 2 : 1);
   }
+  if (!speedFieldLoaded) {
+    speedFieldLoaded = true;
+    field('speed').value = programSpeed || speedNow || '';
+  }
+  // Привод занят процессом: новая скорость заменяет программную, объём задаёт программа.
+  field('volumeRow').hidden = mixer || inProcess;
+  field('start').textContent = inProcess || status.flags & I2C_RUNNING ? 'Применить скорость' : 'Запустить';
+  field('speedNote').textContent = !inProcess ? '' : programSpeed
+    ? 'Программа работает с заданной здесь скоростью: ' + programSpeed + (mixer ? ' об/мин.' : ' л/ч.')
+    : 'Скорость задаёт программа. Новая скорость заменит программную.';
   field('relay').hidden = !(selected.capabilities & I2C_CAP_RELAY);
   field('relay').textContent = selected.config.relayMask & 1 ? 'Выключить реле 1' : 'Включить реле 1';
+  field('resume').hidden = manualHold !== selected.address;
   field('calibrate').hidden = Boolean(selected.address & 1) ||
     !(selected.capabilities & I2C_CAP_FILLING);
 }
@@ -82,6 +107,8 @@ async function refresh() {
     const payload = await response.json();
     devices = Array.isArray(payload.devices) ? payload.devices : [];
     selected = payload.selected || null;
+    manualHold = Number(payload.manualHold) || 0;
+    processInfo = payload;
     render();
     // Гасим только свою ошибку: иначе автообновление за 2 с стирает отказ команды.
     if (refreshErrorShown) {
@@ -96,11 +123,21 @@ async function refresh() {
   }
 }
 
-function commandValues() {
-  return {
-    speedStepsPerSec: field('speedStepsPerSec').value,
-    targetSteps: field('targetSteps').value
-  };
+// Одна команда на оба случая: свободный привод запускается, занятый процессом меняет скорость.
+function startWithSpeed() {
+  const mixer = Boolean(selected.address & 1);
+  const value = Number(field('speed').value);
+  if (!(value > 0)) {
+    SamovarApp.showRequestError('Введите скорость больше нуля');
+    return Promise.resolve(false);
+  }
+  const values = {value: Math.round(mixer ? value : value * 1000)};
+  // 0 = «как в программе»: параметр не шлём; иначе прошивка ждёт 0 - прямое, 1 - обратное.
+  const direction = Number(field('direction').value);
+  if (direction) values.direction = direction - 1;
+  const volume = Math.round(Number(field('volume').value));
+  if (!field('volumeRow').hidden && volume > 0) values.volume = volume;
+  return command('speed', values);
 }
 
 async function command(command, values) {
@@ -123,6 +160,19 @@ async function command(command, values) {
     return false;
   } finally {
     commandInFlight = false;
+  }
+}
+
+// Ручной «Стоп»/«Запустить» отбирает мешалку у программы режима до смены строки; это возврат.
+async function resumeProgram() {
+  try {
+    const response = await fetch(selectedUrl('resume'), {cache: 'no-store'});
+    if (!response.ok) throw new Error(await SamovarApp.responseErrorText(
+      response, 'Команда не принята'
+    ));
+    await refresh();
+  } catch (error) {
+    SamovarApp.showRequestError(String(error));
   }
 }
 
@@ -169,14 +219,17 @@ window.addEventListener('beforeunload', () => {
   <section id="panel" hidden>
     <h2 id="title"></h2>
     <p id="state"></p>
-    <p>Скорость: <span id="speedNow"></span> шаг/с; осталось: <span id="remaining"></span> шагов.</p>
+    <p id="now"></p>
     <h2>Управление</h2>
-    <p><label for="speedStepsPerSec">Скорость</label> <input id="speedStepsPerSec" type="number" min="1" max="18000"></p>
-    <p><label for="targetSteps">Цель, шагов</label> <input id="targetSteps" type="number" min="1" max="2147483647"></p>
+    <p><label id="speedLabel" for="speed">Скорость</label> <input id="speed" type="number">
+      <br><span id="speedNote"></span></p>
+    <p><label for="direction">Направление</label> <select id="direction"></select></p>
+    <p id="volumeRow"><label for="volume">Объём, мл (пусто — без остановки; на ходу — докачать остаток)</label> <input id="volume" type="number" min="1" max="100000"></p>
     <p>
-      <button type="button" class="button" onclick="command('start', commandValues())">Запустить</button>
+      <button id="start" type="button" class="button" onclick="startWithSpeed()">Запустить</button>
       <button type="button" class="button" onclick="command('stop')">Стоп</button>
       <button id="relay" type="button" class="button" onclick="command('relay', {relay: 1, state: selected.config.relayMask & 1 ? 0 : 1})">Реле 1</button>
+      <button id="resume" type="button" class="button" hidden onclick="resumeProgram()">Вернуть управление программе</button>
       <button id="calibrate" type="button" class="button" onclick="location.assign('/calibrate.htm?address=' + selectedAddress)">Калибровка внешнего насоса</button>
     </p>
   </section>

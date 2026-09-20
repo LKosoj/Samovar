@@ -39,6 +39,7 @@
 // время, поэтому компенсация - это сдвиг обеих меток при выходе из паузы
 // (см. check_mixer_state()), а не вычитание из прошедшего времени.
 static unsigned long beerMixerPauseSinceMs = 0;
+static bool beerMixerWasHeld = false;
 static bool beerHoldClockFrozen = false;
 static float beerStageIdleShare = 0;  // Незасчитываемая доля времени с момента beerStageIdleSinceMs (1 = простой целиком)
 static bool beerPairErrorPending = false;
@@ -611,6 +612,7 @@ void run_beer_program(uint8_t num) {
   alarm_c_low_min = 0;  //мешалка вкл
   alarm_c_min = 0;  //мешалка пауза
   currentstepcnt = 0; //счетчик циклов мешалки
+  i2cStepperMixerManualHold = false; //ручной останов мешалки действует до смены строки
   // [Дефект 2 code review] Метки нового цикла мешалки не переживают переход
   // строки - если тут остался незакрытый простой с предыдущей строки (не
   // должен, т.к. переход возможен только вне паузы), не даём ему сдвинуть
@@ -1139,6 +1141,16 @@ inline bool beer_mixer_reverse_dir(int stepCount) {
  */
 void check_mixer_state() {
   if (heater_safety_latched()) return;
+  // Оператор вернул мешалку программе: цикл начинаем заново, чтобы она запустилась сразу,
+  // а не ждала следующей фазы (при постоянном вращении следующей фазы нет вовсе).
+  if (i2cStepperMixerManualHold) {
+    beerMixerWasHeld = true;
+  } else if (beerMixerWasHeld) {
+    beerMixerWasHeld = false;
+    alarm_c_low_min = 0;
+    alarm_c_min = 0;
+    mixer_status = false;
+  }
   // [Дефект 2 code review] alarm_c_min/alarm_c_low_min - АБСОЛЮТНЫЕ метки
   // millis(); вызов этой функции целиком пропускается, пока строка на ручной
   // паузе (см. гейт в beer_stage_tick()), поэтому при выходе из паузы обе
@@ -1180,7 +1192,12 @@ void check_mixer_state() {
         }
     }
 
-    if (alarm_c_low_min == 0 && alarm_c_min == 0) {
+    // Время 0 и пауза 0 = постоянное вращение: запускаем один раз. Без этой проверки цикл
+    // нулевой длины перезапускал мешалку на каждом проходе loop().
+    const bool beerMixerContinuous = program[ProgramNum].Volume == 0 && program[ProgramNum].Power == 0;
+    // currentstepcnt > 0 = в этой строке уже запускали (на новой строке счётчик сброшен).
+    if (alarm_c_low_min == 0 && alarm_c_min == 0 &&
+        !(beerMixerContinuous && currentstepcnt > 0 && mixer_status)) {
       //включаем мешалку
       alarm_c_low_min = millis() + program[ProgramNum].Volume * 1000;
       if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 1000;
@@ -1216,10 +1233,11 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
       //включаем реле 2
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
       mixerRelayEnabled = true;
-      //включаем I2CStepper шаговик
-      if (i2c_stepper_mixer_present()) {
+      //включаем I2CStepper шаговик; если оператор остановил его сам - не трогаем
+      if (i2c_stepper_mixer_present() && !i2cStepperMixerManualHold) {
 	        int tm = abs(program[ProgramNum].Volume);
-	        if (tm == 0) tm = 10;
+	        // Время 0 и пауза 0 = постоянное вращение (Nano крутит, пока не остановят).
+	        if (tm == 0 && program[ProgramNum].Power > 0) tm = 10;
 	        if (!set_stepper_by_time(20, dir, tm)) {
           if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
           return ACTUATOR_COMMAND_FAILED;
@@ -1275,7 +1293,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         set_pump_pwm(0) != ACTUATOR_COMMAND_APPLIED) stopFailed = true;
 #endif
 	    //выключаем I2CStepper шаговик
-	    if (i2c_stepper_mixer_present()) {
+	    if (i2c_stepper_mixer_present() && !i2cStepperMixerManualHold) {
 	      if (!set_stepper_by_time(0, 0, 0)) stopFailed = true;
 	    }
 	    //выключаем I2CStepper реле 1

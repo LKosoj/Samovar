@@ -76,6 +76,8 @@ static WProgram program[PROGRAM_MAX];
 static SetupEEPROM SamSetup;
 static uint8_t ProgramNum = 0;
 static bool mixer_status = false;
+static bool i2cStepperMixerManualHold = false;
+static bool beerMixerWasHeld = false;
 static unsigned long alarm_c_min = 0;
 static unsigned long alarm_c_low_min = 0;
 static int currentstepcnt = 0;
@@ -219,6 +221,8 @@ static void reset_fixture() {
   program[0].capacity_num = 0b10;  // насос (бит 1) назначен этой ёмкости
   ProgramNum = 0;
   mixer_status = true;
+  i2cStepperMixerManualHold = false;
+  beerMixerWasHeld = false;
   alarm_c_min = 0;
   alarm_c_low_min = 0;
   currentstepcnt = 0;
@@ -647,7 +651,57 @@ static void test_beer_finish_then_external_mixer_off_mutes_pump() {
   check(lastPumpPwm == 0, "внешний set_mixer_state(false) после beer_finish должен был обнулить скважность насоса");
 }
 
+// Время 0 и пауза 0 = постоянное вращение: один запуск, а не перезапуск на каждом
+// проходе loop() (Nano при каждом запуске тормозит мотор - мешалка дёргалась).
+static void test_continuous_mixer_starts_once_per_row() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  program[1].capacity_num = 0b01;
+  mixer_status = false;
+  mixerStepperPresent = true;
+
+  for (int tick = 0; tick < 5; tick++) {
+    check_mixer_state();
+    fakeMillis += 100;
+  }
+  check(stepperCalls == 1, "постоянное вращение перезапускалось на каждом проходе");
+  check(mixer_status, "постоянное вращение должно оставить мешалку включённой");
+
+  // Новая строка программы сбрасывает счётчик - мешалка обязана получить команду заново.
+  ProgramNum = 1;
+  currentstepcnt = 0;
+  check_mixer_state();
+  check(stepperCalls == 2, "на новой строке постоянное вращение не запустилось");
+}
+
+// Ручной стоп держит I2C-мешалку; "Вернуть управление программе" запускает её сразу.
+static void test_hold_release_restarts_mixer_immediately() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  mixer_status = false;
+  mixerStepperPresent = true;
+  check_mixer_state();
+  check(stepperCalls == 1, "первый запуск постоянного вращения не прошёл");
+
+  i2cStepperMixerManualHold = true;
+  for (int tick = 0; tick < 3; tick++) {
+    fakeMillis += 100;
+    check_mixer_state();
+  }
+  check(stepperCalls == 1, "во время ручного удержания расписание тронуло I2C-мешалку");
+
+  i2cStepperMixerManualHold = false;
+  fakeMillis += 100;
+  check_mixer_state();
+  check(stepperCalls == 2 && mixer_status, "после возврата управления мешалка не запустилась сразу");
+  fakeMillis += 100;
+  check_mixer_state();
+  check(stepperCalls == 2, "после возврата управления мешалка перезапускается повторно");
+}
+
 int main() {
+  test_continuous_mixer_starts_once_per_row();
+  test_hold_release_restarts_mixer_immediately();
   test_lua_entry_safes_outputs_for_all_heating_stages();
   test_active_cooling_blocks_planned_pump_off();
   test_no_cooling_allows_planned_pump_off();
@@ -686,13 +740,14 @@ enum ActuatorCommandResult {
   ACTUATOR_COMMAND_FAILED,
 };
 
-struct WProgram { uint8_t capacity_num = 0; int Volume = 0; };
+struct WProgram { uint8_t capacity_num = 0; int Volume = 0; float Power = 0; };
 struct SetupEEPROM { bool rele2 = false; };
 
 static WProgram program[1];
 static SetupEEPROM SamSetup;
 static uint8_t ProgramNum = 0;
 static bool mixer_status = false;
+static bool i2cStepperMixerManualHold = false;
 static int relayWrites = 0;
 static bool relayState = false;
 void digitalWrite(int, bool state) { relayWrites++; relayState = state; }
@@ -704,7 +759,9 @@ static bool mixerPumpCommandResult = true;
 static int mixerPumpCalls = 0;
 bool i2c_stepper_mixer_present() { return mixerStepperPresent; }
 bool i2c_stepper_pump_present() { return pumpStepperPresent; }
-bool set_stepper_by_time(int, bool, int) { return true; }
+static int stepperCalls = 0;
+static int lastStepperSeconds = -1;
+bool set_stepper_by_time(int, bool, int seconds) { stepperCalls++; lastStepperSeconds = seconds; return true; }
 bool set_mixer_pump_target(int) {
   mixerPumpCalls++;
   return (mixerStepperPresent || pumpStepperPresent) && mixerPumpCommandResult;
@@ -730,6 +787,36 @@ static void reset_fixture() {
   pumpStepperPresent = false;
   mixerPumpCommandResult = true;
   mixerPumpCalls = 0;
+  stepperCalls = 0;
+  i2cStepperMixerManualHold = false;
+}
+
+// Оператор остановил I2C-мешалку сам (энкодер/вкладка): расписание не шлёт ей ни пуск,
+// ни стоп, иначе она «сама запускается» после паузы; реле мешалки продолжает работать.
+static void test_manual_hold_keeps_schedule_away_from_i2c_mixer() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  mixerStepperPresent = true;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED && stepperCalls == 1,
+        "без удержания расписание обязано запускать I2C-мешалку");
+  i2cStepperMixerManualHold = true;
+  stepperCalls = 0;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED && stepperCalls == 0,
+        "ручное удержание: расписание перезапустило I2C-мешалку");
+  check(relayState == SamSetup.rele2, "ручное удержание не должно глушить реле мешалки");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED && stepperCalls == 0,
+        "ручное удержание: расписание послало стоп I2C-мешалке (сорвёт ручной запуск)");
+}
+
+static void test_zero_time_means_continuous_only_without_pause() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  mixerStepperPresent = true;
+  set_mixer_state(true, false);
+  check(lastStepperSeconds == 0, "время 0 и пауза 0 должны давать постоянное вращение Nano");
+  program[0].Power = 5;
+  set_mixer_state(true, false);
+  check(lastStepperSeconds == 10, "время 0 с паузой должно сохранять запасные 10 секунд");
 }
 
 static void test_no_local_or_i2c_target_fails_without_status_change() {
@@ -763,6 +850,8 @@ int main() {
   test_no_local_or_i2c_target_fails_without_status_change();
   test_mixer_relay_is_rolled_back_without_stepper();
   test_i2c_target_start_is_applied_without_local_pwm();
+  test_manual_hold_keeps_schedule_away_from_i2c_mixer();
+  test_zero_time_means_continuous_only_without_pause();
   return failures == 0 ? 0 : 1;
 }
 '''

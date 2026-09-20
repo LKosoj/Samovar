@@ -155,23 +155,27 @@ CHECK_ACTIONS = r'''async page => {
     await routeStatus();
     await page.evaluate(() => refresh());
   }
-  await acceptCommand(() => page.evaluate(() => window.command('start', window.commandValues())));
+  await acceptCommand(() => page.evaluate(() => {
+    document.getElementById('speed').value = '1.5';
+    document.getElementById('volume').value = '250';
+    return window.startWithSpeed();
+  }));
   await acceptCommand(() => page.evaluate(() => window.command('relay', {relay:1, state:1})));
   await acceptCommand(() => page.evaluate(() => window.command('stop')));
   const mutations = s.requests.slice(beforeCommands).filter(url =>
-    url.includes('/i2cstepper?') && /[?&]cmd=(start|relay|stop)(?:&|$)/.test(url));
+    url.includes('/i2cstepper?') && /[?&]cmd=(speed|relay|stop)(?:&|$)/.test(url));
   check(mutations.length === 3 && mutations.every(url => /[?&]address=2(?:&|$)/.test(url)),
     'all commands must carry address=2: ' + JSON.stringify(mutations));
-  const start = mutations.find(url => /[?&]cmd=start(?:&|$)/.test(url));
+  const start = mutations.find(url => /[?&]cmd=speed(?:&|$)/.test(url));
   check(start && !start.includes('newAddress='), 'start must omit newAddress');
   check(mutations.every(url => !url.includes('newAddress=')),
     'operational commands must omit address configuration');
-  check(mutations.some(url => /cmd=start/.test(url) && /speedStepsPerSec=100/.test(url) && /targetSteps=1000/.test(url)),
-    'start must carry finite v3 motion');
+  check(mutations.some(url => /cmd=speed/.test(url) && /value=1500(?:&|$)/.test(url) && /volume=250(?:&|$)/.test(url)),
+    'start must carry speed in ml/h and volume in ml');
   const operationView = await page.evaluate(() => ({save:document.getElementById('newAddress'), mode:document.getElementById('mode'),
-    speedMax:document.getElementById('speedStepsPerSec').max}));
+    speedMax:document.getElementById('speed').max}));
   check(!operationView.save && !operationView.mode, 'operational page must not render Nano configuration controls');
-  check(operationView.speedMax === '18000', 'operational speed input must use the v3 maximum');
+  check(operationView.speedMax === '65.535', 'pump speed input must be in litres per hour');
 
   await page.unroute('**/i2cstepper?*');
   await routeStatus();

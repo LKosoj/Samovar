@@ -404,7 +404,7 @@ for token in ('"calibrationRunning"', '"processRunning"'):
 i2c = read(DATA / "i2cstepper.htm")
 i2c_command = body(i2c, "async function command")
 i2c_refresh = body(i2c, "async function refresh")
-i2c_values = body(i2c, "function commandValues")
+i2c_values = body(i2c, "function startWithSpeed")
 require_ordered_tokens(
     "selected I2C command serializes and confirms its address-bound operation",
     i2c_command,
@@ -420,7 +420,7 @@ require_ordered_tokens(
     ],
     errors,
 )
-for token in ["speedStepsPerSec", "targetSteps"]:
+for token in ["field('speed').value", "value * 1000", "values.volume = volume", "if (direction) values.direction = direction - 1;", "command('speed', values)"]:
     if token not in i2c_values:
         errors.append(f"operational I2C command values missing {token}")
 for token in [
@@ -435,10 +435,9 @@ require_ordered_tokens(
     "I2C motion inputs are filled once, not on every refresh",
     body(i2c, "function render"),
     [
-        "if (!motionFieldsLoaded) {",
-        "motionFieldsLoaded = true;",
-        "field('speedStepsPerSec').value =",
-        "field('targetSteps').value =",
+        "if (!speedFieldLoaded) {",
+        "speedFieldLoaded = true;",
+        "field('speed').value =",
         "}",
     ],
     errors,

@@ -151,6 +151,7 @@ static bool beerHoldClockFrozen = false;
 static bool beerCoolingPumpActive = false;
 static bool valve_status = false;
 static bool mixer_status = false;
+static bool i2cStepperMixerManualHold = false;
 static bool heaterOutput = false;
 
 static unsigned long fakeMillis = 1000;

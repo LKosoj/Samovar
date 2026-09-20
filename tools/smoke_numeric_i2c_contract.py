@@ -25,6 +25,28 @@ stepper_body = body("static void handle_i2c_stepper_request")
 pump_body = body("static void handle_i2c_pump_request")
 
 require_ordered_tokens(
+    "I2C speed override is validated before queue",
+    patch_body,
+    [
+        'if (command == "speed")',
+        'errorField = "value";',
+        'const bool hasDirection = request_param_count(request, "direction") == 1;',
+        "motion.direction = hasDirection ? motion.direction + 1 : 0;",
+        "request->params() != size_t(3 + (volumeParam ? 1 : 0) + (hasDirection ? 1 : 0))",
+        "parse_bounded_uint32(valueParam->value().c_str(), 1, 65535, value)",
+        "if (!result.ok()) return result;",
+        "config.fillingMl = 0;",
+        "i2cstepper_v3_address_is_mixer(current.address)) config.mixerRpm = value;",
+        "else config.pumpMlHour = value;",
+        'errorField = "volume";',
+        "if (i2cstepper_v3_address_is_mixer(current.address)) return numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);",
+        "parse_bounded_uint32(volumeParam->value().c_str(), 1, 100000, config.fillingMl)",
+        'if (command == "relay" && (!hasRelay || hasConfig))',
+    ],
+    errors,
+)
+
+require_ordered_tokens(
     "I2C patch is all-or-nothing",
     patch_body,
     [

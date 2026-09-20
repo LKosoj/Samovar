@@ -392,6 +392,7 @@ float bk_pwm = 456.0f;
 uint8_t beerSkipConfirmProgramNum = 0xFF;
 unsigned long begintime = 0;
 bool mixer_status = true;
+bool i2cStepperMixerManualHold = false;
 struct SuvidHoldFixture { bool active; bool inBand; };
 SuvidHoldFixture suvidHold{false, false};
 bool suvidHeaterOn = false;

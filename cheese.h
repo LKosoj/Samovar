@@ -359,6 +359,9 @@ inline bool cheese_configure_mixer(const WProgram& row, uint32_t nowMs) {
   cheeseRuntime.mixerDevice = row.capacity_num;
   cheeseRuntime.mixerOneShotComplete = false;
   cheeseRuntime.mixerDeadlineMs = 0;
+  i2cStepperMixerManualHold = false;
+  i2cStepperMixerRpmOverride = 0;  // у каждой строки сыра свои обороты
+  i2cStepperMixerDirOverride = 0;
   if (row.capacity_num == 0) return true;
   if (!cheese_mixer_start(row)) return false;
   if (row.Volume > 0) cheeseRuntime.mixerDeadlineMs = nowMs + row.Volume * 1000UL;
@@ -366,7 +369,15 @@ inline bool cheese_configure_mixer(const WProgram& row, uint32_t nowMs) {
 }
 
 inline bool cheese_mixer_tick(const WProgram& row, uint32_t nowMs) {
-  if (cheeseRuntime.mixerDevice == 0 || row.Volume == 0) return true;
+  if (cheeseRuntime.mixerDevice == 0) return true;
+  if (cheeseRuntime.mixerDevice == 2 && i2cStepperMixerManualHold) {
+    // Оператор остановил мешалку сам: после возврата управления запускаем её заново.
+    cheeseRuntime.mixerRunning = false;
+    mixer_status = false;
+    cheeseRuntime.mixerDeadlineMs = nowMs;
+    return true;
+  }
+  if (row.Volume == 0 && cheeseRuntime.mixerRunning) return true;
   if (cheeseRuntime.mixerRunning &&
       static_cast<int32_t>(nowMs - cheeseRuntime.mixerDeadlineMs) >= 0) {
     if (!cheese_mixer_stop()) return false;

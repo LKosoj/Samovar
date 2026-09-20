@@ -31,6 +31,8 @@ int starts = 0, stops = 0;
 int continuous = 0;
 int applies = 0;
 int lastCommand = 0;
+uint16_t i2cStepperMixerRpmOverride = 0;
+uint8_t i2cStepperMixerDirOverride = 0;
 bool i2c_stepper_apply(I2CStepperDevice&) { applies++; return true; }
 bool i2c_stepper_send_command(I2CStepperDevice&, uint8_t command) { lastCommand = command; return true; }
 bool i2c_stepper_start_finite(I2CStepperDevice&) { starts++; return true; }
@@ -67,6 +69,19 @@ int main() {
       mixer.config.mixerRunSec != 2 || mixer.config.optionFlags != 0x02) return 8;
   lastCommand = 0;
   if (!set_stepper_by_time(0, 0, 0) || stops != 2 || applies != 2 || lastCommand != 0) return 9;
+  // Поправка скорости из веба перебивает обороты расписания, но не команду остановки.
+  i2cStepperMixerRpmOverride = 45;
+  if (!set_stepper_by_time(20, 0, 2) || mixer.config.mixerRpm != 45) return 10;
+  if (!set_stepper_by_time(0, 0, 0) || stops != 3) return 11;
+  i2cStepperMixerRpmOverride = 0;
+  if (!set_stepper_by_time(20, 0, 2) || mixer.config.mixerRpm != 20) return 12;
+  // Направление с вкладки перебивает программное: 2 - обратное, 1 - прямое, 0 - как в программе.
+  i2cStepperMixerDirOverride = 2;
+  if (!set_stepper_by_time(20, 0, 2) || mixer.config.optionFlags != 0x06) return 13;
+  i2cStepperMixerDirOverride = 1;
+  if (!set_stepper_by_time(20, 1, 2) || mixer.config.optionFlags != 0x02) return 14;
+  i2cStepperMixerDirOverride = 0;
+  if (!set_stepper_by_time(20, 1, 2) || mixer.config.optionFlags != 0x06) return 15;
   return 0;
 }
 '''
