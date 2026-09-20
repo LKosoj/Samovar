@@ -15,6 +15,7 @@ let devices = [];
 let selected = null;
 let refreshTimer = 0;
 let commandInFlight = false;
+let motionFieldsLoaded = false;
 
 function deviceName(device) {
   return device.address & 1 ? 'Мешалка' : 'Насос';
@@ -58,8 +59,12 @@ function render() {
   field('state').textContent = status.flags & I2C_RUNNING ? 'Работает' : 'Остановлен';
   field('speedNow').textContent = status.currentSpeedStepsPerSec;
   field('remaining').textContent = status.remainingSteps;
-  field('speedStepsPerSec').value = motion.speedStepsPerSec;
-  field('targetSteps').value = motion.targetSteps;
+  // Поля ввода заполняем один раз: иначе автообновление раз в 2 с затирает набранное.
+  if (!motionFieldsLoaded) {
+    motionFieldsLoaded = true;
+    field('speedStepsPerSec').value = motion.speedStepsPerSec || '';
+    field('targetSteps').value = motion.targetSteps || '';
+  }
   field('relay').hidden = !(selected.capabilities & I2C_CAP_RELAY);
   field('relay').textContent = selected.config.relayMask & 1 ? 'Выключить реле 1' : 'Включить реле 1';
   field('calibrate').hidden = Boolean(selected.address & 1) ||

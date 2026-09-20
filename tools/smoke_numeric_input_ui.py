@@ -430,6 +430,19 @@ for token in [
 ]:
     if token not in i2c_refresh:
         errors.append(f"selected I2C refresh contract missing {token}")
+# Автообновление раз в 2 с не должно затирать то, что пользователь набрал в полях.
+require_ordered_tokens(
+    "I2C motion inputs are filled once, not on every refresh",
+    body(i2c, "function render"),
+    [
+        "if (!motionFieldsLoaded) {",
+        "motionFieldsLoaded = true;",
+        "field('speedStepsPerSec').value =",
+        "field('targetSteps').value =",
+        "}",
+    ],
+    errors,
+)
 for stale in ["sendDevice", "inFlightActions", "leaseTimer", "newAddress", "stepsPerMl"]:
     if stale in i2c:
         errors.append(f"operational I2C page retains obsolete config token {stale}")

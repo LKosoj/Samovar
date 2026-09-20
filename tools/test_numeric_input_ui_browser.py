@@ -773,6 +773,12 @@ BROWSER_TEST = r'''async page => {
       const target = document.getElementById("targetSteps");
       const operationalOnly = !document.getElementById("newAddress") &&
         !document.getElementById("stepsPerMl") && !document.getElementById("pump_type");
+      // Устройство сообщает 1200/100; набранное пользователем обновление стирать не должно.
+      const loadedFromDevice = speed.value === "1200" && target.value === "100";
+      speed.value = "777";
+      target.value = "555";
+      await refresh();
+      const keptTyped = loadedFromDevice && speed.value === "777" && target.value === "555";
       speed.value = "18000";
       target.value = "2147483647";
       const first = command("start", commandValues());
@@ -786,7 +792,7 @@ BROWSER_TEST = r'''async page => {
       const failedStop = await command("stop");
       const error = document.getElementById("request_error");
       return {
-        operationalOnly, firstResult, concurrentStop, relayResult, failedStop,
+        operationalOnly, keptTyped, firstResult, concurrentStop, relayResult, failedStop,
         startUrl, relayUrl, operationRequests:window.__numericOperationRequests.slice(),
         released:!commandInFlight,
         errorVisible:!!error && getComputedStyle(error).display !== "none" && error.textContent.trim() !== "",
@@ -794,7 +800,7 @@ BROWSER_TEST = r'''async page => {
         calibrationUrl:String(document.getElementById("calibrate").getAttribute("onclick") || "")
       };
     });
-    if (!result.operationalOnly || !result.firstResult || result.concurrentStop !== false ||
+    if (!result.operationalOnly || !result.keptTyped || !result.firstResult || result.concurrentStop !== false ||
         !result.relayResult || result.failedStop !== false || !result.released || !result.errorVisible ||
         !result.bounds || result.startUrl !== "/i2cstepper?address=2&cmd=start&speedStepsPerSec=18000&targetSteps=2147483647" ||
         result.relayUrl !== "/i2cstepper?address=2&cmd=relay&relay=1&state=1" ||
