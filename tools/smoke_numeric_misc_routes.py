@@ -200,7 +200,11 @@ expected_hashes = {
     # 20.09.2026: строка отбора ректификации (не пауза) отвергается при скорости выше
     # RECT_RATE_MAX_LPH = 20 л/ч - тем же ok=false в разборе строки, что и соседние
     # проверки; разбор по-прежнему идёт в черновике, A-09 не тронута.
-    "program_io.h": "6217eca788f0c8c706657747a7998c4e6913fd6c0f430f5d7b14bede170952cc",
+    # 20.09.2026 (правка программы при идущем процессе): добавлены
+    # program_row_serializer_for_mode() и program_first_changed_locked_row();
+    # serialize_program_for_mode() выбирает сериализатор через первую. Разбор (A-09)
+    # и сериализованный текст не тронуты.
+    "program_io.h": "26b4207311db5f098a3ffd7d7e040514496f594eee3a5875eb7966ffb3d09a8f",
     "program_types.h": "93b085c108487dc89b221156f91112b898a7a554fb21713a4dac4e4e48f5f96a",
 }
 for name, expected in expected_hashes.items():

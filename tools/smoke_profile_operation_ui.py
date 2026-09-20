@@ -77,6 +77,8 @@ for token in [
   "i2c_refresh_failed",
   "calibration_invalid_result",
   "operation_stale_reaped",
+  "program_row_locked",
+  "program_finished",
 ]:
   if token not in error_text:
     errors.append(f"operation error text missing translation: {token}")

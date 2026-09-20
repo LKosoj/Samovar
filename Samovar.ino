@@ -422,6 +422,28 @@ static OperationError commit_profile_operation() {
   const bool modeChange =
       (active_profile_operation.flags & PROFILE_OPERATION_MODE_CHANGE) != 0;
 
+  // Правка программы при идущем процессе (решение владельца 20.09.2026, как было в
+  // 6.20): менять, добавлять и удалять можно только строки ПОСЛЕ текущей. Проверка
+  // стоит здесь, в loop(), а не в web_program(): между приёмом запроса и применением
+  // процесс мог перейти на следующую строку. Смена режима сюда с идущим процессом не
+  // приходит: switch_samovar_mode() зовёт коммит только после полной остановки.
+  if (hasProgram && program_update_session_active()) {
+    const uint8_t currentRow = ProgramNum;
+    if (currentRow >= ProgramLen) {
+      SendMsg("Программа не изменена: все её строки уже выполнены.", WARNING_MSG);
+      return OPERATION_ERROR_PROGRAM_FINISHED;
+    }
+    const uint8_t changedRow = program_first_changed_locked_row(
+        Samovar_Mode, active_profile_operation.program, currentRow + 1);
+    if (changedRow != 0) {
+      String message = "Программа не изменена: строку ";
+      message += String(changedRow);
+      message += " менять уже нельзя, она выполняется или выполнена.";
+      SendMsg(message, WARNING_MSG);
+      return OPERATION_ERROR_PROGRAM_ROW_LOCKED;
+    }
+  }
+
   String escapedDescription;
   if ((active_profile_operation.flags &
        PROFILE_OPERATION_METADATA_DESCRIPTION) != 0) {

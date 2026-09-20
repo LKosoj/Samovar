@@ -376,6 +376,12 @@ void test_wire_codes() {
   check(std::strcmp(operation_error_code(OPERATION_ERROR_CANCELLED),
                     "operation_cancelled") == 0,
         "cancelled error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_PROGRAM_ROW_LOCKED),
+                    "program_row_locked") == 0,
+        "program-row-locked error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_PROGRAM_FINISHED),
+                    "program_finished") == 0,
+        "program-finished error code mismatch");
   check(std::strcmp(operation_error_code(OPERATION_ERROR_PROFILE_PERSIST_FAILED),
                     "profile_persist_failed") == 0,
         "profile-persist error code mismatch");

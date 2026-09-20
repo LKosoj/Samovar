@@ -1440,22 +1440,42 @@ inline ProgramParseResult prepare_program_for_mode(
   return result;
 }
 
-inline String serialize_program_for_mode(SAMOVAR_MODE mode) {
+inline ProgramRowSerializer program_row_serializer_for_mode(SAMOVAR_MODE mode) {
   switch (program_format_for_mode(mode)) {
-    case PROGRAM_FORMAT_RECT:
-      return program_serialize_rows(0, PROGRAM_END, program_append_rect_row);
-    case PROGRAM_FORMAT_DIST:
-      return program_serialize_rows(0, PROGRAM_END, program_append_dist_row);
-    case PROGRAM_FORMAT_BK:
-      return program_serialize_rows(0, PROGRAM_END, program_append_bk_row);
-    case PROGRAM_FORMAT_BEER:
-      return program_serialize_rows(0, PROGRAM_END, program_append_beer_row);
-    case PROGRAM_FORMAT_NBK:
-      return program_serialize_rows(0, PROGRAM_END, program_append_nbk_row);
-    case PROGRAM_FORMAT_CHEESE:
-      return program_serialize_rows(0, PROGRAM_END, program_append_cheese_row);
+    case PROGRAM_FORMAT_RECT: return program_append_rect_row;
+    case PROGRAM_FORMAT_DIST: return program_append_dist_row;
+    case PROGRAM_FORMAT_BK: return program_append_bk_row;
+    case PROGRAM_FORMAT_BEER: return program_append_beer_row;
+    case PROGRAM_FORMAT_NBK: return program_append_nbk_row;
+    case PROGRAM_FORMAT_CHEESE: return program_append_cheese_row;
     case PROGRAM_FORMAT_UNSUPPORTED:
     default:
-      return String();
+      return nullptr;
   }
+}
+
+inline String serialize_program_for_mode(SAMOVAR_MODE mode) {
+  const ProgramRowSerializer serializer = program_row_serializer_for_mode(mode);
+  return serializer ? program_serialize_rows(0, PROGRAM_END, serializer) : String();
+}
+
+// Правка программы при идущем процессе: строки до текущей включительно менять нельзя -
+// режим уже взял из них объём, мощность и время. Возвращает номер (с 1) первой такой
+// строки, которая в черновике отличается от рабочей, или 0, если отличий нет.
+// Сравнение идёт по тексту строки, а не по байтам: страница присылает программу
+// текстом с округлением до сотых, и побайтно нетронутая строка "изменилась" бы.
+// Вызывать только из loop(): он единственный пишет program[], замок не нужен.
+inline uint8_t program_first_changed_locked_row(
+    SAMOVAR_MODE mode, const ProgramDraft& draft, uint8_t lockedRows) {
+  const ProgramRowSerializer serializer = program_row_serializer_for_mode(mode);
+  if (!serializer) return 1;
+  for (uint8_t i = 0; i < lockedRows && i < PROGRAM_END; i++) {
+    if (i >= draft.len) return i + 1;
+    String current;
+    String edited;
+    serializer(current, program[i], programTextPool);
+    serializer(edited, draft.rows[i], draft.textPool);
+    if (strcmp(current.c_str(), edited.c_str()) != 0) return i + 1;
+  }
+  return 0;
 }

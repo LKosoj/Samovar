@@ -220,7 +220,9 @@ BROWSER_TEST = r'''async page => {
     i2c_device_error: "сообщило об ошибке",
     i2c_refresh_failed: "не удалось получить текущее состояние",
     calibration_invalid_result: "некорректный результат калибровки",
-    operation_stale_reaped: "не завершилась вовремя"
+    operation_stale_reaped: "не завершилась вовремя",
+    program_row_locked: "только строки после текущей",
+    program_finished: "все строки программы уже выполнены"
   };
   for (const [code, message] of Object.entries(failureMessages)) {
     await waiter("failed-" + code, [

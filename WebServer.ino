@@ -2907,7 +2907,9 @@ void web_program(AsyncWebServerRequest *request) {
       (metadataFlags & PROFILE_OPERATION_METADATA_DESCRIPTION) != 0
           ? descriptionValue
           : nullptr,
-      true,
+      // Очистка при идущем процессе запрещена: она стёрла бы текущую строку. Замену
+      // пропускаем - commit_profile_operation() сам не даст тронуть строки до текущей.
+      programAction == PROGRAM_UPDATE_CLEAR,
       false,
       sourceMode,
       sourceMode,

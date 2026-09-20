@@ -910,6 +910,50 @@ void test_serializer_reference_values() {
   }
 }
 
+// Правка программы при идущем процессе: program_first_changed_locked_row() обязана
+// находить первую изменённую строку среди "замороженных" и не трогать остальные.
+uint8_t locked_row_changed(
+    SAMOVAR_MODE mode, const ProgramParseSpec& spec, const char* live,
+    const char* edited, uint8_t lockedRows) {
+  check(program_parse_lines(String(live), spec).ok(), "live program for locked-row check was rejected");
+  ProgramDraft draft{};
+  check(program_parse_lines(String(edited), spec, draft).ok(), "edited program for locked-row check was rejected");
+  return program_first_changed_locked_row(mode, draft, lockedRows);
+}
+
+void test_locked_rows_for_live_edit() {
+  const char* rect = "H;100;0.50;1;0;150\nB;200;1.25;2;0;0\nT;50;0.50;3;0;0\n";
+  check(locked_row_changed(SAMOVAR_RECTIFICATION_MODE, rect_program_parse_spec(), rect,
+            "H;100;0.50;1;0;150\nB;200;1.25;2;0;0\nT;75;0.70;3;0;0\nT;10;0.20;4;0;0\n", 2) == 0,
+        "edit and append after the current row was treated as a locked-row change");
+  check(locked_row_changed(SAMOVAR_RECTIFICATION_MODE, rect_program_parse_spec(), rect,
+            "H;100;0.50;1;0;150\nB;200;1.50;2;0;0\nT;50;0.50;3;0;0\n", 2) == 2,
+        "changed current row was not reported as locked row 2");
+  check(locked_row_changed(SAMOVAR_RECTIFICATION_MODE, rect_program_parse_spec(), rect,
+            "H;100;0.50;1;0;150\nB;200;1.50;2;0;0\nT;50;0.50;3;0;0\n", 1) == 0,
+        "row after the current one was treated as locked");
+  check(locked_row_changed(SAMOVAR_RECTIFICATION_MODE, rect_program_parse_spec(), rect,
+            "H;120;0.50;1;0;150\nB;200;1.50;2;0;0\nT;50;0.50;3;0;0\n", 2) == 1,
+        "first changed locked row was not reported as row 1");
+  check(locked_row_changed(SAMOVAR_RECTIFICATION_MODE, rect_program_parse_spec(), rect,
+            "H;100;0.50;1;0;150\n", 2) == 2,
+        "deleting the current row was not reported as a locked-row change");
+  // Страница возвращает строку в округлённом виде (0.126 -> 0.13): это не правка.
+  // (Ровно 0.125 не берём: printf заглушки округляет его к чётному, Arduino - вверх.)
+  check(locked_row_changed(SAMOVAR_RECTIFICATION_MODE, rect_program_parse_spec(),
+            "H;100;0.126;1;0;150\nB;200;1.25;2;0;0\n",
+            "H;100;0.13;1;0;150\nB;300;1.25;2;0;0\n", 1) == 0,
+        "serializer rounding of an untouched row was treated as an edit");
+  // Формат строки выбирается по режиму, а не зашит под ректификацию.
+  const char* beer = "M;45;0;0^0^0^0;0\nP;60;10;1^20^3^4;1\n";
+  check(locked_row_changed(SAMOVAR_BEER_MODE, beer_program_parse_spec(), beer,
+            "M;45;0;0^0^0^0;0\nP;60;10;1^20^3^4;2\n", 2) == 2,
+        "beer temperature sensor change in the current row was not reported");
+  check(locked_row_changed(SAMOVAR_BEER_MODE, beer_program_parse_spec(), beer,
+            "M;45;0;0^0^0^0;0\nP;62;25;1^20^3^4;1\n", 1) == 0,
+        "beer row after the current one was treated as locked");
+}
+
 }  // namespace
 
 int main() {
@@ -928,6 +972,7 @@ int main() {
   test_power_first_row_scope();
   test_lua_rows();
   test_serializer_reference_values();
+  test_locked_rows_for_live_edit();
 
   if (failures != 0) return 1;
   std::cout << "Program atomic parse/commit behavioral checks passed (draft "

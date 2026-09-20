@@ -59,6 +59,8 @@ enum OperationError : uint8_t {
   OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED,
   OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED,
   OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED,
+  OPERATION_ERROR_PROGRAM_ROW_LOCKED,
+  OPERATION_ERROR_PROGRAM_FINISHED,
 };
 
 struct OperationRecord {
@@ -258,6 +260,8 @@ inline const char* operation_error_code(OperationError error) {
     case OPERATION_ERROR_I2C_REFRESH_FAILED: return "i2c_refresh_failed";
     case OPERATION_ERROR_CALIBRATION_INVALID_RESULT: return "calibration_invalid_result";
     case OPERATION_ERROR_STALE_REAPED: return "operation_stale_reaped";
+    case OPERATION_ERROR_PROGRAM_ROW_LOCKED: return "program_row_locked";
+    case OPERATION_ERROR_PROGRAM_FINISHED: return "program_finished";
   }
   return "operation_internal";
 }

@@ -97,6 +97,7 @@ class String {
   String() = default;
   String(const char* text) : value_(text ? text : "") {}
   String(const std::string& text) : value_(text) {}
+  String(unsigned char number) : value_(std::to_string(number)) {}
 
   String& operator=(const char* text) {
     value_ = text ? text : "";
@@ -104,6 +105,10 @@ class String {
   }
   String& operator+=(const char* text) {
     value_ += text ? text : "";
+    return *this;
+  }
+  String& operator+=(const String& text) {
+    value_ += text.value_;
     return *this;
   }
   void replace(const char* from, const char* to) {
@@ -220,6 +225,8 @@ static int cleanupCalls = 0;
 static int logCloseCalls = 0;
 static int messageCalls = 0;
 static int liveProgram = 0;
+volatile uint8_t ProgramNum = 0;
+volatile uint8_t ProgramLen = 0;
 static bool luaStopResult = true;
 static bool commandQueueIdle = true;
 static bool commandDiscardResult = true;
@@ -336,6 +343,22 @@ void notify_power_worker() { notifyPowerWorkerCalls++; }
 static void SendMsg(const String& message, MESSAGE_TYPE) {
   messageCalls++;
   lastWarningMessage = message.value();
+}
+
+// Модель настоящей program_first_changed_locked_row() (program_io.h, проверена в
+// smoke_program_atomic.py): строка N программы - это N-я с конца десятичная цифра
+// числа. Ответ зависит и от черновика, и от рабочей программы, и от числа
+// замороженных строк - константой или тождеством его не подменить.
+uint8_t program_first_changed_locked_row(
+    SAMOVAR_MODE, const ProgramDraft& draft, uint8_t lockedRows) {
+  int edited = draft.value;
+  int live = liveProgram;
+  for (uint8_t row = 1; row <= lockedRows; row++) {
+    if (edited % 10 != live % 10) return row;
+    edited /= 10;
+    live /= 10;
+  }
+  return 0;
 }
 
 void program_commit(const ProgramDraft& draft) {
@@ -545,6 +568,8 @@ static void reset_fixture() {
   persistCalls = 0;
   programCommitCalls = 0;
   programClearCalls = 0;
+  ProgramNum = 0;
+  ProgramLen = 0;
   runtimeLockCalls = 0;
   luaStateLockCalls = 0;
   luaStateUnlockCalls = 0;
@@ -638,7 +663,7 @@ static OperationError queue_program(
       action,
       metadataFlags,
       description,
-      true,
+      action == PROGRAM_UPDATE_CLEAR,  // как web_program(): см. static_checks()
       false,
       SAMOVAR_RECTIFICATION_MODE,
       SAMOVAR_RECTIFICATION_MODE,
@@ -791,15 +816,21 @@ static void test_idle_policy_and_races() {
         "mode operation did not stop active session and complete");
 
   reset_fixture();
-  check(queue_program(id, &draft, PROGRAM_UPDATE_REPLACE) ==
+  check(queue_program(id, nullptr, PROGRAM_UPDATE_CLEAR) ==
             OPERATION_ERROR_NONE,
-        "program race setup queue failed");
+        "program clear race setup queue failed");
   sessionActive = true;
   OperationRecord record = run_to_terminal(id);
   check(record.state == OPERATION_STATE_FAILED &&
             record.error == OPERATION_ERROR_CANCELLED &&
-            programCommitCalls == 0,
-        "active-session race did not cancel without side effects");
+            programClearCalls == 0 && liveProgram == 7,
+        "active-session clear race did not cancel without side effects");
+
+  reset_fixture();
+  sessionActive = true;
+  check(queue_program(id, nullptr, PROGRAM_UPDATE_CLEAR) ==
+            OPERATION_ERROR_CANCELLED,
+        "program clear was accepted under active session");
 
   reset_fixture();
   settings.Mode = SAMOVAR_DISTILLATION_MODE;
@@ -813,6 +844,103 @@ static void test_idle_policy_and_races() {
             record.error == OPERATION_ERROR_CANCELLED &&
             persistCalls == 0 && !mode_switch_barrier_active,
         "pre-cleanup mode race did not cancel and clear barrier");
+}
+
+// Правка программы при идущем процессе (возврат поведения 6.20): строки после
+// текущей менять можно, текущую и выполненные - нельзя. Рабочая программа фикстуры -
+// 7, то есть строка 1 = 7 (см. модель program_first_changed_locked_row выше).
+static void test_live_program_edit() {
+  OperationId id = 0;
+
+  reset_fixture();
+  sessionActive = true;
+  ProgramNum = 0;
+  ProgramLen = 2;
+  ProgramDraft futureRows{37};
+  check(queue_program(id, &futureRows, PROGRAM_UPDATE_REPLACE) ==
+            OPERATION_ERROR_NONE,
+        "live edit of future rows was refused at queue time");
+  OperationRecord record = run_to_terminal(id);
+  check(record.state == OPERATION_STATE_SUCCEEDED && liveProgram == 37 &&
+            programCommitCalls == 1 && messageCalls == 0,
+        "live edit of rows after the current one was not applied");
+
+  reset_fixture();
+  sessionActive = true;
+  ProgramNum = 0;
+  ProgramLen = 2;
+  ProgramDraft currentRow{38};
+  check(queue_program(id, &currentRow, PROGRAM_UPDATE_REPLACE) ==
+            OPERATION_ERROR_NONE,
+        "live edit queue failed for current-row case");
+  record = run_to_terminal(id);
+  check(record.state == OPERATION_STATE_FAILED &&
+            record.error == OPERATION_ERROR_PROGRAM_ROW_LOCKED &&
+            programCommitCalls == 0 && liveProgram == 7,
+        "live edit of the current row was applied");
+  check(lastWarningMessage.find("строку 1 ") != std::string::npos,
+        "current-row refusal does not name row 1");
+
+  // Текущая строка - вторая: заморожены уже две строки, отличие во второй.
+  reset_fixture();
+  sessionActive = true;
+  liveProgram = 57;
+  ProgramNum = 1;
+  ProgramLen = 3;
+  ProgramDraft secondRow{167};
+  check(queue_program(id, &secondRow, PROGRAM_UPDATE_REPLACE) ==
+            OPERATION_ERROR_NONE,
+        "live edit queue failed for second-row case");
+  record = run_to_terminal(id);
+  check(record.state == OPERATION_STATE_FAILED && programCommitCalls == 0 &&
+            liveProgram == 57,
+        "live edit of the second (current) row was applied");
+  check(lastWarningMessage.find("строку 2 ") != std::string::npos,
+        "second-row refusal does not name row 2");
+
+  // Та же правка третьей строки при тех же двух замороженных проходит.
+  reset_fixture();
+  sessionActive = true;
+  liveProgram = 57;
+  ProgramNum = 1;
+  ProgramLen = 3;
+  ProgramDraft thirdRow{957};
+  check(queue_program(id, &thirdRow, PROGRAM_UPDATE_REPLACE) ==
+            OPERATION_ERROR_NONE,
+        "live edit queue failed for third-row case");
+  check(run_to_terminal(id).state == OPERATION_STATE_SUCCEEDED &&
+            liveProgram == 957,
+        "live edit of the row after the current one was refused");
+
+  // Программа выполнена до конца: дописанную строку режим начал бы исполнять
+  // без штатного перехода на неё, поэтому отказ даже при нетронутых строках.
+  reset_fixture();
+  sessionActive = true;
+  ProgramNum = 2;
+  ProgramLen = 2;
+  // 1007: первые три цифры совпадают с рабочей программой 7, так что отказ здесь
+  // даёт именно проверка "программа закончилась", а не сравнение строк.
+  ProgramDraft appended{1007};
+  check(queue_program(id, &appended, PROGRAM_UPDATE_REPLACE) ==
+            OPERATION_ERROR_NONE,
+        "live edit queue failed for finished-program case");
+  record = run_to_terminal(id);
+  check(record.state == OPERATION_STATE_FAILED &&
+            record.error == OPERATION_ERROR_PROGRAM_FINISHED &&
+            programCommitCalls == 0 && messageCalls == 1,
+        "program was edited after all its rows had finished");
+
+  // Без процесса ограничений нет: меняется и первая строка.
+  reset_fixture();
+  ProgramNum = 0;
+  ProgramLen = 2;
+  ProgramDraft idleEdit{38};
+  check(queue_program(id, &idleEdit, PROGRAM_UPDATE_REPLACE) ==
+            OPERATION_ERROR_NONE,
+        "idle program edit queue failed");
+  check(run_to_terminal(id).state == OPERATION_STATE_SUCCEEDED &&
+            liveProgram == 38,
+        "idle program edit was restricted by the live-edit rule");
 }
 
 static void test_save_program_metadata_and_two_saves() {
@@ -1374,6 +1502,7 @@ int main() {
   test_queue_failures_and_atomic_id();
   test_invalid_combinations();
   test_idle_policy_and_races();
+  test_live_program_edit();
   test_save_program_metadata_and_two_saves();
   test_failures_preserve_owner_state();
   test_mode_change_reloads_lua_script_of_new_mode();
@@ -1554,6 +1683,8 @@ def static_checks() -> list[str]:
         web, "void web_program(AsyncWebServerRequest *request)")
     if "send_program_operation_accepted" not in web_program:
         errors.append("mutating /program lacks six-field operation response")
+    if "programAction == PROGRAM_UPDATE_CLEAR,\n      false," not in web_program:
+        errors.append("/program must require an idle process only for clear")
     if "send_program_json_response" not in web_program:
         errors.append("/program lost legacy three-field read/reject response")
     reserve_owners = (
