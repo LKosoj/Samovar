@@ -1746,5 +1746,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
 .i2c-page #panel { display: flex; flex-direction: column; gap: 18px; }
 .i2c-page .kv .v-text { white-space: normal; }
 .i2c-form { max-width: 34em; }
+/* Карточка вкладки «Внешний насос» - той же ширины, что страница I2CStepper: два поля не заполняют 1000px. */
+.mode-form > #I2CPump.tabcontent.panel { max-width: 640px; box-sizing: border-box; }
 .i2c-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .i2c-actions .button { margin: 0; }
