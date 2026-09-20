@@ -23,6 +23,7 @@
     "crash_handler.h",
     "crash_handler.ino",
     "debug_ds_emu.h",
+    "debug_i2cstepper_emu.h",
     "distiller.h",
     "firmware_config_report.h",
     "font.h",

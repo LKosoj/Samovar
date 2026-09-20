@@ -7,6 +7,7 @@
 
 #include "Samovar.h"
 #include "samovar_api.h"
+#include "debug_i2cstepper_emu.h"
 
 #define I2CSTEPPER_DEVICE_COUNT 10U
 #define I2C_LOCK_WAIT_MS 1000
@@ -141,6 +142,13 @@ inline bool i2c_stepper_read_block(uint8_t address, uint8_t reg, uint8_t* data,
     if (lockBusy) *lockBusy = true;
     return false;
   }
+#ifdef __SAMOVAR_DEBUG
+  bool emulated = false;
+  if (debug_i2c_emu_read(address, reg, data, len, millis(), emulated)) {
+    xSemaphoreGive(xI2CSemaphore);
+    return emulated;
+  }
+#endif
   Wire.beginTransmission(address);
   Wire.write(reg);
   if (Wire.endTransmission(false) != 0) {
@@ -164,6 +172,13 @@ inline bool i2c_stepper_write_block(uint8_t address, uint8_t reg,
       !i2cstepper_v3_write_payload_size_valid(payloadSize)) return false;
   if (xSemaphoreTake(xI2CSemaphore,
                      TickType_t(lockWaitMs / portTICK_PERIOD_MS)) != pdTRUE) return false;
+#ifdef __SAMOVAR_DEBUG
+  bool emulated = false;
+  if (debug_i2c_emu_write(address, reg, payload, payloadSize, millis(), emulated)) {
+    xSemaphoreGive(xI2CSemaphore);
+    return emulated;
+  }
+#endif
   Wire.beginTransmission(address);
   Wire.write(reg);
   Wire.write(payload, payloadSize);
