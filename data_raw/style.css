@@ -1738,3 +1738,13 @@ form h2 { font-weight: 600; margin: 10px 0; }
 .i2c-group legend { font-weight: 600; padding: 0 .4em; }
 .i2c-row { display: grid; grid-template-columns: minmax(0, 1fr) 13em; gap: .5em; align-items: center; margin: .4em 0; }
 .i2c-row input, .i2c-row select { width: 100%; box-sizing: border-box; }
+
+/* Страница I2CStepper и вкладка «Внешний насос»: те же карточки, что на страницах режимов,
+   узкая колонка по центру - на широком экране поля и кнопки не разъезжаются. */
+.i2c-page { max-width: 640px; margin: 20px auto; padding: 0 12px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
+.i2c-page h1 { margin: 0; }
+.i2c-page #panel { display: flex; flex-direction: column; gap: 18px; }
+.i2c-page .kv .v-text { white-space: normal; }
+.i2c-form { max-width: 34em; }
+.i2c-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.i2c-actions .button { margin: 0; }

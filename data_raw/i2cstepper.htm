@@ -10,6 +10,7 @@
 const I2C_RUNNING = 1;
 const I2C_CAP_RELAY = 8;
 const I2C_CAP_FILLING = 4;
+const I2C_RELAY_COUNT = 4;
 let selectedAddress = Number(new URLSearchParams(location.search).get('address')) || 0;
 let devices = [];
 let selected = null;
@@ -90,8 +91,11 @@ function render() {
   field('speedNote').textContent = !inProcess ? '' : programSpeed
     ? 'Программа работает с заданной здесь скоростью: ' + programSpeed + (mixer ? ' об/мин.' : ' л/ч.')
     : 'Скорость задаёт программа. Новая скорость заменит программную.';
-  field('relay').hidden = !(selected.capabilities & I2C_CAP_RELAY);
-  field('relay').textContent = selected.config.relayMask & 1 ? 'Выключить реле 1' : 'Включить реле 1';
+  field('relays').hidden = !(selected.capabilities & I2C_CAP_RELAY);
+  for (let relay = 1; relay <= I2C_RELAY_COUNT; relay++) {
+    field('relay' + relay).textContent =
+      (selected.config.relayMask >> (relay - 1) & 1 ? 'Выключить реле ' : 'Включить реле ') + relay;
+  }
   field('resume').hidden = manualHold !== selected.address;
   field('calibrate').hidden = Boolean(selected.address & 1) ||
     !(selected.capabilities & I2C_CAP_FILLING);
@@ -163,6 +167,10 @@ async function command(command, values) {
   }
 }
 
+function toggleRelay(relay) {
+  return command('relay', {relay: relay, state: selected.config.relayMask >> (relay - 1) & 1 ? 0 : 1});
+}
+
 // Ручной «Стоп»/«Запустить» отбирает мешалку у программы режима до смены строки; это возврат.
 async function resumeProgram() {
   try {
@@ -212,26 +220,43 @@ window.addEventListener('beforeunload', () => {
 <!--#include ui_page_header.htm-->
     <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()">☾</button>
   </header>
-<main class="container_column" style="max-width:760px;margin:1em auto">
+<main class="i2c-page">
   <h1>I2CStepper</h1>
-  <p id="missing" hidden></p>
-  <p id="selectorRow" hidden><label>Устройство <select id="selector" onchange="choose()"></select></label></p>
+  <p id="missing" class="card" hidden></p>
+  <div id="selectorRow" class="card" hidden>
+    <div class="i2c-row"><label for="selector">Устройство</label> <select id="selector" onchange="choose()"></select></div>
+  </div>
   <section id="panel" hidden>
-    <h2 id="title"></h2>
-    <p id="state"></p>
-    <p id="now"></p>
-    <h2>Управление</h2>
-    <p><label id="speedLabel" for="speed">Скорость</label> <input id="speed" type="number">
-      <br><span id="speedNote"></span></p>
-    <p><label for="direction">Направление</label> <select id="direction"></select></p>
-    <p id="volumeRow"><label for="volume">Объём, мл (пусто — без остановки; на ходу — докачать остаток)</label> <input id="volume" type="number" min="1" max="100000"></p>
-    <p>
-      <button id="start" type="button" class="button" onclick="startWithSpeed()">Запустить</button>
-      <button type="button" class="button" onclick="command('stop')">Стоп</button>
-      <button id="relay" type="button" class="button" onclick="command('relay', {relay: 1, state: selected.config.relayMask & 1 ? 0 : 1})">Реле 1</button>
-      <button id="resume" type="button" class="button" hidden onclick="resumeProgram()">Вернуть управление программе</button>
-      <button id="calibrate" type="button" class="button" onclick="location.assign('/calibrate.htm?address=' + selectedAddress)">Калибровка внешнего насоса</button>
-    </p>
+    <div class="card">
+      <h2 id="title"></h2>
+      <div class="kv">
+        <div class="wide"><div class="k">Состояние</div><div class="v" id="state"></div></div>
+        <div class="wide"><div class="k">Сейчас</div><div class="v v-text" id="now"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Управление</h2>
+      <div class="i2c-row"><label id="speedLabel" for="speed">Скорость</label> <input id="speed" type="number"></div>
+      <div class="hint" id="speedNote"></div>
+      <div class="i2c-row"><label for="direction">Направление</label> <select id="direction"></select></div>
+      <div id="volumeRow">
+        <div class="i2c-row"><label for="volume">Объём, мл</label> <input id="volume" type="number" min="1" max="100000"></div>
+        <div class="hint">Пусто — качать без остановки; на ходу — докачать остаток.</div>
+      </div>
+      <div class="i2c-actions">
+        <button id="start" type="button" class="button" onclick="startWithSpeed()">Запустить</button>
+        <!-- window.: внутри onclick кнопки имя command занято её собственным свойством (атрибут command), а не нашей функцией. -->
+        <button type="button" class="button" onclick="window.command('stop')">Стоп</button>
+        <button id="resume" type="button" class="button" hidden onclick="resumeProgram()">Вернуть управление программе</button>
+        <button id="calibrate" type="button" class="button" onclick="location.assign('/calibrate.htm?address=' + selectedAddress)">Калибровка внешнего насоса</button>
+      </div>
+      <div id="relays" class="i2c-actions">
+        <button id="relay1" type="button" class="button" onclick="toggleRelay(1)">Реле 1</button>
+        <button id="relay2" type="button" class="button" onclick="toggleRelay(2)">Реле 2</button>
+        <button id="relay3" type="button" class="button" onclick="toggleRelay(3)">Реле 3</button>
+        <button id="relay4" type="button" class="button" onclick="toggleRelay(4)">Реле 4</button>
+      </div>
+    </div>
   </section>
 </main>
 </body>

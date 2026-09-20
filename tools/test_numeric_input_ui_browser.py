@@ -805,13 +805,28 @@ BROWSER_TEST = r'''async page => {
       await resumeProgram();
       const resumeUrl = mutations().at(-1).url;
       // Подпись кнопки реле следует за состоянием, которое сообщает устройство.
-      const relayButton = document.getElementById("relay");
+      const relayButton = document.getElementById("relay1");
+      const relayFour = document.getElementById("relay4");
       selected.config.relayMask = 0;
       render();
       const relayOffLabel = relayButton.textContent;
       selected.config.relayMask = 1;
       render();
       const relayOnLabel = relayButton.textContent;
+      const relayFourOffLabel = relayFour.textContent;
+      selected.config.relayMask = 8;
+      render();
+      const relayFourOnLabel = relayFour.textContent + "/" + relayButton.textContent;
+      // Настоящие щелчки: внутри onclick кнопки имя command занято её свойством, вызов через evaluate этого не ловит.
+      const waitMutation = async count => { for (let i = 0; i < 100 && mutations().length <= count; i++) await new Promise(r => setTimeout(r, 20)); return mutations().at(-1).url; };
+      let before = mutations().length;
+      relayFour.click();
+      const relayFourClickUrl = await waitMutation(before);
+      for (let i = 0; i < 100 && commandInFlight; i++) await new Promise(r => setTimeout(r, 20));
+      before = mutations().length;
+      document.querySelector("#panel button[onclick*=\"command('stop'\"]").click();
+      const stopClickUrl = await waitMutation(before);
+      for (let i = 0; i < 100 && commandInFlight; i++) await new Promise(r => setTimeout(r, 20));
       selected.config.relayMask = 0;
       // Поле скорости одно. Привод занят процессом: объём прячется, кнопка меняет скорость программы.
       const volumeRow = document.getElementById("volumeRow");
@@ -835,7 +850,7 @@ BROWSER_TEST = r'''async page => {
       const reverseUrl = mutations().at(-1).url;
       const singleSpeedField = document.querySelectorAll("#panel input[type=number]").length === 2;
       return {
-        relayOffLabel, relayOnLabel, freeView, processView, processSpeedUrl, singleSpeedField,
+        relayOffLabel, relayOnLabel, relayFourOffLabel, relayFourOnLabel, relayFourClickUrl, stopClickUrl, freeView, processView, processSpeedUrl, singleSpeedField,
         keptDirection, reverseUrl,
         resumeHiddenByDefault, resumeShown, resumeUrl, resumeHiddenAfter:resume.hidden,
         operationalOnly, keptTyped, firstResult, concurrentStop, relayResult, failedStop,
@@ -851,6 +866,9 @@ BROWSER_TEST = r'''async page => {
         !result.resumeHiddenByDefault || !result.resumeShown || !result.resumeHiddenAfter ||
         result.resumeUrl !== "/i2cstepper?address=2&cmd=resume" ||
         result.relayOffLabel !== "Включить реле 1" || result.relayOnLabel !== "Выключить реле 1" ||
+        result.relayFourOffLabel !== "Включить реле 4" || result.relayFourOnLabel !== "Выключить реле 4/Включить реле 1" ||
+        result.relayFourClickUrl !== "/i2cstepper?address=2&cmd=relay&relay=4&state=0" ||
+        result.stopClickUrl !== "/i2cstepper?address=2&cmd=stop" ||
         !result.freeView || !result.processView || !result.singleSpeedField || !result.keptDirection ||
         result.reverseUrl !== "/i2cstepper?address=2&cmd=speed&value=1500&direction=1" ||
         result.processSpeedUrl !== "/i2cstepper?address=2&cmd=speed&value=1500" ||

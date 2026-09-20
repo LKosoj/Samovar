@@ -352,7 +352,7 @@ def check_pages_static() -> list[str]:
             text,
         ):
             errors.append(f"{name}: bootstrap does not apply i2cPumpVisible to #i2cPumpTab")
-        if not re.search(r"<div\s+id=\"I2CPump\"\s+class=\"tabcontent\"", text):
+        if not re.search(r"<div\s+id=\"I2CPump\"\s+class=\"tabcontent(?:\s[^\"]*)?\"", text):
             errors.append(f"{name}: missing the #I2CPump tabcontent block")
         if "SamovarApp.sendI2cPump();" not in text:
             errors.append(f"{name}: missing a control wired to SamovarApp.sendI2cPump()")
