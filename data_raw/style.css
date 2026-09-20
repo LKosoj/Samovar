@@ -1731,3 +1731,10 @@ form h2 { font-weight: 600; margin: 10px 0; }
   }
   .chart-canvas { height: 60vh; }
 }
+
+/* Настройки → I2CStepper: группы полей и ровные строки «подпись — поле». */
+.i2c-group { border: 1px dashed #bbb; margin: 0 0 1em; padding: .5em 1em; max-width: 34em; }
+.i2c-group[hidden], .i2c-row[hidden] { display: none; }
+.i2c-group legend { font-weight: 600; padding: 0 .4em; }
+.i2c-row { display: grid; grid-template-columns: minmax(0, 1fr) 13em; gap: .5em; align-items: center; margin: .4em 0; }
+.i2c-row input, .i2c-row select { width: 100%; box-sizing: border-box; }

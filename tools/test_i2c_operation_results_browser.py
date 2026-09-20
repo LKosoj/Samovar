@@ -224,6 +224,18 @@ CHECK_SETUP_SAVE = r'''async page => {
   check(await page.isChecked('#i2c-smoothStart'), 'smooth start checkbox must reflect optionFlags bit 2');
   await page.click('label[for="i2c-smoothStart"]');
   check(!await page.isChecked('#i2c-smoothStart'), 'label click must toggle the smooth start checkbox');
+  // Видны только поля выбранного типа: адрес 2 в режиме наполнения, затем примеряем адрес мешалки.
+  const shown = () => page.evaluate(() => ['modeRow', 'mixerGroup', 'pumpGroup', 'fillingGroup', 'calibrationGroup']
+    .filter(id => document.getElementById('i2c-' + id).offsetParent !== null).join());
+  check(await shown() === 'modeRow,fillingGroup,calibrationGroup', 'filling pump must show only its own fields: ' + await shown());
+  await page.selectOption('#i2c-mode', '2');
+  check(await shown() === 'modeRow,pumpGroup,calibrationGroup', 'feeding pump must show only its own fields: ' + await shown());
+  await page.selectOption('#i2c-newAddress', '3');
+  check(await shown() === 'mixerGroup', 'mixer address must show only mixer fields: ' + await shown());
+  check(await page.inputValue('#i2c-mode') === '1', 'mixer address must force the mixer mode');
+  await page.selectOption('#i2c-newAddress', '2');
+  check(await page.inputValue('#i2c-mode') === '2', 'pump address must not keep the mixer mode');
+  await page.selectOption('#i2c-mode', '3');
   await page.unroute('**/i2cstepper?*');
   let saved = '';
   await page.route('**/i2cstepper?*', route => {

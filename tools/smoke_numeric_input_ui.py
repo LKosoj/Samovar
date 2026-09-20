@@ -280,7 +280,7 @@ require_ordered_tokens(
 )
 for field in [
     "newAddress", "mode", "stepsPerMl", "mixerRpm", "mixerRunSec", "mixerPauseSec",
-    "pumpMlHour", "pumpPauseSec", "fillingMl", "fillingMlHour",
+    "pumpMlHour", "fillingMl", "fillingMlHour",
 ]:
     if f"'{field}'" not in setup_i2c_save:
         errors.append(f"setup Nano save omits {field}")

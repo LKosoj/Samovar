@@ -325,10 +325,25 @@
       }
       address.value = String(config.address);
       ['mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
-       'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+       'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
         setupI2cValue(name).value = config[name];
       });
       setupI2cValue('smoothStart').checked = Boolean(config.optionFlags & SETUP_I2C_OPTION_SMOOTH);
+      updateSetupI2cFields();
+    }
+
+    // Показываем только поля выбранного типа. Тип платы задаёт адрес: нечётный - мешалка, чётный - насос.
+    function updateSetupI2cFields() {
+      const mixer = Boolean(Number(setupI2cValue('newAddress').value) & 1);
+      const mode = setupI2cValue('mode');
+      if (mixer) mode.value = '1';
+      else if (mode.value === '1') mode.value = '2';
+      mode.options[0].hidden = !mixer;
+      setupI2cValue('modeRow').hidden = mixer;
+      setupI2cValue('mixerGroup').hidden = !mixer;
+      setupI2cValue('pumpGroup').hidden = mode.value !== '2';
+      setupI2cValue('fillingGroup').hidden = mode.value !== '3';
+      setupI2cValue('calibrationGroup').hidden = mixer;
     }
 
     async function refreshSetupI2c() {
@@ -391,7 +406,7 @@
       if (!setupI2cSelected || !setupI2cSelected.present) return false;
       const params = new URLSearchParams({address: String(setupI2cAddress), cmd: 'save'});
       ['newAddress', 'mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
-       'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+       'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
         params.set(name, setupI2cValue(name).value);
       });
       // Меняем только свой бит: остальные биты optionFlags (направление, реверс после паузы) не трогаем.
@@ -509,19 +524,41 @@
       <p id="i2c-missing" hidden></p>
       <p id="i2c-selectorRow" hidden><label>Устройство <select id="i2c-selector" onchange="chooseSetupI2c()"></select></label></p>
       <section id="i2c-panel" hidden>
-        <p><label for="i2c-newAddress">Новый адрес</label> <select id="i2c-newAddress"></select></p>
-        <p><label for="i2c-mode">Режим</label> <select id="i2c-mode"><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Наполнение</option></select></p>
-        <p><label for="i2c-stepsPerMl">Шагов/мл</label> <input id="i2c-stepsPerMl" type="number" min="1"></p>
-        <p><label for="i2c-mixerRpm">Обороты мешалки</label> <input id="i2c-mixerRpm" type="number" min="0"></p>
-        <p><label for="i2c-mixerRunSec">Работа мешалки, с</label> <input id="i2c-mixerRunSec" type="number" min="0"></p>
-        <p><label for="i2c-mixerPauseSec">Пауза мешалки, с</label> <input id="i2c-mixerPauseSec" type="number" min="0"></p>
-        <p><label for="i2c-pumpMlHour">Подача насоса, мл/ч</label> <input id="i2c-pumpMlHour" type="number" min="0"></p>
-        <p><label for="i2c-pumpPauseSec">Пауза насоса, с</label> <input id="i2c-pumpPauseSec" type="number" min="0"></p>
-        <p><label for="i2c-fillingMl">Объём наполнения, мл</label> <input id="i2c-fillingMl" type="number" min="0"></p>
-        <p><label for="i2c-fillingMlHour">Скорость наполнения, мл/ч</label> <input id="i2c-fillingMlHour" type="number" min="0"></p>
-        <p><input id="i2c-smoothStart" type="checkbox"> <label for="i2c-smoothStart">Плавный разгон и торможение</label>
-          <br><span>Разгон около 10 секунд. При работе на заданный объём или время мотор так же плавно тормозит; непрерывное вращение останавливается сразу.</span></p>
+        <fieldset class="i2c-group">
+          <legend>Подключение</legend>
+          <div class="i2c-row"><label for="i2c-newAddress">Адрес на шине I2C</label> <select id="i2c-newAddress" onchange="updateSetupI2cFields()"></select></div>
+          <div class="hint">Тип платы задаёт адрес: нечётный — мешалка, чётный — насос. Новый адрес начнёт работать после перезагрузки Nano.</div>
+          <div class="i2c-row" id="i2c-modeRow"><label for="i2c-mode">Что делает насос</label> <select id="i2c-mode" onchange="updateSetupI2cFields()"><option value="1">Мешалка</option><option value="2">Постоянная подача</option><option value="3">Наполнение объёма</option></select></div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-mixerGroup">
+          <legend>Мешалка</legend>
+          <div class="i2c-row"><label for="i2c-mixerRpm">Скорость, об/мин</label> <input id="i2c-mixerRpm" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-mixerRunSec">Работа, с</label> <input id="i2c-mixerRunSec" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-mixerPauseSec">Пауза, с</label> <input id="i2c-mixerPauseSec" type="number" min="0"></div>
+          <div class="hint">Мешалка крутится «Работа» секунд, затем стоит «Пауза» секунд, и так по кругу. Работа&nbsp;0 — вращается без остановок.</div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-pumpGroup">
+          <legend>Постоянная подача</legend>
+          <div class="i2c-row"><label for="i2c-pumpMlHour">Скорость подачи, мл/ч</label> <input id="i2c-pumpMlHour" type="number" min="0"></div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-fillingGroup">
+          <legend>Наполнение объёма</legend>
+          <div class="i2c-row"><label for="i2c-fillingMl">Объём, мл</label> <input id="i2c-fillingMl" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-fillingMlHour">Скорость, мл/ч</label> <input id="i2c-fillingMlHour" type="number" min="0"></div>
+          <div class="hint">Насос наливает заданный объём и останавливается сам.</div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-calibrationGroup">
+          <legend>Калибровка насоса</legend>
+          <div class="i2c-row"><label for="i2c-stepsPerMl">Шагов мотора на 1&nbsp;мл</label> <input id="i2c-stepsPerMl" type="number" min="1"></div>
+          <div class="hint">По этому числу мл/ч пересчитываются в скорость мотора. Если насос наливает больше, чем задано, — увеличьте число, если меньше — уменьшите.</div>
+        </fieldset>
+        <fieldset class="i2c-group">
+          <legend>Мотор</legend>
+          <div><input id="i2c-smoothStart" type="checkbox"> <label for="i2c-smoothStart">Плавный разгон и торможение</label></div>
+          <div class="hint">Разгон около 10 секунд. При работе на заданный объём или время мотор так же плавно тормозит; непрерывное вращение останавливается сразу.</div>
+        </fieldset>
         <p><button id="i2c-save" type="button" class="button" onclick="saveSetupI2c()">Сохранить в Nano</button></p>
+        <p class="hint">Эти настройки хранятся в самой плате Nano и записываются только этой кнопкой. Кнопка «Сохранить» внизу страницы к ним не относится.</p>
       </section>
     </div>
     <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
