@@ -208,6 +208,8 @@ CHECK_ACTIONS = r'''async page => {
 CHECK_SETUP_SAVE = r'''async page => {
   const base = __BASE__;
   const check = (condition, message) => { if (!condition) throw new Error(message); };
+  // Плавный разгон (2) включён вместе с обратным направлением (4): снять должны только свой бит.
+  s.selected.config.optionFlags = 6;
   await page.goto(base + '/setup.htm', {waitUntil:'load'});
   await page.waitForFunction(() => typeof saveSetupI2c === 'function' && document.getElementById('i2c-panel'));
   await page.waitForTimeout(20);
@@ -219,6 +221,9 @@ CHECK_SETUP_SAVE = r'''async page => {
   check(!view.tab && !view.panel, 'setup must show settings for the selected Nano');
   check(view.selector, 'setup selector must stay hidden for one Nano');
   check(!view.operationalSave, 'setup must not depend on the operational-page form');
+  check(await page.isChecked('#i2c-smoothStart'), 'smooth start checkbox must reflect optionFlags bit 2');
+  await page.click('label[for="i2c-smoothStart"]');
+  check(!await page.isChecked('#i2c-smoothStart'), 'label click must toggle the smooth start checkbox');
   await page.unroute('**/i2cstepper?*');
   let saved = '';
   await page.route('**/i2cstepper?*', route => {
@@ -236,6 +241,8 @@ CHECK_SETUP_SAVE = r'''async page => {
     'setup save must target the selected address: ' + saved);
   check(saved.includes('newAddress=2') && saved.includes('stepsPerMl=160'),
     'setup save must send Nano configuration: ' + saved);
+  check(/[?&]optionFlags=4(?:&|$)/.test(saved),
+    'unchecked smooth start must clear only its own optionFlags bit: ' + saved);
   check(saved.includes('generation=1'),
     'setup save must carry the config generation the form was filled from: ' + saved);
   check(!s.consoleError, s.consoleError || 'console error');

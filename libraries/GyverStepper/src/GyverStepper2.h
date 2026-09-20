@@ -510,7 +510,7 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
 #ifndef GS_NO_ACCEL
     uint16_t a, V;
     uint16_t na;
-    int16_t stopStep;
+    int32_t stopStep;  // int16_t переполнялся: путь торможения V*V/(2a) на больших скоростях больше 32767 шагов
     uint32_t us0, us10;
     int32_t S, s1, s2, so1, steps;
     MotionPlan nextPlan;

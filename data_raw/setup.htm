@@ -269,6 +269,8 @@
     let setupI2cDevices = [];
     let setupI2cSelected = null;
     let setupI2cScanning = false;
+    // Бит optionFlags «плавный разгон и торможение» (I2CSTEPPER_FLAG_SMOOTH_START в прошивке Nano).
+    const SETUP_I2C_OPTION_SMOOTH = 2;
 
     function setupI2cValue(id) {
       return document.getElementById('i2c-' + id);
@@ -326,6 +328,7 @@
        'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
         setupI2cValue(name).value = config[name];
       });
+      setupI2cValue('smoothStart').checked = Boolean(config.optionFlags & SETUP_I2C_OPTION_SMOOTH);
     }
 
     async function refreshSetupI2c() {
@@ -391,6 +394,10 @@
        'pumpMlHour', 'pumpPauseSec', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
         params.set(name, setupI2cValue(name).value);
       });
+      // Меняем только свой бит: остальные биты optionFlags (направление, реверс после паузы) не трогаем.
+      const optionFlags = setupI2cSelected.config.optionFlags;
+      params.set('optionFlags', String(setupI2cValue('smoothStart').checked
+        ? optionFlags | SETUP_I2C_OPTION_SMOOTH : optionFlags & ~SETUP_I2C_OPTION_SMOOTH));
       // Поколение настроек, с которым заполнена форма: Самовар откажет, если их уже поменяли на Nano.
       params.set('generation', String(setupI2cSelected.status.generation));
       const button = setupI2cValue('save');
@@ -512,6 +519,8 @@
         <p><label for="i2c-pumpPauseSec">Пауза насоса, с</label> <input id="i2c-pumpPauseSec" type="number" min="0"></p>
         <p><label for="i2c-fillingMl">Объём наполнения, мл</label> <input id="i2c-fillingMl" type="number" min="0"></p>
         <p><label for="i2c-fillingMlHour">Скорость наполнения, мл/ч</label> <input id="i2c-fillingMlHour" type="number" min="0"></p>
+        <p><input id="i2c-smoothStart" type="checkbox"> <label for="i2c-smoothStart">Плавный разгон и торможение</label>
+          <br><span>Разгон около 10 секунд. При работе на заданный объём или время мотор так же плавно тормозит; непрерывное вращение останавливается сразу.</span></p>
         <p><button id="i2c-save" type="button" class="button" onclick="saveSetupI2c()">Сохранить в Nano</button></p>
       </section>
     </div>
