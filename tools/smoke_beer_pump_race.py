@@ -78,6 +78,7 @@ static uint8_t ProgramNum = 0;
 static bool mixer_status = false;
 static bool i2cStepperMixerManualHold = false;
 static bool beerMixerWasHeld = false;
+static bool beerMixerPumpRelayOn = false;
 static unsigned long alarm_c_min = 0;
 static unsigned long alarm_c_low_min = 0;
 static int currentstepcnt = 0;
@@ -223,6 +224,7 @@ static void reset_fixture() {
   mixer_status = true;
   i2cStepperMixerManualHold = false;
   beerMixerWasHeld = false;
+  beerMixerPumpRelayOn = false;
   alarm_c_min = 0;
   alarm_c_low_min = 0;
   currentstepcnt = 0;
@@ -350,6 +352,7 @@ static void test_mixer_stop_attempts_every_required_actuator() {
   reset_fixture();
   program[0].capacity_num = 0b11;
   mixer_status = true;
+  beerMixerPumpRelayOn = true;
   mixerStepperPresent = true;
   pumpStepperPresent = true;
   stepperStopCommandResult = false;
@@ -363,6 +366,44 @@ static void test_mixer_stop_attempts_every_required_actuator() {
         "остановка не попыталась выключить шаговик");
   check(mixerPumpCalls == 1 && lastMixerPumpTarget == 0,
         "отказ шаговика помешал попытке выключить I2C-реле насоса");
+  check(beerMixerPumpRelayOn, "отказ выключения I2C-реле насоса снял признак - повтора не будет");
+}
+
+// Жалоба с форума: строка «только мешалка», реле 1 I2CStepper включено оператором вручную.
+// Пауза мешалки не должна его трогать - программа это реле не включала.
+static void test_mixer_only_row_keeps_manual_i2c_relay() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  mixer_status = false;
+  mixerStepperPresent = true;
+
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED, "мешалка не запустилась");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED, "мешалка не остановилась");
+  check(mixerPumpCalls == 0,
+        "РЕГРЕСС: пауза строки «только мешалка» тронула реле 1 I2CStepper, включённое вручную");
+}
+
+// Реле 1 включила программа: его гасит и пауза, и смена строки на строку без устройств,
+// причём ровно один раз.
+static void test_program_owned_i2c_relay_is_switched_off_once() {
+  reset_fixture();
+  program[0].capacity_num = 0b11;
+  mixer_status = false;
+  mixerStepperPresent = true;
+
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED, "мешалка с насосом не запустилась");
+  check(mixerPumpCalls == 1 && lastMixerPumpTarget == 1, "программа не включила реле 1 I2CStepper");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED, "мешалка с насосом не остановилась");
+  check(mixerPumpCalls == 2 && lastMixerPumpTarget == 0,
+        "пауза не выключила реле 1 I2CStepper, включённое программой");
+  set_mixer_state(false, false);
+  check(mixerPumpCalls == 2, "реле 1 I2CStepper выключается повторно, хотя программа его уже сняла");
+
+  set_mixer_state(true, false);
+  program[0].capacity_num = 0;
+  set_mixer_state(false, false);
+  check(mixerPumpCalls == 4 && lastMixerPumpTarget == 0,
+        "смена строки на строку без устройств оставила реле 1 I2CStepper включённым");
 }
 
 static void test_failed_start_rollback_latches_and_stops_schedule_retry() {
@@ -708,6 +749,8 @@ int main() {
   test_local_pump_start_is_applied_without_i2c_target();
   test_partial_mixer_start_failure_is_compensated();
   test_mixer_stop_attempts_every_required_actuator();
+  test_mixer_only_row_keeps_manual_i2c_relay();
+  test_program_owned_i2c_relay_is_switched_off_once();
   test_failed_start_rollback_latches_and_stops_schedule_retry();
   test_failed_pump_rollback_latches_and_stops_schedule_retry();
   test_schedule_state_commits_only_after_applied_start();
@@ -748,6 +791,7 @@ static SetupEEPROM SamSetup;
 static uint8_t ProgramNum = 0;
 static bool mixer_status = false;
 static bool i2cStepperMixerManualHold = false;
+static bool beerMixerPumpRelayOn = false;
 static int relayWrites = 0;
 static bool relayState = false;
 void digitalWrite(int, bool state) { relayWrites++; relayState = state; }
@@ -1026,6 +1070,27 @@ def main() -> int:
         print("FAIL: mixer relay rollback mutation survived smoke", file=sys.stderr)
         sys.stderr.write(output)
         return 1
+
+    for mutated, expected in (
+        ("if ((i2c_stepper_mixer_present() || i2c_stepper_pump_present())) {",
+         "пауза строки «только мешалка» тронула реле 1"),
+        ("if (beerMixerPumpRelayOn && false) {",
+         "пауза не выключила реле 1 I2CStepper"),
+    ):
+        relay_owner_mutant = harness.replace(
+            "if (beerMixerPumpRelayOn && (i2c_stepper_mixer_present() || i2c_stepper_pump_present())) {",
+            mutated,
+        )
+        if relay_owner_mutant == harness:
+            print("FAIL: could not build I2C relay owner mutation", file=sys.stderr)
+            return 1
+        returncode, output = compile_and_run(
+            relay_owner_mutant, "I2C relay owner mutation", show_output=False
+        )
+        if returncode == 0 or expected not in output:
+            print("FAIL: I2C relay owner mutation survived smoke", file=sys.stderr)
+            sys.stderr.write(output)
+            return 1
 
     compensation_mutant = harness.replace(
         "if (mixerStepperStarted && !set_stepper_by_time(0, 0, 0)) rollbackFailed = true;",

@@ -40,6 +40,10 @@
 // (см. check_mixer_state()), а не вычитание из прошедшего времени.
 static unsigned long beerMixerPauseSinceMs = 0;
 static bool beerMixerWasHeld = false;
+// Реле 1 I2CStepper включила программа (строка с насосом). Выключаем его на паузе только
+// в этом случае: иначе реле, включённое оператором вручную, гасло на первой же паузе мешалки
+// и больше не включалось (строка «только мешалка» реле 1 не включает).
+static bool beerMixerPumpRelayOn = false;
 static bool beerHoldClockFrozen = false;
 static float beerStageIdleShare = 0;  // Незасчитываемая доля времени с момента beerStageIdleSinceMs (1 = простой целиком)
 static bool beerPairErrorPending = false;
@@ -1267,6 +1271,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
           }
           return ACTUATOR_COMMAND_FAILED;
         }
+        beerMixerPumpRelayOn = true;
 	      }
 #else
       if (!set_mixer_pump_target(1)) {
@@ -1280,6 +1285,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         }
         return ACTUATOR_COMMAND_FAILED;
       }
+      beerMixerPumpRelayOn = true;
 #endif
     }
   } else {
@@ -1296,9 +1302,10 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	    if (i2c_stepper_mixer_present() && !i2cStepperMixerManualHold) {
 	      if (!set_stepper_by_time(0, 0, 0)) stopFailed = true;
 	    }
-	    //выключаем I2CStepper реле 1
-	    if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
+	    //выключаем I2CStepper реле 1, если его включала программа
+	    if (beerMixerPumpRelayOn && (i2c_stepper_mixer_present() || i2c_stepper_pump_present())) {
 	      if (!set_mixer_pump_target(0)) stopFailed = true;
+	      else beerMixerPumpRelayOn = false;
 	    }
     if (stopFailed) return ACTUATOR_COMMAND_FAILED;
   }
