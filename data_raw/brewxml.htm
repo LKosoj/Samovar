@@ -762,13 +762,13 @@ function get_recipe(R){
       if (!Number.isFinite(t) || t > bth) continue;
       if (t === lastTime) continue;
       lastTime = t;
-      if (bth - t > 0) program = program + "B;0.00;" + (bth - t) + ";1^-1^2^3;0\n";
+      if (bth - t > 0) program = program + "B;0.00;" + (bth - t) + ";1^-20^0^2^3;0\n";
       bth = t;
     }
-    if (bth > 0) program = program + "B;0.00;" + bth + ";1^-1^2^3;0\n";
+    if (bth > 0) program = program + "B;0.00;" + bth + ";1^-20^0^2^3;0\n";
 
     // [Пиво 02.09 D5] мешалка на кипячении/выводе не крутится
-    program = program + "C;" + pt + ";0;0^0^0^0;0\nF;" + pt + ";0;0^0^0^0;0";
+    program = program + "C;" + pt + ";0;0^0^0^0^0;0\nF;" + pt + ";0;0^0^0^0^0;0";
 
     var err = validateBeerProgramText(program);
     if (err) {
@@ -811,9 +811,10 @@ function validateBeerProgramText(text) {
     }
     // [Пиво 02.09 D6] структура устройства и семантика строки - общее правило SamovarApp.beerRowTypeOk
     var device = f[3].split("^").map(Number);
-    var deviceValid = device.length === 4 && device.every(Number.isFinite);
-    var noDevice = deviceValid && device[0] === 0 && device[1] === 0 && device[2] === 0 && device[3] === 0;
-    var scheduledDevice = deviceValid && device[0] >= 1 && device[0] <= 3 && device[2] > 0;
+    var deviceValid = device.length === 5 && device.every(Number.isFinite);
+    var noDevice = deviceValid && device.every(function (value) { return value === 0; });
+    var scheduledDevice = deviceValid && device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
+      (!!(device[0] & 1) === (device[1] !== 0)) && (!!(device[0] & 2) === (device[2] > 0));
     if (!noDevice && !scheduledDevice) {
       return "шаг " + n + ": повреждена структура устройства «" + f[3] + "»";
     }

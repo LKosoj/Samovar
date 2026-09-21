@@ -204,7 +204,10 @@ expected_hashes = {
     # program_row_serializer_for_mode() и program_first_changed_locked_row();
     # serialize_program_for_mode() выбирает сериализатор через первую. Разбор (A-09)
     # и сериализованный текст не тронуты.
-    "program_io.h": "73ea148d330530adf7c03e9da1af493345838b2e2aa0ec99d4efe685abed53f2",
+    # 21.09.2026: формат устройства пива расширен отдельной скоростью I2C-насоса;
+    # строгий разбор пяти полей по-прежнему выполняется в черновике до атомарного
+    # commit, поэтому изоляция A-09 сохранена.
+    "program_io.h": "3d3778e492bc3eaf79dc60baae394a41c7c3f8a6f57e47ac1bf26392e3815466",
     "program_types.h": "93b085c108487dc89b221156f91112b898a7a554fb21713a4dac4e4e48f5f96a",
 }
 for name, expected in expected_hashes.items():

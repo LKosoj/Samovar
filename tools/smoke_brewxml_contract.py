@@ -57,7 +57,7 @@ if 'use === "boil" || use === "first wort"' not in brewxml:
 # D3: одинаковое TIME схлопывается в одну строку B (нет отдельной ветки на "<= 0").
 if "if (t === lastTime) continue;" not in brewxml:
     errors.append("brewxml.htm: duplicate-TIME collapse (lastTime) is missing")
-if '"B;0.00;1;1^-1^2^3;0\\n"' in brewxml:
+if '"B;0.00;1;1^-20^0^2^3;0\\n"' in brewxml:
     errors.append("brewxml.htm: stray single-minute B row (old TIME==BOIL_TIME bug) is back")
 
 # D4: температура первой строки M - из рецепта (INFUSE_TEMP/STEP_TEMP), не хардкод.
@@ -68,7 +68,7 @@ if "get_object_value(MASH[0].INFUSE_TEMP)" not in brewxml or "get_object_value(M
     errors.append("brewxml.htm: mash-derived first M temperature is missing")
 if "typeof MASH[0].INFUSE_TEMP" in brewxml:
     errors.append("brewxml.htm: old typeof-based INFUSE_TEMP check (misses empty tag) is back")
-if 'program = "M;45.00;0;1^-1^2^3;0\\n";' in brewxml:
+if 'program = "M;45.00;0;1^-20^0^2^3;0\\n";' in brewxml:
     errors.append("brewxml.htm: hardcoded 45.00 first M line is back")
 
 # [ревью 02.09, п.1] хмель без TIME (NaN) или с TIME > BOIL_TIME не должен сдвигать bth
@@ -88,9 +88,9 @@ if 'FERMENTABLE_TIME").innerHTML' in brewxml:
     errors.append('brewxml.htm: FERMENTABLE_TIME must not be set via innerHTML')
 
 # D5: мешалка выключена на строках C/F.
-if ';0;0^0^0^0;0\\nF;' not in brewxml and '";0;0^0^0^0;0\\nF;"' not in brewxml:
-    if 'C;" + pt + ";0;0^0^0^0;0\\nF;"' not in brewxml:
-        errors.append("brewxml.htm: C/F rows must keep the mixer off (0^0^0^0)")
+if ';0;0^0^0^0^0;0\\nF;' not in brewxml and '";0;0^0^0^0^0;0\\nF;"' not in brewxml:
+    if 'C;" + pt + ";0;0^0^0^0^0;0\\nF;"' not in brewxml:
+        errors.append("brewxml.htm: C/F rows must keep devices off (0^0^0^0^0)")
 
 # D6: семантика строки программы проверяется общим правилом SamovarApp.beerRowTypeOk.
 if "SamovarApp.initTheme(" not in brewxml or "SamovarApp.toggleTheme(" not in brewxml:

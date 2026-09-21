@@ -284,6 +284,7 @@ def static_checks() -> list[str]:
         "Cheese preflight/session start order",
         cheese_proc,
         [
+            "i2c_stepper_session_begin()",
             "cheese_validate_program(programError)",
             "power_transition_active() || heater_safety_latched()",
             "create_data()",

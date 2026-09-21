@@ -71,6 +71,8 @@ static int warnLogCloseFailedCalls = 0;
 void mode_warn_log_close_failed() { warnLogCloseFailedCalls++; }
 
 static bool validateProgramResult = true;
+static int i2cSessionBeginCalls = 0;
+void i2c_stepper_session_begin() { i2cSessionBeginCalls++; }
 bool beer_validate_program(String&) { return validateProgramResult; }
 
 struct DSSensor {

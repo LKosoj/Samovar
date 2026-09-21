@@ -48,7 +48,7 @@ BROWSER_TEST = r'''async page => {
       acpColor:index ? "#102030" : "#778899"
     };
     const program = plan.page === "beer.htm"
-      ? (index ? "P;66;2;0^0^0^0;0\n" : "M;45;0;0^0^0^0;0\n")
+      ? (index ? "P;66;2;0^0^0^0^0;0\n" : "M;45;0;0^0^0^0^0;0\n")
       : (index ? "B;500;0.5;2;0;100\n" : "H;100;0.1;1;0;120\n");
     return route.fulfill({status:200, contentType:"application/json",
       body:JSON.stringify({...common, program})});
@@ -86,7 +86,7 @@ BROWSER_TEST = r'''async page => {
     expect(requests.at(-2) === "bootstrap" && requests.at(-1) === "ajax",
       pageName + " telemetry did not start after bootstrap");
     const expectedProgram = pageName === "beer.htm"
-      ? (plan.index ? "P;66;2;0^0^0^0;0\n" : "M;45;0;0^0^0^0;0\n")
+      ? (plan.index ? "P;66;2;0^0^0^0^0;0\n" : "M;45;0;0^0^0^0^0;0\n")
       : (plan.index ? "B;500;0.5;2;0;100\n" : "H;100;0.1;1;0;120\n");
     expect(await page.locator("#WProgram").inputValue() === expectedProgram,
       pageName + " bootstrap program was not applied");

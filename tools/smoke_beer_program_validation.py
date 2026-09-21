@@ -21,6 +21,7 @@ HARNESS = r'''
 #include <string>
 
 using ProgramType = char;
+#define BitIsSet(reg, bit) ((reg & (1 << bit)) != 0)
 constexpr ProgramType PROGRAM_TYPE_NONE = '\0';
 constexpr uint8_t PROGRAM_END = 8;
 
@@ -47,6 +48,7 @@ struct WProgram {
   float Time;
   uint8_t capacity_num;
   float Speed;
+  float Param;
   uint16_t Volume;
   uint16_t Power;
   uint8_t TempSensor;
@@ -72,10 +74,12 @@ bool beer_control_sensor(uint8_t sensor, const DSSensor*& out, const char*& name
   name = "test";
   return true;
 }
+static bool pumpPresent = false;
+bool i2c_stepper_pump_present() { return pumpPresent; }
 
 inline bool program_validate_beer_row_semantics(
-    ProgramType type, float temp, float timeMin, long devType, long speed,
-    long onTime, long offTime, long sensor, const char*& errorMessage) {
+    ProgramType type, float temp, float timeMin, long devType, long mixerRpm,
+    long pumpMlHour, long onTime, long offTime, long sensor, const char*& errorMessage) {
 @SEMANTIC@
 }
 
@@ -92,26 +96,32 @@ void reset() { for (auto& row : program) row = {}; ProgramLen = 1; }
 int main() {
   String error;
   reset();
-  program[0] = {'P', 65, 1, 0, 0, 0, 0, 0};
+  program[0] = {'P', 65, 1, 0, 0, 0, 0, 0, 0};
   check(beer_validate_program(error), "valid P row rejected before start");
 
   reset();
-  program[0] = {'P', 65, 1, 0, -1, 2, 3, 0};
+  program[0] = {'P', 65, 1, 0, -100, 0, 2, 3, 0};
   check(!beer_validate_program(error), "stale P row with schedule and no device passed start validation");
   check(error.value().find("устройство") != std::string::npos,
         "start validation lost semantic error context");
 
   reset();
-  program[0] = {'M', 0, 0, 0, 0, 0, 0, 0};
+  program[0] = {'M', 0, 0, 0, 0, 0, 0, 0, 0};
   check(!beer_validate_program(error), "zero-temperature M row passed start validation");
 
   reset();
-  program[0] = {'W', 0, 0, 1, -1, 2, 0, 0};
+  program[0] = {'W', 0, 0, 1, -100, 0, 2, 0, 0};
   check(beer_validate_program(error), "continuous W mixer schedule rejected before start");
 
   reset();
-  program[0] = {'W', 0, 0, 1, -1, 2, 0, 4};
+  program[0] = {'W', 0, 0, 1, -100, 0, 2, 0, 4};
   check(beer_validate_program(error), "W row with sensor 4 rejected before start");
+
+  reset();
+  program[0] = {'W', 0, 0, 2, 0, 1200, 2, 0, 0};
+  check(!beer_validate_program(error), "I2C pump row passed without a connected pump");
+  pumpPresent = true;
+  check(beer_validate_program(error), "I2C pump row was rejected with a connected pump");
 
   return failures == 0 ? 0 : 1;
 }

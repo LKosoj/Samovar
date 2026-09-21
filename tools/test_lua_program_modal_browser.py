@@ -135,7 +135,7 @@ BROWSER_TEST = r'''async page => {
 
   await page.evaluate(() => {
     const mixer = document.getElementById('pmixer0');
-    mixer.value = '1^0^10^5';
+    mixer.value = '1^20^0^10^5';
     SamovarApp.openDeviceScheduleModal(mixer);
   });
   await checkModalButtons('#popup', 'Модалка мешалки');

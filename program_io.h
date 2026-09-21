@@ -303,7 +303,29 @@ inline bool program_store_lua_text(
   return true;
 }
 
-inline bool program_parse_beer_device(char* token, long& devType, long& speed, long& onTime, long& offTime) {
+inline bool program_parse_beer_device(char* token, long& devType, long& mixerRpm,
+                                      long& pumpMlHour, long& onTime, long& offTime) {
+  if (program_count_char(token, '^') != 4) return false;
+
+  char* saveTok = nullptr;
+  char* tokDevType = strtok_r(token, "^", &saveTok);
+  char* tokMixerRpm = strtok_r(nullptr, "^", &saveTok);
+  char* tokPumpMlHour = strtok_r(nullptr, "^", &saveTok);
+  char* tokOnTime = strtok_r(nullptr, "^", &saveTok);
+  char* tokOffTime = strtok_r(nullptr, "^", &saveTok);
+  char* tokExtra = strtok_r(nullptr, "^", &saveTok);
+
+  return tokDevType && tokMixerRpm && tokPumpMlHour && tokOnTime && tokOffTime &&
+         !tokExtra &&
+         parse_bounded_long(tokDevType, 0, UINT8_MAX, devType).ok() &&
+         parse_bounded_long(tokMixerRpm, INT16_MIN, INT16_MAX, mixerRpm).ok() &&
+         parse_bounded_long(tokPumpMlHour, 0, UINT16_MAX, pumpMlHour).ok() &&
+         parse_bounded_long(tokOnTime, 0, UINT16_MAX, onTime).ok() &&
+         parse_bounded_long(tokOffTime, 0, UINT16_MAX, offTime).ok();
+}
+
+inline bool program_parse_cheese_mixer(char* token, long& devType, long& speed,
+                                       long& onTime, long& offTime) {
   if (program_count_char(token, '^') != 3) return false;
 
   char* saveTok = nullptr;
@@ -313,10 +335,9 @@ inline bool program_parse_beer_device(char* token, long& devType, long& speed, l
   char* tokOffTime = strtok_r(nullptr, "^", &saveTok);
   char* tokExtra = strtok_r(nullptr, "^", &saveTok);
 
-  return tokDevType && tokSpeed && tokOnTime && tokOffTime &&
-         !tokExtra &&
+  return tokDevType && tokSpeed && tokOnTime && tokOffTime && !tokExtra &&
          parse_bounded_long(tokDevType, 0, UINT8_MAX, devType).ok() &&
-         parse_bounded_long(tokSpeed, LONG_MIN, LONG_MAX, speed).ok() &&
+         parse_bounded_long(tokSpeed, INT16_MIN, INT16_MAX, speed).ok() &&
          parse_bounded_long(tokOnTime, 0, UINT16_MAX, onTime).ok() &&
          parse_bounded_long(tokOffTime, 0, UINT16_MAX, offTime).ok();
 }
@@ -326,19 +347,24 @@ inline bool program_validate_beer_row_semantics(
     float temp,
     float timeMin,
     long devType,
-    long speed,
+    long mixerRpm,
+    long pumpMlHour,
     long onTime,
     long offTime,
     long sensor,
     const char*& errorMessage) {
   (void)sensor;
-  const bool noDevice = devType == 0 && speed == 0 && onTime == 0 && offTime == 0;
+  const bool noDevice = devType == 0 && mixerRpm == 0 && pumpMlHour == 0 &&
+      onTime == 0 && offTime == 0;
   const bool zeroTempTime = temp == 0.0f && timeMin == 0.0f;
   const bool validDeviceMask = devType >= 1 && devType <= 3;
-  const bool validDeviceSchedule = validDeviceMask && onTime > 0;
+  const bool validMixerSpeed = (devType & 1) ? mixerRpm != 0 : mixerRpm == 0;
+  const bool validPumpSpeed = (devType & 2) ? pumpMlHour > 0 : pumpMlHour == 0;
+  const bool validDeviceSchedule = validDeviceMask && validMixerSpeed &&
+      validPumpSpeed && onTime > 0;
   const bool mixerScheduleValid = noDevice || validDeviceSchedule;
   if (!mixerScheduleValid) {
-    errorMessage = "устройство должно быть 0^0^0^0 или маской 1..3 с ненулевым расписанием";
+    errorMessage = "устройство должно быть 0^0^0^0^0 или маской 1..3 со скоростями выбранных устройств и ненулевым расписанием";
     return false;
   }
   switch (type) {
@@ -374,7 +400,7 @@ inline bool program_validate_beer_row_semantics(
       return false;
     case 'A':
       if (temp > 0.0f && timeMin == 0.0f && noDevice) return true;
-      errorMessage = "для типа A Temp больше 0, Time=0 и устройство=0^0^0^0";
+      errorMessage = "для типа A Temp больше 0, Time=0 и устройство=0^0^0^0^0";
       return false;
     default:
       errorMessage = "неизвестный тип beer";
@@ -623,16 +649,19 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
             parse_bounded_long(tokSensor, 0, 4, sensor).ok();
 
   long devType = 0;
-  long speed = 0;
+  long mixerRpm = 0;
+  long pumpMlHour = 0;
   long onTime = 0;
   long offTime = 0;
-  if (ok && !program_parse_beer_device(tokDevice, devType, speed, onTime, offTime)) {
+  if (ok && !program_parse_beer_device(tokDevice, devType, mixerRpm,
+                                        pumpMlHour, onTime, offTime)) {
     errorMessage = "неверный шаблон устройства beer";
     ok = false;
   }
 
   if (ok && !program_validate_beer_row_semantics(
-      parsedType, temp, timeMin, devType, speed, onTime, offTime, sensor, errorMessage)) {
+      parsedType, temp, timeMin, devType, mixerRpm, pumpMlHour,
+      onTime, offTime, sensor, errorMessage)) {
     ok = false;
   }
 
@@ -643,7 +672,8 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   row.Temp = temp;
   row.Time = timeMin;
   row.capacity_num = (uint8_t)devType;
-  row.Speed = (float)speed;
+  row.Speed = (float)mixerRpm;
+  row.Param = (float)pumpMlHour;
   row.Volume = (uint16_t)onTime;
   row.Power = (uint16_t)offTime;
   row.TempSensor = (uint8_t)sensor;
@@ -857,7 +887,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   long speed = 0;
   long onTime = 0;
   long offTime = 0;
-  if (ok && !program_parse_beer_device(tokDevice, devType, speed, onTime, offTime)) {
+  if (ok && !program_parse_cheese_mixer(tokDevice, devType, speed, onTime, offTime)) {
     errorMessage = "неверный шаблон устройства cheese";
     ok = false;
   }
@@ -1118,6 +1148,8 @@ inline void program_append_beer_row(String& out, const WProgram& row, const char
   out += row.capacity_num;
   out += '^';
   out += (int)row.Speed;
+  out += '^';
+  out += (int)row.Param;
   out += '^';
   out += row.Volume;
   out += '^';

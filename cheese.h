@@ -1109,6 +1109,7 @@ void cheese_proc() {
     return;
   }
   String programError;
+  i2c_stepper_session_begin();
   if (!cheese_validate_program(programError)) {
     mode_cancel_process_start(programError);
     return;

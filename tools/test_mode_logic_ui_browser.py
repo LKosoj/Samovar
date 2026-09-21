@@ -90,7 +90,7 @@ BROWSER_TEST = r'''async page => {
       status:202,
       contentType:"application/json",
       body:JSON.stringify({
-        ok:true,err:"",program:"W;0;0;0^0^0^0;4",
+        ok:true,err:"",program:"W;0;0;0^0^0^0^0;4",
         operationId:41,state:"queued",error:"none"
       })
     });
@@ -196,8 +196,8 @@ BROWSER_TEST = r'''async page => {
              "Beer Lua-stage safety explanation missing");
       const beerPostCount = beerProgramPosts.length;
       const beerW = await page.evaluate(async () => {
-        const valid = "W;0;0;0^0^0^0;4";
-        const invalid = "W;0;0;0^0^0^0;5";
+        const valid = "W;0;0;0^0^0^0^0;4";
+        const invalid = "W;0;0;0^0^0^0^0;5";
         document.getElementById("WProgram").value = valid;
         await set_program();
         return {
@@ -210,17 +210,17 @@ BROWSER_TEST = r'''async page => {
              "Beer W row with sensor 4 is rejected by UI validation");
       expect(beerW.rejected,
              "Beer W row with out-of-range sensor 5 is accepted by UI validation");
-      expect(beerW.saved === "W;0;0;0^0^0^0;4",
+      expect(beerW.saved === "W;0;0;0^0^0^0^0;4",
              "Beer W row with sensor 4 changed before save");
       const beerWPost = beerProgramPosts[beerProgramPosts.length - 1] || "";
-      expect(beerProgramPosts.length === beerPostCount + 1 && beerWPost.includes("W;0;0;0^0^0^0;4"),
+      expect(beerProgramPosts.length === beerPostCount + 1 && beerWPost.includes("W;0;0;0^0^0^0^0;4"),
              "Beer W row with sensor 4 was not sent to /program");
 
       // Жалоба с форума 17.09.2026: после смены типа строки на «Пауза» текст программы
       // становился неверным (время ещё 0), и calc_program() отказывалась переносить
       // в него дальнейшие правки полей - программа не устанавливалась без причины.
       const beerRowSync = await page.evaluate(() => {
-        document.getElementById("WProgram").value = "W;0;0;0^0^0^0;1";
+        document.getElementById("WProgram").value = "W;0;0;0^0^0^0^0;1";
         document.getElementById("WProgram").dispatchEvent(new Event("change"));
         const row = document.getElementsByClassName("prgline")[1].childNodes;
         row[1].value = "P"; row[1].dispatchEvent(new Event("change"));
@@ -230,9 +230,9 @@ BROWSER_TEST = r'''async page => {
         return {
           broken:broken,
           text:document.getElementById("WProgram").value,
-          reason:program_error("P;61.00;0.00;0^0^0^0;1"),
-          fermentTimed:check_program("F;18;4320;0^0^0^0;0") && check_program("F;18;0;0^0^0^0;0"),
-          fermentTooLong:program_error("F;18;43201;0^0^0^0;0")
+          reason:program_error("P;61.00;0.00;0^0^0^0^0;1"),
+          fermentTimed:check_program("F;18;4320;0^0^0^0^0;0") && check_program("F;18;0;0^0^0^0^0;0"),
+          fermentTooLong:program_error("F;18;43201;0^0^0^0^0;0")
         };
       });
       expect(beerRowSync.text.split("\n")[0].startsWith("P;61.00;20.00;"),
@@ -273,6 +273,25 @@ BROWSER_TEST = r'''async page => {
       const mixerTooltip = await page.locator('label[for="m_time"] .tooltiptext').textContent();
       expect(mixerTooltip.includes("65535"),
              "beer mixer tooltip does not show the real firmware limit before input");
+
+      const deviceEditor = await page.evaluate(() => {
+        const input = document.createElement("input");
+        input.value = "3^-100^1200^30^10";
+        const opened = SamovarApp.openDeviceScheduleModal(input);
+        const loaded = ["m_type", "m_mixer_rpm", "m_pump_rate", "m_time", "m_pause"]
+          .map(id => document.getElementById(id).value);
+        const saved = SamovarApp.saveDeviceScheduleModal();
+        const oldInput = document.createElement("input");
+        oldInput.value = "1^-1^30^60";
+        const oldOpened = SamovarApp.openDeviceScheduleModal(oldInput);
+        return {opened, loaded, saved, value:input.value, oldOpened};
+      });
+      expect(deviceEditor.opened && deviceEditor.saved &&
+             JSON.stringify(deviceEditor.loaded) === JSON.stringify(["3", "-100", "1200", "30", "10"]) &&
+             deviceEditor.value === "3^-100^1200^30^10",
+             "beer device editor did not preserve independent mixer/pump speeds: " + JSON.stringify(deviceEditor));
+      expect(deviceEditor.oldOpened === false,
+             "beer device editor still accepted the removed four-part format");
 
       await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
       expect(await page.locator("#BeerBrewOrder").count() === 1,

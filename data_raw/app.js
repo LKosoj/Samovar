@@ -174,9 +174,9 @@
     return false;
   }
 
-  var BEER_MASH_DEVICE_DEFAULT = '1^-1^2^3';
-  var BEER_PUMP_CONTINUOUS = '2^0^65535^0';
-  var BEER_WAIT_DEVICE = '0^0^0^0';
+  var BEER_MASH_DEVICE_DEFAULT = '1^-20^0^2^3';
+  var BEER_PUMP_CONTINUOUS = '2^0^1200^65535^0';
+  var BEER_WAIT_DEVICE = '0^0^0^0^0';
   var BEER_PROGRAM_MAX_ROWS = 20;
   var configuredBeerBrewOrderId = 'allinone';
 
@@ -678,14 +678,15 @@
   }
 
   function openDeviceScheduleModal(input, onSave) {
-    const values = String(input.value || '0^0^0^0').split('^');
-    if (values.length !== 4) return false;
+    const values = String(input.value || '0^0^0^0^0').split('^');
+    if (values.length !== 5) return false;
     deviceScheduleInput = input;
     deviceScheduleOnSave = typeof onSave === 'function' ? onSave : null;
     byId('m_type').value = values[0];
-    byId('m_direction').value = values[1];
-    byId('m_time').value = values[2];
-    byId('m_pause').value = values[3];
+    byId('m_mixer_rpm').value = values[1];
+    byId('m_pump_rate').value = values[2];
+    byId('m_time').value = values[3];
+    byId('m_pause').value = values[4];
     byId('popup').style.display = 'block';
     byId('overlay').classList.add('show');
     return true;
@@ -708,6 +709,20 @@
 
   function saveDeviceScheduleModal() {
     if (!deviceScheduleInput) return false;
+    const type = Number(byId('m_type').value);
+    const mixer = readNumericInput('m_mixer_rpm', {
+      integer: true, min: -32768, max: 32767, label: 'Обороты мешалки'
+    });
+    if (!mixer) return false;
+    const pump = readNumericInput('m_pump_rate', {
+      integer: true, min: 0, max: 65535, label: 'Скорость I2C-насоса'
+    });
+    if (!pump) return false;
+    if (((type & 1) !== 0) !== (Number(mixer.text) !== 0) ||
+        ((type & 2) !== 0) !== (Number(pump.text) > 0)) {
+      showRequestError('Задайте скорость каждого выбранного устройства, а для выключенного — 0.');
+      return false;
+    }
     normalizeDeviceScheduleSeconds(byId('m_time'));
     normalizeDeviceScheduleSeconds(byId('m_pause'));
     const run = readNumericInput('m_time', {
@@ -718,7 +733,8 @@
       integer: true, min: 0, max: 65535, label: 'Время паузы устройства'
     });
     if (!pause) return false;
-    deviceScheduleInput.value = byId('m_type').value + '^' + byId('m_direction').value + '^' + run.text + '^' + pause.text;
+    deviceScheduleInput.value = byId('m_type').value + '^' + mixer.text + '^' +
+      pump.text + '^' + run.text + '^' + pause.text;
     const onSave = deviceScheduleOnSave;
     closeDeviceScheduleModal();
     if (onSave) onSave();

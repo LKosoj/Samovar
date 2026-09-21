@@ -46,7 +46,7 @@ SETUP_CONTROLS = (
 PAGE_LABELS = {
     "index.htm": ("Voltage", "pumpspeed", "lua_str_i", "Descr", "WProgram"),
     "beer.htm": (
-        "Voltage", "m_type", "m_direction", "m_time", "m_pause",
+        "Voltage", "m_type", "m_mixer_rpm", "m_pump_rate", "m_time", "m_pause",
         "lua_str_i", "Descr", "WProgram",
     ),
     "distiller.htm": ("Voltage", "lua_str_i", "Descr", "WProgram"),

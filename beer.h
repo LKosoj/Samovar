@@ -44,6 +44,8 @@ static bool beerMixerWasHeld = false;
 // в этом случае: иначе реле, включённое оператором вручную, гасло на первой же паузе мешалки
 // и больше не включалось (строка «только мешалка» реле 1 не включает).
 static bool beerMixerPumpRelayOn = false;
+static bool beerScheduledDeviceRunning = false;
+static bool beerI2cPumpStarted = false;
 static bool beerHoldClockFrozen = false;
 static float beerStageIdleShare = 0;  // Незасчитываемая доля времени с момента beerStageIdleSinceMs (1 = простой целиком)
 static bool beerPairErrorPending = false;
@@ -218,6 +220,8 @@ inline void beer_reset_stage_state() {
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
   beerMixerPauseSinceMs = 0;
+  beerScheduledDeviceRunning = false;
+  beerI2cPumpStarted = false;
   beerHoldClockFrozen = false;
   beerPairErrorPending = false;
   beerSkipConfirmProgramNum = 0xFF;
@@ -376,7 +380,8 @@ inline bool beer_validate_program(String& errorMessage) {
     if (!program_validate_beer_row_semantics(
             program[i].WType, program[i].Temp, program[i].Time,
             program[i].capacity_num, static_cast<long>(program[i].Speed),
-            program[i].Volume, program[i].Power, program[i].TempSensor,
+            static_cast<long>(program[i].Param), program[i].Volume,
+            program[i].Power, program[i].TempSensor,
             semanticError)) {
       errorMessage = (semanticError ? String("Ошибка программы: ") + semanticError
                                      : String("Ошибка программы")) +
@@ -387,6 +392,10 @@ inline bool beer_validate_program(String& errorMessage) {
     const char* rowSensorName = "";
     if (!beer_control_sensor(program[i].TempSensor, rowSensor, rowSensorName)) {
       errorMessage = "Ошибка программы: неверный датчик температуры в строке " + String(i + 1);
+      return false;
+    }
+    if (BitIsSet(program[i].capacity_num, 1) && !i2c_stepper_pump_present()) {
+      errorMessage = "I2C-насос недоступен в строке " + String(i + 1);
       return false;
     }
   }
@@ -412,6 +421,7 @@ void beer_proc() {
   }
 
   if (startval == SAMOVAR_STARTVAL_BEER_START && !PowerOn) {
+    i2c_stepper_session_begin();
     String programError;
     if (!beer_validate_program(programError)) {
       mode_cancel_process_start(programError);
@@ -1132,12 +1142,12 @@ void beer_stage_tick() {
 }
 
 /**
- * @brief [Пиво 02.09 A2/A6] Направление мешалки по номеру фазы: Speed>0 - постоянный
- * реверс, Speed<0 - реверс через цикл (по чётности), Speed==0 - без реверса.
+ * @brief Направление мешалки по номеру фазы: отрицательные обороты меняют
+ * направление после каждой паузы, положительные задают прямое вращение.
  * Общая формула для старта нового цикла и для возобновления после ручной паузы.
  */
 inline bool beer_mixer_reverse_dir(int stepCount) {
-  return program[ProgramNum].Speed > 0 || (stepCount % 2 == 0 && program[ProgramNum].Speed < 0);
+  return stepCount % 2 == 0 && program[ProgramNum].Speed < 0;
 }
 
 /**
@@ -1154,6 +1164,7 @@ void check_mixer_state() {
     alarm_c_low_min = 0;
     alarm_c_min = 0;
     mixer_status = false;
+    beerScheduledDeviceRunning = false;
   }
   // [Дефект 2 code review] alarm_c_min/alarm_c_low_min - АБСОЛЮТНЫЕ метки
   // millis(); вызов этой функции целиком пропускается, пока строка на ручной
@@ -1169,7 +1180,7 @@ void check_mixer_state() {
     beerMixerPauseSinceMs = 0;
     // [Пиво 02.09 A6] Пауза попала на фазу вращения (после сдвига меток фаза ещё
     // впереди) - включаем мешалку заново на остаток фазы, а не ждём следующего цикла.
-    if ((int32_t)(alarm_c_low_min - millis()) > 0 && !mixer_status) {  // [C-13] overflow-safe
+    if ((int32_t)(alarm_c_low_min - millis()) > 0 && !beerScheduledDeviceRunning) {  // [C-13] overflow-safe
       if (set_mixer_state(true, beer_mixer_reverse_dir(currentstepcnt)) == ACTUATOR_COMMAND_FAILED) return;
     }
   }
@@ -1201,7 +1212,7 @@ void check_mixer_state() {
     const bool beerMixerContinuous = program[ProgramNum].Volume == 0 && program[ProgramNum].Power == 0;
     // currentstepcnt > 0 = в этой строке уже запускали (на новой строке счётчик сброшен).
     if (alarm_c_low_min == 0 && alarm_c_min == 0 &&
-        !(beerMixerContinuous && currentstepcnt > 0 && mixer_status)) {
+        !(beerMixerContinuous && currentstepcnt > 0 && beerScheduledDeviceRunning)) {
       //включаем мешалку
       alarm_c_low_min = millis() + program[ProgramNum].Volume * 1000;
       if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 1000;
@@ -1216,7 +1227,7 @@ void check_mixer_state() {
     }
 
   } else {
-    if (mixer_status) {
+    if (beerScheduledDeviceRunning) {
       //если мешалка или насос работают, их нужно выключить, так как в этой строке программы они не нужны
       set_mixer_state(false, false);
     }
@@ -1232,6 +1243,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
   if (state) {
     bool mixerRelayEnabled = false;
     bool mixerStepperStarted = false;
+    bool i2cPumpStarted = false;
     //включаем мешалку
     if (BitIsSet(program[ProgramNum].capacity_num, 0)) {
       //включаем реле 2
@@ -1242,7 +1254,8 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	        int tm = abs(program[ProgramNum].Volume);
 	        // Время 0 и пауза 0 = постоянное вращение (Nano крутит, пока не остановят).
 	        if (tm == 0 && program[ProgramNum].Power > 0) tm = 10;
-	        if (!set_stepper_by_time(20, dir, tm)) {
+        if (!set_stepper_by_time(static_cast<uint16_t>(fabsf(program[ProgramNum].Speed)),
+                                 dir, tm)) {
           if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
           return ACTUATOR_COMMAND_FAILED;
         }
@@ -1250,10 +1263,17 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	      }
     }
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
+      if (!start_second_i2c_pump(program[ProgramNum].Param / 1000.0f, 0)) {
+        if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);
+        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+        return ACTUATOR_COMMAND_FAILED;
+      }
+      i2cPumpStarted = true;
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
       if (set_pump_pwm(1023) != ACTUATOR_COMMAND_APPLIED) {
 	        bool rollbackFailed = mixerStepperStarted && !set_stepper_by_time(0, 0, 0);
+	        if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
 	        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	        if (rollbackFailed) {
           request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
@@ -1265,6 +1285,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	        if (!set_mixer_pump_target(1)) {
           bool rollbackFailed = set_pump_pwm(0) != ACTUATOR_COMMAND_APPLIED;
           if (mixerStepperStarted && !set_stepper_by_time(0, 0, 0)) rollbackFailed = true;
+          if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
           if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	          if (rollbackFailed) {
             request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
@@ -1279,6 +1300,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         if (mixerStepperStarted) {
           rollbackFailed = !set_stepper_by_time(0, 0, 0);
         }
+        if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
         if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
         if (rollbackFailed) {
           request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
@@ -1287,6 +1309,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
       }
       beerMixerPumpRelayOn = true;
 #endif
+      beerI2cPumpStarted = i2cPumpStarted;
     }
   } else {
     bool stopFailed = false;
@@ -1307,9 +1330,12 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	      if (!set_mixer_pump_target(0)) stopFailed = true;
 	      else beerMixerPumpRelayOn = false;
 	    }
+      if (beerI2cPumpStarted && !stop_second_i2c_pump()) stopFailed = true;
+      else beerI2cPumpStarted = false;
     if (stopFailed) return ACTUATOR_COMMAND_FAILED;
   }
-  mixer_status = state;
+  mixer_status = state && BitIsSet(program[ProgramNum].capacity_num, 0);
+  beerScheduledDeviceRunning = state;
   return ACTUATOR_COMMAND_APPLIED;
 }
 

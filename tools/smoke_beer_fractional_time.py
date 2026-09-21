@@ -168,8 +168,8 @@ void check(bool condition, const char* message) {
 void test_fractional_pause_time_survives_round_trip() {
   struct FractionalCase { const char* text; float time; const char* serializedTime; };
   const FractionalCase cases[] = {
-    {"P;60;12.5;1^20^3^4;1\n", 12.5f, "12.50"},
-    {"P;61;7.25;1^20^3^4;1\n", 7.25f, "7.25"},
+    {"P;60;12.5;1^20^0^3^4;1\n", 12.5f, "12.50"},
+    {"P;61;7.25;1^20^0^3^4;1\n", 7.25f, "7.25"},
   };
   for (const FractionalCase& test : cases) {
     ProgramDraft draft{};
@@ -195,7 +195,7 @@ void test_fractional_pause_time_survives_round_trip() {
 // искажаться сериализацией/повторным разбором.
 void test_integer_time_stays_undistorted() {
   ProgramDraft draft{};
-  ProgramParseResult applied = program_parse_lines(String("M;45;0;0^0^0^0;0\n"), beer_program_parse_spec());
+  ProgramParseResult applied = program_parse_lines(String("M;45;0;0^0^0^0^0;0\n"), beer_program_parse_spec());
   check(applied.ok(), "valid beer program with integer Time was rejected");
 
   String serialized = program_serialize_rows(0, PROGRAM_END, program_append_beer_row);

@@ -41,6 +41,7 @@ struct WProgram {
   float Time;
   uint8_t capacity_num;
   float Speed;
+  float Param;
   uint16_t Volume;
   uint16_t Power;
   uint8_t TempSensor;
@@ -85,30 +86,39 @@ static bool parse_row(const char* line, WProgram& row) {
 int main() {
   WProgram row{};
 
+  check(parse_row("P;65;10;3^-100^1200^30^10;0", row),
+        "новый формат независимых скоростей устройств должен проходить");
+  check(row.Speed == -100.0f && row.Param == 1200.0f && row.Volume == 30 && row.Power == 10,
+        "обороты мешалки и скорость насоса записаны не в свои поля");
+  check(parse_row("P;65;10;2^0^900^20^5;0", row) && row.Speed == 0.0f && row.Param == 900.0f,
+        "строка только с насосом не сохранила его скорость");
+  check(!parse_row("P;65;10;1^-1^30^60;0", row),
+        "удалённый четырёхчастный формат устройства всё ещё принимается");
+
   // Разумное значение выдержки (мин) - должно пройти и сохраниться как есть.
-  check(parse_row("P;65;90;0^0^0^0;0", row), "нормальная выдержка 90 мин должна пройти");
+  check(parse_row("P;65;90;0^0^0^0^0;0", row), "нормальная выдержка 90 мин должна пройти");
   check(row.Time == 90.0f, "row.Time должен получить именно введённое значение");
 
   // [П33] Ключевой случай бага: время ~1e38 (физически бессмысленно) обязано
   // отвергаться разбором, точно как отвергается такое же по масштабу Temp.
-  check(!parse_row("P;65;1e38;0^0^0^0;0", row), "время 1e38 обязано отвергаться разбором (как и Temp)");
+  check(!parse_row("P;65;1e38;0^0^0^0^0;0", row), "время 1e38 обязано отвергаться разбором (как и Temp)");
 
   // Верхняя граница включительно - PROGRAM_TIME_MAX ровно на потолке должна проходить.
-  check(parse_row("P;65;1440;0^0^0^0;0", row), "время ровно на верхней границе (1440 мин) должно проходить");
+  check(parse_row("P;65;1440;0^0^0^0^0;0", row), "время ровно на верхней границе (1440 мин) должно проходить");
   check(row.Time == 1440.0f, "row.Time должен сохранить граничное значение без искажений");
-  check(!parse_row("P;65;1441;0^0^0^0;0", row), "пауза дольше 1440 мин обязана отвергаться");
+  check(!parse_row("P;65;1441;0^0^0^0^0;0", row), "пауза дольше 1440 мин обязана отвергаться");
 
   // Строка F (ферментация): время необязательно, потолок свой - 30 суток.
-  check(parse_row("F;18;0;0^0^0^0;0", row) && row.Time == 0.0f, "F с временем 0 (бесконечно) должна проходить");
-  check(parse_row("F;18;43200;0^0^0^0;0", row) && row.Time == 43200.0f, "F на 30 суток должна проходить");
-  check(!parse_row("F;18;43201;0^0^0^0;0", row), "F дольше 30 суток обязана отвергаться");
-  check(!parse_row("F;0;60;0^0^0^0;0", row), "F без температуры обязана отвергаться");
+  check(parse_row("F;18;0;0^0^0^0^0;0", row) && row.Time == 0.0f, "F с временем 0 (бесконечно) должна проходить");
+  check(parse_row("F;18;43200;0^0^0^0^0;0", row) && row.Time == 43200.0f, "F на 30 суток должна проходить");
+  check(!parse_row("F;18;43201;0^0^0^0^0;0", row), "F дольше 30 суток обязана отвергаться");
+  check(!parse_row("F;0;60;0^0^0^0^0;0", row), "F без температуры обязана отвергаться");
 
   // Чуть выше границы - обязано отвергаться.
-  check(!parse_row("P;65;1440.01;0^0^0^0;0", row), "время чуть выше верхней границы обязано отвергаться");
+  check(!parse_row("P;65;1440.01;0^0^0^0^0;0", row), "время чуть выше верхней границы обязано отвергаться");
 
   // Отрицательное время по-прежнему недопустимо (как и раньше).
-  check(!parse_row("P;65;-5;0^0^0^0;0", row), "отрицательное время обязано отвергаться");
+  check(!parse_row("P;65;-5;0^0^0^0^0;0", row), "отрицательное время обязано отвергаться");
 
   if (failures != 0) return 1;
   std::cout << "beer program Time bounds checks passed\n";
@@ -138,14 +148,14 @@ def build_harness(program_io: str) -> str:
     )
     harness = harness.replace(
         "@PROGRAM_PARSE_BEER_DEVICE@",
-        "static bool program_parse_beer_device(char* token, long& devType, long& speed, long& onTime, long& offTime) {"
+        "static bool program_parse_beer_device(char* token, long& devType, long& mixerRpm, long& pumpMlHour, long& onTime, long& offTime) {"
         + device + "}",
     )
     harness = harness.replace(
         "@PROGRAM_VALIDATE_BEER_ROW_SEMANTICS@",
         "static bool program_validate_beer_row_semantics("
-        "ProgramType type, float temp, float timeMin, long devType, long speed, "
-        "long onTime, long offTime, long sensor, const char*& errorMessage) {"
+        "ProgramType type, float temp, float timeMin, long devType, long mixerRpm, "
+        "long pumpMlHour, long onTime, long offTime, long sensor, const char*& errorMessage) {"
         + semantics + "}",
     )
     harness = harness.replace(

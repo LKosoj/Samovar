@@ -115,16 +115,17 @@
               luaParts.some(function(value) { return value === ''; })) return row + PROGRAM_ROW_RULES.L;
           continue;
         }
-        if (char_count(arrayOfDelim[3], "^") != 3) return row + 'поле «Мешалка» должно иметь вид 0^0^0^0';
+        if (char_count(arrayOfDelim[3], "^") != 4) return row + 'поле «Устройства» должно иметь вид 0^0^0^0^0';
         var device = arrayOfDelim[3].split("^").map(Number);
         if (!Number.isFinite(temp) || !Number.isFinite(time) ||
-            device.length != 4 || device.some(function(v) { return !Number.isInteger(v); }) ||
+            device.length != 5 || device.some(function(v) { return !Number.isInteger(v); }) ||
             !Number.isInteger(sensor) || sensor < 0 || sensor > 4 || time < 0) return row + 'температура, время, мешалка и датчик должны быть числами, время не меньше 0';
         var timeMax = type === 'F' ? 43200 : 1440;
         if (time > timeMax) return row + 'время не больше ' + timeMax + ' минут';
         var noDevice = device.every(function(v) { return v === 0; });
-        var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[2] > 0;
-        if (!(noDevice || scheduledDevice)) return row + 'мешалка - либо 0^0^0^0, либо устройство 1..3 с временем работы больше 0';
+        var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
+          (!!(device[0] & 1) === (device[1] !== 0)) && (!!(device[0] & 2) === (device[2] > 0));
+        if (!(noDevice || scheduledDevice)) return row + 'задайте скорости выбранных устройств и время работы';
         if (!SamovarApp.beerRowTypeOk(type, temp, time, noDevice, sensor)) return row + (PROGRAM_ROW_RULES[type] || 'неизвестный тип «' + type + '»');
       }
       return '';
@@ -214,8 +215,8 @@
         k = t[i].childNodes;
         for (j = 1; j < 6; j++) {
           if (j == 4 && k[1].value !== 'L') {
-            if (k[j].value == "") k[j].value = "0^0^0^0";
-            if (char_count(k[j].value, "^") != 3) k[j].value = "0^0^0^0";
+            if (k[j].value == "") k[j].value = "0^0^0^0^0";
+            if (char_count(k[j].value, "^") != 4) k[j].value = "0^0^0^0^0";
           }
           s = s + k[j].value + ";";
         }
@@ -588,7 +589,7 @@
           <div><label for="WProgram">Текст программы затирки:</label></div>
           <textarea cols="40" rows="7" id='WProgram' name='WProgram'></textarea>
           <div class='dvcs'>
-            <p><span>Параметры программы затирания: Тип программы;Температура;Время;Режим работы мешалки;Датчик</span></p>
+            <p><span>Параметры программы затирания: Тип программы;Температура;Время;Устройства;Датчик</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре),</span></p>
             <p><span>B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры),</span></p>
@@ -598,18 +599,18 @@
             <p><span>Варочный порядок (All-in-one / HERMS / RIMS) задаётся в Настройках, вкладка «Пиво». Импорт BeerXML подставляет датчик и насос из этого порядка; TYPE шага (Infusion/Temperature/Decoction) берётся из рецепта.</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>Пример программы отбора:</span></p>
-            <p><span>M;45.00;0;1^1^1^1;0</span></p>
-            <p><span>P;60.00;1;1^1^1^1;0</span></p>
-            <p><span>W;0.00;0;1^1^1^1;0</span></p>
-            <p><span>B;0.00;1;1^1^1^1;0</span></p>
-            <p><span>C;30.00;0;1^1^1^1;0</span></p>
+            <p><span>M;45.00;0;1^20^0^1^1;0</span></p>
+            <p><span>P;60.00;1;1^20^0^1^1;0</span></p>
+            <p><span>W;0.00;0;1^20^0^1^1;0</span></p>
+            <p><span>B;0.00;1;1^20^0^1^1;0</span></p>
+            <p><span>C;30.00;0;1^20^0^1^1;0</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>&nbsp;</span></p>
-            <p><span>Описание режима работы мешалки: предпоследним полем задается режим работы мешалки. 1^-1^2^3, где</span></p>
-            <p><span>1 - Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно</span></p>
-            <p><span>-1 - Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения (если поддерживает оборудование); 1 - постоянное обратное направление (только I2C-мешалка; для релейной мешалки направление не применяется)</span></p>
-            <p><span>2 - Время включения в секундах</span></p>
-            <p><span>3 - Время выключения в секундах</span></p>
+            <p><span>Описание устройств: предпоследнее поле имеет вид 3^-100^1200^30^10, где</span></p>
+            <p><span>3 — мешалка и насос; -100 — 100 об/мин со сменой направления после паузы; 1200 — скорость I2C-насоса в мл/ч; 30 — работа, сек; 10 — пауза, сек.</span></p>
+            <p><span>Первое число — устройство: 1 — мешалка, 2 — I2C-насос, 3 — оба устройства.</span></p>
+            <p><span>Второе число — обороты мешалки. Отрицательное значение включает смену направления после каждой паузы.</span></p>
+            <p><span>Третье число — скорость I2C-насоса в мл/ч; четвёртое и пятое — время работы и паузы в секундах.</span></p>
           </div>
         </div>
       </details>

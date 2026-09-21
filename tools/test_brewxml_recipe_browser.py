@@ -298,8 +298,8 @@ BROWSER_TEST = r'''async page => {
     out.fLine = progLines.find(l => l[0] === "F") || "";
 
     // 8) [D6] семантика строки: температура на "M"/"B" не по правилам типа
-    out.errM = validateBeerProgramText("M;68.00;5;1^-1^2^3;0");
-    out.errB = validateBeerProgramText("B;68.00;10;1^-1^2^3;0");
+    out.errM = validateBeerProgramText("M;68.00;5;1^-20^0^2^3;0");
+    out.errB = validateBeerProgramText("B;68.00;10;1^-20^0^2^3;0");
 
     // 9) [ревью п.1, случай а] хмель без TIME не сдвигает bth для последующих строк B
     await loadOnce(f.hopsNoTimeEdge, "hops_no_time.xml");
@@ -468,7 +468,7 @@ BROWSER_TEST = r'''async page => {
   // ---------- assert: 3) без HOPS ----------
   if (!results.noHopsIsProgram) throw new Error("recipe without HOPS must still produce a valid program: " + results.noHopsProgram);
   const noHopsBRows = results.noHopsProgram.split("\n").filter(l => l[0] === "B");
-  if (noHopsBRows.length !== 1 || noHopsBRows[0] !== "B;0.00;45;1^-1^2^3;0") {
+  if (noHopsBRows.length !== 1 || noHopsBRows[0] !== "B;0.00;45;1^-20^0^2^3;0") {
     throw new Error("recipe without HOPS must give exactly one B row spanning BOIL_TIME: " + JSON.stringify(noHopsBRows));
   }
 
@@ -487,16 +487,16 @@ BROWSER_TEST = r'''async page => {
   if (!results.notesText.includes("<img")) throw new Error("NOTES must keep the markup as plain text: " + results.notesText);
 
   // ---------- assert: 6) температура первой строки M ----------
-  if (results.diogenesFirstLine !== "M;68.9;0;1^-1^2^3;0") {
+  if (results.diogenesFirstLine !== "M;68.9;0;1^-20^0^2^3;0") {
     throw new Error("Diogenes first M line must use recipe STEP_TEMP 68.9: " + results.diogenesFirstLine);
   }
-  if (results.sampleBlondeFirstLine !== "M;65;0;1^-1^2^3;0") {
+  if (results.sampleBlondeFirstLine !== "M;65;0;1^-20^0^2^3;0") {
     throw new Error("Sample Blonde Ale first M line must use recipe STEP_TEMP 65: " + results.sampleBlondeFirstLine);
   }
 
   // ---------- assert: 7) мешалка на C/F ----------
-  if (!results.cLine.endsWith(";0^0^0^0;0") || !results.fLine.endsWith(";0^0^0^0;0")) {
-    throw new Error("C/F rows must keep the mixer off (0^0^0^0): " + JSON.stringify({ c: results.cLine, f: results.fLine }));
+  if (!results.cLine.endsWith(";0^0^0^0^0;0") || !results.fLine.endsWith(";0^0^0^0^0;0")) {
+    throw new Error("C/F rows must keep the mixer off (0^0^0^0^0): " + JSON.stringify({ c: results.cLine, f: results.fLine }));
   }
 
   // ---------- assert: 8) семантика строки ----------
@@ -525,7 +525,7 @@ BROWSER_TEST = r'''async page => {
   }
 
   // ---------- assert: 11) пустой INFUSE_TEMP уступает STEP_TEMP ----------
-  if (results.emptyInfuseFirstLine !== "M;65.5;0;1^-1^2^3;0") {
+  if (results.emptyInfuseFirstLine !== "M;65.5;0;1^-20^0^2^3;0") {
     throw new Error("empty INFUSE_TEMP must fall back to STEP_TEMP=65.5: " + results.emptyInfuseFirstLine);
   }
 
@@ -571,7 +571,7 @@ BROWSER_TEST = r'''async page => {
   if (JSON.stringify(infusionTypes.slice(0, 4)) !== JSON.stringify(["M", "P", "W", "P"])) {
     throw new Error("infusion must be M,P,W,P then boil: " + results.infusionProgram);
   }
-  if (!results.infusionProgram.includes("W;0;0;0^0^0^0;0")) {
+  if (!results.infusionProgram.includes("W;0;0;0^0^0^0^0;0")) {
     throw new Error("second infusion step must wait for water addition: " + results.infusionProgram);
   }
 
@@ -590,10 +590,10 @@ BROWSER_TEST = r'''async page => {
     throw new Error("brewxml.htm must not offer a per-recipe brew order select");
   }
 
-  if (!results.hermsProgram.startsWith("M;65;0;2^0^65535^0;1")) {
+  if (!results.hermsProgram.startsWith("M;65;0;2^0^1200^65535^0;1")) {
     throw new Error("HERMS settings must put M/P on water sensor with continuous pump: " + results.hermsProgram);
   }
-  if (!results.hermsProgram.includes("P;65;60;2^0^65535^0;1")) {
+  if (!results.hermsProgram.includes("P;65;60;2^0^1200^65535^0;1")) {
     throw new Error("HERMS P row must follow mash sensor/pump mapping: " + results.hermsProgram);
   }
 

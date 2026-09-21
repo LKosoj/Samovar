@@ -58,7 +58,7 @@ BROWSER_TEST = r'''async page => {
     };
   });
 
-  const program = "P;60.00;1;0^0^0^0;0\nW;0.00;0;1^1^1^1;0\n";
+  const program = "P;60.00;1;0^0^0^0^0;0\nW;0.00;0;1^20^0^1^1;0\n";
   const description250 = "я".repeat(125);
   await page.evaluate(({program, description}) => {
     document.getElementById("WProgram").value = program;
@@ -86,7 +86,7 @@ BROWSER_TEST = r'''async page => {
          "overlong export did not show the byte-limit error");
 
   const input = page.locator("#fileToLoad");
-  const importedProgram = "M;45.00;0;0^0^0^0;0\n";
+  const importedProgram = "M;45.00;0;0^0^0^0^0;0\n";
   await input.setInputFiles(__STRUCTURED_PATH__);
   await page.waitForFunction(({program, description}) =>
     document.getElementById("WProgram").value === program &&
@@ -94,7 +94,7 @@ BROWSER_TEST = r'''async page => {
     {program:importedProgram, description:description250});
 
   await page.evaluate(() => {
-    document.getElementById("WProgram").value = "P;55;2;0^0^0^0;0\n";
+    document.getElementById("WProgram").value = "P;55;2;0^0^0^0^0;0\n";
     document.getElementById("Descr").value = "не менять";
   });
   await input.setInputFiles(__BROKEN_PATH__);
@@ -104,7 +104,7 @@ BROWSER_TEST = r'''async page => {
     program:document.getElementById("WProgram").value,
     description:document.getElementById("Descr").value
   }));
-  expect(afterBroken.program === "P;55;2;0^0^0^0;0\n" && afterBroken.description === "не менять",
+  expect(afterBroken.program === "P;55;2;0^0^0^0^0;0\n" && afterBroken.description === "не менять",
          "malformed JSON fell back to plain text or changed description");
 
   await input.setInputFiles(__UNSUPPORTED_PATH__);
@@ -127,7 +127,7 @@ BROWSER_TEST = r'''async page => {
   expect(JSON.stringify(afterTooLong) === JSON.stringify(afterBroken),
          "overlong imported description changed the form");
 
-  const legacyProgram = "B;0.00;1;0^0^0^0;0\n";
+  const legacyProgram = "B;0.00;1;0^0^0^0^0;0\n";
   await input.setInputFiles(__LEGACY_PATH__);
   await page.waitForFunction(programText =>
     document.getElementById("WProgram").value === programText, legacyProgram);
@@ -151,7 +151,7 @@ def main() -> int:
         temp = Path(temp_dir)
         site = temp / "site"
         render_site(site)
-        imported_program = "M;45.00;0;0^0^0^0;0\n"
+        imported_program = "M;45.00;0;0^0^0^0^0;0\n"
         fixtures = {
             "__STRUCTURED_PATH__": temp / "structured.txt",
             "__BROKEN_PATH__": temp / "broken.txt",
@@ -185,7 +185,7 @@ def main() -> int:
             encoding="utf-8",
         )
         fixtures["__LEGACY_PATH__"].write_text(
-            "B;0.00;1;0^0^0^0;0\n", encoding="utf-8",
+            "B;0.00;1;0^0^0^0^0;0\n", encoding="utf-8",
         )
         handler = functools.partial(QuietHandler, directory=str(site))
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
