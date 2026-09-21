@@ -702,6 +702,7 @@ inline bool program_validate_cheese_row_semantics(
   // M: Temp=0, Time=длительность мин, Param=0, TempSensor=0.
   // D: Temp=объём мл, Time=тайм-аут мин, Param=код компонента (ручное) либо
   //    скорость мл/мин (локальное), TempSensor=1 (ручное) или 2 (локальное).
+  //    TempSensor=4 - как 2, но качает I2C-насос (адрес выбирает I2CStepper.h).
   //    Для TempSensor=3 точное число шагов хранится в 4 байтах Param, Temp равна 0.
   // N: Temp=температура °C, Time=тайм-аут мин, Param=целевой pH,
   //    TempSensor=датчик температуры.
@@ -710,14 +711,17 @@ inline bool program_validate_cheese_row_semantics(
   // W: Temp=0, Time=тайм-аут мин, Param=код ручного действия, TempSensor=0.
   // S/L: Temp=0, Time=тайм-аут мин, Param=0, TempSensor=0.
   // Во всех строках MIXER переводится одинаково: capacity_num=устройство,
-  // Speed=RPM и направление, Volume=ON сек, Power=OFF сек.
+  // Speed=RPM и направление, Volume=ON сек, Power=OFF сек. Устройство 3 - I2C-мешалка,
+  // меняющая направление после каждой паузы, поэтому ей нужны и ON, и OFF.
   const bool noDevice = devType == 0 && speed == 0 && onTime == 0 && offTime == 0;
   const bool validSchedule = (onTime == 0 && offTime == 0) || onTime > 0;
   const bool validRelayMixer = devType == 1 && speed == 0 && validSchedule;
   const bool validI2cMixer = devType == 2 && speed >= INT16_MIN && speed <= INT16_MAX &&
       speed != 0 && validSchedule;
-  if (!noDevice && !validRelayMixer && !validI2cMixer) {
-    errorMessage = "мешалка должна быть 0^0^0^0, реле 1^0 или I2C 2 с ненулевым RPM";
+  const bool validReversingMixer = devType == 3 && speed >= INT16_MIN && speed <= INT16_MAX &&
+      speed != 0 && onTime > 0 && offTime > 0;
+  if (!noDevice && !validRelayMixer && !validI2cMixer && !validReversingMixer) {
+    errorMessage = "мешалка должна быть 0^0^0^0, реле 1^0, I2C 2 с ненулевым RPM или I2C с реверсом 3 с RPM, ON и OFF";
     return false;
   }
   switch (type) {
@@ -744,7 +748,7 @@ inline bool program_validate_cheese_row_semantics(
       if (timeMin > 0.0f &&
           ((sensor == 1 && temp > 0.0f && param >= 1.0f && param <= 8.0f &&
             param == (float)(uint8_t)param) ||
-           (sensor == 2 && temp > 0.0f && param > 0.0f) ||
+           ((sensor == 2 || sensor == 4) && temp > 0.0f && param > 0.0f) ||
            (sensor == 3 && temp == 0.0f && param == 0.0f))) return true;
       errorMessage = "для D нужны Time, способ и параметры ручного, объёмного либо шагового дозирования";
       return false;

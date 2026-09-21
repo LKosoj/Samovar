@@ -204,7 +204,7 @@ expected_hashes = {
     # program_row_serializer_for_mode() и program_first_changed_locked_row();
     # serialize_program_for_mode() выбирает сериализатор через первую. Разбор (A-09)
     # и сериализованный текст не тронуты.
-    "program_io.h": "26b4207311db5f098a3ffd7d7e040514496f594eee3a5875eb7966ffb3d09a8f",
+    "program_io.h": "73ea148d330530adf7c03e9da1af493345838b2e2aa0ec99d4efe685abed53f2",
     "program_types.h": "93b085c108487dc89b221156f91112b898a7a554fb21713a4dac4e4e48f5f96a",
 }
 for name, expected in expected_hashes.items():

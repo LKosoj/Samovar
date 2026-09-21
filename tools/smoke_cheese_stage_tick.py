@@ -46,7 +46,7 @@ static void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, int)
 enum CheeseStageKind : uint8_t { CHEESE_STAGE_INVALID=0, CHEESE_STAGE_HEAT, CHEESE_STAGE_HOLD, CHEESE_STAGE_COOL, CHEESE_STAGE_MIX, CHEESE_STAGE_DOSE, CHEESE_STAGE_PH, CHEESE_STAGE_WAIT, CHEESE_STAGE_DRAIN, CHEESE_STAGE_LUA, CHEESE_STAGE_FLOC };
 struct WProgram { ProgramType WType; float Temp; float Time; float Param; uint8_t TempSensor; };
 struct DSSensor { float avgTemp; float SetTemp; } sensor;
-struct CheeseRuntimeState { uint32_t enteredMs,lastTickMs,temperatureConfirmSinceMs,holdAccumulatedMs,mixerDeadlineMs,phReachedSinceMs,phInvalidSinceMs; float heatStartSetpoint; uint8_t mixerDevice; bool mixerRunning,mixerOneShotComplete,doserStarted,doserCompleted,drainOpen,temperatureConfirmActive,phReachedActive,phInvalidActive,flocFixed; uint32_t flocActualSeconds,flocMultiplierMilli,flocCutSeconds,flocTimeoutSeconds; } cheeseRuntime = {};
+struct CheeseRuntimeState { uint32_t enteredMs,lastTickMs,temperatureConfirmSinceMs,holdAccumulatedMs,mixerDeadlineMs,phReachedSinceMs,phInvalidSinceMs; float heatStartSetpoint; uint8_t mixerDevice; bool mixerRunning,mixerOneShotComplete,doserStarted,doserCompleted,i2cDoserStarted,drainOpen,temperatureConfirmActive,phReachedActive,phInvalidActive,flocFixed; uint32_t flocActualSeconds,flocMultiplierMilli,flocCutSeconds,flocTimeoutSeconds; } cheeseRuntime = {};
 enum CheeseLuaStagePhase : uint8_t { CHEESE_LUA_STAGE_IDLE=0, CHEESE_LUA_STAGE_ENTER_QUEUED, CHEESE_LUA_STAGE_RUNNING, CHEESE_LUA_STAGE_EXIT_REQUESTED, CHEESE_LUA_STAGE_EXIT_QUEUED };
 struct CheeseLuaStageState { CheeseLuaStagePhase phase; uint32_t ticket; uint8_t nextProgram; } cheeseLuaStage = {CHEESE_LUA_STAGE_IDLE, 0, 20};
 enum LuaBeerJobResult : uint8_t { LUA_BEER_JOB_LOCK_BUSY, LUA_BEER_JOB_QUEUED, LUA_BEER_JOB_RUNNING, LUA_BEER_JOB_SUCCEEDED, LUA_BEER_JOB_FAILED };
@@ -73,6 +73,9 @@ bool cheese_mixer_tick(const WProgram&, uint32_t) { return mixerOk; }
 bool cheese_set_cooling_outputs(bool, bool) { ++coolingCalls; return coolingOk; }
 bool cheese_local_doser_complete() { return cheeseRuntime.doserStarted && localDone; }
 void stepper_safe_stop() {}
+enum I2CStepperDoseState : uint8_t { I2C_STEPPER_DOSE_RUNNING, I2C_STEPPER_DOSE_DONE, I2C_STEPPER_DOSE_FAILED };
+static I2CStepperDoseState i2cDose = I2C_STEPPER_DOSE_RUNNING;
+I2CStepperDoseState second_i2c_pump_dose_state() { return i2cDose; }
 void setHeaterPosition(bool) { ++heaterCalls; }
 void set_heater_state(float, float, float = NAN) { ++heaterCalls; }
 void cheese_ph_tick() {}
@@ -103,6 +106,10 @@ int main() {
   reset('D'); program[0].TempSensor=2; cheeseRuntime.doserStarted=true; tick(); check(transitions==0 && aborts==0,"D moved before local doser completion"); localDone=true; tick(); tick(); check(transitions==1,"D local post-start completion");
   reset('D'); program[0].TempSensor=3; cheeseRuntime.doserStarted=true; localDone=true; tick(); tick(); check(transitions==1,"D direct-step completion");
   reset('D'); program[0].TempSensor=2; cheeseRuntime.doserStarted=true; program[0].Time=.001f; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"D local timeout after start");
+  reset('D'); program[0].TempSensor=4; cheeseRuntime.i2cDoserStarted=true; i2cDose=I2C_STEPPER_DOSE_RUNNING; localDone=true; tick(); tick(); check(transitions==0 && aborts==0 && cheeseRuntime.i2cDoserStarted,"D moved before I2C pump completion");
+  i2cDose=I2C_STEPPER_DOSE_DONE; tick(); tick(); check(transitions==1 && aborts==0 && !cheeseRuntime.i2cDoserStarted && cheeseRuntime.doserCompleted,"D I2C pump completion");
+  reset('D'); program[0].TempSensor=4; cheeseRuntime.i2cDoserStarted=true; i2cDose=I2C_STEPPER_DOSE_FAILED; tick(); check(transitions==0 && aborts==1,"D interrupted I2C pump dose was not aborted");
+  reset('D'); program[0].TempSensor=1; i2cDose=I2C_STEPPER_DOSE_DONE; tick(); tick(); check(transitions==0 && aborts==0,"D manual row followed the I2C pump state");
   reset('D'); program[0].TempSensor=1; program[0].Time=.001f; cheeseRuntime.enteredMs=fakeMs-1000; tick(); check(aborts==1,"D manual timeout");
   reset('N'); program[0].Param=6.5f; cheesePhValue=6.5f; sensor.avgTemp=20; for(int i=0;i<15;i++) tick(); cheesePhValue=7.0f; tick(); cheesePhValue=6.5f; for(int i=0;i<31;i++) tick(); tick(); check(transitions==1,"N resets the 30-second pH window");
   reset('N'); phOk=false; sensor.avgTemp=20; for(int i=0;i<11;i++) tick(); check(aborts==1,"N invalid pH failure");
@@ -179,6 +186,9 @@ def main() -> int:
         ("cheeseRuntime.holdAccumulatedMs += static_cast<uint32_t>(elapsed * weight);", "cheeseRuntime.holdAccumulatedMs -= static_cast<uint32_t>(elapsed * weight);", "P accumulation"),
         ("static_cast<uint32_t>(elapsed * weight)", "elapsed", "P weighted accumulation"),
         ("if ((row.TempSensor == 2 || row.TempSensor == 3) && cheese_local_doser_complete())", "if (false)", "D completion"),
+        ("dose == I2C_STEPPER_DOSE_FAILED", "false", "D I2C pump failure"),
+        ("dose == I2C_STEPPER_DOSE_DONE", "dose == I2C_STEPPER_DOSE_RUNNING", "D I2C pump completion"),
+        ("} else if (row.TempSensor == 4) {", "} else {", "D I2C pump method"),
         ("kind != CHEESE_STAGE_HOLD && kind != CHEESE_STAGE_MIX", "false", "C timeout"),
         ("case CHEESE_STAGE_WAIT:\n      return;", "case CHEESE_STAGE_WAIT:\n      run_cheese_program(ProgramNum + 1); return;", "W manual transition"),
         ("case CHEESE_STAGE_DRAIN:\n      return;", "case CHEESE_STAGE_DRAIN:\n      run_cheese_program(ProgramNum + 1); return;", "S manual transition"),

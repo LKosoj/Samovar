@@ -56,8 +56,10 @@ struct CheeseRuntimeState {
   uint8_t mixerDevice;
   bool mixerRunning;
   bool mixerOneShotComplete;
+  bool mixerReversed;
   bool doserStarted;
   bool doserCompleted;
+  bool i2cDoserStarted;
   bool drainOpen;
   bool temperatureConfirmActive;
   bool phReachedActive;
@@ -328,13 +330,19 @@ inline void cheese_set_drain(bool open) {
   cheeseRuntime.drainOpen = open;
 }
 
+// Устройство мешалки в строке: 1 - реле, 2 - I2C, 3 - I2C с реверсом после каждой паузы.
+inline bool cheese_mixer_is_i2c(uint8_t device) {
+  return device == 2 || device == 3;
+}
+
 inline bool cheese_mixer_start(const WProgram& row) {
   if (row.capacity_num == 1) {
     digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
-  } else if (row.capacity_num == 2) {
+  } else if (cheese_mixer_is_i2c(row.capacity_num)) {
     if (!i2c_stepper_mixer_present() ||
         !set_stepper_by_time(static_cast<uint16_t>(fabsf(row.Speed)),
-                             row.Speed < 0.0f, row.Volume)) return false;
+                             (row.Speed < 0.0f) != cheeseRuntime.mixerReversed,
+                             row.Volume)) return false;
   } else if (row.capacity_num != 0) {
     return false;
   }
@@ -346,7 +354,7 @@ inline bool cheese_mixer_start(const WProgram& row) {
 inline bool cheese_mixer_stop() {
   if (cheeseRuntime.mixerDevice == 1) {
     digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-  } else if (cheeseRuntime.mixerDevice == 2 &&
+  } else if (cheese_mixer_is_i2c(cheeseRuntime.mixerDevice) &&
              !set_stepper_by_time(0, false, 0)) {
     return false;
   }
@@ -370,7 +378,7 @@ inline bool cheese_configure_mixer(const WProgram& row, uint32_t nowMs) {
 
 inline bool cheese_mixer_tick(const WProgram& row, uint32_t nowMs) {
   if (cheeseRuntime.mixerDevice == 0) return true;
-  if (cheeseRuntime.mixerDevice == 2 && i2cStepperMixerManualHold) {
+  if (cheese_mixer_is_i2c(cheeseRuntime.mixerDevice) && i2cStepperMixerManualHold) {
     // Оператор остановил мешалку сам: после возврата управления запускаем её заново.
     cheeseRuntime.mixerRunning = false;
     mixer_status = false;
@@ -387,6 +395,7 @@ inline bool cheese_mixer_tick(const WProgram& row, uint32_t nowMs) {
     }
     cheeseRuntime.mixerDeadlineMs = nowMs +
         static_cast<uint32_t>(row.Power * 1000.0f);
+    if (row.capacity_num == 3) cheeseRuntime.mixerReversed = !cheeseRuntime.mixerReversed;
     return true;
   }
   if (!cheeseRuntime.mixerRunning && !cheeseRuntime.mixerOneShotComplete &&
@@ -453,6 +462,7 @@ inline bool cheese_apply_safe_outputs(bool closeDrain) {
   setHeaterPosition(false);
   if (!cheese_set_cooling_outputs(false, false)) applied = false;
   if (!cheese_mixer_stop()) applied = false;
+  if (cheeseRuntime.i2cDoserStarted && !stop_second_i2c_pump()) applied = false;
   stopService();
   stepper_safe_stop_reset();
   startService();
@@ -460,6 +470,7 @@ inline bool cheese_apply_safe_outputs(bool closeDrain) {
   TargetStepps = 0;
   cheeseRuntime.doserStarted = false;
   cheeseRuntime.doserCompleted = false;
+  if (applied) cheeseRuntime.i2cDoserStarted = false;
   if (closeDrain) cheese_set_drain(false);
   if (!applied) {
     request_emergency_stop("Аварийное отключение! Не удалось выключить оборудование сыроварения");
@@ -568,6 +579,15 @@ inline bool cheese_local_doser_motion(const WProgram& row,
   return true;
 }
 
+// Доза I2C-насоса: шаги считает калибровка подключённого насоса, скорость - в л/ч.
+inline bool cheese_i2c_doser_motion(const WProgram& row,
+                                    uint32_t& targetSteps, float& rateLitersPerHour) {
+  targetSteps = i2c_get_step_by_liquid_volume(row.Temp);
+  rateLitersPerHour = row.Param * 60.0f / 1000.0f;
+  const float speed = i2c_get_speed_from_rate(rateLitersPerHour);
+  return targetSteps > 0 && speed >= 1.0f && speed <= I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC;
+}
+
 inline bool cheese_validate_program(String& error) {
   if (ProgramLen == 0 || ProgramLen > PROGRAM_END) {
     error = "Ошибка программы Сыр: строка не задана";
@@ -598,7 +618,7 @@ inline bool cheese_validate_program(String& error) {
         return false;
       }
     }
-    if (row.capacity_num == 2 && !i2c_stepper_mixer_present()) {
+    if (cheese_mixer_is_i2c(row.capacity_num) && !i2c_stepper_mixer_present()) {
       error = "I2C-мешалка недоступна в строке " + String(i + 1);
       return false;
     }
@@ -607,6 +627,14 @@ inline bool cheese_validate_program(String& error) {
       float speed = 0.0f;
       if (!cheese_local_doser_motion(row, targetSteps, speed)) {
         error = "Локальный дозатор недоступен в строке " + String(i + 1);
+        return false;
+      }
+    }
+    if (kind == CHEESE_STAGE_DOSE && row.TempSensor == 4) {
+      uint32_t targetSteps = 0;
+      float rate = 0.0f;
+      if (!cheese_i2c_doser_motion(row, targetSteps, rate)) {
+        error = "I2C-насос недоступен в строке " + String(i + 1);
         return false;
       }
     }
@@ -657,6 +685,18 @@ inline bool cheese_start_local_doser(const WProgram& row) {
   return true;
 }
 
+inline bool cheese_start_i2c_doser(const WProgram& row) {
+  uint32_t targetSteps = 0;
+  float rate = 0.0f;
+  if (!cheese_i2c_doser_motion(row, targetSteps, rate)) return false;
+  i2cStepperPumpRateOverride = 0.0f;  // у каждой строки сыра своя скорость дозирования
+  i2cStepperPumpDirOverride = 0;
+  // Флаг ставим до команды: при неясном итоге старта насос всё равно будет остановлен.
+  cheeseRuntime.i2cDoserStarted = true;
+  cheeseRuntime.doserStarted = true;  // общий признак «дозатор работает» для статуса в интерфейсе
+  return start_second_i2c_pump_steps(rate, targetSteps);
+}
+
 inline bool cheese_local_doser_complete() {
   return cheeseRuntime.doserStarted && !StepperMoving && TargetStepps > 0 &&
       stepper_safe_get_current() >= static_cast<int32_t>(TargetStepps);
@@ -692,6 +732,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
     if (row.WType != 'S' && !cheese_configure_mixer(row, nowMs)) return false;
     if (row.WType == 'D' && (row.TempSensor == 2 || row.TempSensor == 3) &&
         !cheese_start_local_doser(row)) return false;
+    if (row.WType == 'D' && row.TempSensor == 4 && !cheese_start_i2c_doser(row)) return false;
     if (row.WType == 'S') cheese_set_drain(true);
   }
   cheeseRuntime.enteredMs = nowMs;
@@ -702,7 +743,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
                           "Переход к следующей строке", NOTIFY_MSG);
   if (row.WType == 'W') {
     runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR, "Ожидание действия оператора", NOTIFY_MSG);
-  } else if (row.WType == 'D' && (row.TempSensor == 2 || row.TempSensor == 3)) {
+  } else if (row.WType == 'D' && row.TempSensor != 1) {
     runtime_pair_begin(UI_WAIT_CHEESE_DOSE, "Дозатор запущен", NOTIFY_MSG);
   }
   SendMsg("Строка " + String(ProgramNum + 1) + "; " +
@@ -988,6 +1029,17 @@ void cheese_stage_tick() {
         runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED,
                          "Дозирование завершено", NOTIFY_MSG);
         run_cheese_program(ProgramNum + 1);
+      } else if (row.TempSensor == 4) {
+        const I2CStepperDoseState dose = second_i2c_pump_dose_state();
+        if (dose == I2C_STEPPER_DOSE_FAILED) {
+          cheese_abort("Дозирование I2C-насосом прервано");
+        } else if (dose == I2C_STEPPER_DOSE_DONE) {
+          cheeseRuntime.i2cDoserStarted = false;
+          cheeseRuntime.doserCompleted = true;
+          runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED,
+                           "Дозирование завершено", NOTIFY_MSG);
+          run_cheese_program(ProgramNum + 1);
+        }
       }
       return;
     case CHEESE_STAGE_PH:

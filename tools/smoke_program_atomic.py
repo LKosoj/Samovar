@@ -600,6 +600,15 @@ void test_cheese_row_semantics() {
       {"H;63;90;1^0^0^0;0;1\n", false},
       {"H;nan;90;1;1^0^0^0;0\n", false},
       {"D;65536;15;25;0^0^0^0;2\n", false},
+      {"D;12.5;15;30;0^0^0^0;4\n", true},
+      {"D;100;15;0;0^0^0^0;4\n", false},
+      {"D;0;15;30;0^0^0^0;4\n", false},
+      {"M;0;5;0;3^40^30^10;0\n", true},
+      {"M;0;5;0;3^-40^30^10;0\n", true},
+      {"M;0;5;0;3^40^30^0;0\n", false},
+      {"M;0;5;0;3^40^0^0;0\n", false},
+      {"M;0;5;0;3^0^30^10;0\n", false},
+      {"M;0;5;0;4^40^30^10;0\n", false},
       {"H;63;90;1;1^0^0^0;0;extra\n", false},
       {"Z;32;10;0;0^0^0^0;0\n", false},
       {"P;63;30;45;1^0^0^0;0\n", true},
@@ -1116,6 +1125,39 @@ def main() -> int:
             sys.stderr.write("FAIL: cheese Param test did not catch the mutation\n")
             return 1
         print("Cheese Param mutation was rejected as expected")
+
+        for old, new, label in (
+            ("(sensor == 2 || sensor == 4) && temp > 0.0f", "sensor == 2 && temp > 0.0f",
+             "I2C pump dose method"),
+            ("(sensor == 2 || sensor == 4) && temp > 0.0f && param > 0.0f",
+             "(sensor == 2 || sensor == 4) && temp > 0.0f", "I2C pump dose rate"),
+            ("devType == 3 && speed >= INT16_MIN", "devType == 9 && speed >= INT16_MIN",
+             "reversing mixer device"),
+            ("speed != 0 && onTime > 0 && offTime > 0", "speed != 0 && onTime > 0",
+             "reversing mixer pause"),
+        ):
+            original = (ROOT / "program_io.h").read_text(encoding="utf-8")
+            mutated = original.replace(old, new, 1)
+            if mutated == original:
+                sys.stderr.write(f"FAIL: {label} mutation target not found\n")
+                return 1
+            (temp / "program_io.h").write_text(mutated, encoding="utf-8")
+            binary = temp / "program_atomic_cheese_new_rows_mutation_test"
+            compiled = subprocess.run(
+                [
+                    "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                    "-I", str(temp), "-I", str(ROOT), str(harness), "-o", str(binary),
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            if compiled.returncode != 0:
+                sys.stderr.write(f"FAIL: {label} mutation did not compile\n")
+                sys.stderr.write(compiled.stderr)
+                return 1
+            if subprocess.run([str(binary)], capture_output=True, text=True, check=False).returncode == 0:
+                sys.stderr.write(f"FAIL: cheese row test did not catch the mutation: {label}\n")
+                return 1
+            print(f"Cheese {label} mutation was rejected as expected")
 
         mutated_f_multiplier = (ROOT / "program_io.h").read_text(encoding="utf-8")
         mutated_f_multiplier = mutated_f_multiplier.replace(

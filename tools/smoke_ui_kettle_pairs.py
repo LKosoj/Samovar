@@ -201,15 +201,18 @@ def main() -> int:
         "request_program_lua_job(targetProgram, ticket)",
         "runtime_pair_begin(UI_WAIT_LUA_KNOWN",
         "!cheese_start_local_doser(row)) return false;",
+        "!cheese_start_i2c_doser(row)) return false;",
         "row.WType == 'W'",
         "runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR",
-        "row.WType == 'D' && (row.TempSensor == 2 || row.TempSensor == 3)",
+        "row.WType == 'D' && row.TempSensor != 1",
         "runtime_pair_begin(UI_WAIT_CHEESE_DOSE",
     ], errors)
     require("Cheese q18 q20 q21 outcomes", cheese_tick, [
         "runtime_pair_end(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED",
         "runtime_pair_begin(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE",
         "cheese_local_doser_complete()",
+        "runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED",
+        "dose == I2C_STEPPER_DOSE_DONE",
         "runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED",
         "runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM",
     ], errors)

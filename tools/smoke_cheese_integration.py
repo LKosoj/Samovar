@@ -150,6 +150,11 @@ bool beer_control_sensor(uint8_t, const DSSensor*& sensor, const char*&) {
   return sensorPresent;
 }
 bool i2c_stepper_mixer_present() { return i2cPresent; }
+// Как в I2CStepper.h: без подключённого откалиброванного насоса шагов и скорости нет.
+#define I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC 20000
+static uint16_t i2cPumpStepsPerMl = 0;
+uint32_t i2c_get_step_by_liquid_volume(float ml) { return static_cast<uint32_t>(ml * i2cPumpStepsPerMl); }
+float i2c_get_speed_from_rate(float litersPerHour) { return roundf(litersPerHour * 1000.0f * i2cPumpStepsPerMl / 3600.0f); }
 #ifdef USE_LUA
 bool exists(String) { return luaPresent; }
 #endif
@@ -158,6 +163,9 @@ inline CheeseStageKind cheese_stage_kind(ProgramType type) { @KIND@ }
 inline bool cheese_row_needs_sensor(CheeseStageKind kind) { @NEEDS_SENSOR@ }
 inline bool cheese_local_doser_motion(const WProgram& row,
                                       uint32_t& targetSteps, float& speed) { @DOSER_MOTION@ }
+inline bool cheese_i2c_doser_motion(const WProgram& row,
+                                    uint32_t& targetSteps, float& rateLitersPerHour) { @I2C_DOSER_MOTION@ }
+inline bool cheese_mixer_is_i2c(uint8_t device) { @IS_I2C@ }
 inline bool cheese_validate_program(String& error) { @VALIDATE@ }
 
 static int failures = 0;
@@ -180,6 +188,17 @@ int main() {
   check(!cheese_validate_program(error), "I2C mixer absence passed preflight");
   i2cPresent = true;
   check(cheese_validate_program(error), "available I2C mixer failed preflight");
+  program[0].capacity_num = 3; i2cPresent = false;
+  check(!cheese_validate_program(error), "reversing I2C mixer absence passed preflight");
+  i2cPresent = true;
+  check(cheese_validate_program(error), "available reversing I2C mixer failed preflight");
+
+  reset('D'); program[0].TempSensor = 4; program[0].Temp = 10.0f; program[0].Param = 30.0f;
+  SamSetup.StepperStepMl = 4; i2cPumpStepsPerMl = 0;
+  check(!cheese_validate_program(error),
+        "I2C pump D without a connected calibrated pump passed preflight");
+  i2cPumpStepsPerMl = 400; SamSetup.StepperStepMl = 0;
+  check(cheese_validate_program(error), "valid I2C pump D failed preflight");
 
   reset('D'); program[0].TempSensor = 2;
   SamSetup.StepperStepMl = 0;
@@ -230,6 +249,8 @@ def build_preflight(validate_body: str, use_lua: bool) -> str:
         "@KIND@": body("inline CheeseStageKind cheese_stage_kind(ProgramType type)"),
         "@NEEDS_SENSOR@": body("inline bool cheese_row_needs_sensor(CheeseStageKind kind)"),
         "@DOSER_MOTION@": body("inline bool cheese_local_doser_motion(const WProgram& row,"),
+        "@I2C_DOSER_MOTION@": body("inline bool cheese_i2c_doser_motion(const WProgram& row,"),
+        "@IS_I2C@": body("inline bool cheese_mixer_is_i2c(uint8_t device)"),
         "@VALIDATE@": validate_body,
     }
     result = PREFLIGHT_HARNESS
@@ -316,8 +337,17 @@ def main() -> int:
         validate_body = body("inline bool cheese_validate_program(String& error)")
         run(build_preflight(validate_body, True), "Cheese preflight availability", True)
         for old, new, label in (
-            ("row.capacity_num == 2 && !i2c_stepper_mixer_present()", "false",
+            ("cheese_mixer_is_i2c(row.capacity_num) && !i2c_stepper_mixer_present()", "false",
              "I2C mixer availability mutation"),
+            ("cheese_mixer_is_i2c(row.capacity_num) && !i2c_stepper_mixer_present()",
+             "row.capacity_num == 2 && !i2c_stepper_mixer_present()",
+             "reversing I2C mixer availability mutation"),
+            ("!cheese_i2c_doser_motion(row, targetSteps, rate)",
+             "false && !cheese_i2c_doser_motion(row, targetSteps, rate)",
+             "I2C pump D availability mutation"),
+            ("kind == CHEESE_STAGE_DOSE && row.TempSensor == 4",
+             "kind == CHEESE_STAGE_DOSE && row.TempSensor == 2",
+             "I2C pump D method mutation"),
             ("!cheese_local_doser_motion(row, targetSteps, speed)",
              "false && !cheese_local_doser_motion(row, targetSteps, speed)",
              "local D conversion mutation"),

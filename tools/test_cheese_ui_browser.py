@@ -146,7 +146,7 @@ BROWSER_TEST = r'''async page => {
   const dosingMethods = await manualDose.locator(".cheese-value4 option").evaluateAll(nodes =>
     nodes.map(node => [node.value, node.textContent]));
   expect(JSON.stringify(dosingMethods) === JSON.stringify([
-    ["1", "Вручную"], ["2", "Локальный шаговый двигатель"], ["3", "По шагам"]
+    ["1", "Вручную"], ["2", "Локальный шаговый двигатель"], ["3", "По шагам"], ["4", "I2C-насос"]
   ]), "D methods are wrong: " + JSON.stringify(dosingMethods));
   await manualDose.locator(".cheese-value4").selectOption("1");
   await manualDose.locator(".cheese-action-code").selectOption("2");
@@ -182,6 +182,40 @@ BROWSER_TEST = r'''async page => {
   expect(await manualDose.locator(".cheese-value3").isHidden(), "direct-step D still shows rate input");
   expect((await page.evaluate(() => serializeCheeseRows())).split("\n")[4] ===
     "D;20000000;30;0;0^0^0^0;3", "direct-step D serialization is wrong");
+
+  await manualDose.locator(".cheese-value4").selectOption("4");
+  await manualDose.locator(".cheese-value1").fill("12.5");
+  await manualDose.locator(".cheese-value3").fill("30");
+  expect(await manualDose.locator(".cheese-field").first().locator("label").textContent() === "Объём, мл" &&
+    await manualDose.locator(".cheese-value3").isVisible(), "I2C pump D does not ask for volume and rate");
+  expect((await page.evaluate(() => serializeCheeseRows())).split("\n")[4] ===
+    "D;12.5;30;30;0^0^0^0;4", "I2C pump D serialization is wrong");
+  const doseRows = [
+    [["12.5", "30", "30", "0^0^0^0", "4"], true], [["12.5", "30", "0", "0^0^0^0", "4"], false],
+    [["0", "30", "30", "0^0^0^0", "4"], false], [["12.5", "30", "30", "0^0^0^0", "5"], false]
+  ];
+  for (const [values, ok] of doseRows) {
+    expect(await page.evaluate(row => validateCheeseRow(["D", ...row]), values) === ok,
+      "I2C pump D row validity is wrong: " + values.join(";"));
+  }
+
+  // Мешалка с реверсом после паузы: устройство 3, нужны и работа, и пауза.
+  await heat.locator(".cheese-mixer-device").selectOption("3");
+  await heat.locator(".cheese-mixer-on").fill("30");
+  await heat.locator(".cheese-mixer-off").fill("10");
+  expect((await page.evaluate(() => serializeCheeseRows())).split("\n")[0].split(";")[4] === "3^-120^30^10",
+    "reversing I2C mixer was not serialized");
+  const mixerRows = [["3^40^30^10", true], ["3^-40^30^10", true], ["3^40^30^0", false],
+    ["3^40^0^0", false], ["3^0^30^10", false], ["4^40^30^10", false], ["2^40^30^0", true]];
+  for (const [mixer, ok] of mixerRows) {
+    expect(await page.evaluate(row => validateCheeseRow(row), ["M", "0", "5", "0", mixer, "0"]) === ok,
+      "reversing mixer validity is wrong: " + mixer);
+  }
+  expect(await page.evaluate(() => parseCheeseProgram("M;0;5;0;3^-40^30^10;0\nD;12.5;30;30;0^0^0^0;4\n").length) === 2,
+    "program with reversing mixer and I2C pump dose is not importable");
+  await heat.locator(".cheese-mixer-device").selectOption("2");
+  await heat.locator(".cheese-mixer-on").fill("0");
+  await heat.locator(".cheese-mixer-off").fill("0");
 
   await page.getByRole("button", {name:"Процесс"}).click();
   await page.evaluate(data => renderTelemetry(data), {...telemetry(9),

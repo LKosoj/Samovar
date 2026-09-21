@@ -42,13 +42,14 @@ MIXER = r'''
 using std::isfinite;
 struct WProgram { uint8_t capacity_num; float Speed; uint16_t Volume; };
 struct Setup { bool rele2; } SamSetup = {true};
-struct Runtime { uint8_t mixerDevice; bool mixerRunning; } cheeseRuntime = {};
+struct Runtime { uint8_t mixerDevice; bool mixerRunning; bool mixerReversed; } cheeseRuntime = {};
 bool mixer_status = false;
 int relayWrites = 0; bool relayState = false; void digitalWrite(int, bool state) { ++relayWrites; relayState = state; }
 #define RELE_CHANNEL2 2
 bool i2cPresent = true; bool i2cOk = true; int i2cCalls = 0; uint16_t i2cSpeed = 0; bool i2cDirection = false;
 bool i2c_stepper_mixer_present() { return i2cPresent; }
 bool set_stepper_by_time(uint16_t speed, bool direction, uint16_t) { ++i2cCalls; i2cSpeed = speed; i2cDirection = direction; return i2cOk; }
+inline bool cheese_mixer_is_i2c(uint8_t device) { @IS_I2C@ }
 inline bool cheese_mixer_start(const WProgram& row) { @START@ }
 inline bool cheese_mixer_stop() { @STOP@ }
 int failures = 0; void check(bool value, const char* text) { if (!value) { std::cerr << text << '\n'; ++failures; } }
@@ -58,6 +59,8 @@ int main() {
   check(cheese_mixer_stop() && !mixer_status && !relayState, "relay mixer stop did not publish common state");
   WProgram i2c = {2, -17.0f, 12}; cheeseRuntime.mixerDevice = 2;
   check(cheese_mixer_start(i2c) && mixer_status && i2cSpeed == 17 && i2cDirection, "I2C mixer direction or speed changed");
+  WProgram reversing = {3, 23.0f, 12}; cheeseRuntime.mixerDevice = 3;
+  check(cheese_mixer_start(reversing) && i2cSpeed == 23 && !i2cDirection, "reversing I2C mixer did not start forward");
   i2cOk = false;
   check(!cheese_mixer_stop() && mixer_status, "failed I2C stop falsely changed common state");
   return failures;
@@ -108,6 +111,53 @@ int main() {
 '''
 
 
+I2C_DOSER = r'''
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+struct WProgram { float Temp; float Param; };
+struct Runtime { bool doserStarted; bool i2cDoserStarted; } cheeseRuntime = {};
+#define I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC 20000
+float i2cStepperPumpRateOverride = 0.0f; uint8_t i2cStepperPumpDirOverride = 0;
+uint16_t stepsPerMl = 0; bool startOk = true;
+int startCalls = 0; float startedRate = 0.0f; uint32_t startedSteps = 0; float rateOverrideAtStart = -1.0f;
+// Как в I2CStepper.h: шаги и скорость зависят от калибровки подключённого насоса.
+uint32_t i2c_get_step_by_liquid_volume(float ml) { return static_cast<uint32_t>(ml * stepsPerMl); }
+float i2c_get_speed_from_rate(float litersPerHour) { return roundf(litersPerHour * 1000.0f * stepsPerMl / 3600.0f); }
+bool start_second_i2c_pump_steps(float rate, uint32_t steps) {
+  ++startCalls; startedRate = rate; startedSteps = steps; rateOverrideAtStart = i2cStepperPumpRateOverride;
+  return startOk;
+}
+inline bool cheese_i2c_doser_motion(const WProgram& row,
+                                    uint32_t& targetSteps, float& rateLitersPerHour) { @MOTION@ }
+inline bool cheese_start_i2c_doser(const WProgram& row) { @DOSE@ }
+int failures = 0; void check(bool value, const char* text) { if (!value) { std::cerr << text << '\n'; ++failures; } }
+int main() {
+  WProgram dose = {2.5f, 30.0f};
+  check(!cheese_start_i2c_doser(dose) && startCalls == 0 && !cheeseRuntime.i2cDoserStarted,
+        "I2C dose without pump calibration was started");
+  stepsPerMl = 400; i2cStepperPumpRateOverride = 9.0f; i2cStepperPumpDirOverride = 2;
+  check(cheese_start_i2c_doser(dose) && startCalls == 1 && startedSteps == 1000 &&
+        std::fabs(startedRate - 1.8f) < 0.001f, "I2C dose 2.5 ml at 30 ml/min was converted wrongly");
+  check(rateOverrideAtStart == 0.0f && i2cStepperPumpDirOverride == 0,
+        "operator pump override of a previous row leaked into the dose");
+  check(cheeseRuntime.i2cDoserStarted && cheeseRuntime.doserStarted, "I2C dose start was not recorded");
+  stepsPerMl = 100; dose.Temp = 10.0f; dose.Param = 120.0f;
+  check(cheese_start_i2c_doser(dose) && startedSteps == 1000 && std::fabs(startedRate - 7.2f) < 0.001f,
+        "I2C dose 10 ml at 120 ml/min was converted wrongly");
+  stepsPerMl = 400; dose.Temp = 0.001f; dose.Param = 30.0f;  // меньше одного шага
+  check(!cheese_start_i2c_doser(dose) && startCalls == 2, "I2C dose below one pump step was started");
+  dose.Temp = 10.0f;
+  stepsPerMl = 6000; dose.Param = 300.0f;  // 30000 шагов/с - выше предела Nano
+  check(!cheese_start_i2c_doser(dose) && startCalls == 2, "I2C dose faster than the pump limit was started");
+  stepsPerMl = 400; dose.Param = 30.0f; cheeseRuntime = {}; startOk = false;
+  check(!cheese_start_i2c_doser(dose) && cheeseRuntime.i2cDoserStarted,
+        "unconfirmed I2C dose start must stay marked so that safe outputs stop the pump");
+  return failures;
+}
+'''
+
+
 COOLING = r'''
 #include <cstdint>
 #include <iostream>
@@ -139,7 +189,8 @@ int main() {
 
 def main() -> int:
     try:
-        mixer = MIXER.replace("@START@", body("inline bool cheese_mixer_start(const WProgram& row)"))
+        mixer = MIXER.replace("@IS_I2C@", body("inline bool cheese_mixer_is_i2c(uint8_t device)"))
+        mixer = mixer.replace("@START@", body("inline bool cheese_mixer_start(const WProgram& row)"))
         mixer = mixer.replace("@STOP@", body("inline bool cheese_mixer_stop()"))
         run(mixer, "relay and I2C mixer")
         mixer_mutant = mixer.replace(
@@ -155,6 +206,23 @@ def main() -> int:
             raise AssertionError("local dose mutation anchor missing")
         run(DOSER.replace("@MOTION@", motion_mutant).replace("@DOSE@", dose_body),
             "local dose minimum-step mutation", False)
+        i2c_motion = body("inline bool cheese_i2c_doser_motion(const WProgram& row,")
+        i2c_dose = body("inline bool cheese_start_i2c_doser(const WProgram& row)")
+        run(I2C_DOSER.replace("@MOTION@", i2c_motion).replace("@DOSE@", i2c_dose), "I2C pump dose")
+        for anchor, mutant, source in (
+            ("row.Param * 60.0f / 1000.0f", "row.Param", i2c_motion),
+            ("targetSteps > 0 &&", "", i2c_motion),
+            ("speed <= I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC", "true", i2c_motion),
+            ("i2cStepperPumpRateOverride = 0.0f;", "", i2c_dose),
+            ("cheeseRuntime.i2cDoserStarted = true;", "", i2c_dose),
+        ):
+            if anchor not in source:
+                raise AssertionError("I2C dose mutation anchor missing: " + anchor)
+            mutated = I2C_DOSER.replace("@MOTION@", i2c_motion.replace(anchor, mutant, 1)
+                                        if source is i2c_motion else i2c_motion)
+            mutated = mutated.replace("@DOSE@", i2c_dose.replace(anchor, mutant, 1)
+                                      if source is i2c_dose else i2c_dose)
+            run(mutated, "I2C dose mutation: " + anchor, False)
         cooling_body = body("inline bool cheese_set_cooling_outputs(bool active, bool highFlow)")
         run("#define USE_WATER_PUMP\n" + COOLING.replace("@COOL@", cooling_body), "PWM cooling")
         run("#define USE_WATER_VALVE 1\n" + COOLING.replace("@COOL@", cooling_body), "two-valve cooling")
@@ -174,7 +242,7 @@ def main() -> int:
     except (AssertionError, ValueError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    print("OK: Cheese relay/I2C mixer, volume/direct-step D, and both cooling builds")
+    print("OK: Cheese relay/I2C mixer, volume/direct-step/I2C-pump D, and both cooling builds")
     return 0
 
 

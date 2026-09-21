@@ -552,6 +552,14 @@ inline float i2c_get_liquid_volume_by_step(uint32_t steps) {
       ? static_cast<float>(steps) / device->config.stepsPerMl : 0.0f;
 }
 
+// Доза в шагах насоса; 0 - насоса нет, он не откалиброван или доза вне диапазона.
+inline uint32_t i2c_get_step_by_liquid_volume(float volumeMl) {
+  I2CStepperDevice* device = i2c_stepper_selected_pump();
+  if (!device || !device->present || !(volumeMl > 0.0f)) return 0;
+  const double steps = static_cast<double>(volumeMl) * device->config.stepsPerMl;
+  return steps <= I2CSTEPPER_V3_TARGET_STEPS_MAX ? static_cast<uint32_t>(steps) : 0;
+}
+
 inline float i2c_get_liquid_rate_by_step(uint32_t stepsPerSecond) {
   return round(i2c_get_liquid_volume_by_step(stepsPerSecond) * 3.6f * 1000.0f) / 1000.0f;
 }
@@ -672,6 +680,18 @@ inline bool i2c_stepper_override_pump_rate(float rateLitersPerHour, uint8_t dire
   if (!i2c_stepper_refresh(*device, true)) return false;
   return device->status.remainingSteps == 0 ||
          start_second_i2c_pump_steps(rateLitersPerHour, device->status.remainingSteps);
+}
+
+// Чем закончилась конечная доза насоса. Причину остановки приносит статус, который пульс
+// обновляет раз в 250 мс; сразу после удачного старта она равна NONE.
+enum I2CStepperDoseState : uint8_t { I2C_STEPPER_DOSE_RUNNING, I2C_STEPPER_DOSE_DONE, I2C_STEPPER_DOSE_FAILED };
+
+inline I2CStepperDoseState second_i2c_pump_dose_state() {
+  I2CStepperDevice* device = i2c_stepper_selected_pump();
+  if (!device || !device->present) return I2C_STEPPER_DOSE_FAILED;
+  if (device->status.stopReason == I2CSTEPPER_V3_STOP_NONE) return I2C_STEPPER_DOSE_RUNNING;
+  return device->status.stopReason == I2CSTEPPER_V3_STOP_COMPLETE
+      ? I2C_STEPPER_DOSE_DONE : I2C_STEPPER_DOSE_FAILED;
 }
 
 inline bool stop_second_i2c_pump() {

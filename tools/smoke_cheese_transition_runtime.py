@@ -75,7 +75,7 @@ struct WProgram { char WType; float Temp; float Time; uint8_t capacity_num; floa
 uint32_t program_load_cheese_doser_steps(const WProgram& row) { uint32_t steps = 0; std::memcpy(&steps, &row.Param, sizeof(steps)); return steps; }
 #define CHEESE_DOSER_STEP_SPEED 3200
 struct Setup { bool rele2; bool rele4; uint16_t StepperStepMl; } SamSetup = {true, true, 4};
-struct Runtime { uint8_t mixerDevice; bool mixerRunning; bool mixerOneShotComplete; uint32_t mixerDeadlineMs; bool doserStarted; bool doserCompleted; bool drainOpen; uint32_t enteredMs; uint32_t lastTickMs; float heatStartSetpoint; } cheeseRuntime = {};
+struct Runtime { uint8_t mixerDevice; bool mixerRunning; bool mixerOneShotComplete; uint32_t mixerDeadlineMs; bool mixerReversed; bool doserStarted; bool doserCompleted; bool i2cDoserStarted; bool drainOpen; uint32_t enteredMs; uint32_t lastTickMs; float heatStartSetpoint; } cheeseRuntime = {};
 enum ActuatorCommandResult { ACTUATOR_COMMAND_APPLIED, ACTUATOR_COMMAND_FAILED };
 static const int RELE_CHANNEL2 = 2, RELE_CHANNEL4 = 4;
 static const int SAMOVAR_STARTVAL_CHEESE_START = 42;
@@ -113,10 +113,19 @@ struct Stepper { void enable() {} } stepper;
 #define STEPPER_REVERSE
 bool i2c_stepper_mixer_present() { return true; }
 bool set_stepper_by_time(uint16_t, bool, uint16_t) { return true; }
+// I2C-насос: качает, пока его не остановили; отказ остановки оставляет его работать.
+#define I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC 20000
+float i2cStepperPumpRateOverride = 0.0f; uint8_t i2cStepperPumpDirOverride = 0;
+bool i2cPumpRunning = false, i2cPumpStopOk = true; int i2cPumpStops = 0;
+uint32_t i2c_get_step_by_liquid_volume(float ml) { return static_cast<uint32_t>(ml * 400.0f); }
+float i2c_get_speed_from_rate(float litersPerHour) { return litersPerHour * 1000.0f * 400.0f / 3600.0f; }
+bool start_second_i2c_pump_steps(float, uint32_t) { i2cPumpRunning = true; trace.push_back("i2c-pump-on"); return true; }
+bool stop_second_i2c_pump() { ++i2cPumpStops; if (i2cPumpStopOk) { i2cPumpRunning = false; trace.push_back("i2c-pump-off"); } return i2cPumpStopOk; }
 void request_emergency_stop(const String&) { trace.push_back("emergency"); }
 const char* cheese_stage_name(char) { return "stage"; }
 void SendMsg(const String&, int) {}
 inline void cheese_set_drain(bool open) { @DRAIN@ }
+inline bool cheese_mixer_is_i2c(uint8_t device) { @IS_I2C@ }
 inline bool cheese_mixer_start(const WProgram& row) { @MIXER_START@ }
 inline bool cheese_mixer_stop() { @MIXER_STOP@ }
 inline bool cheese_configure_mixer(const WProgram& row, uint32_t nowMs) { @MIXER_CONFIGURE@ }
@@ -124,6 +133,9 @@ inline bool cheese_set_cooling_outputs(bool active, bool highFlow) { @COOLING@ }
 inline bool cheese_local_doser_motion(const WProgram& row,
                                       uint32_t& targetSteps, float& speed) { @LOCAL_MOTION@ }
 inline bool cheese_start_local_doser(const WProgram& row) { @LOCAL_DOSE@ }
+inline bool cheese_i2c_doser_motion(const WProgram& row,
+                                    uint32_t& targetSteps, float& rateLitersPerHour) { @I2C_MOTION@ }
+inline bool cheese_start_i2c_doser(const WProgram& row) { @I2C_DOSE@ }
 inline bool cheese_apply_safe_outputs(bool closeDrain) { @SAFE@ }
 inline bool cheese_prepare_stage(uint8_t targetProgram) { @PREPARE@ }
 static int index_of(const char* event) { for (size_t i = 0; i < trace.size(); ++i) if (trace[i] == event) return static_cast<int>(i); return -1; }
@@ -143,6 +155,16 @@ int main() {
   trace.clear();
   if (!cheese_prepare_stage(1)) return 3;
   if (cooling || !relay2 || !StepperMoving || !cheeseRuntime.doserStarted || !previous_outputs_off_before_new_outputs()) return 4;
+  if (i2cPumpStops != 0) return 5;  // чужой I2C-насос строка без I2C-дозы не трогает
+  program[1] = {'D', 2.5f, 1, 0, 0, 0, 0, 4, 30};
+  program[2] = {'W', 0, 1, 0, 0, 0, 0, 0, 1};
+  trace.clear();
+  if (!cheese_prepare_stage(1) || !i2cPumpRunning || !cheeseRuntime.i2cDoserStarted || index_of("doser-on") >= 0) return 6;
+  trace.clear();
+  if (!cheese_prepare_stage(2) || i2cPumpRunning || i2cPumpStops != 1 || cheeseRuntime.i2cDoserStarted) return 7;
+  if (!cheese_prepare_stage(1) || !i2cPumpRunning) return 8;
+  i2cPumpStopOk = false; trace.clear();
+  if (cheese_prepare_stage(2) || index_of("emergency") < 0 || !i2cPumpRunning) return 9;
   return 0;
 }
 '''
@@ -169,6 +191,9 @@ def main() -> int:
         abort = body("inline void cheese_abort(const String& reason)")
         pieces = {
             "@DRAIN@": body("inline void cheese_set_drain(bool open)"),
+            "@IS_I2C@": body("inline bool cheese_mixer_is_i2c(uint8_t device)"),
+            "@I2C_MOTION@": body("inline bool cheese_i2c_doser_motion(const WProgram& row,"),
+            "@I2C_DOSE@": body("inline bool cheese_start_i2c_doser(const WProgram& row)"),
             "@MIXER_START@": body("inline bool cheese_mixer_start(const WProgram& row)"),
             "@MIXER_STOP@": body("inline bool cheese_mixer_stop()"),
             "@MIXER_CONFIGURE@": body("inline bool cheese_configure_mixer(const WProgram& row, uint32_t nowMs)"),
@@ -199,6 +224,18 @@ def main() -> int:
     transition_mutant = transition.replace(pieces["@PREPARE@"], prepare_mutant, 1)
     if not run(transition_mutant, "Cheese safe transition mutation", False):
         return 1
+    for marker, old, new, label in (
+        ("@SAFE@", "cheeseRuntime.i2cDoserStarted && !stop_second_i2c_pump()", "false", "I2C pump left running"),
+        ("@SAFE@", "cheeseRuntime.i2cDoserStarted && !stop_second_i2c_pump()", "!stop_second_i2c_pump()",
+         "foreign I2C pump stopped"),
+        ("@PREPARE@", "row.TempSensor == 4 && !cheese_start_i2c_doser(row)", "false", "I2C pump dose not started"),
+    ):
+        mutant = pieces[marker].replace(old, new, 1)
+        if mutant == pieces[marker]:
+            print(f"FAIL: {label} mutation anchor missing", file=sys.stderr)
+            return 1
+        if not run(transition.replace(pieces[marker], mutant, 1), f"mutation: {label}", False):
+            return 1
     print("OK: Cheese errors identify the line and real stage transitions clear outputs")
     return 0
 

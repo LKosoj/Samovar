@@ -81,7 +81,7 @@
 
     function mixerValues(row) {
       var speed = Number(row.mixerSpeed.value);
-      if (Number(row.mixerDevice.value) === 2) speed = Math.abs(speed) * Number(row.mixerDirection.value);
+      if (Number(row.mixerDevice.value) >= 2) speed = Math.abs(speed) * Number(row.mixerDirection.value);
       return [Number(row.mixerDevice.value), speed,
         Number(row.mixerOn.value), Number(row.mixerOff.value)];
     }
@@ -93,9 +93,11 @@
       var device = values[0], speed = values[1], on = values[2], off = values[3];
       if (!allowed) return device === 0 && speed === 0 && on === 0 && off === 0;
       if (device === 0) return speed === 0 && on === 0 && off === 0;
-      if (device !== 1 && device !== 2) return false;
+      if (device !== 1 && device !== 2 && device !== 3) return false;
       if (device === 1 && speed !== 0) return false;
-      if (device === 2 && (!integer(speed, -65535, 65535) || speed === 0)) return false;
+      if (device >= 2 && (!integer(speed, -65535, 65535) || speed === 0)) return false;
+      // Реверс после паузы: без паузы направление менять некогда.
+      if (device === 3 && !(integer(on, 1, 65535) && integer(off, 1, 65535))) return false;
       if (!integer(on, 0, 65535) || !integer(off, 0, 65535)) return false;
       return on === 0 ? off === 0 : true;
     }
@@ -130,9 +132,9 @@
       if (type === 'H' && !positive(three, 150)) return false;
       if (type === 'P' && (!positive(three, 1440) || three < two)) return false;
       if (type === 'D' && !(positive(three, 65535) || integer(three, 0, 8)) ||
-          (type === 'D' && !integer(four, 1, 3))) return false;
+          (type === 'D' && !integer(four, 1, 4))) return false;
       if (type === 'D' && four === 1 && !integer(three, 1, 8)) return false;
-      if (type === 'D' && four === 2 && !positive(three, 65535)) return false;
+      if (type === 'D' && (four === 2 || four === 4) && !positive(three, 65535)) return false;
       if (type === 'D' && four === 3 && three !== 0) return false;
       if (type === 'N' && !positive(three, 14)) return false;
       if (type === 'F' && cheeseFlocMultiplierMilli(three) === null) return false;
@@ -150,7 +152,7 @@
 
     function setValue4Options(row) {
       var type = row.type.value;
-      var options = type === 'D' ? [['1','Вручную'],['2','Локальный шаговый двигатель'],['3','По шагам']]
+      var options = type === 'D' ? [['1','Вручную'],['2','Локальный шаговый двигатель'],['3','По шагам'],['4','I2C-насос']]
         : SENSOR_NAMES.map(function(name, index) { return [String(index), name]; });
       var previous = row.value4.value;
       row.value4.textContent = '';
@@ -571,7 +573,7 @@
           <div class="cheese-field"><label></label><input class="cheese-value2" type="number" min="0" max="1440" step="0.1"></div>
           <div class="cheese-field"><label></label><input class="cheese-value3" type="number" min="0" max="65535" step="0.1"><select class="cheese-action-code" hidden><option value="1">Внести закваску</option><option value="2">Внести фермент</option><option value="3">Внести добавку</option><option value="4">Разрезать сгусток</option><option value="5">Переложить в формы</option><option value="6">Начать или изменить прессование</option><option value="7">Перевернуть сыр</option><option value="8">Другое действие</option></select></div>
           <div class="cheese-mixer">
-            <label>Мешалка<select class="cheese-mixer-device"><option value="0">NONE</option><option value="1">RELAY</option><option value="2">I2C</option></select></label>
+            <label>Мешалка<select class="cheese-mixer-device"><option value="0">NONE</option><option value="1">RELAY</option><option value="2">I2C</option><option value="3">I2C, реверс после паузы</option></select></label>
             <label>RPM<input class="cheese-mixer-speed" type="number" min="0" max="65535" step="1" value="0"></label>
             <label>Направление<select class="cheese-mixer-direction"><option value="1">Прямое</option><option value="-1">Обратное</option></select></label>
             <label>Работа, с<input class="cheese-mixer-on" type="number" min="0" max="65535" step="1" value="0"></label>
