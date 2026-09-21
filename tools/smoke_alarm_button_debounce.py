@@ -1,166 +1,138 @@
 #!/usr/bin/env python3
-"""Антидребезг аварийной кнопки (21.09.2026).
-
-Задача кнопки срабатывала по одному спаду сигнала: любая наводка на входе (GPIO35 без
-внутренней подтяжки, длинные провода к датчикам протечки и паров спирта) глушила процесс.
-Теперь emergency_button_press_confirmed() (Samovar.ino) засчитывает срабатывание, только
-если вход держит LOW все 30 мс подряд.
-
-Харнесс вытаскивает из исходника РЕАЛЬНОЕ тело функции и обе константы. Вход задан
-сценарием «уровень от времени», vTaskDelay() двигает время - заглушки моделируют
-зависимость функции от состояния входа, а не её ответ.
-"""
-import re
+"""Реальная задача аварийной кнопки + GyverButton: помехи, удержание и повторный вход."""
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
-SIGNATURE = "bool emergency_button_press_confirmed()"
-CONSTANT_PATTERN = r"static constexpr \w+ EMERGENCY_BUTTON_DEBOUNCE_\w+ = \d+;"
-
-HARNESS_TEMPLATE = r'''
+LIB = ROOT / 'libraries/GyverButton/src'
+ARDUINO = '''#pragma once
 #include <cstdint>
-#include <iostream>
-
+using boolean = bool;
+using byte = uint8_t;
 #define LOW 0
 #define HIGH 1
+#define INPUT 0
+#define INPUT_PULLUP 2
+void pinMode(int, int);
+int digitalRead(int);
+uint32_t millis();
+'''
+HARNESS = r'''
+#include <GyverButton.h>
+#include <vector>
+#include <utility>
+#include <iostream>
+#include <cstdlib>
 #define ALARM_BTN_PIN 35
+#define pdTRUE 1
+#define pdPASS 1
+#define portMAX_DELAY 0xffffffffU
 #define pdMS_TO_TICKS(ms) (ms)
-
+#define FALLING 2
+using BaseType_t = int;
+using TaskHandle_t = void*;
+static TaskHandle_t EmergencyButtonTask = nullptr;
 static uint32_t nowMs = 0;
-static uint32_t lowFromMs = 0;   // вход LOW на отрезке [lowFromMs, lowUntilMs)
-static uint32_t lowUntilMs = 0;
-static uint32_t secondLowFromMs = 0;  // вторая помеха: [secondLowFromMs, secondLowUntilMs)
-static uint32_t secondLowUntilMs = 0;
-static int readPin = -1;
-
-static int digitalRead(int pin) {
-  readPin = pin;
-  const bool low = (nowMs >= lowFromMs && nowMs < lowUntilMs) ||
-                   (nowMs >= secondLowFromMs && nowMs < secondLowUntilMs);
-  return low ? LOW : HIGH;
+static unsigned pending = 0;
+static std::vector<std::pair<uint32_t, uint32_t>> pulses;
+static std::vector<uint32_t> stops;
+struct Done {};
+void pinMode(int, int) {}
+uint32_t millis() { return nowMs; }
+int digitalRead(int pin) {
+  if (pin != ALARM_BTN_PIN) std::abort();
+  for (auto p : pulses) if (nowMs >= p.first && nowMs < p.second) return LOW;
+  return HIGH;
 }
-static void vTaskDelay(uint32_t ticks) { nowMs += ticks; }
-
-@CONSTANTS@
-
-@SIGNATURE@ {@BODY@}
-
-static int failures = 0;
-static void check(bool condition, const char* message) {
-  if (!condition) {
-    std::cerr << "FAIL: " << message << '\n';
-    failures++;
+GButton alarm_btn(ALARM_BTN_PIN);
+void check(bool ok, const char* message) {
+  if (!ok) { std::cerr << "FAIL: " << message << '\n'; std::exit(1); }
+}
+void vTaskDelay(uint32_t ticks) {
+  check(ticks > 0, "task must yield while polling");
+  for (auto p : pulses) if (p.first > nowMs && p.first <= nowMs + ticks) ++pending;
+  nowMs += ticks;
+  check(nowMs < 1000, "task must sleep after release");
+}
+void ulTaskNotifyTake(int, uint32_t) {
+  if (!pending) {
+    bool found = false;
+    for (auto p : pulses) if (p.first > nowMs) {
+      nowMs = p.first; pending = 1; found = true; break;
+    }
+    if (!found) throw Done{};
   }
+  pending = 0;
 }
-
-static bool run(uint32_t lowFrom, uint32_t lowUntil, uint32_t secondLowFrom = 0, uint32_t secondLowUntil = 0) {
-  nowMs = 0;
-  secondLowFromMs = secondLowFrom;
-  secondLowUntilMs = secondLowUntil;
-  lowFromMs = lowFrom;
-  lowUntilMs = lowUntil;
-  return emergency_button_press_confirmed();
+void emergencyButtonInterrupt() {}
+void attachInterrupt(int, void (*)(), int) {}
+void xTaskNotifyGive(TaskHandle_t) { ++pending; }
+int xTaskCreatePinnedToCore(void (*)(void*), const char*, int, void*, int,
+                           TaskHandle_t* handle, int) {
+  *handle = reinterpret_cast<void*>(1); return pdPASS;
 }
-
+const char* emergency_button_reason() { return "alarm"; }
+void request_emergency_stop(const char*) { stops.push_back(nowMs); }
+void triggerEmergencyButton(void* parameter) { @TASK@ }
+bool initEmergencyButtonTask() { @INIT@ }
+void run(std::vector<std::pair<uint32_t, uint32_t>> input,
+         std::vector<uint32_t> expected, const char* message) {
+  nowMs = 0; pending = 0; pulses = input; stops.clear();
+  check(initEmergencyButtonTask(), "task creation");
+  try { triggerEmergencyButton(nullptr); } catch (Done&) {}
+  check(stops == expected, message);
+}
 int main() {
-  check(run(0, 1000000) == true, "устойчивый LOW (кнопка или сработавший датчик) обязан засчитаться");
-  check(readPin == ALARM_BTN_PIN, "читать обязаны вход аварийной кнопки");
-  check(nowMs == 30, "подтверждение обязано занимать 30 мс");
-
-  check(run(0, 1) == false, "помеха короче 1 мс не должна засчитываться");
-  check(run(0, 12) == false, "помеха 12 мс не должна засчитываться");
-  check(run(0, 29) == false, "LOW, пропавший к последней проверке (29 мс), не должен засчитываться");
-  check(run(0, 31) == true, "LOW дольше 30 мс обязан засчитаться");
-  check(run(0, 1, 30, 31) == false, "две помехи с разрывом (0 и 30 мс) - это не удержание, засчитывать нельзя");
-  check(run(1, 1000000) == false, "HIGH на первой же проверке - не срабатывание");
-  check(nowMs == 0, "при HIGH на входе ждать нечего: выход сразу, без задержки");
-
-  if (failures == 0) std::cout << "OK\n";
-  return failures == 0 ? 0 : 1;
+  run({{0, 100}}, {30}, "held at boot: one stop at 30 ms");
+  run({{20, 200}}, {50}, "interrupt wake: one stop despite long hold");
+  run({{0, 1}, {30, 42}, {70, 99}}, {}, "short separated pulses must not trip");
+  run({{10, 100}, {150, 220}}, {40, 180}, "release must rearm next press");
+  run({{0, 12}, {20, 100}}, {50}, "bounce must restart debounce interval");
+  run({}, {}, "idle input must not trip");
 }
 '''
 
-# Каждая мутация обязана упасть на названном содержательном assert-е, а не на компиляторе.
-MUTATIONS = [
-    ("засчитывается любой спад", "    if (digitalRead(ALARM_BTN_PIN) != LOW) return false;",
-     "    if (digitalRead(ALARM_BTN_PIN) != LOW && false) return false;", "две помехи с разрывом"),
-    ("нет последней проверки", "  return digitalRead(ALARM_BTN_PIN) == LOW;",
-     "  return digitalRead(ALARM_BTN_PIN) == LOW || true;", "пропавший к последней проверке"),
-    ("окно короче 30 мс", "EMERGENCY_BUTTON_DEBOUNCE_SAMPLES = 6;", "EMERGENCY_BUTTON_DEBOUNCE_SAMPLES = 2;",
-     "помеха 12 мс"),
-    ("срабатывание не засчитывается", "  return digitalRead(ALARM_BTN_PIN) == LOW;",
-     "  return digitalRead(ALARM_BTN_PIN) == LOW && false;", "устойчивый LOW"),
-]
+
+def harness(source):
+    return HARNESS.replace('@TASK@', extract_function_body(
+        source, 'void triggerEmergencyButton(void *parameter)')).replace(
+        '@INIT@', extract_function_body(source, 'bool initEmergencyButtonTask()'))
 
 
-def build_harness(source: str) -> str:
-    constants = re.findall(CONSTANT_PATTERN, source)
-    if len(constants) != 2:
-        raise ValueError(f"expected 2 EMERGENCY_BUTTON_DEBOUNCE_* constants, found {len(constants)}")
-    return (HARNESS_TEMPLATE
-            .replace("@CONSTANTS@", "\n".join(constants))
-            .replace("@SIGNATURE@", SIGNATURE)
-            .replace("@BODY@", extract_function_body(source, SIGNATURE)))
+def run(source):
+    with tempfile.TemporaryDirectory(prefix='samovar-alarm-gyver-') as temp:
+        p = Path(temp)
+        (p / 'Arduino.h').write_text(ARDUINO)
+        (p / 'test.cpp').write_text(harness(source))
+        subprocess.run(['g++', '-std=c++11', '-Wall', '-Wextra', '-Werror',
+                        '-I' + temp, '-I' + str(LIB), str(p / 'test.cpp'),
+                        str(LIB / 'GyverButton.cpp'), '-o', str(p / 'test')], check=True)
+        return subprocess.run([str(p / 'test')], capture_output=True, text=True)
 
 
-def compile_and_run(harness: str, label: str) -> tuple[int, str]:
-    with tempfile.TemporaryDirectory(prefix="samovar-alarm-button-debounce-") as temp_dir:
-        source = Path(temp_dir) / "alarm_button_debounce_test.cpp"
-        binary = Path(temp_dir) / "alarm_button_debounce_test"
-        source.write_text(harness, encoding="utf-8")
-        compiled = subprocess.run(
-            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
-            capture_output=True, text=True, check=False,
-        )
-        if compiled.returncode != 0:
-            return compiled.returncode, f"[{label}] compile failed:\n{compiled.stdout}{compiled.stderr}"
-        result = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
-        return result.returncode, result.stdout + result.stderr
+def main():
+    source = (ROOT / 'Samovar.ino').read_text()
+    result = run(source)
+    assert result.returncode == 0, result.stderr
+    for old, new, expected in (
+        ('alarm_btn.setDebounce(30);', 'alarm_btn.setDebounce(10);', 'held at boot'),
+        ('if (alarm_btn.isPress())', 'if (alarm_btn.state())', 'held at boot'),
+        ('if (!alarm_btn.state()) break;', 'if (true) break;', 'held at boot'),
+        ('alarm_btn.tick();', '(void)0;', 'held at boot'),
+    ):
+        assert source.count(old) == 1, old
+        result = run(source.replace(old, new))
+        assert result.returncode != 0 and 'FAIL: ' + expected in result.stderr, result.stderr
+    init = extract_function_body(source, 'bool initEmergencyButtonTask()')
+    assert init.index('alarm_btn.setDebounce(30);') < init.index('xTaskCreatePinnedToCore(')
+    assert 'tick_alarm_button' not in source, 'loop must not poll the same button'
+    assert source.count('alarm_btn.tick();') == 1, 'button must have one polling owner'
+    assert 'emergency_button_press_confirmed' not in source, 'remove custom debounce'
+    print('PASS: real GyverButton/task scenarios and 4 source mutations')
 
 
-def main() -> int:
-    source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
-    try:
-        rc, output = compile_and_run(build_harness(source), "baseline")
-    except ValueError as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 1
-    if rc != 0:
-        print(output, file=sys.stderr)
-        return 1
-
-    for label, old, new, expected in MUTATIONS:
-        if source.count(old) != 1:
-            print(f"FAIL: mutation anchor not unique for «{label}»", file=sys.stderr)
-            return 1
-        rc, output = compile_and_run(build_harness(source.replace(old, new)), label)
-        if rc == 0:
-            print(f"FAIL: mutation «{label}» survived", file=sys.stderr)
-            return 1
-        if expected not in output:
-            print(f"FAIL: mutation «{label}» failed for the wrong reason:\n{output}", file=sys.stderr)
-            return 1
-
-    # Срабатывание обязано проходить через антидребезг, а оба пути кнопки - давать один текст.
-    task_body = extract_function_body(source, "void triggerEmergencyButton(void *parameter)")
-    confirm = task_body.find("if (!emergency_button_press_confirmed()) continue;")
-    stop = task_body.find("request_emergency_stop(emergency_button_reason());")
-    if confirm < 0 or stop < 0 or confirm > stop:
-        print("FAIL: triggerEmergencyButton must confirm the press before request_emergency_stop", file=sys.stderr)
-        return 1
-    tick_body = extract_function_body(source, "static void tick_alarm_button()")
-    if "request_emergency_stop(emergency_button_reason());" not in tick_body:
-        print("FAIL: tick_alarm_button must report the same emergency_button_reason()", file=sys.stderr)
-        return 1
-
-    print("OK: smoke_alarm_button_debounce")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == '__main__':
+    main()

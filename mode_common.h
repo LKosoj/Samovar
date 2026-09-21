@@ -157,10 +157,9 @@ inline bool mode_water_pre_alarm_due() {
   return WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5 && PowerOn && alarm_t_min == 0;
 }
 
-// ТСА горячее порога и горячее воды: охлаждение не справляется. По этому признаку
-// насос охлаждения крутится усерднее, а оператор получает предупреждение.
+// Превышение уставки ТСА для предупреждения и усиления охлаждения.
 inline bool mode_acp_above_boost_threshold(float acpBoostThreshold) {
-  return sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp;
+  return sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold;
 }
 
 // Предупреждение - одно на эпизод перегрева ТСА: повторно взводится, когда ТСА остыла
@@ -186,7 +185,7 @@ inline void mode_update_water_pump_pid(float acpBoostThreshold) {
   mode_warn_acp_hot_once(acpHot, acpBoostThreshold);
 #ifdef USE_WATER_PUMP
   if (!valve_status) return;
-  if (acpHot) {
+  if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {
     set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);
   } else {
     set_pump_speed_pid(WaterSensor.avgTemp);

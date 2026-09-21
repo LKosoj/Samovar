@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Предупреждение оператору о горячей ТСА (жалоба с форума 21.09.2026).
 
-Когда ТСА горячее порога усиления насоса (39 °C в ректификации, SetACPTemp в
-дистилляции и НБК), насос охлаждения молча крутился усерднее, а оператор узнавал о
-проблеме только по аварийному отключению. Теперь mode_update_water_pump_pid()
-(mode_common.h) по тому же признаку шлёт одно предупреждение на эпизод перегрева.
+Предупреждение о превышении SetACPTemp не зависит от температуры воды.
+После охлаждения ниже порога на 2 градуса новый перегрев предупреждает снова.
+Усиление насоса дополнительно требует, чтобы ТСА была горячее воды.
 
 Харнесс вытаскивает из исходников РЕАЛЬНЫЕ тела mode_acp_above_boost_threshold(),
 mode_warn_acp_hot_once(), mode_update_water_pump_pid() и датчиковых проверок alarm.h.
 Заглушки только у SendMsg/set_buzzer/set_pump_speed_pid (запоминают вызовы) и
 format_float.
 """
+import re
 import subprocess
 import sys
 import tempfile
@@ -47,7 +47,7 @@ struct DSSensor {
   volatile float avgTemp = 0.0f;
   volatile int ErrCount = 0;
 };
-struct Setup { float SetWaterTemp = 30.0f; };
+struct Setup { float SetWaterTemp = 30.0f; float SetACPTemp = 47.0f; };
 
 static DSSensor WaterSensor;
 static DSSensor ACPSensor;
@@ -130,7 +130,7 @@ int main() {
   check(messageCount == 2, "после остывания ниже порога - 2 новый перегрев обязан предупредить снова");
   check(contains(lastMessage, "50.0"), "второе предупреждение называет новую температуру 50.0");
 
-  // Другой порог (ректификация, 39): текст берёт порог из аргумента.
+  // Другой порог (39): текст берёт порог из аргумента.
   ACPSensor.avgTemp = 30.0f;
   mode_update_water_pump_pid(39.0f);
   ACPSensor.avgTemp = 40.0f;
@@ -156,14 +156,15 @@ int main() {
   check(lastPumpTemp == -1.0f, "при закрытом клапане насос не трогаем");
   valve_status = true;
 
-  // ТСА горячее порога, но холоднее воды - не перегрев ТСА.
+  // Предупреждение не зависит от воды; насос продолжает регулирование по воде.
   PowerOn = false;
   mode_update_water_pump_pid(39.0f);
   PowerOn = true;
   WaterSensor.avgTemp = 60.0f;
   ACPSensor.avgTemp = 45.0f;
   mode_update_water_pump_pid(39.0f);
-  check(messageCount == 5, "ТСА холоднее воды - предупреждения нет");
+  check(messageCount == 6, "ТСА холоднее воды - предупреждение обязательно");
+  check(lastPumpTemp == 60.0f && lastPumpSoften, "ТСА холоднее воды - насос регулируется по воде");
   WaterSensor.avgTemp = 25.0f;
 
   // Датчик ТСА не назначен - предупреждения нет.
@@ -173,7 +174,34 @@ int main() {
   ACPSensor.Sensor[0] = 0xFF;
   ACPSensor.avgTemp = 70.0f;
   mode_update_water_pump_pid(39.0f);
-  check(messageCount == 5, "без датчика ТСА предупреждения нет");
+  check(messageCount == 6, "без датчика ТСА предупреждения нет");
+
+  ACPSensor.Sensor[0] = 0x28;
+  // Вызываем извлечённую из check_alarm() строку с двумя уставками.
+  for (float threshold : {47.0f, 55.0f}) {
+    SamSetup.SetACPTemp = threshold;
+    WaterSensor.avgTemp = 60.0f;
+    ACPSensor.avgTemp = 30.0f;
+    rectification_pump_tick();
+    const int before = messageCount;
+    ACPSensor.avgTemp = threshold - 1;
+    rectification_pump_tick();
+    check(messageCount == before, "ректификация учитывает настроенную уставку");
+    ACPSensor.avgTemp = threshold + 5;
+    rectification_pump_tick();
+    check(messageCount == before + 1, "первый перегрев при горячей воде");
+    ACPSensor.avgTemp = 30.0f;
+    rectification_pump_tick();
+    ACPSensor.avgTemp = threshold + 3;
+    rectification_pump_tick();
+    check(messageCount == before + 2, "повторный перегрев при горячей воде");
+    WaterSensor.avgTemp = 25.0f;
+    rectification_pump_tick();
+    check(lastPumpTemp == 33.0f && !lastPumpSoften, "насос усиливается по настроенной уставке");
+    ACPSensor.avgTemp = threshold - 1;
+    rectification_pump_tick();
+    check(lastPumpTemp == 25.0f && lastPumpSoften, "насос не усиливается ниже настроенной уставки");
+  }
 
   if (failures == 0) std::cout << "OK\n";
   return failures == 0 ? 0 : 1;
@@ -186,6 +214,9 @@ def build_harness(mode_common_source: str, alarm_source: str) -> str:
     for source, signatures in ((alarm_source, ALARM_SIGNATURES), (mode_common_source, MODE_COMMON_SIGNATURES)):
         for signature in signatures:
             bodies.append(signature + " {" + extract_function_body(source, signature) + "}")
+    rect = extract_function_body(alarm_source, "void check_alarm()")
+    call = re.search(r"mode_update_water_pump_pid\([^;]+;", rect).group(0)
+    bodies.append("void rectification_pump_tick() {" + call + "}")
     return HARNESS_TEMPLATE.replace("@BODIES@", "\n\n".join(bodies))
 
 
@@ -218,8 +249,11 @@ MUTATIONS = [
      "  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);\n#ifdef USE_WATER_PUMP\n  if (!valve_status) return;",
      "#ifdef USE_WATER_PUMP\n  if (!valve_status) return;\n  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
      "не зависит от клапана воды"),
-    ("ТСА не сравнивается с водой", " && ACPSensor.avgTemp > WaterSensor.avgTemp;", ";",
-     "ТСА холоднее воды"),
+    ("насос не сравнивает ТСА с водой", "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp)", "if (acpHot)",
+     "ТСА холоднее воды - насос"),
+    ("предупреждение зависит от воды", "mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
+     "mode_warn_acp_hot_once(acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp, acpBoostThreshold);",
+     "ТСА холоднее воды - предупреждение"),
 ]
 
 
@@ -247,6 +281,11 @@ def main() -> int:
             print(f"FAIL: mutation «{label}» failed for the wrong reason:\n{output}", file=sys.stderr)
             return 1
 
+    mutant_alarm = alarm_source.replace("mode_update_water_pump_pid(SamSetup.SetACPTemp < 45.0f ? 45.0f : SamSetup.SetACPTemp);", "mode_update_water_pump_pid(39.0f);")
+    rc, output = compile_and_run(build_harness(mode_common_source, mutant_alarm), "fixed 39")
+    if rc == 0 or "ректификация учитывает настроенную уставку" not in output:
+        print("FAIL: fixed threshold mutation: " + output, file=sys.stderr)
+        return 1
     print("OK: smoke_acp_hot_warning")
     return 0
 

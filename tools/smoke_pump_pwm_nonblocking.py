@@ -250,7 +250,7 @@ if water_pid_body:
         [
             "const bool acpHot = mode_acp_above_boost_threshold(acpBoostThreshold);",
             "if (!valve_status) return;",
-            "if (acpHot) {",
+            "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {",
             "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);",
             "} else {",
             "set_pump_speed_pid(WaterSensor.avgTemp);",
@@ -266,7 +266,7 @@ try:
 except ValueError as exc:
     errors.append(str(exc))
 else:
-    if "ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp" not in acp_hot_body:
+    if "ACPSensor.avgTemp > acpBoostThreshold" not in acp_hot_body:
         errors.append("hot ACP condition lost its 6.27 thresholds")
 
 if bk_alarm_body:

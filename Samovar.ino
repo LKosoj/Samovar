@@ -1916,20 +1916,6 @@ void IRAM_ATTR emergencyButtonInterrupt() {
   if (higherPriorityTaskWoken == pdTRUE) portYIELD_FROM_ISR();
 }
 
-// Антидребезг: одиночная помеха на входе (GPIO35 без внутренней подтяжки, длинные
-// провода к датчикам) не должна глушить процесс. Срабатывание засчитывается, только если
-// вход держит LOW все 30 мс подряд; настоящая кнопка и сработавший датчик держат дольше.
-static constexpr uint8_t EMERGENCY_BUTTON_DEBOUNCE_SAMPLES = 6;
-static constexpr uint32_t EMERGENCY_BUTTON_DEBOUNCE_STEP_MS = 5;
-
-bool emergency_button_press_confirmed() {
-  for (uint8_t sample = 0; sample < EMERGENCY_BUTTON_DEBOUNCE_SAMPLES; sample++) {
-    if (digitalRead(ALARM_BTN_PIN) != LOW) return false;
-    vTaskDelay(pdMS_TO_TICKS(EMERGENCY_BUTTON_DEBOUNCE_STEP_MS));
-  }
-  return digitalRead(ALARM_BTN_PIN) == LOW;
-}
-
 // К входу кнопки подключают и датчики (протечки, паров спирта). Пары спирта идут
 // из перегретой ТСА, поэтому её температуру называем сразу - иначе оператор ищет
 // неисправность в датчиках, а не в охлаждении.
@@ -1945,13 +1931,22 @@ void triggerEmergencyButton(void *parameter) {
   (void)parameter;
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    if (!emergency_button_press_confirmed()) continue;
-    request_emergency_stop(emergency_button_reason());
-    vTaskDelay(pdMS_TO_TICKS(30));
+    // Только эта задача обслуживает GyverButton, включая отпускание кнопки.
+    do {
+      alarm_btn.tick();
+      if (alarm_btn.isPress()) {
+        request_emergency_stop(emergency_button_reason());
+      }
+      if (!alarm_btn.state()) break;
+      vTaskDelay(pdMS_TO_TICKS(5));
+    } while (true);
   }
 }
 
 bool initEmergencyButtonTask() {
+  alarm_btn.setType(HIGH_PULL);
+  alarm_btn.setTickMode(MANUAL);
+  alarm_btn.setDebounce(30);
   const BaseType_t created = xTaskCreatePinnedToCore(
     triggerEmergencyButton,
     "EmergencyButton",
@@ -3371,12 +3366,6 @@ void setup() {
   btn.setTimeout(2000);
 #endif
 
-#ifdef ALARM_BTN_PIN
-  alarm_btn.setType(HIGH_PULL);
-  alarm_btn.setTickMode(AUTO);
-  alarm_btn.setDebounce(30);
-#endif
-
   wifiAP = setup_check_ap_button_hold();
 
   apply_config_runtime();
@@ -3723,15 +3712,6 @@ static void tick_mqtt() {
   mqtt_publish_log_line(build_mqtt_log_line());
 }
 #endif
-
-static void tick_alarm_button() {
-#ifdef ALARM_BTN_PIN
-  alarm_btn.tick();  // отработка нажатия аварийной кнопки
-  if (alarm_btn.isPress()) {
-    request_emergency_stop(emergency_button_reason());
-  }
-#endif
-}
 
 static void tick_process_recovery_commands() {
   {
@@ -4146,7 +4126,6 @@ void loop() {
 #endif
 
   // Обработка кнопок и энкодера
-  tick_alarm_button();
 
   if (pending_emergency_stop_flag) {
     perform_emergency_stop();

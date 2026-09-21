@@ -362,7 +362,7 @@ void check_alarm() {
   // OPEN_VALVE_TANK_TEMP (77 C) - то есть до конца разгона возвращала бы false вхолостую.
 
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
-  mode_update_water_pump_pid(39.0f);
+  mode_update_water_pump_pid(SamSetup.SetACPTemp < 45.0f ? 45.0f : SamSetup.SetACPTemp);
 
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
