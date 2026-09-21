@@ -30,8 +30,9 @@ MODE_PAGES = {
 ALL_PAGES = (*MODE_PAGES, "chart.htm")
 FROZEN_HASHES = {
     # T06: подтверждение ухода и результат сохранения; палитра/gzip сохранены.
-    "edit.htm": "c57f6bf0b3d952bbe1d2b8bfe59a94f7e49d57ada52c184b52c1e5d88cf6bbd7",
-    "edit.htm.gz": "6dac2df23427a55ce2359525457b88cbefc3833aa6462d1b236a768f1fb1b7ec",
+    # 21.09.2026: русский текст для ответов BAD NAME / WRITE FAILED / DELETE FAILED.
+    "edit.htm": "a031f61b5eb915ad22a506d245763b0c5815808478aca05d5fff9dec86f9cf87",
+    "edit.htm.gz": "ed8c86998a6e4b4a3e19bec06f979beb9ad972f014061c6dfa66ce56de9a8a5f",
 }
 
 

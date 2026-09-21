@@ -470,7 +470,8 @@
       operation_store_busy: 'хранилище операций временно занято',
       invalid_operation_transition: 'нарушена последовательность выполнения операции',
       operation_internal: 'внутренняя ошибка выполнения операции',
-      operation_cancelled: 'операция отменена',
+      operation_cancelled: 'операция отменена: идёт смена режима или режим уже изменился',
+      process_active: 'сначала остановите процесс: пока он идёт, это действие недоступно',
       profile_persist_failed: 'настройки не удалось записать в постоянную память',
       mode_switch_failed: 'не удалось завершить смену режима; точная причина есть в журнале',
       mode_switch_log_failed: 'не завершилось закрытие журнала',
@@ -499,9 +500,41 @@
       calibration_invalid_result: 'получен некорректный результат калибровки',
       operation_stale_reaped: 'операция не завершилась вовремя и была остановлена',
       program_row_locked: 'во время процесса можно менять, добавлять и удалять только строки после текущей; номер затронутой строки есть в сообщениях',
-      program_finished: 'все строки программы уже выполнены, менять её до остановки процесса нельзя'
+      program_finished: 'все строки программы уже выполнены, менять её до остановки процесса нельзя',
+      // Общие признаки отказа запроса (конверт ошибок и текстовые ответы).
+      BUSY: 'устройство занято, повторите чуть позже',
+      BAD_REQUEST: 'запрос составлен неверно',
+      internal_error: 'внутренняя ошибка устройства',
+      unavailable: 'I2C-устройство не найдено или не поддерживает эту команду',
+      not_available: 'нужное оборудование не подключено',
+      not_allowed: 'такое поле или значение здесь не допускается',
+      stale: 'настройки изменились на самом устройстве, обновите страницу и повторите',
+      program: 'в тексте программы ошибка',
+      // Признаки разбора чисел (numeric_parse_error_code).
+      empty: 'значение не задано',
+      format: 'значение не является числом',
+      trailing: 'после числа стоят лишние символы',
+      range: 'значение вне допустимых границ',
+      finite: 'значение не является конечным числом',
+      bounds: 'в прошивке неверно заданы границы поля',
+      allowed: 'такое значение не входит в список допустимых',
+      argument: 'параметр запроса задан неверно'
     };
-    return messages[code] || code;
+    return Object.prototype.hasOwnProperty.call(messages, code) ? messages[code] : code;
+  }
+
+  // Прошивка кладёт в message то русскую фразу с подробностями (границы поля, строка
+  // программы), то служебный английский текст или сам признак. Русскую фразу показываем
+  // как есть, иначе переводим признак и называем поле, к которому он относится.
+  function errorEnvelopeText(body) {
+    // Старые ответы кладут текст в error, а признак - в code; конверт - message и error.
+    const legacy = !body.message && body.code;
+    const message = String((legacy ? body.error : body.message) || '');
+    const code = String((legacy ? body.code : (body.error || body.err || body.code)) || message);
+    if (/[А-Яа-яЁё]/.test(message)) return message;
+    const text = operationErrorText(code);
+    if (text === code) return message && message !== code ? message + ' (' + code + ')' : code;
+    return text + (body.field ? ' (поле ' + body.field + ')' : '');
   }
 
   async function responseErrorText(resp, prefix) {
@@ -511,13 +544,7 @@
       if (contentType.indexOf('application/json') !== -1) {
         const body = await resp.json();
         if (body && typeof body === 'object') {
-          // Конверт ошибок отдаёт message человеку и error машине; старые ответы кладут
-          // человеческий текст прямо в error, а код - в code. Известные коды переводим,
-          // неизвестные сохраняем для диагностики.
-          detail = body.message || body.error || body.err || body.code || '';
-          const code = body.code || (body.message ? body.error : '');
-          detail = operationErrorText(detail);
-          if (code && detail !== code && operationErrorText(code) === code) detail += ' (' + code + ')';
+          detail = errorEnvelopeText(body);
         }
       } else {
         detail = operationErrorText(plainBodyText(await resp.text()));
@@ -1696,7 +1723,7 @@
           const parsed = JSON.parse(body);
           if (parsed && typeof parsed === 'object') {
             if (parsed.error) token = String(parsed.error);
-            detail = parsed.message || parsed.error || body;
+            detail = errorEnvelopeText(parsed);
           }
         } catch (e) {
           // Битый JSON - оставляем тело как есть, ниже оно уйдёт в общую ветку HTTP-ошибки.
@@ -1799,6 +1826,8 @@
   }
 
   async function readOperationAcceptance(resp) {
+    // Отказ (4xx/5xx) несёт причину в теле: показываем её, а не голый номер статуса.
+    if (resp && !resp.ok) throw new Error(await responseErrorText(resp));
     if (!resp || resp.status !== 202) {
       throw new Error('Некорректный HTTP-статус операции: ' + (resp ? resp.status : 0) + '.');
     }
@@ -1960,6 +1989,8 @@
         throw new Error('Операция /program не подтверждена как queued.');
       }
     }
+    // Отказ постановки в очередь приходит коротким признаком; страницы показывают err как есть.
+    result.err = operationErrorText(result.err);
     result.httpStatus = resp.status;
     result.queued = result.ok && resp.status === 202;
     return result;

@@ -611,7 +611,7 @@
       var body = new FormData(); body.append('WProgram', state.conversion.program);
       var response = await fetch('/program', { method: 'POST', body: body });
       var result = await response.json().catch(function () { return {}; });
-      if (!response.ok || result.ok === false) throw new Error(result.err || result.error || ('HTTP ' + response.status));
+      if (!response.ok || result.ok === false) throw new Error(SamovarApp.operationErrorText(result.err || result.error || '') || ('HTTP ' + response.status));
       status(t('accepted'), 'ok');
     } catch (error) { status(t('notApplied') + error.message, 'error'); byId('applyRecipe').disabled = false; }
     finally { state.applying = false; }

@@ -66,7 +66,7 @@ if handle_save:
             "const bool hasSwitchMode = modeRequested",
             "if (hasSwitchMode && PowerOn)",
             "409",
-            "operation_error_code(OPERATION_ERROR_CANCELLED)",
+            "operation_error_code(OPERATION_ERROR_PROCESS_ACTIVE)",
             "return;",
             "prepare_program_for_mode(",
             "prepare_default_program_for_mode(",

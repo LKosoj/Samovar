@@ -211,6 +211,25 @@ function textResponse(status, body) {
   const plain = await app.responseErrorText(textResponse(400, "Invalid request: argument"), "");
   check(/Invalid request: argument/.test(plain), "text/plain должен работать: " + plain);
 
+  // Известный признак со служебным английским message: человек обязан увидеть русский
+  // текст и имя поля, а не "Invalid diam". Два разных признака - от хардкода не пройти.
+  const rangeText = await app.responseErrorText(
+    jsonResponse(400, { error: "range", field: "diam", message: "Invalid diam" }), "");
+  check(/вне допустимых границ/.test(rangeText) && /поле diam/.test(rangeText) &&
+      !/Invalid/.test(rangeText),
+    "признак range обязан переводиться и называть поле: " + rangeText);
+  const busyText = await app.responseErrorText(
+    jsonResponse(503, { error: "BUSY", field: null, message: "BUSY" }), "");
+  check(/устройство занято/.test(busyText) && !/BUSY/.test(busyText) && !/поле/.test(busyText),
+    "признак BUSY обязан переводиться без упоминания поля: " + busyText);
+  // Русский message подробнее словаря (границы поля, номер строки) - он и показывается.
+  const russian = await app.responseErrorText(
+    jsonResponse(400, { error: "range", field: "BKPower", message: "Мощность: от 100 до 3500" }), "");
+  check(/Мощность: от 100 до 3500/.test(russian) && !/вне допустимых границ/.test(russian),
+    "русский message обязан показываться как есть: " + russian);
+  const plainBusy = await app.responseErrorText(textResponse(409, "process_active"), "");
+  check(/остановите процесс/.test(plainBusy), "text/plain с признаком обязан переводиться: " + plainBusy);
+
   // Дубля кода быть не должно, если текст и код совпали.
   const same = await app.responseErrorText(
     jsonResponse(503, { error: "busy", field: null, message: "busy" }), "");

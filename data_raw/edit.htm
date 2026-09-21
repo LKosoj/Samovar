@@ -238,9 +238,22 @@ function setStatus(text, kind) {
   el.className = kind || "";
 }
 
+var EDIT_ERROR_TEXT = {
+  "BAD NAME": "недопустимое имя файла",
+  "WRITE FAILED": "файл не записан (нет места или сбой файловой системы)",
+  "DELETE FAILED": "файл не удалён"
+};
+
 function describeHttpError(status, body) {
   if (status == 503) return "Занято: идёт процесс, файлы сейчас нельзя менять";
   var msg = "Ошибка " + status;
+  // Прошивка отвечает коротким английским признаком и путём: "WRITE FAILED: /x.lua".
+  var parts = /^([A-Z ]+): (.*)$/.exec(body || "");
+  if (parts && EDIT_ERROR_TEXT.hasOwnProperty(parts[1])) {
+    body = EDIT_ERROR_TEXT[parts[1]] + ": " + parts[2];
+  } else if (!body && status == 404) {
+    body = "файл не найден";
+  }
   if (body) msg += ": " + body;
   return msg;
 }

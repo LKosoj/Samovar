@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 from pathlib import Path
 
@@ -43,45 +44,28 @@ for token in [
   if token not in app:
     errors.append(f"shared operation contract missing token: {token}")
 
-for token in [
-  "invalid_operation_id",
-  "operation_not_found",
-  "operation_store_full",
-  "operation_store_busy",
-  "invalid_operation_transition",
-  "operation_internal",
-  "operation_cancelled",
-  "profile_persist_failed",
-  "mode_switch_log_failed",
-  "mode_switch_lua_stop_failed",
-  "mode_switch_queue_failed",
-  "mode_switch_actuator_failed",
-  "mode_switch_i2c_mixer_failed",
-  "mode_switch_i2c_pump_failed",
-  "mode_switch_local_stepper_failed",
-  "mode_switch_valve_failed",
-  "mode_switch_mixer_failed",
-  "mode_switch_cooling_pump_failed",
-  "mode_switch_calibration_failed",
-  "mode_switch_heater_failed",
-  "mode_switch_power_transition_failed",
-  "mode_switch_nbk_transition_failed",
-  "mode_switch_heating_start_failed",
-  "mode_switch_self_test_failed",
-  "mode_switch_owner_failed",
-  "mode_switch_lua_reload_failed",
-  "operation_runtime_busy",
-  "i2c_config_busy",
-  "i2c_command_failed",
-  "i2c_device_error",
-  "i2c_refresh_failed",
-  "calibration_invalid_result",
-  "operation_stale_reaped",
-  "program_row_locked",
-  "program_finished",
-]:
-  if token not in error_text:
-    errors.append(f"operation error text missing translation: {token}")
+# Список признаков берётся из прошивки, а не ведётся руками: новый короткий признак без
+# русского текста на странице обязан ронять тест.
+def returned_literals(source, signature):
+  return set(re.findall(r'return "([^"]+)";', body(source, signature)))
+
+
+firmware_codes = returned_literals(
+    read(ROOT / "operation_store.h"), "inline const char* operation_error_code") - {"none"}
+firmware_codes |= returned_literals(
+    read(ROOT / "numeric_parse.h"), "inline const char* numeric_parse_error_code") - {"ok"}
+web_server = read(ROOT / "WebServer.ino")
+firmware_codes |= set(re.findall(r'build_error_envelope\(\s*"([^"]+)"', web_server))
+firmware_codes |= set(re.findall(r'toJsonString\(code \? code : "([^"]+)"\)', web_server))
+if len(firmware_codes) < 50:
+  errors.append(f"firmware error code extraction is broken: {len(firmware_codes)} codes")
+
+translated = set(re.findall(r"^\s*([A-Za-z0-9_]+): '", error_text, re.M))
+for token in sorted(firmware_codes - translated):
+  errors.append(f"operation error text missing translation: {token}")
+for token in re.findall(r"^\s*[A-Za-z0-9_]+: '([^']*)'", error_text, re.M):
+  if not re.search("[а-яё]", token):
+    errors.append(f"operation error text is not Russian: {token}")
 
 require_ordered_tokens(
   "strict operation waiter",

@@ -61,6 +61,7 @@ enum OperationError : uint8_t {
   OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED,
   OPERATION_ERROR_PROGRAM_ROW_LOCKED,
   OPERATION_ERROR_PROGRAM_FINISHED,
+  OPERATION_ERROR_PROCESS_ACTIVE,
 };
 
 struct OperationRecord {
@@ -262,6 +263,7 @@ inline const char* operation_error_code(OperationError error) {
     case OPERATION_ERROR_STALE_REAPED: return "operation_stale_reaped";
     case OPERATION_ERROR_PROGRAM_ROW_LOCKED: return "program_row_locked";
     case OPERATION_ERROR_PROGRAM_FINISHED: return "program_finished";
+    case OPERATION_ERROR_PROCESS_ACTIVE: return "process_active";
   }
   return "operation_internal";
 }

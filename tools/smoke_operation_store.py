@@ -382,6 +382,9 @@ void test_wire_codes() {
   check(std::strcmp(operation_error_code(OPERATION_ERROR_PROGRAM_FINISHED),
                     "program_finished") == 0,
         "program-finished error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_PROCESS_ACTIVE),
+                    "process_active") == 0,
+        "process-active error code mismatch");
   check(std::strcmp(operation_error_code(OPERATION_ERROR_PROFILE_PERSIST_FAILED),
                     "profile_persist_failed") == 0,
         "profile-persist error code mismatch");

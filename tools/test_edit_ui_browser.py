@@ -392,6 +392,14 @@ BROWSER_TEST = r'''async page => {
       await page.locator("#btn-save").getAttribute("data-dirty") !== "1") {
     throw new Error("500 POST must preserve dirty state and show the write error");
   }
+  // Настоящие ответы SPIFFSEditor.h - английский признак и путь. Человек обязан увидеть
+  // русскую причину; два разных признака, чтобы одной фразой тест было не пройти.
+  await saveWithOutcome("firmware write failure", 500, "WRITE FAILED: /late-b.lua");
+  await page.waitForFunction(() => document.getElementById("status").textContent ===
+    "Ошибка 500: файл не записан (нет места или сбой файловой системы): /late-b.lua");
+  await saveWithOutcome("firmware delete failure", 500, "DELETE FAILED: /late-b.lua");
+  await page.waitForFunction(() => document.getElementById("status").textContent ===
+    "Ошибка 500: файл не удалён: /late-b.lua");
   passed.push("POST 200 full, 200 reload rejection, and 500 write error");
 
   await page.evaluate(() => window.samovarAce.loadUrl("/cleanup.lua", true));

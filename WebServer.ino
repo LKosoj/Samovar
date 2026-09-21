@@ -104,6 +104,13 @@ bool queue_pending_string(volatile bool& flag, String& valueSlot, const String& 
 }
 #endif
 
+// 409 - запрос отклонён состоянием устройства (смена режима, идущий процесс), повтор без
+// действий человека бесполезен; 503 - временная занятость, повтор имеет смысл.
+static uint16_t profile_queue_error_status(OperationError queueError) {
+  return queueError == OPERATION_ERROR_CANCELLED ||
+         queueError == OPERATION_ERROR_PROCESS_ACTIVE ? 409 : 503;
+}
+
 static OperationError queue_profile_operation(
     OperationKind kind,
     const SetupEEPROM* settings,
@@ -154,10 +161,13 @@ static OperationError queue_profile_operation(
   if (profile_operation_phase_load() != PROFILE_OPERATION_EMPTY) {
     return OPERATION_ERROR_LOCK_BUSY;
   }
-  if (mode_switch_in_progress() ||
-      (requireProgramIdle && program_update_session_active()) ||
-      Samovar_Mode != sourceMode) {
+  if (mode_switch_in_progress() || Samovar_Mode != sourceMode) {
     return OPERATION_ERROR_CANCELLED;
+  }
+  // Отдельный признак, а не общая "отмена": страница по нему пишет человеку, что мешает
+  // именно идущий процесс.
+  if (requireProgramIdle && program_update_session_active()) {
+    return OPERATION_ERROR_PROCESS_ACTIVE;
   }
 
   OperationId reservedId = 0;
@@ -2391,7 +2401,7 @@ void handleSave(AsyncWebServerRequest *request) {
       (sourceProfileMode != static_cast<int>(requestedMode) ||
        sourceMode != requestedMode);
   if (hasSwitchMode && PowerOn) {
-    send_no_store_response(request, 409, "text/plain", operation_error_code(OPERATION_ERROR_CANCELLED));
+    send_no_store_response(request, 409, "text/plain", operation_error_code(OPERATION_ERROR_PROCESS_ACTIVE));
     return;
   }
   ProgramDraft programDraft{};
@@ -2435,9 +2445,9 @@ void handleSave(AsyncWebServerRequest *request) {
       requestedMode,
       operationId);
   if (queueError != OPERATION_ERROR_NONE) {
-    const uint16_t statusCode = queueError == OPERATION_ERROR_CANCELLED ? 409 : 503;
     send_no_store_response(
-        request, statusCode, "text/plain", operation_error_code(queueError));
+        request, profile_queue_error_status(queueError), "text/plain",
+        operation_error_code(queueError));
     return;
   }
 
@@ -2792,7 +2802,7 @@ void web_program(AsyncWebServerRequest *request) {
     if (!known || !param->isPost() || param->isFile() ||
         request_param_count(request, param->name().c_str()) != 1) {
       send_program_json_response(
-          request, 400, false, F("Invalid request parameter"), String());
+          request, 400, false, F("Недопустимый параметр запроса"), String());
       return;
     }
   }
@@ -2874,7 +2884,7 @@ void web_program(AsyncWebServerRequest *request) {
   if (descriptionParam) {
     if (descriptionParam->isFile()) {
       send_program_json_response(
-          request, 400, false, F("Invalid Descr: argument"), String());
+          request, 400, false, F("Описание задано неверно"), String());
       return;
     }
     const String& description = descriptionParam->value();
@@ -2917,7 +2927,7 @@ void web_program(AsyncWebServerRequest *request) {
   if (queueError != OPERATION_ERROR_NONE) {
     send_program_json_response(
         request,
-        queueError == OPERATION_ERROR_CANCELLED ? 409 : 503,
+        profile_queue_error_status(queueError),
         false,
         operation_error_code(queueError),
         String());

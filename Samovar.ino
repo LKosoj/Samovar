@@ -665,14 +665,17 @@ static void process_profile_operation() {
     const bool requiresProgramIdle =
         (active_profile_operation.flags &
          PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE) != 0;
-    if ((requiresProgramIdle && program_update_session_active()) ||
-        Samovar_Mode != sourceMode) {
+    const bool processActive =
+        requiresProgramIdle && program_update_session_active();
+    if (processActive || Samovar_Mode != sourceMode) {
       if ((active_profile_operation.flags &
            PROFILE_OPERATION_MODE_CHANGE) != 0) {
         mode_switch_end();
       }
       set_profile_operation_terminal(
-          OPERATION_STATE_FAILED, OPERATION_ERROR_CANCELLED);
+          OPERATION_STATE_FAILED,
+          Samovar_Mode != sourceMode ? OPERATION_ERROR_CANCELLED
+                                     : OPERATION_ERROR_PROCESS_ACTIVE);
       publish_profile_operation_terminal();
       return;
     }

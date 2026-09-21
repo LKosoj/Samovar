@@ -57,6 +57,8 @@ def build_harness() -> str:
             samovar, "static void reset_profile_operation_slot()"),
         "@IS_VALID_MODE_BODY@": extract_function_body(web, "bool is_valid_samovar_mode(long mode) {"),
         "@QUEUE_BODY@": extract_function_body(web, "static OperationError queue_profile_operation("),
+        "@QUEUE_STATUS_BODY@": extract_function_body(
+            web, "static uint16_t profile_queue_error_status(OperationError queueError) {"),
         "@COMMIT_BODY@": extract_last_function_body(samovar, "static OperationError commit_profile_operation()"),
         "@SET_TERMINAL_BODY@": extract_function_body(samovar, "static void set_profile_operation_terminal("),
         "@PUBLISH_BODY@": extract_function_body(samovar, "static void publish_profile_operation_terminal()"),
@@ -492,6 +494,10 @@ static OperationError queue_profile_operation(
 @QUEUE_BODY@
 }
 
+static uint16_t profile_queue_error_status(OperationError queueError) {
+@QUEUE_STATUS_BODY@
+}
+
 static OperationError commit_profile_operation() {
 @COMMIT_BODY@
 }
@@ -797,7 +803,7 @@ static void test_idle_policy_and_races() {
 
   reset_fixture();
   sessionActive = true;
-  check(queue_save(settings, id, &draft, true) == OPERATION_ERROR_CANCELLED,
+  check(queue_save(settings, id, &draft, true) == OPERATION_ERROR_PROCESS_ACTIVE,
         "explicit save program ignored active session");
 
   reset_fixture();
@@ -822,14 +828,14 @@ static void test_idle_policy_and_races() {
   sessionActive = true;
   OperationRecord record = run_to_terminal(id);
   check(record.state == OPERATION_STATE_FAILED &&
-            record.error == OPERATION_ERROR_CANCELLED &&
+            record.error == OPERATION_ERROR_PROCESS_ACTIVE &&
             programClearCalls == 0 && liveProgram == 7,
         "active-session clear race did not cancel without side effects");
 
   reset_fixture();
   sessionActive = true;
   check(queue_program(id, nullptr, PROGRAM_UPDATE_CLEAR) ==
-            OPERATION_ERROR_CANCELLED,
+            OPERATION_ERROR_PROCESS_ACTIVE,
         "program clear was accepted under active session");
 
   reset_fixture();
@@ -1503,6 +1509,13 @@ int main() {
   test_invalid_combinations();
   test_idle_policy_and_races();
   test_live_program_edit();
+  // 409 = мешает состояние устройства (повтор бесполезен), 503 = временная занятость.
+  check(profile_queue_error_status(OPERATION_ERROR_PROCESS_ACTIVE) == 409 &&
+            profile_queue_error_status(OPERATION_ERROR_CANCELLED) == 409,
+        "state-caused queue rejection must answer 409");
+  check(profile_queue_error_status(OPERATION_ERROR_LOCK_BUSY) == 503 &&
+            profile_queue_error_status(OPERATION_ERROR_STORE_FULL) == 503,
+        "transient queue rejection must answer 503");
   test_save_program_metadata_and_two_saves();
   test_failures_preserve_owner_state();
   test_mode_change_reloads_lua_script_of_new_mode();

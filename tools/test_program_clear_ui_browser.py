@@ -96,7 +96,9 @@ BROWSER_TEST = r'''async page => {
           window.__programRequests.push({ method: options.method, entries: entries });
           const status = window.__programStatus;
           const ok = status === 202;
-          const body = { ok: ok, err: ok ? "" : "E" + status, program: "" };
+          // 409 и 503 приходят с устройства коротким признаком, 400 - готовой фразой.
+          const deviceErrors = { 400: "E400", 409: "process_active", 503: "operation_store_busy" };
+          const body = { ok: ok, err: ok ? "" : deviceErrors[status], program: "" };
           if (ok) Object.assign(body, { operationId: 1, state: "queued", error: "none" });
           return Promise.resolve(new Response(
             JSON.stringify(body),
@@ -123,6 +125,10 @@ BROWSER_TEST = r'''async page => {
         throw new Error(scenario + " cancelled confirmation sent a request");
       }
 
+      // Человек обязан увидеть русскую причину, а не признак вида process_active.
+      const shownErrors = {
+        400: "E400", 409: "сначала остановите процесс", 503: "хранилище операций временно занято"
+      };
       for (const status of [202, 400, 409, 503]) {
         const before = await page.evaluate(statusValue => {
           window.__programStatus = statusValue;
@@ -163,7 +169,8 @@ BROWSER_TEST = r'''async page => {
             throw new Error(scenario + " terminal response mismatch: " + JSON.stringify({ result, lastMessage, feedback }));
           }
         } else if (result !== false || !lastMessage.includes("HTTP " + status) ||
-                   !lastMessage.includes("E" + status) || !feedback.text.includes(lastMessage)) {
+                   !lastMessage.includes(shownErrors[status]) || /[a-z]_[a-z]/.test(lastMessage) ||
+                   !feedback.text.includes(lastMessage)) {
           throw new Error(scenario + " error response mismatch: " + JSON.stringify({ status, result, lastMessage, feedback }));
         }
       }

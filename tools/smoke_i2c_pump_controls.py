@@ -234,8 +234,9 @@ async function scenarioBusy503OnStop() {
   const result = await app.stopI2cPump();
   check(result === false, "stopI2cPump must resolve false when the device is busy");
   check(elements.request_error.style.display === "block" &&
-    elements.request_error.textContent.indexOf("BUSY") !== -1,
-    "a BUSY response must surface a visible error naming BUSY (got: " + elements.request_error.textContent + ")");
+    elements.request_error.textContent.indexOf("устройство занято") !== -1 &&
+      elements.request_error.textContent.indexOf("BUSY") === -1,
+    "a BUSY response must surface a visible Russian reason, not the raw token (got: " + elements.request_error.textContent + ")");
 }
 
 async function scenarioEmptyInputBlocksRequest() {

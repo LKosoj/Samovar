@@ -222,7 +222,8 @@ BROWSER_TEST = r'''async page => {
     calibration_invalid_result: "некорректный результат калибровки",
     operation_stale_reaped: "не завершилась вовремя",
     program_row_locked: "только строки после текущей",
-    program_finished: "все строки программы уже выполнены"
+    program_finished: "все строки программы уже выполнены",
+    process_active: "сначала остановите процесс"
   };
   for (const [code, message] of Object.entries(failureMessages)) {
     await waiter("failed-" + code, [
