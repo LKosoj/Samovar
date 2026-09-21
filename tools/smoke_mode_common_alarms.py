@@ -143,14 +143,22 @@ if mode_common:
             ],
         ),
         (
-            "inline void mode_update_water_pump_pid",
+            "inline bool mode_acp_above_boost_threshold",
             [
-                "#ifdef USE_WATER_PUMP",
-                "if (!valve_status) return;",
                 "sensor_configured(ACPSensor)",
                 "sensor_reading_valid(ACPSensor)",
                 "ACPSensor.avgTemp > acpBoostThreshold",
                 "ACPSensor.avgTemp > WaterSensor.avgTemp",
+            ],
+        ),
+        (
+            "inline void mode_update_water_pump_pid",
+            [
+                "mode_acp_above_boost_threshold(acpBoostThreshold)",
+                "mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
+                "#ifdef USE_WATER_PUMP",
+                "if (!valve_status) return;",
+                "if (acpHot) {",
                 "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false)",
                 "set_pump_speed_pid(WaterSensor.avgTemp)",
             ],

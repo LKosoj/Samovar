@@ -248,14 +248,26 @@ if water_pid_body:
         "hot ACP branch bypasses softening",
         strip_cpp_comments(water_pid_body),
         [
+            "const bool acpHot = mode_acp_above_boost_threshold(acpBoostThreshold);",
             "if (!valve_status) return;",
-            "ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp",
+            "if (acpHot) {",
             "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);",
             "} else {",
             "set_pump_speed_pid(WaterSensor.avgTemp);",
         ],
         errors,
     )
+
+try:
+    acp_hot_body = extract_function_body(
+        read_text("mode_common.h"),
+        "inline bool mode_acp_above_boost_threshold(float acpBoostThreshold)",
+    )
+except ValueError as exc:
+    errors.append(str(exc))
+else:
+    if "ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp" not in acp_hot_body:
+        errors.append("hot ACP condition lost its 6.27 thresholds")
 
 if bk_alarm_body:
     require_ordered_tokens(

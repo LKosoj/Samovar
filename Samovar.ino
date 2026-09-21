@@ -1904,11 +1904,37 @@ void IRAM_ATTR emergencyButtonInterrupt() {
   if (higherPriorityTaskWoken == pdTRUE) portYIELD_FROM_ISR();
 }
 
+// Антидребезг: одиночная помеха на входе (GPIO35 без внутренней подтяжки, длинные
+// провода к датчикам) не должна глушить процесс. Срабатывание засчитывается, только если
+// вход держит LOW все 30 мс подряд; настоящая кнопка и сработавший датчик держат дольше.
+static constexpr uint8_t EMERGENCY_BUTTON_DEBOUNCE_SAMPLES = 6;
+static constexpr uint32_t EMERGENCY_BUTTON_DEBOUNCE_STEP_MS = 5;
+
+bool emergency_button_press_confirmed() {
+  for (uint8_t sample = 0; sample < EMERGENCY_BUTTON_DEBOUNCE_SAMPLES; sample++) {
+    if (digitalRead(ALARM_BTN_PIN) != LOW) return false;
+    vTaskDelay(pdMS_TO_TICKS(EMERGENCY_BUTTON_DEBOUNCE_STEP_MS));
+  }
+  return digitalRead(ALARM_BTN_PIN) == LOW;
+}
+
+// К входу кнопки подключают и датчики (протечки, паров спирта). Пары спирта идут
+// из перегретой ТСА, поэтому её температуру называем сразу - иначе оператор ищет
+// неисправность в датчиках, а не в охлаждении.
+String emergency_button_reason() {
+  String reason = "Аварийное отключение! Сработал вход аварийной кнопки (кнопка или подключённый к ней датчик).";
+  if (sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor)) {
+    reason += " Температура ТСА " + format_float(ACPSensor.avgTemp, 1) + "°C.";
+  }
+  return reason;
+}
+
 void triggerEmergencyButton(void *parameter) {
   (void)parameter;
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    request_emergency_stop("Аварийное отключение! Нажата аварийная кнопка");
+    if (!emergency_button_press_confirmed()) continue;
+    request_emergency_stop(emergency_button_reason());
     vTaskDelay(pdMS_TO_TICKS(30));
   }
 }
@@ -3687,7 +3713,7 @@ static void tick_alarm_button() {
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();  // отработка нажатия аварийной кнопки
   if (alarm_btn.isPress()) {
-    set_alarm();
+    request_emergency_stop(emergency_button_reason());
   }
 #endif
 }

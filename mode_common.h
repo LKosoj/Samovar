@@ -157,16 +157,40 @@ inline bool mode_water_pre_alarm_due() {
   return WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5 && PowerOn && alarm_t_min == 0;
 }
 
+// ТСА горячее порога и горячее воды: охлаждение не справляется. По этому признаку
+// насос охлаждения крутится усерднее, а оператор получает предупреждение.
+inline bool mode_acp_above_boost_threshold(float acpBoostThreshold) {
+  return sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp;
+}
+
+// Предупреждение - одно на эпизод перегрева ТСА: повторно взводится, когда ТСА остыла
+// на 2 градуса ниже порога (температура у порога дрожит) или нагрев выключен.
+inline void mode_warn_acp_hot_once(bool acpHot, float acpBoostThreshold) {
+  static bool warned = false;
+  if (!PowerOn) {
+    warned = false;
+    return;
+  }
+  if (!acpHot) {
+    if (!sensor_temp_at_least(ACPSensor, acpBoostThreshold - 2)) warned = false;
+    return;
+  }
+  if (warned) return;
+  warned = true;
+  set_buzzer(true);
+  SendMsg("Высокая температура ТСА: " + format_float(ACPSensor.avgTemp, 1) + "°C (порог " + format_float(acpBoostThreshold, 1) + "°C)! Проверьте охлаждение.", WARNING_MSG);
+}
+
 inline void mode_update_water_pump_pid(float acpBoostThreshold) {
+  const bool acpHot = mode_acp_above_boost_threshold(acpBoostThreshold);
+  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);
 #ifdef USE_WATER_PUMP
   if (!valve_status) return;
-  if (sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold && ACPSensor.avgTemp > WaterSensor.avgTemp) {
+  if (acpHot) {
     set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);
   } else {
     set_pump_speed_pid(WaterSensor.avgTemp);
   }
-#else
-  (void)acpBoostThreshold;
 #endif
 }
 
