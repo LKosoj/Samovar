@@ -2037,14 +2037,11 @@ static void tick_wifi_disconnect_diagnostics() {
   }
 }
 
-static bool defer_typed_pair_until_v35(const char* message) {
 #ifdef SAMOVAR_USE_BLYNK
+static bool defer_typed_pair_until_v35(const char* message) {
   return strncmp(message, "@P1;", 4) == 0 && blynk_session_start_pending();
-#else
-  (void)message;
-  return false;
-#endif
 }
+#endif
 
 void triggerGetClock(void *parameter) {
   int counter = 30;
@@ -2678,6 +2675,7 @@ static void state_snapshot_report_pending() {
 // то есть на практике она всегда возвращает "". esp_reset_reason()/esp_reset_reason_t
 // доступны без дополнительного #include (транзитивно через <Arduino.h> -> esp32-hal.h ->
 // esp_system.h, тот же путь, что и у esp_random() в session_begin()).
+#ifdef SAMOVAR_USE_BLYNK
 static String get_reset_reason_short() {
   switch (esp_reset_reason()) {
     case ESP_RST_POWERON:   return "poweron";
@@ -2694,6 +2692,7 @@ static String get_reset_reason_short() {
     default:                return "unknown";
   }
 }
+#endif
 
 // Начало сессии для V35. Вызывается из четырёх точек старта
 // процесса (Menu.ino::menu_samovar_start(), beer.h::beer_proc(), nbk.h, mode_common.h::
@@ -2724,12 +2723,16 @@ void session_begin(const String& sessionDescription) {
     // берём аппаратный ГСЧ ESP32, чтобы sessionId был уникален и без времени.
     currentSessionId = (epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : new_random_session_id();
   }
+#ifdef SAMOVAR_USE_BLYNK
   const String line = String(currentSessionId) + "," + (resume ? "1" : "0") + "," +
                        String(chipId) + "," + String(SamSetup.TimeZone) + "," +
                        SAMOVAR_VERSION + "," +
                        (resume ? get_reset_reason_short() : String("")) + "," +
                        sessionDescription;
   blynk_stage_session_start(line);
+#else
+  (void)sessionDescription;
+#endif
 }
 
 static void setup_check_gpio0_reset_button() {
