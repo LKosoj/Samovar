@@ -63,8 +63,8 @@ PAGE_LABELS = {
 }
 FROZEN = {
     # T06: честный результат Lua-записи и подтверждение ухода; палитра/gzip сохранены.
-    "edit.htm": "a031f61b5eb915ad22a506d245763b0c5815808478aca05d5fff9dec86f9cf87",
-    "edit.htm.gz": "ed8c86998a6e4b4a3e19bec06f979beb9ad972f014061c6dfa66ce56de9a8a5f",
+    "edit.htm": "3789c93027826ea58224ab33becde8a4f399cce58a51bca5c33d34e8a2403a37",
+    "edit.htm.gz": "453f57d44a58cce0cc4eeaecaebe159c08bc3634808442f9ae69e360e602a373",
 }
 KEY_LISTENER_REGISTRATION = re.compile(
     r"\baddEventListener\s*\(\s*(['\"])(?:keydown|keyup|keypress)\1\s*,",

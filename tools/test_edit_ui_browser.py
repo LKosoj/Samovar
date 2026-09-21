@@ -64,7 +64,7 @@ BROWSER_TEST = r'''async page => {
 
   page.on("console", message => {
     if (message.type() === "error" &&
-        !(ignoreExpectedHttp500 && message.text().includes("500"))) {
+        !(ignoreExpectedHttp500 && /\b50[03]\b/.test(message.text()))) {
       errors.push(scenario + " console: " + message.text());
     }
   });
@@ -397,6 +397,13 @@ BROWSER_TEST = r'''async page => {
   await saveWithOutcome("firmware write failure", 500, "WRITE FAILED: /late-b.lua");
   await page.waitForFunction(() => document.getElementById("status").textContent ===
     "Ошибка 500: файл не записан (нет места или сбой файловой системы): /late-b.lua");
+  // 503 редактор отдаёт, только пока журнал держит замок файла: процесс правке не мешает,
+  // и человеку надо сказать "повторите", а не "нельзя".
+  await saveWithOutcome("log lock busy", 503, "BUSY");
+  await page.waitForFunction(() => {
+    const text = document.getElementById("status").textContent;
+    return text.includes("пишется журнал") && text.includes("Повторите") && !text.includes("BUSY");
+  });
   await saveWithOutcome("firmware delete failure", 500, "DELETE FAILED: /late-b.lua");
   await page.waitForFunction(() => document.getElementById("status").textContent ===
     "Ошибка 500: файл не удалён: /late-b.lua");
