@@ -416,6 +416,7 @@
 
     async function saveSetupI2c() {
       if (!setupI2cSelected || !setupI2cSelected.present) return false;
+      const addressChanged = Number(setupI2cValue('newAddress').value) !== setupI2cAddress;
       const params = new URLSearchParams({address: String(setupI2cAddress), cmd: 'save'});
       ['newAddress', 'mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
        'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
@@ -437,7 +438,9 @@
         const accepted = await SamovarApp.readOperationAcceptance(response);
         await SamovarApp.waitForOperation(accepted.operationId);
         await refreshSetupI2c();
-        SamovarApp.showRequestError('Настройки сохранены в Nano. Новый адрес начнёт работать после перезагрузки Nano.');
+        SamovarApp.showRequestError(addressChanged
+          ? 'Настройки сохранены в Nano. Новый адрес начнёт работать после перезагрузки Nano.'
+          : 'Настройки сохранены в Nano.');
         return true;
       } catch (error) {
         SamovarApp.showRequestError(String(error));

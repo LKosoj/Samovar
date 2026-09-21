@@ -22,6 +22,10 @@ def function(lookup: str, definition: str) -> str:
   return definition + " {" + extracted(lookup) + "}"
 
 
+def samovar_function(signature: str) -> str:
+  return signature + " {" + extract_function_body(SAMOVAR, signature) + "}"
+
+
 def require_source_contract() -> list[str]:
   errors = []
   for name, budget in (
@@ -262,6 +266,15 @@ bool i2c_stepper_refresh(I2CStepperDevice& device, bool = false,
   return true;
 }
 
+enum OperationError {
+  OPERATION_ERROR_NONE,
+  OPERATION_ERROR_I2C_REFRESH_FAILED,
+  OPERATION_ERROR_I2C_COMMAND_FAILED,
+};
+OperationError i2c_command_result(bool, const I2CStepperDevice&) {
+  return OPERATION_ERROR_NONE;
+}
+
 @WRITE_CONFIG@
 @WRITE_MOTION@
 @NEXT_SEQ@
@@ -271,6 +284,7 @@ bool i2c_stepper_refresh(I2CStepperDevice& device, bool = false,
 @START_FINITE@
 @READ_CONFIG@
 @SYNC_CONFIG@
+@CONFIRM@
 
 static int failures = 0;
 void check(bool value, const char* message) {
@@ -291,6 +305,20 @@ int main() {
   device.config = nano.active;
   device.status = nano.status;
   device.configGeneration = nano.status.generation;
+
+  I2CStepperDevice mismatched = device;
+  mismatched.config.pumpMlHour = 321;
+  nano.active.pumpMlHour = 20;
+  check(confirm_i2c_candidate(mismatched) == OPERATION_ERROR_I2C_COMMAND_FAILED,
+        "config readback mismatch was accepted");
+  mismatched = device;
+  mismatched.config.pumpMlHour = 321;
+  nano.active.pumpMlHour = 321;
+  check(confirm_i2c_candidate(mismatched) == OPERATION_ERROR_NONE,
+        "matching config readback was rejected");
+  nano.active.pumpMlHour = 0;
+  device.config = nano.active;
+  nano.configReads = 0;
 
   device.config.pumpMlHour = 321;
   check(i2c_stepper_write_config(device), "config staging write failed");
@@ -442,6 +470,8 @@ def main() -> int:
       "@SYNC_CONFIG@": function(
           "inline void i2c_stepper_sync_config",
           "inline void i2c_stepper_sync_config(I2CStepperDevice& device)"),
+      "@CONFIRM@": samovar_function(
+          "static OperationError confirm_i2c_candidate(I2CStepperDevice& candidate)"),
       "@CONFIG_BIT@": function(
           "inline uint32_t i2c_stepper_config_bit",
           "inline uint32_t i2c_stepper_config_bit(uint8_t address)"),
@@ -485,6 +515,16 @@ def main() -> int:
   mutation_code, _ = compile_and_run(mutation)
   if mutation == source or mutation_code == 0:
     errors.append("command collision mutation survived")
+  mutation = source.replace(
+      "if (memcmp(expectedA, actualA, sizeof(expectedA)) != 0 ||\n"
+      "      memcmp(expectedB, actualB, sizeof(expectedB)) != 0)",
+      "if (false)",
+      1)
+  mutation_code, mutation_output = compile_and_run(mutation)
+  if mutation == source:
+    errors.append("config readback comparison mutation anchor missing")
+  elif mutation_code == 0 or "config readback mismatch was accepted" not in mutation_output:
+    errors.append("config readback comparison mutation survived without its semantic assertion")
   if errors:
     print("I2C v3 operation results smoke failed:")
     for error in errors:

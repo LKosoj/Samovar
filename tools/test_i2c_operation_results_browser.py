@@ -272,11 +272,16 @@ CHECK_SETUP_SAVE = r'''async page => {
   check(saved.includes('generation=1'),
     'setup save must carry the config generation the form was filled from: ' + saved);
   check(/[?&]mode=3(?:&|$)/.test(saved), 'pump save must carry the chosen pump job: ' + saved);
+  check(await page.textContent('#request_error') === 'Настройки сохранены в Nano.✕',
+    'unchanged address must not ask for a Nano reboot');
   // Плату переводят на адрес мешалки: режим мешалки уходит сам, хотя в списке его нет.
   await page.selectOption('#i2c-newAddress', '3');
   await page.evaluate(async () => { await saveSetupI2c(); });
   check(/[?&]newAddress=3(?:&|$)/.test(saved) && /[?&]mode=1(?:&|$)/.test(saved),
     'mixer address must be saved with the mixer mode: ' + saved);
+  check((await page.textContent('#request_error')).startsWith(
+      'Настройки сохранены в Nano. Новый адрес начнёт работать после перезагрузки Nano.'),
+    'changed address must explain that Nano needs a reboot');
   check(!s.consoleError, s.consoleError || 'console error');
   return 'setup-save';
 }'''

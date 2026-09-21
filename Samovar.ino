@@ -1361,8 +1361,20 @@ static OperationError i2c_command_result(
 }
 
 static OperationError confirm_i2c_candidate(I2CStepperDevice& candidate) {
+  uint8_t expectedA[I2CSTEPPER_V3_CONFIG_A_SIZE] = {};
+  uint8_t expectedB[I2CSTEPPER_V3_CONFIG_B_SIZE] = {};
+  i2cstepper_v3_encode_config_a(expectedA, &candidate.config);
+  i2cstepper_v3_encode_config_b(expectedB, &candidate.config);
   if (!i2c_stepper_read_config(candidate) || !i2c_stepper_refresh(candidate, true)) {
     return OPERATION_ERROR_I2C_REFRESH_FAILED;
+  }
+  uint8_t actualA[I2CSTEPPER_V3_CONFIG_A_SIZE] = {};
+  uint8_t actualB[I2CSTEPPER_V3_CONFIG_B_SIZE] = {};
+  i2cstepper_v3_encode_config_a(actualA, &candidate.config);
+  i2cstepper_v3_encode_config_b(actualB, &candidate.config);
+  if (memcmp(expectedA, actualA, sizeof(expectedA)) != 0 ||
+      memcmp(expectedB, actualB, sizeof(expectedB)) != 0) {
+    return OPERATION_ERROR_I2C_COMMAND_FAILED;
   }
   return i2c_command_result(true, candidate);
 }
