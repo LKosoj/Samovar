@@ -147,7 +147,7 @@ __BOOTSTRAP_READY_HELPER__
   await page.route("**/ui-bootstrap", route => route.fulfill({
     status:200,contentType:"application/json",body:JSON.stringify(bootstrapFixture)
   }));
-  // program.htm (T3) при каждой загрузке дергает /cheese-recipes-bootstrap для карточки
+  // brewxml.htm при загрузке дергает /cheese-recipes-bootstrap для карточки
   // "Рецепты пива с сайта"; эти тесты её не касаются - отдаём mode:1, чтобы карточка
   // осталась скрытой и не было 404 в консоли.
   await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({
@@ -591,7 +591,12 @@ __BOOTSTRAP_READY_HELPER__
             }
           }
           for (let index=0; index<(families.tabs || 0); index++) {
-            const selector = `.tablinks[aria-pressed]:nth-of-type(${index+1})`;
+            const selector = await page.evaluate(index => {
+              const target = document.querySelectorAll(".tablinks[aria-pressed]")[index];
+              if (!target) throw new Error("tab trigger missing at index " + index);
+              target.setAttribute("data-u05-tab", String(index));
+              return `.tablinks[data-u05-tab="${index}"]`;
+            }, index);
             await countCall("SamovarApp", "openTab", selector, kind);
             await checkTabState(selector);
           }

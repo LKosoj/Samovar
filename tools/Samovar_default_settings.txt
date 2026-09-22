@@ -56,6 +56,7 @@
   "NbkOwPress":"10.00",
   "NbkTn" : "98.5",
   "NbkUseStreamServo" : false,
+  "HideProcessScheme" : false,
   "blynkauth" : "",
   "tgtoken" : "",
   "tgchatid" : "",

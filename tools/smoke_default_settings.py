@@ -57,6 +57,7 @@ current_defaults = {
     "NbkTn": "98.5",
     "NbkSteamT": "81.00",
     "NbkUseStreamServo": False,
+    "HideProcessScheme": False,
     "MainsVoltage": "230.0",
 }
 

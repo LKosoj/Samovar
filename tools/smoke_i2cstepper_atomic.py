@@ -11,6 +11,7 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
+WEB_SERVER_SOURCE = (ROOT / "WebServer.ino").read_text(encoding="utf-8")
 PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 SCAN_MATCH = re.search(r"^#define I2CSTEPPER_SCAN_MS (\d+)UL$", SOURCE, re.MULTILINE)
 if not SCAN_MATCH or int(SCAN_MATCH.group(1)) != 100:
@@ -35,6 +36,7 @@ volatile bool i2cStepperScanActive = true;
 uint8_t i2cStepperSessionMixerAddress = 0;
 uint8_t i2cStepperSessionPumpAddress = 0;
 volatile bool i2cStepperMixerManualHold = false;
+volatile bool i2cStepperPumpManualHold = false;
 uint16_t i2cStepperMixerRpmOverride = 0;
 uint8_t i2cStepperMixerDirOverride = 0;
 uint8_t i2cStepperPumpDirOverride = 0;
@@ -45,6 +47,7 @@ static constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
 @LOOKUP@
 @LOWEST@
 @SESSION@
+@NOTE_MANUAL@
 @SESSION_END_FUNCTION@
 @SESSION_ACTIVE@
 @SELECTED_MIXER@
@@ -75,6 +78,10 @@ int main() {
   if (i2c_stepper_lowest_present(false)->address != 4) return 2;
   i2c_stepper_session_begin();
   if (i2cStepperSessionMixerAddress != 3 || i2cStepperSessionPumpAddress != 4) return 3;
+  i2c_stepper_note_manual_control(3);
+  if (!i2cStepperMixerManualHold || i2cStepperPumpManualHold) return 18;
+  i2c_stepper_note_manual_control(4);
+  if (!i2cStepperMixerManualHold || !i2cStepperPumpManualHold) return 19;
   i2cSteppers[3].present = false; // selected address is lost; no automatic switch to 10
   if (i2c_stepper_selected_pump()->address != 4) return 4;
   startval = SAMOVAR_STARTVAL_IDLE;
@@ -84,7 +91,8 @@ int main() {
   PowerOn = false;
   if (i2c_stepper_session_active()) return 7;
   i2c_stepper_session_end_if_idle();
-  if (i2cStepperSessionPumpAddress != 0) return 8;
+  if (i2cStepperSessionPumpAddress != 0 || i2cStepperMixerManualHold ||
+      i2cStepperPumpManualHold) return 8;
   if (i2c_stepper_selected_pump()->address != 10) return 9;
   if (i2c_stepper_selected_mixer()->address != 3) return 10;
   PowerOn = true;
@@ -138,6 +146,9 @@ def run_selection() -> tuple[int, str]:
       "@SESSION@": function(
           "inline void i2c_stepper_session_begin",
           "inline void i2c_stepper_session_begin()"),
+      "@NOTE_MANUAL@": function(
+          "inline void i2c_stepper_note_manual_control",
+          "inline void i2c_stepper_note_manual_control(uint8_t address)"),
       "@SELECTED_PUMP@": function(
       "inline I2CStepperDevice* i2c_stepper_selected_pump",
       "inline I2CStepperDevice* i2c_stepper_selected_pump()"),
@@ -173,6 +184,12 @@ def run_selection() -> tuple[int, str]:
 
 
 def main() -> int:
+  for token in (
+      "dev.address == i2cStepperSessionPumpAddress && i2cStepperPumpManualHold",
+      "if (address == i2cStepperSessionPumpAddress) i2cStepperPumpManualHold = false;",
+  ):
+    if token not in WEB_SERVER_SOURCE:
+      raise AssertionError(f"WebServer I2C pump manual hold contract is missing: {token}")
   code, output = run_selection()
   if code:
     print(output, end="", file=sys.stderr)

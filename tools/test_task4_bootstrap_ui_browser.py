@@ -26,7 +26,7 @@ BROWSER_TEST = r'''async page => {
     const raw = request.url();
     const scheme = raw.indexOf("://");
     const path = raw.slice(raw.indexOf("/", scheme + 3)).split("?")[0];
-    if (["/ui-bootstrap", "/data.csv", "/ajax", "/ajax_col_params"].includes(path)) {
+    if (["/ui-bootstrap", "/data.csv", "/ajax", "/ajax_col_params", "/program_fruit.txt", "/program_grain.txt", "/program_shugar.txt"].includes(path)) {
       requests.push(path);
     }
   });
@@ -117,16 +117,18 @@ BROWSER_TEST = r'''async page => {
     const expectedColors = i ? ["rgb(68, 85, 102)","rgb(119, 136, 153)","rgb(170, 187, 204)","rgb(221, 238, 255)","rgb(16, 32, 48)"] : ["rgb(17, 34, 51)","rgb(34, 51, 68)","rgb(51, 68, 85)","rgb(85, 102, 119)","rgb(119, 136, 153)"];
     expect(chartState.colors.every((value, index) => value[0] === expectedColors[index] && value[1] === expectedColors[index]), "chart colors " + i);
 
-    before = await openSuccess("program.htm", i);
-    await page.waitForFunction(() => document.querySelector("#prg").children.length > 0);
-    await page.waitForTimeout(50);
-    own = requests.slice(before);
-    expect(own.indexOf("/ajax_col_params") > own.indexOf("/ui-bootstrap"), "program request order");
-    const program = await page.evaluate(() => ({unit:pwr_unit, resistance:heaterResistance, voltage:mainsVolt, diameter:document.getElementById("coldiam").value, height:document.getElementById("columnHeight").textContent, density:document.getElementById("packDensity").textContent, version:document.getElementById("version").textContent, program:document.getElementById("WProgram").value, heater:document.getElementById("heaterMaxPower").value}));
-    expect(program.unit === (i ? "P" : "V") && program.resistance === (i ? 20 : 10) && program.voltage === (i ? 220 : 230), "program power " + i);
-    expect(program.diameter === (i ? "3.0" : "2.0") && program.height === (i ? "1.8" : "1.2") && program.density === (i ? "92" : "71"), "program column " + i);
-    expect(program.version === (i ? "task4-two" : "task4-one") && program.program.length > 0, "program text " + i);
-    expect(program.heater === String(Math.round((i ? 220*220/20 : 230*230/10))), "program heater " + i);
+    if (i === 0) {
+      before = await openSuccess("program.htm", i);
+      await page.waitForFunction(() => document.querySelector("#prg").children.length > 0);
+      await page.waitForTimeout(50);
+      own = requests.slice(before);
+      expect(own.indexOf("/ajax_col_params") > own.indexOf("/ui-bootstrap"), "program request order");
+      const program = await page.evaluate(() => ({unit:pwr_unit, resistance:heaterResistance, voltage:mainsVolt, diameter:document.getElementById("coldiam").value, height:document.getElementById("columnHeight").textContent, density:document.getElementById("packDensity").textContent, version:document.getElementById("version").textContent, program:document.getElementById("WProgram").value, heater:document.getElementById("heaterMaxPower").value}));
+      expect(program.unit === "V" && program.resistance === 10 && program.voltage === 230, "program power");
+      expect(program.diameter === "2.0" && program.height === "1.2" && program.density === "71", "program column");
+      expect(program.version === "task4-one" && program.program.length > 0, "program text");
+      expect(program.heater === String(Math.round(230*230/10)), "program heater");
+    }
 
     await openSuccess("calibrate.htm", i);
     const calibration = await page.evaluate(() => ({speed:document.getElementById("kstepperspd").value, steps:document.getElementById("stepperstepml").value, local:localStepsPerMl, external:externalAddress, externalSteps:externalStepsPerMl, running:calibrationRunning, save:document.getElementById("save").disabled, speedDisabled:document.getElementById("kstepperspd").disabled}));
@@ -149,11 +151,37 @@ BROWSER_TEST = r'''async page => {
     expect(i ? ph[3].includes("ADS1115 не найден") && ph[4].includes("AIN0") : ph[3] === "" && ph[4].includes("LUA_PIN"), "pH source text " + i);
   }
 
+  for (const mode of [1, 2, 3, 4, 5, 6, 7]) {
+    plan = {index:mode};
+    const before = requests.length;
+    await page.goto(baseUrl + "/program.htm", {waitUntil:"load"});
+    await page.waitForFunction(() => document.body.inert === false && !document.getElementById("programUnavailable").hidden);
+    const unavailable = await page.evaluate(() => ({
+      calculatorHidden: document.getElementById("programCalculator").hidden,
+      themeInitialized: document.documentElement.hasAttribute("data-theme"),
+      message: document.querySelector("#programUnavailable p").textContent,
+      href: document.querySelector("#programUnavailable a").getAttribute("href"),
+      linkLabel: document.querySelector("#programUnavailable a").textContent
+    }));
+    expect(unavailable.calculatorHidden, "program calculator remains visible for mode " + mode);
+    expect(unavailable.themeInitialized, "program unavailable did not initialize theme for mode " + mode);
+    expect(unavailable.message === "Расчёт программы отбора доступен только в режиме «Ректификация».", "program unavailable text for mode " + mode + ": " + unavailable.message);
+    expect(unavailable.href === "/", "program unavailable mode link for mode " + mode);
+    expect(unavailable.linkLabel === "Перейти к режиму", "program unavailable link label for mode " + mode);
+    const own = requests.slice(before);
+    expect(own.filter(path => path === "/ui-bootstrap").length === 1, "program unavailable bootstrap count for mode " + mode + ": " + own);
+    expect(!own.some(path => ["/ajax_col_params", "/program_fruit.txt", "/program_grain.txt", "/program_shugar.txt"].includes(path)), "program unavailable started calculator work for mode " + mode + ": " + own);
+  }
+
+  plan = {index:0};
   await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
-  expect(await page.locator('.page-nav a[href="/program.htm"]').isVisible(),
+  await page.waitForFunction(() => !document.querySelector('[data-mode-navigation-slot]').hidden);
+  expect(await page.locator('.page-nav [data-mode-navigation-slot]').isVisible(),
     "setup hides calculation link in rectification mode");
+  plan = {index:1};
   await page.goto(baseUrl + "/setup_nonrect.htm", {waitUntil:"load"});
-  expect(await page.locator('.page-nav a[href="/program.htm"]').isHidden(),
+  await page.waitForFunction(() => document.querySelector('[data-mode-navigation-slot]').hidden);
+  expect(await page.locator('.page-nav [data-mode-navigation-slot]').isHidden(),
     "setup shows calculation link outside rectification mode");
 
   plan = {index:0, diameter:4};
@@ -177,7 +205,7 @@ FAILURE_TEST = r'''async page => {
   page.on("request", request => {
     const raw = request.url();
     const path = raw.slice(raw.indexOf("/", raw.indexOf("://") + 3)).split("?")[0];
-    if (["/ui-bootstrap","/data.csv","/ajax","/ajax_col_params","/calibrate","/save","/program"].includes(path)) requests.push(path);
+    if (["/ui-bootstrap","/data.csv","/ajax","/ajax_col_params","/program_fruit.txt","/program_grain.txt","/program_shugar.txt","/calibrate","/save","/program"].includes(path)) requests.push(path);
   });
   await page.route("**/ui-bootstrap", route => route.fulfill({status:503, contentType:"text/plain", body:"BUSY"}));
   for (const pageName of ["chart.htm","program.htm","calibrate.htm","calibrate_ph.htm"]) {
@@ -186,6 +214,10 @@ FAILURE_TEST = r'''async page => {
     await page.waitForFunction(() => document.getElementById("request_error") && document.getElementById("request_error").style.display !== "none");
     const own = requests.slice(before);
     expect(await page.locator("body").evaluate(node => node.inert), pageName + " failure unlocked");
+    if (pageName === "program.htm") {
+      expect(await page.locator("#programCalculator").isHidden(), "program failure revealed calculator");
+      expect(await page.locator("#programUnavailable").isHidden(), "program failure revealed unavailable message");
+    }
     expect(own.filter(path => path === "/ui-bootstrap").length === 1, pageName + " bootstrap count");
     expect(!own.some(path => path !== "/ui-bootstrap"), pageName + " work after failure: " + own);
   }

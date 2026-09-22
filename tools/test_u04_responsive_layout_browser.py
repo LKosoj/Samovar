@@ -62,19 +62,19 @@ BROWSER_TEST = r'''async page => {
   // 15.09.2026: во вкладке Pump удалены 59 px устаревших настроек; фактическая
   // геометрия и 23 подсказки перепроверены в Chromium без обрезания.
   const DESKTOP_GEOMETRY_BASELINE = {
-    "setup/Main": { form: {x:270,y:85,width:900,height:1182.95}, panel: {x:299,y:190.8,width:842,height:1008.16}, actions: {x:386,y:1198.95,width:668,height:44}, save: {x:386,y:1198.95,width:160,height:44}, return: {x:640,y:1198.95,width:160,height:44}, edit: {x:894,y:1198.95,width:160,height:44} },
+    "setup/Main": { form: {x:270,y:85,width:900,height:1215}, panel: {x:299,y:190.8,width:842,height:1040.2}, actions: {x:386,y:1231,width:668,height:44}, save: {x:386,y:1231,width:160,height:44}, return: {x:640,y:1231,width:160,height:44}, edit: {x:894,y:1231,width:160,height:44} },
     "setup/Temp": { form: {x:270,y:85,width:900,height:1374.8}, panel: {x:299,y:190.8,width:842,height:1200}, actions: {x:386,y:1390.8,width:668,height:44}, save: {x:386,y:1390.8,width:160,height:44}, return: {x:640,y:1390.8,width:160,height:44}, edit: {x:894,y:1390.8,width:160,height:44} },
     "setup/Pump": { form: {x:270,y:85,width:900,height:372.84}, panel: {x:299,y:190.8,width:842,height:198.05}, actions: {x:386,y:388.84,width:668,height:44}, save: {x:386,y:388.84,width:160,height:44}, return: {x:640,y:388.84,width:160,height:44}, edit: {x:894,y:388.84,width:160,height:44} },
     "setup/Beer": { form: {x:270,y:85,width:900,height:599.89}, panel: {x:299,y:190.8,width:842,height:425.09}, actions: {x:386,y:615.89,width:668,height:44}, save: {x:386,y:615.89,width:160,height:44}, return: {x:640,y:615.89,width:160,height:44}, edit: {x:894,y:615.89,width:160,height:44} },
     "setup/Cheese": { form: {x:270,y:85,width:900,height:362.84}, panel: {x:299,y:190.8,width:842,height:188.05}, actions: {x:386,y:378.84,width:668,height:44}, save: {x:386,y:378.84,width:160,height:44}, return: {x:640,y:378.84,width:160,height:44}, edit: {x:894,y:378.84,width:160,height:44} },
     "setup/NBK": { form: {x:270,y:85,width:900,height:603.89}, panel: {x:299,y:190.8,width:842,height:429.09}, actions: {x:386,y:619.89,width:668,height:44}, save: {x:386,y:619.89,width:160,height:44}, return: {x:640,y:619.89,width:160,height:44}, edit: {x:894,y:619.89,width:160,height:44} },
     "setup/Other": { form: {x:270,y:85,width:900,height:1128.22}, panel: {x:299,y:190.8,width:842,height:953.42}, actions: {x:386,y:1144.22,width:668,height:44}, save: {x:386,y:1144.22,width:160,height:44}, return: {x:640,y:1144.22,width:160,height:44}, edit: {x:894,y:1144.22,width:160,height:44} },
-    "setup/main-longest-mode": { form: {x:270,y:85,width:900,height:1182.95}, panel: {x:299,y:190.8,width:842,height:1008.16}, actions: {x:386,y:1198.95,width:668,height:44}, save: {x:386,y:1198.95,width:160,height:44}, return: {x:640,y:1198.95,width:160,height:44}, edit: {x:894,y:1198.95,width:160,height:44} },
+    "setup/main-longest-mode": { form: {x:270,y:85,width:900,height:1215}, panel: {x:299,y:190.8,width:842,height:1040.2}, actions: {x:386,y:1231,width:668,height:44}, save: {x:386,y:1231,width:160,height:44}, return: {x:640,y:1231,width:160,height:44}, edit: {x:894,y:1231,width:160,height:44} },
     "setup/other-long-values": { form: {x:270,y:85,width:900,height:1128.22}, panel: {x:299,y:190.8,width:842,height:953.42}, actions: {x:386,y:1144.22,width:668,height:44}, save: {x:386,y:1144.22,width:160,height:44}, return: {x:640,y:1144.22,width:160,height:44}, edit: {x:894,y:1144.22,width:160,height:44} },
     "setup/other-empty-values": { form: {x:270,y:85,width:900,height:1128.22}, panel: {x:299,y:190.8,width:842,height:953.42}, actions: {x:386,y:1144.22,width:668,height:44}, save: {x:386,y:1144.22,width:160,height:44}, return: {x:640,y:1144.22,width:160,height:44}, edit: {x:894,y:1144.22,width:160,height:44} },
-    "setup/validation-error": { form: {x:270,y:85,width:900,height:1254.25}, panel: {x:299,y:262.09,width:842,height:1008.16}, actions: {x:386,y:1270.25,width:668,height:44}, save: {x:386,y:1270.25,width:160,height:44}, return: {x:640,y:1270.25,width:160,height:44}, edit: {x:894,y:1270.25,width:160,height:44} },
-    "setup/request-error": { form: {x:270,y:85,width:900,height:1254.25}, panel: {x:299,y:262.09,width:842,height:1008.16}, actions: {x:386,y:1270.25,width:668,height:44}, save: {x:386,y:1270.25,width:160,height:44}, return: {x:640,y:1270.25,width:160,height:44}, edit: {x:894,y:1270.25,width:160,height:44} },
-    "setup/visible-tooltip": { form: {x:270,y:85,width:900,height:1182.95}, panel: {x:299,y:190.8,width:842,height:1008.16}, actions: {x:386,y:1198.95,width:668,height:44}, save: {x:386,y:1198.95,width:160,height:44}, return: {x:640,y:1198.95,width:160,height:44}, edit: {x:894,y:1198.95,width:160,height:44} },
+    "setup/validation-error": { form: {x:270,y:85,width:900,height:1286.3}, panel: {x:299,y:262.09,width:842,height:1040.2}, actions: {x:386,y:1302.3,width:668,height:44}, save: {x:386,y:1302.3,width:160,height:44}, return: {x:640,y:1302.3,width:160,height:44}, edit: {x:894,y:1302.3,width:160,height:44} },
+    "setup/request-error": { form: {x:270,y:85,width:900,height:1286.3}, panel: {x:299,y:262.09,width:842,height:1040.2}, actions: {x:386,y:1302.3,width:668,height:44}, save: {x:386,y:1302.3,width:160,height:44}, return: {x:640,y:1302.3,width:160,height:44}, edit: {x:894,y:1302.3,width:160,height:44} },
+    "setup/visible-tooltip": { form: {x:270,y:85,width:900,height:1215}, panel: {x:299,y:190.8,width:842,height:1040.2}, actions: {x:386,y:1231,width:668,height:44}, save: {x:386,y:1231,width:160,height:44}, return: {x:640,y:1231,width:160,height:44}, edit: {x:894,y:1231,width:160,height:44} },
     "chart/messages-hidden": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:69,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
     "chart/messages-short": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:69,width:600,height:101.03}, messages: {x:200,y:69,width:600,height:101.03} },
     "chart/messages-long": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:69,width:600,height:299.45}, messages: {x:200,y:69,width:600,height:299.45} },
@@ -165,12 +165,6 @@ BROWSER_TEST = r'''async page => {
   // program.htm/index.htm/distiller.htm (проверка подсказок на fit, ниже) на загрузке
   // сами запрашивают параметры колонки - без фикстуры это настоящий 404 от тестового
   // статического сервера. Та же фикстура, что в test_u03_contrast_browser.py.
-  // program.htm (T3) при каждой загрузке дергает /cheese-recipes-bootstrap для карточки
-  // "Рецепты пива с сайта"; эти тесты её не касаются - отдаём mode:1, чтобы карточка
-  // осталась скрытой и не было 404 в консоли.
-  await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify({mode: 1})
-  }));
   await page.route("**/ajax_col_params?*", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({
       floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,

@@ -52,6 +52,7 @@ BROWSER_TEST = r'''async page => {
       waterColor: "#000", tankColor: "#000", acpColor: "#000", steamVisible: true,
       pipeVisible: true, waterVisible: true, tankVisible: true, pressureVisible: true,
       programNumberVisible: true, i2cStepperVisible: false, i2cPumpVisible: false,
+      hideProcessScheme: false,
       beerBrewOrder: "allinone", pwmLow: 0, pwmValue: 0, nbkDp: 0,
       columnDiameter: 2, columnHeight: 1, packDensity: 80, heaterResistance: 10,
       mainsVoltage: 230, heaterMaxPower: 230, stepperMaxSpeed: 1000,

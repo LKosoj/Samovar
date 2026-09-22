@@ -193,6 +193,7 @@ async function init() {
   try {
     let bootstrap = null;
     if (!await SamovarApp.loadUiBootstrap(data => { bootstrap = data; })) return;
+    SamovarApp.applyModeNavigation(bootstrap.mode);
     devices = Array.isArray(bootstrap.i2cSteppers) ? bootstrap.i2cSteppers : [];
     if (!selectedAddress) {
       const first = devices.find(device => device.present);

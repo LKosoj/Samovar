@@ -650,6 +650,7 @@
   jsonRequest('/cheese-recipes-bootstrap', { cache: 'no-store' }).then(function (bootstrap) {
     state.token = typeof bootstrap.blynkToken === 'string' ? bootstrap.blynkToken : '';
     state.mode = Number(bootstrap.mode);
+    SamovarApp.applyModeNavigation(state.mode);
     if (bootstrap.i2cMixer === true) byId('mixerDevice').value = '2';
     loadCatalog();
   }).catch(function () { state.token = ''; state.mode = null; loadCatalog(); });

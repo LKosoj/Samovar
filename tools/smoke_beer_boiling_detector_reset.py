@@ -114,6 +114,7 @@ static bool msgfl = false;
 static unsigned long begintime = 0;
 static int currentstepcnt = 0;
 static bool i2cStepperMixerManualHold = false;
+static bool i2cStepperPumpManualHold = false;
 static unsigned long alarm_c_min = 0;
 static unsigned long alarm_c_low_min = 0;
 

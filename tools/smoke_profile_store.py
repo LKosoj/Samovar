@@ -317,7 +317,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 77, "SetupEEPROM v8 field inventory changed")
+require(len(setup_fields) == 78, "SetupEEPROM v9 field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -372,6 +372,7 @@ nvs_harness = (
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V2ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V3ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V9ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
         // UPTO4-поля (LogPeriod/tg_token/tg_chat_id) остались в X-macro списке для
         // прохода курсора при чтении старых форматов, но физически ушли из
         // SetupEEPROM (T1) - sizeof(((SetupEEPROM*)0)->name) для них не скомпилируется.
@@ -386,6 +387,7 @@ nvs_harness = (
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO5
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO6
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO7
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V9ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V3ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V2ONLY
@@ -403,7 +405,7 @@ nvs_harness = (
         r'''
         static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
         static const char* const SAMOVAR_PROFILE_KEY = "profile";
-        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 8;
+        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 9;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
@@ -420,10 +422,15 @@ nvs_harness = (
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V7 = 475;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V8 = 473;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V8 = 473;
+        static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V9 = 474;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V9 = 474;
 
         using ProfileCodec = ProfileBlobCodec<
-            SAMOVAR_PROFILE_PAYLOAD_SIZE_V8,
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V9,
             SAMOVAR_PROFILE_FORMAT_VERSION>;
+        using V8ProfileCodec = ProfileBlobCodec<
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V8,
+            8>;
         using V7ProfileCodec = ProfileBlobCodec<
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V7,
             7>;
@@ -446,8 +453,11 @@ nvs_harness = (
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V1,
             1>;
 
-        static_assert(sizeof(SetupEEPROM) == 492, "host ABI drift");
-        static_assert(ProfileCodec::BLOB_SIZE == 487, "v8 blob size drift");
+        static void set_profile_version_defaults(SetupEEPROM&, uint8_t);
+
+        static_assert(sizeof(SetupEEPROM) == 496, "host ABI drift");
+        static_assert(ProfileCodec::BLOB_SIZE == 488, "v9 blob size drift");
+        static_assert(V8ProfileCodec::BLOB_SIZE == 487, "v8 blob size drift");
         static_assert(V7ProfileCodec::BLOB_SIZE == 489, "v7 blob size drift");
         static_assert(V6ProfileCodec::BLOB_SIZE == 490, "v6 blob size drift");
         static_assert(V5ProfileCodec::BLOB_SIZE == 494, "v5 blob size drift");
@@ -865,8 +875,16 @@ for token, signature in [
         "template <bool ReadUpTo5Fields, bool ReadUpTo6Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_v4only_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
     ),
     (
+        "decode_setup_payload_v9only_fields(",
+        "template <size_t PayloadSize>\nstatic bool decode_setup_payload_v9only_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
+    ),
+    (
         "decode_setup_payload(",
         "static bool decode_setup_payload(const uint8_t* payload, SetupEEPROM& candidate)",
+    ),
+    (
+        "decode_setup_payload_v8(",
+        "static bool decode_setup_payload_v8(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
     (
         "decode_setup_payload_v7(",
@@ -1117,6 +1135,7 @@ nvs_harness += (
           candidate.NbkUseStreamServo = true;
           candidate.CheesePhSlope = -0.00325f;
           candidate.CheesePhOffset = 10.75f;
+          candidate.HideProcessScheme = true;
           return candidate;
         }
 
@@ -1125,6 +1144,16 @@ nvs_harness += (
           assert(encode_setup_payload(candidate, payload));
           ProfileCodec::Blob blob{};
           ProfileCodec::encode(payload, blob);
+          return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
+        }
+
+        static std::vector<uint8_t> encode_v8_blob(const SetupEEPROM& candidate) {
+          uint8_t v9Payload[ProfileCodec::PAYLOAD_SIZE] = {};
+          assert(encode_setup_payload(candidate, v9Payload));
+          uint8_t v8Payload[V8ProfileCodec::PAYLOAD_SIZE] = {};
+          memcpy(v8Payload, v9Payload, sizeof(v8Payload));
+          V8ProfileCodec::Blob blob{};
+          V8ProfileCodec::encode(v8Payload, blob);
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
@@ -1165,6 +1194,7 @@ nvs_harness += (
 #define SAMOVAR_LEGACY_ENCODE_TERM_V2ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_V3ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_TERM_V9ONLY(kind, name)
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO4(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO5(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO6(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
@@ -1178,6 +1208,7 @@ nvs_harness += (
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO5
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO6
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO7
+#undef SAMOVAR_LEGACY_ENCODE_TERM_V9ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V3ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V2ONLY
@@ -1349,7 +1380,7 @@ nvs_harness += (
           assert(fake.writes == 1 && fake.opens == 1);
 
           reset_fake();
-          fake.sizeReported = ProfileCodec::BLOB_SIZE - 1;
+          fake.sizeReported = ProfileCodec::BLOB_SIZE + 100;
           assert(save_profile_nvs(candidate) == PERSIST_STORED_SIZE_MISMATCH);
           assert(fake.writes == 1 && fake.opens == 1);
 
@@ -1406,7 +1437,7 @@ nvs_harness += (
 
           reset_fake();
           seed_current_blob(expected);
-          fake.sizeReported = ProfileCodec::BLOB_SIZE - 1;
+          fake.sizeReported = ProfileCodec::BLOB_SIZE + 100;
           expect_load_failure(PROFILE_LOAD_STORED_SIZE_MISMATCH);
 
           reset_fake();
@@ -1453,10 +1484,11 @@ nvs_harness += (
           assert(loaded.NbkUseStreamServo == expected.NbkUseStreamServo);
           assert(loaded.CheesePhSlope == expected.CheesePhSlope);
           assert(loaded.CheesePhOffset == expected.CheesePhOffset);
+          assert(loaded.HideProcessScheme == expected.HideProcessScheme);
           assert(encode_blob(loaded) == fake.blob);
         }
 
-        static void test_v1_v2_v3_v4_v5_v6_v7_profiles_migrate_after_verified_v8_write() {
+        static void test_v1_to_v8_profiles_migrate_after_verified_v9_write() {
           SetupEEPROM legacy = sample_setup();
           PersistResult persistResult = PERSIST_OK;
           legacy.Mode = SAMOVAR_LUA_MODE;
@@ -1484,6 +1516,7 @@ nvs_harness += (
           assert(!rewritten.NbkUseStreamServo);
           assert(rewritten.CheesePhSlope == 1.0f);
           assert(rewritten.CheesePhOffset == 1.0f);
+          assert(!rewritten.HideProcessScheme);
 
           reset_fake();
           fake.blob = encode_v1_blob(legacy);
@@ -1509,6 +1542,7 @@ nvs_harness += (
           assert(!loaded.NbkUseStreamServo);
           assert(loaded.CheesePhSlope == 1.0f);
           assert(loaded.CheesePhOffset == 1.0f);
+          assert(!loaded.HideProcessScheme);
           assert(fake.writes == 1);
           assert(fake.blob.size() == ProfileCodec::BLOB_SIZE);
 
@@ -1530,6 +1564,7 @@ nvs_harness += (
           assert(loaded.NbkUseStreamServo == legacy.NbkUseStreamServo);
           assert(loaded.CheesePhSlope == 1.0f);
           assert(loaded.CheesePhOffset == 1.0f);
+          assert(!loaded.HideProcessScheme);
           assert(fake.writes == 1);
           assert(fake.blob.size() == ProfileCodec::BLOB_SIZE);
 
@@ -1555,6 +1590,7 @@ nvs_harness += (
           assert(loaded.MpxZeroAdc == legacy.MpxZeroAdc);
           assert(loaded.NbkUseStreamServo == legacy.NbkUseStreamServo);
           assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
+          assert(!loaded.HideProcessScheme);
           assert(fake.writes == 1);
           assert(fake.blob.size() == ProfileCodec::BLOB_SIZE);
           assert(encode_blob(loaded) == fake.blob);
@@ -1567,6 +1603,7 @@ nvs_harness += (
           assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp);
           assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
+          assert(!loaded.HideProcessScheme);
           assert(fake.writes == 1);
           assert(fake.blob.size() == ProfileCodec::BLOB_SIZE);
           assert(encode_blob(loaded) == fake.blob);
@@ -1586,6 +1623,7 @@ nvs_harness += (
           assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
           assert(persistResult == PERSIST_OK);
           assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
+          assert(!loaded.HideProcessScheme);
           assert(fake.writes == 1 && encode_blob(loaded) == fake.blob);
 
           reset_fake();
@@ -1595,6 +1633,7 @@ nvs_harness += (
           assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
           assert(persistResult == PERSIST_OK);
           assert(loaded.CheesePhOffset == legacy.CheesePhOffset);
+          assert(!loaded.HideProcessScheme);
           assert(fake.writes == 1 && encode_blob(loaded) == fake.blob);
 
           reset_fake();
@@ -1620,7 +1659,8 @@ nvs_harness += (
           assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
           assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp && loaded.NbkTn == legacy.NbkTn);
-          const std::vector<uint8_t> v8FromFirstV7 = fake.blob;
+          assert(!loaded.HideProcessScheme);
+          const std::vector<uint8_t> v9FromFirstV7 = fake.blob;
 
           reset_fake();
           fake.blob = encode_v7_blob(legacy, 0xFEDC);
@@ -1629,7 +1669,8 @@ nvs_harness += (
           assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
           assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp && loaded.NbkTn == legacy.NbkTn);
-          assert(fake.blob == v8FromFirstV7);
+          assert(!loaded.HideProcessScheme);
+          assert(fake.blob == v9FromFirstV7);
 
           reset_fake();
           fake.blob = encode_v7_blob(legacy, 0x55AA);
@@ -1638,6 +1679,33 @@ nvs_harness += (
           assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
           assert(persistResult == PERSIST_OPEN_FAILED);
           assert(destination.Kp == legacy.Kp && destination.Mode == legacy.Mode);
+
+          reset_fake();
+          fake.blob = encode_v8_blob(legacy);
+          loaded = {};
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
+          assert(loaded.Kp == legacy.Kp && loaded.NbkTn == legacy.NbkTn);
+          assert(!loaded.HideProcessScheme);
+          const std::vector<uint8_t> v9FromV8 = fake.blob;
+          assert(v9FromV8.size() == ProfileCodec::BLOB_SIZE);
+
+          reset_fake();
+          legacy.HideProcessScheme = false;
+          fake.blob = encode_v8_blob(legacy);
+          loaded = {};
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(fake.blob == v9FromV8);
+
+          reset_fake();
+          fake.blob = encode_v8_blob(legacy);
+          fake.writerBegin = false;
+          memset(&destination, 0xE2, sizeof(destination));
+          assert(load_profile_nvs(destination, persistResult) == PROFILE_LOAD_MIGRATION_PERSIST_FAILED);
+          assert(persistResult == PERSIST_OPEN_FAILED);
+          assert(destination.Kp == legacy.Kp && !destination.HideProcessScheme);
         }
 
         static void mark_field(bool* occupied, size_t offset, size_t size) {
@@ -2041,7 +2109,7 @@ nvs_harness += (
         // ---------------------------------------------------------------------
         // A-16/T3 golden-тест: независимый (посчитанный отдельным python-скриптом,
         // НЕ через encode_setup_payload/decode_setup_payload_fields) побайтовый
-        // эталон канонического V7-профиля (475 байт). Пин порядка/ширины полей —
+        // эталон канонического V9-профиля (474 байта). Пин порядка/ширины полей —
         // перестановка, смена put_u16->put_u8, потеря вызова в цепочке && или
         // смещение candidate = {} обязаны развалить один из ассертов ниже с
         // указанием ИМЕНИ поля и байтового смещения, а не абстрактным «не то».
@@ -2132,9 +2200,10 @@ nvs_harness += (
           {"NbkUseStreamServo", 464, 1, offsetof(SetupEEPROM, NbkUseStreamServo), sizeof(((SetupEEPROM*)0)->NbkUseStreamServo)},
           {"CheesePhSlope", 465, 4, offsetof(SetupEEPROM, CheesePhSlope), sizeof(((SetupEEPROM*)0)->CheesePhSlope)},
           {"CheesePhOffset", 469, 4, offsetof(SetupEEPROM, CheesePhOffset), sizeof(((SetupEEPROM*)0)->CheesePhOffset)},
+          {"HideProcessScheme", 473, 1, offsetof(SetupEEPROM, HideProcessScheme), sizeof(((SetupEEPROM*)0)->HideProcessScheme)},
         };
 
-        static const uint8_t GOLDEN_A[473] = {
+        static const uint8_t GOLDEN_A[474] = {
           0x0B,  // [  0-  0] flag
           0x00, 0x00, 0x00, 0x00,  // [  1-  4] DeltaSteamTemp
           0x00, 0x00, 0x50, 0xC0,  // [  5-  8] DeltaPipeTemp
@@ -2212,9 +2281,10 @@ nvs_harness += (
           0x01,  // [466-466] NbkUseStreamServo
           0x00, 0x80, 0x98, 0xC2,  // [467-470] CheesePhSlope
           0x00, 0x80, 0x9A, 0xC2,  // [471-474] CheesePhOffset
+          0x00,  // [473-473] HideProcessScheme
         };
 
-        static const uint8_t GOLDEN_B[473] = {
+        static const uint8_t GOLDEN_B[474] = {
           0xEE,  // [  0-  0] flag
           0x00, 0xC0, 0x48, 0x43,  // [  1-  4] DeltaSteamTemp
           0x00, 0x60, 0x96, 0x43,  // [  5-  8] DeltaPipeTemp
@@ -2292,9 +2362,10 @@ nvs_harness += (
           0x00,  // [466-466] NbkUseStreamServo
           0x00, 0x86, 0xED, 0x45,  // [467-470] CheesePhSlope
           0x00, 0xA6, 0xF0, 0x45,  // [471-474] CheesePhOffset
+          0x01,  // [473-473] HideProcessScheme
         };
 
-        static const uint8_t GOLDEN_DEFAULT_NOSEM[473] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_NOSEM[474] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2372,9 +2443,10 @@ nvs_harness += (
           0x00,  // [466-466] NbkUseStreamServo
           0x00, 0x00, 0x80, 0x3F,  // [467-470] CheesePhSlope
           0x00, 0x00, 0x80, 0x3F,  // [471-474] CheesePhOffset
+          0x00,  // [473-473] HideProcessScheme
         };
 
-        static const uint8_t GOLDEN_DEFAULT_SEM[473] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_SEM[474] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2452,6 +2524,7 @@ nvs_harness += (
           0x00,  // [466-466] NbkUseStreamServo
           0x00, 0x00, 0x80, 0x3F,  // [467-470] CheesePhSlope
           0x00, 0x00, 0x80, 0x3F,  // [471-474] CheesePhOffset
+          0x00,  // [473-473] HideProcessScheme
         };
 
 
@@ -2571,7 +2644,8 @@ nvs_harness += (
         candidateA.NbkUseStreamServo = true;
         candidateA.CheesePhSlope = -76.25f;
         candidateA.CheesePhOffset = -77.25f;
-          uint8_t payloadA[473] = {};
+        candidateA.HideProcessScheme = false;
+          uint8_t payloadA[474] = {};
           assert(encode_setup_payload(candidateA, payloadA) &&
                  "encode_setup_payload must succeed for golden set A");
           golden_check_encode(payloadA, GOLDEN_A, "encode set A");
@@ -2659,7 +2733,8 @@ nvs_harness += (
         candidateB.NbkUseStreamServo = false;
         candidateB.CheesePhSlope = 7600.75f;
         candidateB.CheesePhOffset = 7700.75f;
-          uint8_t payloadB[473] = {};
+        candidateB.HideProcessScheme = true;
+          uint8_t payloadB[474] = {};
           assert(encode_setup_payload(candidateB, payloadB) &&
                  "encode_setup_payload must succeed for golden set B");
           golden_check_encode(payloadB, GOLDEN_B, "encode set B");
@@ -2684,7 +2759,7 @@ nvs_harness += (
           memset(&candidate, 0xAA, sizeof(candidate));
           set_default_setup_profile(candidate);
 
-          uint8_t payload[473] = {};
+          uint8_t payload[474] = {};
           assert(encode_setup_payload(candidate, payload) &&
                  "encode_setup_payload must succeed for defaults");
         #ifndef SAMOVAR_USE_SEM_AVR
@@ -2698,7 +2773,7 @@ nvs_harness += (
         int main() {
           test_save_fault_matrix();
           test_load_fault_matrix();
-          test_v1_v2_v3_v4_v5_v6_v7_profiles_migrate_after_verified_v8_write();
+          test_v1_to_v8_profiles_migrate_after_verified_v9_write();
           test_poisoned_padding_and_canonical_rejection();
           test_legacy_fault_matrix();
           test_migration_precedence_and_errors();
@@ -3065,6 +3140,7 @@ if load_body:
         require(forbidden not in load_body, f"blob load contains forbidden fallback {forbidden}")
     require(
         len(re.findall(r"(?<![A-Za-z0-9])ProfileCodec::Blob", load_body)) == 1 and
+        load_body.count("V8ProfileCodec::Blob") == 1 and
         load_body.count("V7ProfileCodec::Blob") == 1 and
         load_body.count("V6ProfileCodec::Blob") == 1 and
         load_body.count("V5ProfileCodec::Blob") == 1 and
@@ -3073,6 +3149,7 @@ if load_body:
         load_body.count("V2ProfileCodec::Blob") == 1 and
         load_body.count("LegacyProfileCodec::Blob") == 1 and
         load_body.count("uint8_t payload[ProfileCodec::PAYLOAD_SIZE]") == 1 and
+        load_body.count("uint8_t payload[V8ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V7ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V6ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V5ProfileCodec::PAYLOAD_SIZE]") == 1 and
@@ -3080,6 +3157,7 @@ if load_body:
         load_body.count("uint8_t payload[V3ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V2ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[LegacyProfileCodec::PAYLOAD_SIZE]") == 1 and
+        "decode_setup_payload_v8(payload, migrated)" in load_body and
         "decode_setup_payload_v7(payload, migrated)" in load_body and
         "decode_setup_payload_v6(payload, migrated)" in load_body and
         "decode_setup_payload_v5(payload, migrated)" in load_body and
@@ -3087,16 +3165,16 @@ if load_body:
         "decode_setup_payload_v3(payload, migrated)" in load_body and
         "decode_setup_payload_v2(payload, migrated)" in load_body and
         "decode_setup_payload_v1(payload, migrated)" in load_body and
-        load_body.count("save_profile_nvs(migrated)") == 7 and
+        load_body.count("save_profile_nvs(migrated)") == 8 and
         "SetupEEPROM decoded" not in load_body,
-        "profile load must decode V1/V2/V3/V4/V5/V6/V7 and confirm their V8 rewrite with fixed buffers",
+        "profile load must decode V1-V8 and confirm their V9 rewrite with fixed buffers",
     )
     require(
         load_body.startswith("\n  persistResult = PERSIST_OK;") and
-        load_body.count("candidate = migrated;") == 7 and
-        load_body.count("persistResult = save_profile_nvs(migrated);") == 7 and
-        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 7,
-        "legacy V1-V7 load must retain its decoded candidate and report the exact V8 persist failure",
+        load_body.count("candidate = migrated;") == 8 and
+        load_body.count("persistResult = save_profile_nvs(migrated);") == 8 and
+        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 8,
+        "V1-V8 load must retain its decoded candidate and report the exact V9 persist failure",
     )
 
 if migrate_body:
@@ -3183,8 +3261,8 @@ else:
     )
     total_size = sum(int(row[2]) for row in profile_field_rows if row[4] not in ("UPTO4", "UPTO5", "UPTO6", "UPTO7"))
     require(
-        total_size == 473,
-        f"profile_setup_fields.h SIZE column (без retired-полей) sums to {total_size} bytes, expected 473",
+        total_size == 474,
+        f"profile_setup_fields.h SIZE column (без retired-полей) sums to {total_size} bytes, expected 474",
     )
     # decode_setup_payload_fields() и decode_setup_payload_v2only_fields() читают
     # ОДИН И ТОТ ЖЕ курсор reader двумя последовательными проходами по одному и
@@ -3197,7 +3275,7 @@ else:
     # V2ONLY-хвост) - это нормально; интерливинг ALL/V2ONLY - нет.
     v2only_fields = [row[1] for row in profile_field_rows if row[4] == "V2ONLY"]
     scopes = [row[4] for row in profile_field_rows]
-    expected_scope_order = {"ALL": 0, "UPTO4": 0, "UPTO7": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3, "UPTO6": 4, "UPTO5": 5}
+    expected_scope_order = {"ALL": 0, "UPTO4": 0, "UPTO7": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3, "UPTO6": 4, "UPTO5": 5, "V9ONLY": 6}
     require(
         all(scope in expected_scope_order for scope in scopes) and
         all(expected_scope_order[left] <= expected_scope_order[right]
@@ -3223,6 +3301,11 @@ else:
             "CheesePhSlope", "CheesePhOffset",
         ],
         f"unexpected V4ONLY field set in profile_setup_fields.h: {v4only_fields!r}",
+    )
+    v9only_fields = [row[1] for row in profile_field_rows if row[4] == "V9ONLY"]
+    require(
+        v9only_fields == ["HideProcessScheme"],
+        f"unexpected V9ONLY field set in profile_setup_fields.h: {v9only_fields!r}",
     )
     # [П8] DistTimeF по умолчанию должен быть 60 минут (был 16 - см. мёртвую
     # isnan(uint8_t)-ветку, удалённую из apply_config_runtime() в Samovar.ino).
@@ -3269,6 +3352,16 @@ if decode_v4only_body:
         "SAMOVAR_PROFILE_FIELDS(SAMOVAR_V4ONLY_FIELD)" in decode_v4only_body,
         "V4-only decoder does not dispatch through the shared X-macro",
     )
+decode_v9only_body = function_body(
+    nvs_text,
+    "template <size_t PayloadSize>\nstatic bool decode_setup_payload_v9only_fields(",
+)
+require(bool(decode_v9only_body), "V9-only field-wise SetupEEPROM decoder is missing")
+if decode_v9only_body:
+    require(
+        "SAMOVAR_PROFILE_FIELDS(SAMOVAR_V9ONLY_FIELD)" in decode_v9only_body,
+        "V9-only decoder does not dispatch through the shared X-macro",
+    )
 if decode_body:
     require(
         "decode_setup_payload_v2only_fields(reader, decoded)" in decode_body,
@@ -3283,7 +3376,11 @@ if decode_body:
         "decode_setup_payload_v4only_fields<false, false>(reader, decoded)" in decode_body,
         "V7 decoder must decode V4-only fields via the shared X-macro pass",
     )
-    for name in v2only_fields + v3only_fields + v4only_fields:
+    require(
+        "decode_setup_payload_v9only_fields(reader, decoded)" in decode_body,
+        "V9 decoder must decode V9-only fields via the shared X-macro pass",
+    )
+    for name in v2only_fields + v3only_fields + v4only_fields + v9only_fields:
         require(
             name not in decode_body,
             f"V2 decoder references {name} by name instead of going through the "
@@ -3335,10 +3432,12 @@ for forbidden in [
 require("void save_profile()" not in (ROOT / "FS.ino").read_text(encoding="utf-8"),
         "FS.ino void save_profile wrapper remains")
 require("void save_profile();" not in api_text, "void save_profile API remains")
-require('static_assert(sizeof(SetupEEPROM) == 492' in nvs_text,
-        "production SetupEEPROM v8 ABI assertion is missing")
+require('static_assert(sizeof(SetupEEPROM) == 496' in nvs_text,
+        "production SetupEEPROM v9 ABI assertion is missing")
 for token in [
-    "SAMOVAR_PROFILE_FORMAT_VERSION = 8",
+    "SAMOVAR_PROFILE_FORMAT_VERSION = 9",
+    "SAMOVAR_PROFILE_PAYLOAD_SIZE_V9 = 474",
+    "SAMOVAR_PROFILE_CANONICAL_BYTES_V9 = 474",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V8 = 473",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V8 = 473",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V7 = 475",
@@ -3349,6 +3448,7 @@ for token in [
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V5 = 480",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545",
+    "using V8ProfileCodec = ProfileBlobCodec<",
     "using V7ProfileCodec = ProfileBlobCodec<",
     "using V6ProfileCodec = ProfileBlobCodec<",
     "using V5ProfileCodec = ProfileBlobCodec<",
@@ -3356,7 +3456,7 @@ for token in [
     "using V3ProfileCodec = ProfileBlobCodec<",
     "using V2ProfileCodec = ProfileBlobCodec<",
 ]:
-    require(token in nvs_text, f"production profile v8 contract is missing {token}")
+    require(token in nvs_text, f"production profile v9 contract is missing {token}")
 
 setup_body = function_body(samovar_text, "void setup()")
 if setup_body:

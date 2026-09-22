@@ -195,7 +195,7 @@ BROWSER_TEST = r'''async page => {
       program: programFixtures[bootstrapPage] || bootstrapFixture.program
     }, bootstrapOverrides[bootstrapPage] || {}))
   }));
-  // program.htm (T3) при каждой загрузке дергает /cheese-recipes-bootstrap для карточки
+  // brewxml.htm при загрузке дергает /cheese-recipes-bootstrap для карточки
   // "Рецепты пива с сайта"; эти тесты её не касаются - отдаём mode:1, чтобы карточка
   // осталась скрытой и не было 404 в консоли.
   await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({

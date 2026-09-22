@@ -214,6 +214,7 @@ using std::isfinite;
 
 #define SAMOVAR_VERSION "6.27"
 #define I2CSTEPPER_STATUS_RUNNING 1
+#define BitIsSet(reg, bit) ((reg & (1 << bit)) != 0)
 
 class String {
  public:
@@ -825,6 +826,27 @@ int main() {
       nbkFirst.controls[0].source != UI_CONTROL_SOURCE_PROGRAM) return 24;
   nbkUiPowerApplied = false; nbkUiFeedApplied = false;
   if (build_ui_state_from_loop().controlCount != 0) return 25;
+
+  // Работающий насос пивной строки должен появляться отдельным control со
+  // скоростью программы и фактически подтверждённой скоростью устройства.
+  Samovar_Mode = SAMOVAR_BEER_MODE;
+  PowerOn = true; mixer_status = false; valve_status = false;
+  ProgramNum = 1; ProgramLen = 3; programType = 'P';
+  program[1].WType = 'P'; program[1].capacity_num = 0x02; program[1].Param = 1200.0f;
+  i2c_stepper_cache.pump_status = I2CSTEPPER_V3_STATUS_RUNNING;
+  i2c_stepper_cache.pump_current_rate = 1.15f;
+  UiStateDescriptor beerPump = build_ui_state_from_loop();
+  if (beerPump.controlCount != 2 ||
+      beerPump.controls[0].kind != UI_CONTROL_I2C_PUMP ||
+      !beerPump.controls[0].hasRequested || beerPump.controls[0].requested != 1.2f ||
+      !beerPump.controls[0].hasApplied || beerPump.controls[0].applied != 1.15f ||
+      beerPump.controls[0].unit != UI_UNIT_L_H ||
+      beerPump.controls[0].source != UI_CONTROL_SOURCE_PROGRAM) return 27;
+  i2c_stepper_cache.pump_status = 0;
+  UiStateDescriptor stoppedBeerPump = build_ui_state_from_loop();
+  for (uint8_t index = 0; index < stoppedBeerPump.controlCount; index++) {
+    if (stoppedBeerPump.controls[index].kind == UI_CONTROL_I2C_PUMP) return 28;
+  }
 
   // Выдержка сыра использует накопленное время, а не duration строки: проверяем
   // две разные остаточные величины и реальное ожидание замороженных часов.

@@ -173,6 +173,7 @@ window.onload = async function() {
     try {
       let bootstrap = null;
       if (!await SamovarApp.loadUiBootstrap(data => { bootstrap = data; })) return;
+      SamovarApp.applyModeNavigation(bootstrap.mode);
       calibrationRunning = Boolean(bootstrap.calibrationRunning);
       if (bootstrap.processRunning || calibrationRunning) {
         SamovarApp.showRequestError('Калибровка внешнего насоса сейчас недоступна.');
@@ -187,6 +188,7 @@ window.onload = async function() {
   } else {
     let bootstrap = null;
     if (!await SamovarApp.loadUiBootstrap(data => { bootstrap = data; })) return;
+    SamovarApp.applyModeNavigation(bootstrap.mode);
     localStepsPerMl = Number(bootstrap.stepperStepsPerMl);
     calibrationRunning = Boolean(bootstrap.calibrationRunning);
     document.getElementById('kstepperspd').value = String(bootstrap.stepperMaxSpeed);

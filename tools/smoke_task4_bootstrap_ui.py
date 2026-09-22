@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from build_web_assets import resolve_includes
+from smoke_helpers import extract_function_body, require_ordered_tokens
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +66,51 @@ def validate(pages: dict[str, str]) -> list[str]:
         errors.append("chart.htm: bootstrap callback does not initialize the chart")
 
     program = pages["program.htm"]
+    try:
+        program_bootstrap = extract_function_body(program, "function applyProgramBootstrap(data)")
+    except ValueError as exc:
+        errors.append(f"program.htm: {exc}")
+        program_bootstrap = ""
+    if program_bootstrap:
+        require_ordered_tokens(
+            "program calculator availability bootstrap",
+            program_bootstrap,
+            [
+                "SamovarApp.applyModeNavigation(data.mode);",
+                "const calculatorAvailable = Number(data.mode) === 0;",
+                "calculator.hidden = !calculatorAvailable;",
+                "unavailable.hidden = calculatorAvailable;",
+                "if (!calculatorAvailable) return;",
+                "pwr_unit = data.powerUnit;",
+            ],
+            errors,
+        )
+    for token in (
+        'id="programUnavailable" class="card" hidden',
+        'Расчёт программы отбора доступен только в режиме «Ректификация».',
+        '<a href="/" class="button">Перейти к режиму</a>',
+        'id="programCalculator" hidden',
+        'name="mainform" id="mainform"',
+        "if (document.getElementById('programCalculator').hidden) return;",
+    ):
+        if token not in program:
+            errors.append(f"program.htm: unavailable-calculator contract missing {token}")
+    try:
+        program_onload = extract_function_body(program, "window.onload = async function()")
+    except ValueError as exc:
+        errors.append(f"program.htm: {exc}")
+        program_onload = ""
+    if program_onload:
+        require_ordered_tokens(
+            "program unavailable theme initialization",
+            program_onload,
+            [
+                "await SamovarApp.loadUiBootstrap(applyProgramBootstrap)",
+                "SamovarApp.initTheme();",
+                "if (document.getElementById('programCalculator').hidden) return;",
+            ],
+            errors,
+        )
     if program.find("await SamovarApp.loadUiBootstrap") > program.find("getProgramFromFile(loadProgramSelect"):
         errors.append("program.htm: template/column request starts before bootstrap")
     if 'diamSelect.value = "1.5"' not in program:
@@ -101,6 +147,9 @@ def main() -> int:
     mutations = (
         ("chart visibility inversion", "chart.htm", "Steam: !data.steamVisible", "Steam: data.steamVisible"),
         ("program numeric bootstrap", "program.htm", "mainsVolt = data.mainsVoltage", "mainsVolt = 230"),
+        ("program calculator mode guard", "program.htm", "const calculatorAvailable = Number(data.mode) === 0;", "const calculatorAvailable = true;"),
+        ("program unavailable theme initialization", "program.htm", "SamovarApp.initTheme();", "SamovarApp.initThemeUnavailable();"),
+        ("program unavailable early return", "program.htm", "if (document.getElementById('programCalculator').hidden) return;", "if (false) return;"),
         ("program unsupported diameter guard", "program.htm", "? requestedDiameter : ''", "? requestedDiameter : requestedDiameter"),
         ("external calibration process guard", "calibrate.htm", "bootstrap.processRunning", "bootstrap.processBusy"),
         ("pH bootstrap mapping", "calibrate_ph.htm", "data.cheesePhSlope", "data.cheesePhOffset"),

@@ -452,7 +452,6 @@
 
     window.onload = function() {
       var setupForm = document.getElementById('setupform');
-      SamovarApp.showCalculationNavForMode(document.getElementById('mode').value);
       setupForm.dataset.dirty = 'false';
       setupForm.dataset.editRevision = '0';
       setupForm.addEventListener('submit', submitSetupForm);
@@ -503,6 +502,7 @@
       SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
       SamovarApp.enhanceTooltips();
       SamovarApp.loadUiBootstrap(function (bootstrap) {
+        SamovarApp.applyModeNavigation(bootstrap.mode);
         if (bootstrap && Array.isArray(bootstrap.i2cSteppers)) {
           setupI2cDevices = bootstrap.i2cSteppers;
           var first = setupI2cDevices.find(function (device) { return device.present; });
@@ -526,7 +526,7 @@
     <nav class="page-nav" aria-label="Разделы">
       <a class="nav-link" href="/" onclick="return SamovarApp.confirmLeave()">Режим</a>
       <a class="nav-link" href="/chart.htm" onclick="return SamovarApp.confirmLeave()">График</a>
-      <a class="nav-link" href="/program.htm" onclick="return SamovarApp.confirmLeave()">Расчёт</a>
+      <a class="nav-link" data-mode-navigation-slot hidden onclick="return SamovarApp.confirmLeave()"></a>
       <a class="nav-link" href="/setup.htm" onclick="return SamovarApp.confirmLeave()">Настройки</a>
     </nav>
     <div class="spacer"></div>
@@ -616,6 +616,10 @@
         <h2>
           <input id='useflevel' type='checkbox' name='useflevel' value='useflevel' %FLChecked%>
           <label for='useflevel' %IgnFL% >Использовать датчик уровня флегмы при ректификации</label>
+        </h2>
+        <h2>
+          <input id="HideProcessScheme" type="checkbox" name="HideProcessScheme" value="HideProcessScheme" %HideProcessSchemeChecked%>
+          <label for="HideProcessScheme">Не показывать схему процесса</label>
         </h2>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em;">

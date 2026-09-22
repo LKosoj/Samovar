@@ -546,6 +546,7 @@
     };
 
     function applyIndexBootstrap(data) {
+      SamovarApp.applyModeNavigation(data.mode);
       if (!check_program(data.program)) throw new Error('неверный формат программы.');
       pwr_unit = data.powerUnit;
       powerInputMax = data.heaterMaxPower;
@@ -616,7 +617,7 @@
       <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Ректификация" aria-pressed="true">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно" aria-pressed="false">
-      <input type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/program.htm';" value="Расчёт" title="Расчёт программы отбора по объёму и крепости сырья">
+      <input type='button' class="tablinks" data-rectification-navigation onclick="if (SamovarApp.confirmLeave()) location.href='/program.htm';" value="Расчёт" title="Расчёт программы отбора по объёму и крепости сырья">
       <input id='i2cStepperTab' type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
       <input id='i2cPumpTab' type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: none;" aria-pressed="false">
 <!--#include ui_header_close.htm-->

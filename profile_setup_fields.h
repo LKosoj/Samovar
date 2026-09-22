@@ -18,8 +18,9 @@
 //             для перекрёстной проверки smoke-тестом.
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
-//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, UPTO4, UPTO5, UPTO6 или UPTO7.
-//             V2ONLY/V3ONLY/V4ONLY образуют последовательные хвосты канонического
+//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, V9ONLY,
+//             UPTO4, UPTO5, UPTO6 или UPTO7.
+//             V2ONLY/V3ONLY/V4ONLY/V9ONLY образуют последовательные хвосты канонического
 //             формата (поле появляется начиная с этой версии и остаётся во всех
 //             следующих). UPTO4 — обратный случай: поле было в форматах 1-4,
 //             в 5-м и далее из канонического блоба физически убрано (но при
@@ -122,4 +123,5 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(FLOAT, CheesePhOffset, 4, candidate.CheesePhOffset = 1.0f, V4ONLY) \
   X(U8, CheesePhSmoothPercent, 1, /* retired in V7 */, UPTO6) \
   X(U16, CheeseDoserSpeed, 2, /* retired in V6 */, UPTO5) \
-  X(U16, CheeseDoserSteps, 2, /* retired in V6 */, UPTO5)
+  X(U16, CheeseDoserSteps, 2, /* retired in V6 */, UPTO5) \
+  X(BOOL, HideProcessScheme, 1, candidate.HideProcessScheme = false, V9ONLY)

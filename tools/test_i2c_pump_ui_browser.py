@@ -143,6 +143,52 @@ BROWSER_TEST = r'''async page => {
     }
   }
 
+  // Фактический статус I2C-насоса включает анимацию насоса независимо от
+  // косвенных признаков мешалки и отбора.
+  for (const testCase of [
+    { file: "index.htm", order: "allinone" },
+    { file: "beer.htm", order: "herms" },
+    { file: "cheese.htm", order: "allinone" },
+    { file: "nbk.htm", order: "allinone" }
+  ]) {
+    scenario = "animation/" + testCase.file;
+    await page.goto(baseUrl + "/" + testCase.file, { waitUntil: "load" });
+    const animation = await page.evaluate(({ base, order }) => {
+      const running = Object.assign({}, base, {
+        PowerOn: 1, mixer: 0, WthdrwlStatus: 0, ActualVolumePerHour: 0,
+        i2c_pump_present: 1, i2c_pump_running: 1, BeerBrewOrder: order
+      });
+      SamovarApp.renderScheme(running);
+      const elements = Array.from(document.querySelectorAll('[data-on="_pumpOn"]'));
+      const on = elements.length > 0 && elements.every(element => element.classList.contains("is-on"));
+      SamovarApp.renderScheme(Object.assign({}, running, { i2c_pump_running: 0 }));
+      const off = elements.every(element => !element.classList.contains("is-on"));
+      return { count: elements.length, on, off };
+    }, { base, order: testCase.order });
+    if (!animation.count || !animation.on || !animation.off) {
+      throw new Error(scenario + " mismatch: " + JSON.stringify(animation));
+    }
+  }
+
+  // В БК нарисован другой насос — насос охлаждающей воды. Он должен следовать
+  // своей скорости wp_spd, а не состоянию внешнего I2C-насоса.
+  scenario = "animation/bk.htm";
+  await page.goto(baseUrl + "/bk.htm", { waitUntil: "load" });
+  const bkAnimation = await page.evaluate(base => {
+    const running = Object.assign({}, base, {
+      PowerOn: 1, valve: 0, wp_spd: 120, i2c_pump_running: 0
+    });
+    SamovarApp.renderScheme(running);
+    const elements = Array.from(document.querySelectorAll('[data-on="_flowOn"]'));
+    const on = elements.length > 0 && elements.every(element => element.classList.contains("is-on"));
+    SamovarApp.renderScheme(Object.assign({}, running, { wp_spd: 0 }));
+    const off = elements.every(element => !element.classList.contains("is-on"));
+    return { count: elements.length, on, off };
+  }, base);
+  if (!bkAnimation.count || !bkAnimation.on || !bkAnimation.off) {
+    throw new Error(scenario + " mismatch: " + JSON.stringify(bkAnimation));
+  }
+
   const missingMount = await page.evaluate(() => {
     document.getElementById("i2c_pump_status").remove();
     try {

@@ -55,10 +55,11 @@ uint8_t i2cStepperSessionPumpAddress = 0;
 // Номер последнего отправленного кадра команды по каждому адресу. Хранится отдельно от
 // device.status: статус мог не прочитаться после записи, а копии-кандидаты отбрасываются.
 uint32_t i2cStepperLastSentSeq[I2CSTEPPER_DEVICE_COUNT] = {};
-// Оператор сам остановил или запустил мешалку процесса (энкодер Nano, вкладка I2CStepper).
-// Пока флаг стоит, расписание режима её не трогает; снимается сменой строки программы,
+// Оператор сам остановил или запустил привод процесса (энкодер Nano, вкладка I2CStepper).
+// Пока его флаг стоит, расписание режима привод не трогает; снимается сменой строки программы,
 // концом процесса или кнопкой «Вернуть управление программе».
 volatile bool i2cStepperMixerManualHold = false;
+volatile bool i2cStepperPumpManualHold = false;
 // Поправка скорости оператором на время процесса: подменяет скорость, которую задаёт программа
 // (мешалка - об/мин, насос - л/ч; 0 = поправки нет). Иначе программа возвращает свою скорость.
 uint16_t i2cStepperMixerRpmOverride = 0;
@@ -265,9 +266,10 @@ inline void i2c_stepper_note_refresh_failure(I2CStepperDevice& device) {
   device.present = false;
 }
 
-// Адрес мешалки сессии вне процесса равен 0, поэтому флаг ставится только во время процесса.
+// Адреса приводов сессии вне процесса равны 0, поэтому флаг ставится только во время процесса.
 inline void i2c_stepper_note_manual_control(uint8_t address) {
   if (address == i2cStepperSessionMixerAddress) i2cStepperMixerManualHold = true;
+  if (address == i2cStepperSessionPumpAddress) i2cStepperPumpManualHold = true;
 }
 
 inline bool i2c_stepper_refresh(I2CStepperDevice& device, bool force = false,
@@ -362,6 +364,7 @@ inline void i2c_stepper_session_begin() {
   i2cStepperSessionMixerAddress = mixer ? mixer->address : 0;
   i2cStepperSessionPumpAddress = pump ? pump->address : 0;
   i2cStepperMixerManualHold = false;
+  i2cStepperPumpManualHold = false;
   i2cStepperMixerRpmOverride = 0;
   i2cStepperPumpRateOverride = 0.0f;
   i2cStepperMixerDirOverride = 0;
@@ -372,6 +375,7 @@ inline void i2c_stepper_session_end() {
   i2cStepperSessionMixerAddress = 0;
   i2cStepperSessionPumpAddress = 0;
   i2cStepperMixerManualHold = false;
+  i2cStepperPumpManualHold = false;
   i2cStepperMixerRpmOverride = 0;
   i2cStepperPumpRateOverride = 0.0f;
   i2cStepperMixerDirOverride = 0;

@@ -79,6 +79,7 @@ static SetupEEPROM SamSetup;
 static uint8_t ProgramNum = 0;
 static bool mixer_status = false;
 static bool i2cStepperMixerManualHold = false;
+static bool i2cStepperPumpManualHold = false;
 static bool beerMixerWasHeld = false;
 static bool beerMixerPumpRelayOn = false;
 static bool beerScheduledDeviceRunning = false;
@@ -243,6 +244,7 @@ static void reset_fixture() {
   ProgramNum = 0;
   mixer_status = true;
   i2cStepperMixerManualHold = false;
+  i2cStepperPumpManualHold = false;
   beerMixerWasHeld = false;
   beerMixerPumpRelayOn = false;
   beerScheduledDeviceRunning = false;
@@ -837,6 +839,7 @@ static SetupEEPROM SamSetup;
 static uint8_t ProgramNum = 0;
 static bool mixer_status = false;
 static bool i2cStepperMixerManualHold = false;
+static bool i2cStepperPumpManualHold = false;
 static bool beerMixerPumpRelayOn = false;
 static bool beerScheduledDeviceRunning = false;
 static bool beerI2cPumpStarted = false;
@@ -885,6 +888,7 @@ static void reset_fixture() {
   mixerPumpCalls = 0;
   stepperCalls = 0;
   i2cStepperMixerManualHold = false;
+  i2cStepperPumpManualHold = false;
   beerScheduledDeviceRunning = false;
   beerI2cPumpStarted = false;
 }
@@ -945,10 +949,25 @@ static void test_i2c_target_start_is_applied_without_local_pwm() {
   check(mixerPumpCalls == 1, "доступный I2C target не получил команду запуска");
 }
 
+// Локальный STOP насоса действует до явного возврата управления программе:
+// очередная ON-фаза расписания не должна неожиданно запустить его снова.
+static void test_manual_hold_keeps_schedule_away_from_i2c_pump() {
+  reset_fixture();
+  pumpStepperPresent = true;
+  i2cStepperPumpManualHold = true;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED,
+        "удерживаемый I2C-насос должен считаться сознательно остановленным");
+  check(mixerPumpCalls == 0,
+        "после локального STOP расписание снова включило реле I2C-насоса");
+  check(!beerI2cPumpStarted,
+        "после локального STOP расписание отметило I2C-насос запущенным");
+}
+
 int main() {
   test_no_local_or_i2c_target_fails_without_status_change();
   test_mixer_relay_is_rolled_back_without_stepper();
   test_i2c_target_start_is_applied_without_local_pwm();
+  test_manual_hold_keeps_schedule_away_from_i2c_pump();
   test_manual_hold_keeps_schedule_away_from_i2c_mixer();
   test_zero_time_means_continuous_only_without_pause();
   return failures == 0 ? 0 : 1;

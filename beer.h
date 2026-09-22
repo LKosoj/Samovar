@@ -627,6 +627,7 @@ void run_beer_program(uint8_t num) {
   alarm_c_min = 0;  //мешалка пауза
   currentstepcnt = 0; //счетчик циклов мешалки
   i2cStepperMixerManualHold = false; //ручной останов мешалки действует до смены строки
+  i2cStepperPumpManualHold = false; //ручной останов насоса действует до смены строки
   // [Дефект 2 code review] Метки нового цикла мешалки не переживают переход
   // строки - если тут остался незакрытый простой с предыдущей строки (не
   // должен, т.к. переход возможен только вне паузы), не даём ему сдвинуть
@@ -1155,9 +1156,9 @@ inline bool beer_mixer_reverse_dir(int stepCount) {
  */
 void check_mixer_state() {
   if (heater_safety_latched()) return;
-  // Оператор вернул мешалку программе: цикл начинаем заново, чтобы она запустилась сразу,
-  // а не ждала следующей фазы (при постоянном вращении следующей фазы нет вовсе).
-  if (i2cStepperMixerManualHold) {
+  // Оператор вернул привод программе: цикл начинаем заново, чтобы он запустился сразу,
+  // а не ждал следующей фазы (при постоянной работе следующей фазы нет вовсе).
+  if (i2cStepperMixerManualHold || i2cStepperPumpManualHold) {
     beerMixerWasHeld = true;
   } else if (beerMixerWasHeld) {
     beerMixerWasHeld = false;
@@ -1262,7 +1263,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         mixerStepperStarted = true;
 	      }
     }
-    if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
+    if (BitIsSet(program[ProgramNum].capacity_num, 1) && !i2cStepperPumpManualHold) {
       if (!start_second_i2c_pump(program[ProgramNum].Param / 1000.0f, 0)) {
         if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);
         if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);

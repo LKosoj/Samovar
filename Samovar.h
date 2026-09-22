@@ -609,6 +609,7 @@ struct SetupEEPROM {
   bool NbkUseStreamServo;                                      //Переключать поток НБК сервоприводом
   float CheesePhSlope;                                         //Коэффициент наклона калибровки pH
   float CheesePhOffset;                                        //Смещение калибровки pH
+  bool HideProcessScheme;                                      //Не показывать схему процесса в веб-интерфейсе устройства
 };
 
 struct ImpurityDetector {

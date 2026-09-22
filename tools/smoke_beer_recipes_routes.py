@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""T3: карточка «Рецепты пива с сайта» в program.htm и приём рецепта в brewxml.htm —
-маркеры в исходниках и запрет второго конвертера (см. docs/plans/2026-09-16-beer-tasks/T3-firmware.md)."""
+"""Каталог рецептов пива и импорт BeerXML на brewxml.htm без промежуточного хранилища."""
 
 from pathlib import Path
 
@@ -8,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 program = (ROOT / "data_raw/program.htm").read_text(encoding="utf-8")
 brewxml = (ROOT / "data_raw/brewxml.htm").read_text(encoding="utf-8")
+beer = (ROOT / "data_raw/beer.htm").read_text(encoding="utf-8")
 assets = (ROOT / "tools/build_web_assets.py").read_text(encoding="utf-8")
 errors = []
 
@@ -16,27 +16,29 @@ for token in (
     "/cheese-recipes-bootstrap",
     'id="beerRecipesCard"',
     "hidden",
-    "sessionStorage.setItem(STORAGE_KEY",
-    "STORAGE_KEY = 'samovar.beerxml.pending'",
-    "'brewxml.htm'",
-):
-    if token not in program:
-        errors.append("program.htm missing " + token)
-
-for forbidden in ("function get_brew_info", "function convertRecipe", "MASH_STEPS"):
-    if forbidden in program:
-        errors.append("program.htm must not duplicate the recipe converter: " + forbidden)
-
-for token in (
-    'sessionStorage.getItem(BEER_RECIPE_STORAGE_KEY)',
-    'sessionStorage.removeItem(BEER_RECIPE_STORAGE_KEY)',
-    "function applyRecipeText(",
-    "function get_brew_info(",
-    "function loadPendingBeerRecipe(",
-    'id="recipeSource"',
+    "function selectCatalogRecipe(",
+    'applyRecipeText(xml, "BeerXML", generation)',
+    "showRecipeSource(item.name || item.slug)",
+    "SamovarApp.applyModeNavigation(bootstrap.mode)",
 ):
     if token not in brewxml:
         errors.append("brewxml.htm missing " + token)
+
+for forbidden in ("beerRecipesCard", "beerxml/v1", "cheese-recipes-bootstrap"):
+    if forbidden in program:
+        errors.append("program.htm must contain only the rectification calculator: " + forbidden)
+
+for forbidden in ("sessionStorage", "BEER_RECIPE_STORAGE_KEY", "loadPendingBeerRecipe", "location.href = 'brewxml.htm'"):
+    if forbidden in brewxml:
+        errors.append("brewxml.htm must apply the selected recipe directly: " + forbidden)
+
+for token in ("function applyRecipeText(", "function get_brew_info(", 'id="recipeSource"'):
+    if token not in brewxml:
+        errors.append("brewxml.htm missing recipe import " + token)
+
+for token in ("id='beerRecipesTab'", 'value="Рецепты"', "SamovarApp.confirmLeave()", 'location.href="brewxml.htm"'):
+    if token not in beer:
+        errors.append("beer.htm missing recipes entry " + token)
 
 for name in ('"program.htm"', '"brewxml.htm"'):
     if name not in assets:

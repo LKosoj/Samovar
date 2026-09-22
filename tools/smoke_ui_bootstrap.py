@@ -115,6 +115,7 @@ def check_static(source: str) -> tuple[str, str, str]:
             '"mode"', '"version"', '"powerUnit"', '"program"', '"description"',
             '"luaButtonList"', '"steamColor"', '"steamVisible"',
             '"i2cStepperVisible"', '"beerBrewOrder"', '"nbkDp"',
+            '"hideProcessScheme"',
             '"stepperStepsPerMl"', '"calibrationRunning"', '"cheesePhSlope"',
             '"cheesePhAvailable"', '"cheesePhAds1115Address"',
             '"cheeseCoolingScheme"', '"heaterMaxPower"', '"timeZone"',
@@ -200,6 +201,7 @@ struct SetupEEPROM {
   uint8_t BeerBrewOrder; float NbkDP; float ColDiam; float ColHeight; uint8_t PackDens;
   float HeaterResistant; float MainsVoltage; uint16_t StepperStepMl;
   float CheesePhSlope; float CheesePhOffset; uint8_t TimeZone;
+  bool HideProcessScheme;
 };
 static const uint8_t I2CSTEPPER_DEVICE_COUNT = 10;
 struct I2CStepperDevice { bool present; };
@@ -238,6 +240,7 @@ static UiBootstrapSnapshot make_snapshot(SAMOVAR_MODE mode, const char* program,
   snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = 123;
   snapshot.setup.CheesePhSlope = 2.5f; snapshot.setup.CheesePhOffset = -1.0f;
   snapshot.setup.TimeZone = mode == SAMOVAR_NBK_MODE ? 3 : 5;
+  snapshot.setup.HideProcessScheme = i2c;
   snapshot.cheesePhAvailable = !i2c; snapshot.cheesePhAds1115Address = i2c ? 0x48 : 0;
   snapshot.steamVisible = true; snapshot.pipeVisible = false; snapshot.waterVisible = true; snapshot.tankVisible = false;
   snapshot.pressureVisible = true; snapshot.programNumberVisible = true; snapshot.i2cStepperVisible = i2c; snapshot.i2cPumpVisible = i2c;
@@ -309,6 +312,8 @@ def check_writer_behavior(writer_scope: str) -> None:
     require(rect["program"] != nbk["program"], "два режима вернули одну программу")
     require(rect["i2cPumpVisible"] is False and nbk["i2cPumpVisible"] is True,
             "признак I2C насоса не сохранил два разных состояния")
+    require(rect["hideProcessScheme"] is False and nbk["hideProcessScheme"] is True,
+            "настройка видимости схемы не сохранила два разных состояния")
     require(isinstance(rect["nbkDp"], (int, float)), "nbkDp должен быть числом")
     require(isinstance(nbk["calibrationRunning"], bool), "calibrationRunning должен быть bool")
     require(rect["cheesePhAvailable"] is True and nbk["cheesePhAvailable"] is False,

@@ -466,6 +466,7 @@
 <!--#include ui_header_open.htm-->
       <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Затирание" aria-pressed="true">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа" aria-pressed="false">
+      <input id='beerRecipesTab' type='button' class="tablinks" onclick='if (SamovarApp.confirmLeave()) location.href="brewxml.htm";' value="Рецепты">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно" aria-pressed="false">
       <input id='i2cStepperTab' type='button' class="tablinks" onclick="if (SamovarApp.confirmLeave()) location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
       <input id='i2cPumpTab' type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: none;" aria-pressed="false">

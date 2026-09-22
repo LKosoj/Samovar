@@ -4658,6 +4658,12 @@ static UiStateDescriptor build_ui_state_from_loop() {
       ui_add_control(value, UI_CONTROL_MIXER, false, 0, true, 1,
                      UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);
     }
+    if (BitIsSet(row.capacity_num, 1) &&
+        (i2c_stepper_cache.pump_status & I2CSTEPPER_V3_STATUS_RUNNING) != 0) {
+      ui_add_control(value, UI_CONTROL_I2C_PUMP, true, row.Param / 1000.0f,
+                     true, i2c_stepper_cache.pump_current_rate,
+                     UI_UNIT_L_H, UI_CONTROL_SOURCE_PROGRAM);
+    }
     if (valve_status) {
       ui_add_control(value, UI_CONTROL_WATER, false, 0, true, 1,
                      UI_UNIT_BOOL, UI_CONTROL_SOURCE_PROGRAM);

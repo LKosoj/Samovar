@@ -126,6 +126,7 @@ async function makeEnv(vars, fetchImpl) {
         return true;
       },
       initTheme: function () {},
+      applyModeNavigation: function () {},
       showRequestError: function (text) { shown.push(String(text)); },
       clearRequestError: function () {},
       readNumericInput: function (id, opts) {

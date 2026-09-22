@@ -44,6 +44,7 @@
     'steamColor', 'pipeColor', 'waterColor', 'tankColor', 'acpColor',
     'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
     'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible',
+    'hideProcessScheme',
     'beerBrewOrder', 'pwmLow', 'pwmValue', 'nbkDp', 'columnDiameter',
     'columnHeight', 'packDensity', 'heaterResistance', 'mainsVoltage', 'heaterMaxPower',
     'stepperMaxSpeed', 'stepperStepsPerMl', 'i2cSteppers',
@@ -58,7 +59,7 @@
   const UI_BOOTSTRAP_BOOLEAN_KEYS = [
     'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
     'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible', 'calibrationRunning', 'processRunning',
-    'cheesePhAvailable'
+    'cheesePhAvailable', 'hideProcessScheme'
   ];
   const UI_BOOTSTRAP_INTEGER_KEYS = [
     'mode', 'pwmValue', 'packDensity', 'stepperMaxSpeed', 'stepperStepsPerMl',
@@ -1631,6 +1632,8 @@
     }
     try {
       applyBootstrap(data);
+      const scheme = byId('sec-scheme');
+      if (scheme) scheme.hidden = data.hideProcessScheme;
     } catch (err) {
       showRequestError('Некорректные начальные данные: ' +
         (err && err.message ? err.message : err));
@@ -2298,9 +2301,10 @@
     v._running = v._heaterOn && !v._paused;
     v._withdrawing = Number(data.WthdrwlStatus) > 0 && !v._paused;
     const rate = num(data.ActualVolumePerHour);
-    v._pumpOn = kind === 'nbk' ? num(data.ISspd) > 0 && v._running
-      : kind === 'beer' || kind === 'cheese' ? !!data.mixer && v._running
-      : v._withdrawing && rate > 0;
+    const i2cPumpOn = Number(data.i2c_pump_running) === 1;
+    v._pumpOn = kind === 'nbk' ? (num(data.ISspd) > 0 && v._running) || i2cPumpOn
+      : kind === 'beer' || kind === 'cheese' ? (!!data.mixer && v._running) || i2cPumpOn
+      : (v._withdrawing && rate > 0) || i2cPumpOn;
     v._mixerOn = !!data.mixer && v._running;
     // Второй I2C-насос отбора голов над ЦП (ректификация): ЦП и насос на схеме только
     // если он включён в настройках и плата отвечает; анимация — пока насос качает.
@@ -2619,9 +2623,24 @@
     });
   }
 
-  function showCalculationNavForMode(mode) {
-    const link = document.querySelector('.page-nav a[href="/program.htm"]');
-    if (link) link.hidden = Number(mode) !== 0;
+  function applyModeNavigation(mode) {
+    const targetByMode = {
+      0: { href: '/program.htm', label: 'Расчёт' },
+      2: { href: '/brewxml.htm', label: 'Рецепты' },
+      7: { href: '/cheese-recipes.htm', label: 'Рецепты' }
+    };
+    const target = targetByMode[Number(mode)];
+    document.querySelectorAll('[data-mode-navigation-slot]').forEach(function (link) {
+      link.hidden = !target;
+      link.removeAttribute('aria-current');
+      if (!target) return;
+      link.setAttribute('href', target.href);
+      link.textContent = target.label;
+      if (location.pathname === target.href) link.setAttribute('aria-current', 'page');
+    });
+    document.querySelectorAll('[data-rectification-navigation]').forEach(function (tab) {
+      tab.hidden = Number(mode) !== 0;
+    });
   }
 
   // На телефоне карточка «Действия» - фиксированная панель внизу, но лежит внутри
@@ -2753,7 +2772,7 @@
     markProgramSaved: markProgramSaved,
     markProgramDirty: markProgramDirty,
     confirmLeave: confirmLeave,
-    showCalculationNavForMode: showCalculationNavForMode,
+    applyModeNavigation: applyModeNavigation,
     reportUiError: reportUiError,
     readNumericInput: readNumericInput,
     responseErrorText: responseErrorText,

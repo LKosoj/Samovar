@@ -627,7 +627,10 @@ void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev
   response->print("{\"scanning\":");
   response->print(i2cStepperScanActive ? 1 : 0);
   response->print(",\"manualHold\":");
-  response->print(i2cStepperMixerManualHold ? i2cStepperSessionMixerAddress : 0);
+  response->print(
+      (dev.address == i2cStepperSessionMixerAddress && i2cStepperMixerManualHold) ||
+      (dev.address == i2cStepperSessionPumpAddress && i2cStepperPumpManualHold)
+          ? dev.address : 0);
   // Скорость и остаток в единицах оператора: мешалка - об/мин, насос - л/ч и мл.
   const bool mixerDevice = i2cstepper_v3_address_is_mixer(dev.address);
   const bool running = (dev.status.status & I2CSTEPPER_V3_STATUS_RUNNING) != 0;
@@ -741,8 +744,9 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     return;
   }
   if (command == "resume") {
-    // Оператор возвращает мешалку расписанию режима (см. i2cStepperMixerManualHold).
+    // Оператор возвращает выбранный привод расписанию режима.
     if (address == i2cStepperSessionMixerAddress) i2cStepperMixerManualHold = false;
+    if (address == i2cStepperSessionPumpAddress) i2cStepperPumpManualHold = false;
     send_no_store_response(request, 204, "text/plain", "");
     return;
   }
@@ -1486,6 +1490,7 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
       !ui_bootstrap_write_bool(out, first, "programNumberVisible", snapshot.programNumberVisible) ||
       !ui_bootstrap_write_bool(out, first, "i2cStepperVisible", snapshot.i2cStepperVisible) ||
       !ui_bootstrap_write_bool(out, first, "i2cPumpVisible", snapshot.i2cPumpVisible) ||
+      !ui_bootstrap_write_bool(out, first, "hideProcessScheme", snapshot.setup.HideProcessScheme) ||
       !ui_bootstrap_write_i2c_devices(out, first, snapshot.i2cDevices) ||
       !ui_bootstrap_write_string(out, first, "beerBrewOrder",
                                   ui_bootstrap_beer_brew_order(snapshot.setup.BeerBrewOrder),
@@ -1607,6 +1612,7 @@ static const GetCheckboxField kGetCheckboxFields[] = {
     {"ChckPwr", &SetupEEPROM::CheckPower},
     {"SecondI2CPumpChecked", &SetupEEPROM::UseSecondI2CPump},
     {"NbkStreamServoChecked", &SetupEEPROM::NbkUseStreamServo},
+    {"HideProcessSchemeChecked", &SetupEEPROM::HideProcessScheme},
 };
 
 static const GetModeSelectField kGetModeSelectFields[] = {
@@ -2113,6 +2119,7 @@ static const SaveCheckboxField kSaveCheckboxFields[] = {
     {"CheckPower", &SetupEEPROM::CheckPower},
     {"UseSecondI2CPump", &SetupEEPROM::UseSecondI2CPump},
     {"NbkUseStreamServo", &SetupEEPROM::NbkUseStreamServo},
+    {"HideProcessScheme", &SetupEEPROM::HideProcessScheme},
 };
 
 static const SaveBool01Field kSaveBool01Fields[] = {

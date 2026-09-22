@@ -8,6 +8,7 @@
     var phAvailable = true;
 
     function applyPhCalibrationBootstrap(data) {
+      SamovarApp.applyModeNavigation(data.mode);
       if (typeof data.cheesePhAvailable !== 'boolean' ||
           !Number.isInteger(Number(data.cheesePhAds1115Address))) {
         throw new Error('неверный источник pH.');
