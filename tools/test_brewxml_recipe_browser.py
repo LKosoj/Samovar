@@ -211,6 +211,7 @@ BROWSER_TEST = r'''async page => {
   const errors = [];
   page.on("pageerror", error => errors.push("pageerror: " + error.message));
 
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(baseUrl + "/brewxml.htm", { waitUntil: "load" });
   await page.waitForTimeout(100);
 
@@ -291,6 +292,21 @@ BROWSER_TEST = r'''async page => {
     out.blondeFermTime = document.getElementById("FERMENTABLE_TIME").textContent;
     out.blondeIngr = document.getElementById("ingredients").textContent;
     out.blondeEquip = document.getElementById("EQUIPMENT").textContent;
+    const formRect = document.getElementById("mainform").getBoundingClientRect();
+    const ingredientHeader = document.querySelector("#ingredients > div > .ingredients");
+    const mashHeader = document.querySelector("#mash > div > .ingredients");
+    const description = document.querySelector("#brew > .container_row > .specs");
+    out.desktopLayout = {
+      formWidth: formRect.width,
+      descriptionColumns: getComputedStyle(description).gridTemplateColumns.split(" ").length,
+      ingredientColumns: getComputedStyle(ingredientHeader).gridTemplateColumns.split(" ").length,
+      mashColumns: getComputedStyle(mashHeader).gridTemplateColumns.split(" ").length,
+      ingredientHeaderHeight: ingredientHeader.getBoundingClientRect().height,
+      mashHeaderHeight: mashHeader.getBoundingClientRect().height,
+      ingredientWrap: getComputedStyle(ingredientHeader.lastElementChild).overflowWrap,
+      mashWrap: getComputedStyle(mashHeader.firstElementChild).overflowWrap,
+      pageOverflow: document.documentElement.scrollWidth - window.innerWidth
+    };
 
     // 7) [D5] мешалка выключена на C/F
     const progLines = window.program.trim().split("\n");
@@ -549,6 +565,17 @@ BROWSER_TEST = r'''async page => {
     throw new Error("hop AMOUNT 0.005 kg must display as grams: " + results.blondeIngr);
   }
   if (results.blondeEquip !== "Grainfather") throw new Error("equipment name missing: " + results.blondeEquip);
+  if (results.desktopLayout.formWidth < 1200 ||
+      results.desktopLayout.descriptionColumns !== 3 ||
+      results.desktopLayout.ingredientColumns !== 4 ||
+      results.desktopLayout.mashColumns !== 5 ||
+      results.desktopLayout.ingredientHeaderHeight > 44 ||
+      results.desktopLayout.mashHeaderHeight > 44 ||
+      results.desktopLayout.ingredientWrap === "anywhere" ||
+      results.desktopLayout.mashWrap === "anywhere" ||
+      results.desktopLayout.pageOverflow > 0) {
+    throw new Error("desktop recipe layout is cramped or overflowing: " + JSON.stringify(results.desktopLayout));
+  }
 
   if (!results.bmIsProgram) throw new Error("BrewMate recipe must produce a program");
   if (results.bmName !== "Тест BrewMate") throw new Error("BrewMate NAME mismatch: " + results.bmName);
@@ -635,6 +662,17 @@ BROWSER_TEST = r'''async page => {
   if (programPosts.length !== 1 || !programPosts[0] || !programPosts[0].includes("WProgram")) {
     throw new Error("only successful B may POST /program; pending/invalid B must not: " +
       JSON.stringify(programPosts));
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileLayout = await page.evaluate(() => ({
+    pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    ingredientRowDisplay: getComputedStyle(document.querySelector("#ingredients > div > .ingredients")).display,
+    mashRowDisplay: getComputedStyle(document.querySelector("#mash > div > .ingredients")).display
+  }));
+  if (mobileLayout.pageOverflow > 0 || mobileLayout.ingredientRowDisplay === "grid" ||
+      mobileLayout.mashRowDisplay === "grid") {
+    throw new Error("mobile recipe layout regressed: " + JSON.stringify(mobileLayout));
   }
 
   await page.evaluate(() => { window.confirm = () => false; });

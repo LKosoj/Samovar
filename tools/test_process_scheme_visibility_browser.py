@@ -50,17 +50,33 @@ BROWSER_TEST = r'''async page => {
     status:200, contentType:"application/json", body:JSON.stringify(ajax)
   }));
   function expect(value, message) { if (!value) throw new Error(message); }
-  for (const [name, mode] of pages) {
-    for (const hidden of [false, true]) {
-      current = {...bootstrap, mode, hideProcessScheme:hidden};
-      await page.goto(baseUrl + "/" + name, {waitUntil:"load"});
-      await page.waitForFunction(() => document.body.inert === false);
-      const result = await page.locator("#sec-scheme").evaluate(node => ({
-        hidden:node.hidden, display:getComputedStyle(node).display
-      }));
-      expect(result.hidden === hidden, name + " hidden=" + hidden + ": " + JSON.stringify(result));
-      expect((result.display === "none") === hidden,
-        name + " rendered visibility=" + hidden + ": " + JSON.stringify(result));
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height:900});
+    for (const [name, mode] of pages) {
+      for (const hidden of [false, true]) {
+        current = {...bootstrap, mode, hideProcessScheme:hidden};
+        await page.goto(baseUrl + "/" + name, {waitUntil:"load"});
+        await page.waitForFunction(() => document.body.inert === false);
+        const result = await page.locator("#sec-scheme").evaluate(node => {
+          const column = node.closest('.col-center');
+          const grid = node.closest('.grid');
+          return {
+            hidden:node.hidden,
+            display:getComputedStyle(node).display,
+            columnDisplay:getComputedStyle(column).display,
+            gridColumns:getComputedStyle(grid).gridTemplateColumns.split(' ').length
+          };
+        });
+        expect(result.hidden === hidden,
+          width + "px " + name + " hidden=" + hidden + ": " + JSON.stringify(result));
+        expect((result.display === "none") === hidden,
+          width + "px " + name + " scheme visibility=" + hidden + ": " + JSON.stringify(result));
+        expect((result.columnDisplay === "none") === hidden,
+          width + "px " + name + " column visibility=" + hidden + ": " + JSON.stringify(result));
+        const expectedColumns = width > 1000 ? (hidden ? 2 : 3) : 1;
+        expect(result.gridColumns === expectedColumns,
+          width + "px " + name + " expected " + expectedColumns + " columns: " + JSON.stringify(result));
+      }
     }
   }
   expect(problems.length === 0, "console/page errors: " + problems.join("; "));

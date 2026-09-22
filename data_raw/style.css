@@ -329,6 +329,10 @@ a { color: var(--accent); }
   max-width: 1400px;
   margin: 0 auto;
 }
+.grid.grid-without-scheme {
+  grid-template-columns: minmax(300px, 1fr) minmax(340px, 1fr);
+  max-width: 1000px;
+}
 .col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .card {
   background: var(--bg-form);
@@ -1232,6 +1236,7 @@ select {
 }
 
 /* brewxml.htm: списки ингредиентов и шагов затирания */
+.brewxml-form { max-width: 1320px; }
 .ingredients {
   width: 100%;
   margin-top: 0.4em;
@@ -1278,6 +1283,54 @@ select {
 .mashWater {
   width: 13%;
   float: left;
+}
+
+@media (min-width: 901px) {
+  .brewxml-form #brew > .container_row,
+  .brewxml-form #brew > .ingredients > .container_row {
+    padding: 12px 14px;
+    align-items: stretch;
+  }
+  .brewxml-form #brew > .container_row > .specs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 24px;
+  }
+  .brewxml-form .spec-row { min-width: 0; }
+  .brewxml-form .spec-row > label:first-child { font-weight: 600; }
+  .brewxml-form .spec-row > label:last-child { overflow-wrap: break-word; }
+  .brewxml-form #ingredients > div > .ingredients,
+  .brewxml-form #mash > div > .ingredients {
+    display: grid;
+    align-items: start;
+    gap: 12px 18px;
+    margin: 0;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: normal;
+  }
+  .brewxml-form #ingredients > div > .ingredients:last-child,
+  .brewxml-form #mash > div > .ingredients:last-child { border-bottom: 0; }
+  .brewxml-form #ingredients > div > .ingredients {
+    grid-template-columns: minmax(7rem, .65fr) minmax(14rem, 1.35fr) minmax(7rem, .55fr) minmax(16rem, 1.45fr);
+  }
+  .brewxml-form #mash > div > .ingredients {
+    grid-template-columns: minmax(12rem, 1.5fr) minmax(9rem, 1fr) minmax(8rem, .8fr) minmax(6rem, .6fr) minmax(7rem, .7fr);
+  }
+  .brewxml-form #ingredients > div > .ingredients:first-child,
+  .brewxml-form #mash > div > .ingredients:first-child {
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .brewxml-form #ingredients > div > .ingredients > label,
+  .brewxml-form #mash > div > .ingredients > label {
+    display: block;
+    float: none;
+    width: auto;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
 }
 
 /* ==================== Спойлеры ==================== */
@@ -1542,6 +1595,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
 /* ==================== Адаптив ==================== */
 @media (max-width: 1000px) {
   .grid { grid-template-columns: 1fr 1fr; }
+  .grid.grid-without-scheme { grid-template-columns: 1fr 1fr; }
   .col-center { grid-column: 1 / -1; }
   .scheme { position: static; }
   .scheme svg { max-height: 70vh; }
@@ -1591,6 +1645,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
   .stage { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
   .stage .meta { gap: 6px 14px; }
   .grid { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; padding-bottom: 88px; }
+  .grid.grid-without-scheme { grid-template-columns: minmax(0, 1fr); }
   /* Панель действий вынесена из вкладки «Режим» (app.js, relocateActionsPanel) и
      висит над любой вкладкой - запас снизу нужен всем, подсказка поднимается над ней. */
   .mode-form > .tabcontent.panel { padding-bottom: 88px; }

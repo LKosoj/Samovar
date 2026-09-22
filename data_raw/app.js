@@ -1633,7 +1633,13 @@
     try {
       applyBootstrap(data);
       const scheme = byId('sec-scheme');
-      if (scheme) scheme.hidden = data.hideProcessScheme;
+      if (scheme) {
+        const schemeColumn = scheme.closest('.col-center');
+        const modeGrid = scheme.closest('.grid');
+        scheme.hidden = data.hideProcessScheme;
+        if (schemeColumn) schemeColumn.hidden = data.hideProcessScheme;
+        if (modeGrid) modeGrid.classList.toggle('grid-without-scheme', data.hideProcessScheme);
+      }
     } catch (err) {
       showRequestError('Некорректные начальные данные: ' +
         (err && err.message ? err.message : err));
