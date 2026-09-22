@@ -1422,6 +1422,7 @@ static bool apply_i2c_speed_command(I2CStepperDevice& device, const I2CStepperV3
     started = i2c_stepper_apply(candidate) &&
         i2c_stepper_send_command(candidate, I2CSTEPPER_V3_CMD_START_CONFIGURED);
   } else if (device.address == i2cStepperSessionPumpAddress) {
+    if (SamovarStatusInt == SAMOVAR_STATUS_NBK && i2c_stepper_session_active()) return false;
     if (!i2c_stepper_override_pump_rate(config.pumpMlHour / 1000.0f, direction)) return false;
     // На головах отбор ведёт I2C-насос: показываем оператору новую скорость, а не программную.
     if (rectSecondPumpHeadsRow) ActualVolumePerHour = i2cStepperPumpRateOverride;
@@ -3968,9 +3969,9 @@ static void tick_apply_pending_lua_commands() {
 }
 
 static void tick_apply_pending_pnbk() {
-  // [W-4] Ручное управление скоростью I2C-насоса (/command?pnbk): get_stepper_speed()/
-  //        set_stepper_target() — блокирующий I2C, выполняем здесь. Логика идентична
-  //        прежнему async-обработчику; pnbk заменяет request->arg("pnbk").
+  // [W-4] Ручное управление насосом НБК (/command?pnbk) выполняем здесь:
+  //        выбранный при старте I2C-насос требует блокирующего обмена, а при его
+  //        отсутствии команда идёт на встроенный насос.
   bool hasPendingPnbk = false;
   ControlNbkCommand pnbk = {};
   {
@@ -3990,15 +3991,17 @@ static void tick_apply_pending_pnbk() {
       I2CStepperDevice* pump = i2c_stepper_selected_pump();
       // [Ремонт-2026-09-02 П4] На Оптимизации/Работе НБК ручная pnbk обходит алгоритм —
       // до разбора pnbk.kind, dispatch пропускается, флаг снимается через pnbkDone=true.
-      if (!pump || !pump->present || pump->config.stepsPerMl == 0) {
-        SendMsg("Команда НБК отклонена: I2C-насос не выбран.", WARNING_MSG);
+      if (pump && (!pump->present || pump->config.stepsPerMl == 0)) {
+        SendMsg("Команда НБК отклонена: выбранный I2C-насос недоступен.", WARNING_MSG);
         pnbkDone = true;
       } else if (nbk_manual_control_locked()) {
         SendMsg("Ручное управление недоступно на Оптимизации и в Работе НБК.", WARNING_MSG);
         pnbkDone = true;
       } else if (pnbk.kind == CONTROL_NBK_INCREMENT) {
-        const float deltaSpeed = i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001f);
-        const uint32_t currentSpeed = get_stepper_speed();
+        const float deltaSpeed = pump
+            ? i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001f)
+            : get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001f);
+        const uint32_t currentSpeed = pump ? get_stepper_speed() : CurrrentStepperSpeed;
         const uint32_t requestedSpeed = currentSpeed + uint32_t(deltaSpeed);
         if (!(deltaSpeed > 0.0f) || deltaSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC ||
             requestedSpeed < currentSpeed ||
@@ -4006,34 +4009,43 @@ static void tick_apply_pending_pnbk() {
           SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
           pnbkDone = true;
         } else {
-          pnbkDone = start_second_i2c_pump(
-              i2c_get_liquid_rate_by_step(requestedSpeed), 0);
+          const float requestedRate = pump
+              ? i2c_get_liquid_rate_by_step(requestedSpeed)
+              : get_liquid_rate_by_step(requestedSpeed);
+          pnbkDone = SetSpeed(requestedRate) == ACTUATOR_COMMAND_APPLIED;
         }
       } else if (pnbk.kind == CONTROL_NBK_DECREMENT) {
-        uint32_t currentSpeed = get_stepper_speed();
+        uint32_t currentSpeed = pump ? get_stepper_speed() : CurrrentStepperSpeed;
         float deltaRate = float(SamSetup.NbkDP) - 0.0001f;
         const float deltaSpeed = deltaRate > 0.0f
-            ? i2c_get_speed_from_rate(deltaRate) : 0.0f;
+            ? (pump ? i2c_get_speed_from_rate(deltaRate)
+                    : get_speed_from_rate(deltaRate))
+            : 0.0f;
         if (deltaRate > 0.0f && (!(deltaSpeed > 0.0f) ||
                                  deltaSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC)) {
           SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
           pnbkDone = true;
         } else if (uint32_t(deltaSpeed) >= currentSpeed) {
-          pnbkDone = set_stepper_target(0, 0, 0);
+          pnbkDone = SetSpeed(0) == ACTUATOR_COMMAND_APPLIED;
         } else {
-          pnbkDone = start_second_i2c_pump(
-              i2c_get_liquid_rate_by_step(currentSpeed - uint32_t(deltaSpeed)), 0);
+          const uint32_t requestedSpeed = currentSpeed - uint32_t(deltaSpeed);
+          const float requestedRate = pump
+              ? i2c_get_liquid_rate_by_step(requestedSpeed)
+              : get_liquid_rate_by_step(requestedSpeed);
+          pnbkDone = SetSpeed(requestedRate) == ACTUATOR_COMMAND_APPLIED;
         }
       } else if (pnbk.kind == CONTROL_NBK_ABSOLUTE) {
-        pnbkDone = start_second_i2c_pump(
-            i2c_get_liquid_rate_by_step(pnbk.stepSpeed), 0);
+        const float requestedRate = pump
+            ? i2c_get_liquid_rate_by_step(pnbk.stepSpeed)
+            : get_liquid_rate_by_step(pnbk.stepSpeed);
+        pnbkDone = SetSpeed(requestedRate) == ACTUATOR_COMMAND_APPLIED;
       } else if (pnbk.kind == CONTROL_NBK_STOP) {
-        pnbkDone = set_stepper_target(0, 0, 0);
+        pnbkDone = SetSpeed(0) == ACTUATOR_COMMAND_APPLIED;
       } else {
         pnbkDone = true;
       }
       // [Ревью 24.08, ошибка 1] Та же природа, что в process_pending_i2c_operations()
-      // (см. комментарий там): set_stepper_target() при обнаруженном I2C-насосе идёт
+      // (см. комментарий там): SetSpeed() при выбранном I2C-насосе идёт
       // через i2c_stepper_start()/i2c_stepper_stop() - ограниченную, но не мгновенную
       // цепочку ожиданий семафора шины. feedLoopWDT() безопасен и при выключенном
       // сторожем - см. обоснование в process_pending_i2c_operations().

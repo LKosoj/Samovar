@@ -58,6 +58,7 @@ if nbk_text:
             early_return_body,
             [
                 "nbk_overheat_start_time = 0;",
+                "nbk_end_steam_start_time = 0;",
                 "nbk_dry_steam_start_time = 0;",
                 "return false;",
             ],
@@ -74,10 +75,12 @@ if nbk_text:
 
     if mash_depleted_body:
         require_ordered_tokens(
-            "NBK ran-out-of-mash finishes gracefully via command queue, emergency stop only as fallback",
+            "NBK ran-out-of-mash waits 60 seconds and finishes gracefully via command queue",
             mash_depleted_body,
             [
-                "SendMsg(\"Кончилась брага. Программа НБК завершена.\", NOTIFY_MSG);",
+                "nbk_end_steam_start_time == 0",
+                "millis() - nbk_end_steam_start_time >= 60000",
+                "Температура пара выше 98°C в течение 60 секунд.",
                 "if (!queue_samovar_command(SAMOVAR_POWER)) {",
                 "request_emergency_stop(\"Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)\");",
             ],

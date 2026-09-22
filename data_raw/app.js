@@ -2255,9 +2255,9 @@
       row.summary = row.name + (row.temp ? ' · ' + row.temp + ' °C' : '') +
         (row.time ? ' · ' + hoursText(row.time) : '');
     } else if (kind === 'nbk') {
-      row.value = num(f[1]); row.speed = num(f[2]);
-      row.summary = row.name + (row.value !== null ? ' · ' + row.value : '') +
-        (row.speed !== null ? ' · ' + row.speed : '');
+      row.speed = num(f[1]); row.power = num(f[2]);
+      row.summary = row.name + (row.speed !== null ? ' · ' + row.speed + ' л/ч' : '') +
+        (row.power !== null ? ' · ' + row.power : '');
     } else {
       row.summary = line;
     }

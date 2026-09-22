@@ -39,6 +39,7 @@ if nbk:
     require_token("[T2] Po ceiling state", nbk_code, "float nbk_Po_ceiling = 0;")
     require_token("[T2] high temp ticks counter", nbk_code, "uint8_t nbk_high_temp_ticks = 0;")
     require_token("[T3] dry steam start time", nbk_code, "uint32_t nbk_dry_steam_start_time = 0;")
+    require_token("NBK steam finish hold state", nbk_code, "uint32_t nbk_end_steam_start_time = 0;")
     # [Ремонт-2026-09-02 П1] флаг-обходной путь удалён целиком - его работу
     # теперь делает прямой автовход run_nbk_program(num, false, true).
     if "nbk_work_entry_overflow_pending" in nbk_code:
@@ -61,6 +62,7 @@ if nbk:
             [
                 "if (num == 0)",
                 "nbk_overheat_start_time = 0;",
+                "nbk_end_steam_start_time = 0;",
                 # [Ревью П1, находка 2] симметричный сброс — иначе рестарт НБК на 'S' с
                 # горячим парогенератором даёт мгновенный ложный стоп без выдержки 60с
                 "nbk_dry_steam_start_time = 0;",
@@ -166,6 +168,17 @@ if nbk:
 
     if opt_body:
         require_ordered_tokens(
+            "optimization inherits actual local or I2C pump feed",
+            opt_body,
+            [
+                "float candidateP = nbk_actual_feed_rate();",
+                "if (!(candidateP > 0)) candidateP = 10;",
+                "if (program[ProgramNum].Speed > 0)",
+                "candidateP = program[ProgramNum].Speed;",
+            ],
+            errors,
+        )
+        require_ordered_tokens(
             "[T8/П1] optimization overflow without found optimum stops; with found optimum auto-enters W",
             opt_body,
             [
@@ -231,6 +244,7 @@ if nbk:
             [
                 "SetSpeed(0)",
                 "nbk_overheat_start_time = 0;",
+                "nbk_end_steam_start_time = 0;",
                 "uint32_t totalTime = stats.startTime > 0",
                 "if (stats.startTime > 0)",
                 "String summary",

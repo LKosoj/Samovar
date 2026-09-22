@@ -2559,7 +2559,9 @@ void web_command(AsyncWebServerRequest *request) {
     commandKeySuffix = "=" + String(pumpSpeedSteps);
   } else if (action == "pnbk") {
     I2CStepperDevice* pump = i2c_stepper_selected_pump();
-    const uint32_t stepsPerMl = pump && pump->present ? pump->config.stepsPerMl : 0;
+    const uint32_t stepsPerMl = pump
+        ? pump->config.stepsPerMl
+        : SamSetup.StepperStepMl;
     parseResult = parse_control_nbk(
         actionParam->value().c_str(), stepsPerMl, nbkCommand);
     if (parseResult.ok() && nbkCommand.kind != CONTROL_NBK_STOP &&

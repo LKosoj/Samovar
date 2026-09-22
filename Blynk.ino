@@ -473,7 +473,7 @@ BLYNK_WRITE(V28) {
 BLYNK_WRITE(V29) {
   if (mode_switch_in_progress()) return;
   const I2CStepperDevice* pump = i2c_stepper_selected_pump();
-  const uint32_t stepsPerMl = pump ? pump->config.stepsPerMl : 0;
+  const uint32_t stepsPerMl = pump ? pump->config.stepsPerMl : SamSetup.StepperStepMl;
   ControlNbkCommand nbkCommand = {};
   NumericParseResult result = parse_control_nbk(
       param.asStr(), stepsPerMl, nbkCommand);

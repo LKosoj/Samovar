@@ -24,7 +24,7 @@ BROWSER_TEST = r'''async page => {
   let plan = {kind: 'success', index: 0, path: '/distiller.htm'};
   const base = (index, path) => ({
     mode:index ? 4 : 1, version:index ? 'two' : 'one', powerUnit:index ? 'P' : 'V',
-    program:path === '/nbk.htm' ? (index ? 'T;86;400' : 'T;85;300') : path === '/bk.htm' ? (index ? 'T;86;0;0;0' : 'T;85;0;0;0') : (index ? 'T;86;0;0' : 'T;85;0;0'),
+    program:path === '/nbk.htm' ? (index ? 'H;2;3600' : 'H;1;3500') : path === '/bk.htm' ? (index ? 'T;86;0;0;0' : 'T;85;0;0;0') : (index ? 'T;86;0;0' : 'T;85;0;0'),
     description:index ? 'Второе описание' : 'Первое описание',
     luaButtonList:index ? 'two|Lua two' : 'one|Lua one',
     steamColor:index ? '#101010' : '#111111', pipeColor:index ? '#202020' : '#222222', waterColor:index ? '#303030' : '#333333', tankColor:index ? '#404040' : '#444444', acpColor:index ? '#505050' : '#555555',
@@ -55,7 +55,7 @@ BROWSER_TEST = r'''async page => {
     i2c_pump_present:0, i2c_pump_running:0, i2c_pump_remaining_ml:0, i2c_pump_speed:0, PowerOn:0,
     heaterAlarmLatched:0, heaterAlarmReason:'', latestMessageSequence:0, events:[],
     BoilingEvidence:0, BoilingPrecisionSensorConfigured:false, bk_water_auto:false, bk_steam_setpoint:0,
-    prvl:0, ISspd:0
+    prvl:0, ISspd:0, ProgramNum:1
   };
   await page.route('**/ajax*', route => { requests.push('ajax'); return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(telemetry)}); });
   await page.route('**/command', route => { commands.push(route.request().postData() || ''); return route.fulfill({status:200, body:'OK'}); });
@@ -137,6 +137,11 @@ BROWSER_TEST = r'''async page => {
     const expected = base(index, '/nbk.htm');
     expect((await page.locator('#nbkDpLabel').textContent()).includes(String(expected.nbkDp)), 'NBK step missing for dataset ' + index);
     expect((await page.locator('#pmmn').getAttribute('title')).includes(String(expected.nbkDp)), 'NBK title missing for dataset ' + index);
+    await page.waitForFunction(() => document.querySelector('[data-tele="_lineSpeed"]').textContent !== '');
+    expect(await page.locator('[data-tele="_lineSpeed"]').textContent() === (index ? '2' : '1'),
+      'NBK row feed must come from the second program field');
+    expect(await page.locator('[data-tele="_linePower"]').textContent() === (index ? '3600' : '3500'),
+      'NBK row power must come from the third program field');
   }
   await open('/distiller.htm', {kind:'success', index:0});
   await assertBootstrap('/distiller.htm', 0);

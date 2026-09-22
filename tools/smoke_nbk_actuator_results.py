@@ -30,6 +30,7 @@ struct I2CStepperDevice {
   I2CStepperV3StatusSnapshot status;
 };
 static I2CStepperDevice selectedPump = {2, true, {100}, {40}};
+static I2CStepperDevice* selectedPumpPtr = &selectedPump;
 static bool i2cAvailable = true;
 static bool driverSucceeds = true;
 static int driverCalls = 0;
@@ -37,6 +38,11 @@ static uint8_t lastCommandAddress = 0;
 static uint32_t fakeMillis = 0;
 static uint32_t time_speed = 0;
 static float nbk_P = 4.0f;
+static uint16_t CurrrentStepperSpeed = 25;
+static bool StepperMoving = true;
+static int localStartCalls = 0;
+static int localStopCalls = 0;
+static uint32_t localTarget = 0;
 struct StatsProbe {
   float totalVolume;
   float activeVolume;
@@ -47,13 +53,23 @@ static StatsProbe stats = {};
 uint32_t millis() { return fakeMillis; }
 ProgramType current_program_type() { return 'W'; }
 I2CStepperDevice* i2c_stepper_selected_pump() {
-  return selectedPump.present ? &selectedPump : nullptr;
+  return selectedPumpPtr;
 }
 bool i2c_stepper_refresh(I2CStepperDevice& device) {
   return i2cAvailable && device.present;
 }
 float i2c_get_liquid_rate_by_step(uint32_t speed) {
   return float(speed) / 10.0f;
+}
+float get_liquid_rate_by_step(uint32_t speed) {
+  return float(speed) / 5.0f;
+}
+float get_speed_from_rate(float rate) { return rate * 5.0f; }
+void stopService() { localStopCalls++; }
+void startService() { localStartCalls++; }
+void stepper_safe_stop_reset() { localTarget = 0; }
+void stepper_safe_set_motion(float, int32_t, uint32_t target) {
+  localTarget = target;
 }
 bool set_stepper_target(uint32_t speed, uint8_t, uint32_t, bool requireI2c) {
   driverCalls++;
@@ -84,6 +100,7 @@ static void check(bool condition, const char* message) {
 
 static void reset_fixture() {
   selectedPump = {2, true, {100}, {40}};
+  selectedPumpPtr = &selectedPump;
   i2cAvailable = true;
   driverSucceeds = true;
   driverCalls = 0;
@@ -91,15 +108,38 @@ static void reset_fixture() {
   fakeMillis = 200;
   time_speed = 100;
   nbk_P = 4.0f;
+  CurrrentStepperSpeed = 25;
+  StepperMoving = true;
+  localStartCalls = 0;
+  localStopCalls = 0;
+  localTarget = 0;
   stats = {3.0f, 3.0f, 50};
 }
 
 int main() {
   reset_fixture();
+  selectedPumpPtr = nullptr;
+  check(SetSpeed(7.0f) == ACTUATOR_COMMAND_APPLIED,
+        "без I2C при старте НБК обязана использовать встроенный насос");
+  check(driverCalls == 0 && localStopCalls == 1 && localStartCalls == 1,
+        "встроенный насос должен запускаться без I2C-команд");
+  check(CurrrentStepperSpeed == 35 && localTarget == 2147483640UL,
+        "встроенный насос обязан получить скорость из своей калибровки");
+
+  reset_fixture();
+  selectedPumpPtr = nullptr;
+  check(SetSpeed(0.0f) == ACTUATOR_COMMAND_APPLIED,
+        "встроенный насос обязан останавливаться без I2C-подтверждения");
+  check(driverCalls == 0 && localStopCalls == 1 && localStartCalls == 0 &&
+            CurrrentStepperSpeed == 0 && !StepperMoving,
+        "остановка встроенного насоса обязана сбросить его состояние");
+
+  reset_fixture();
   i2cAvailable = false;
   check(SetSpeed(7.0f) == ACTUATOR_COMMAND_FAILED,
-        "отсутствующий I2C-насос обязан дать FAILED");
-  check(driverCalls == 0, "при отсутствии I2C локальный привод вызываться не должен");
+        "потерянный выбранный I2C-насос обязан дать FAILED");
+  check(driverCalls == 0 && localStartCalls == 0,
+        "после потери выбранного I2C нельзя переключаться на встроенный насос");
   check(time_speed == 100 && nbk_P == 4.0f,
         "отказ обнаружения не должен коммитить время или подачу");
   check(stats.totalVolume == 3.0f && stats.activeVolume == 3.0f &&
@@ -532,8 +572,8 @@ def main() -> int:
 
     mutations = (
         set_speed.replace(
-            "if (!pump || !pump->present || !i2c_stepper_refresh(*pump)) return ACTUATOR_COMMAND_FAILED;",
-            "if (false) return ACTUATOR_COMMAND_FAILED;",
+            "if (pump && (!pump->present || !i2c_stepper_refresh(*pump))) {\n    return ACTUATOR_COMMAND_FAILED;\n  }",
+            "if (false) {\n    return ACTUATOR_COMMAND_FAILED;\n  }",
             1,
         ),
         set_speed.replace(
@@ -541,7 +581,12 @@ def main() -> int:
             ": true;",
             1,
         ),
-        set_speed.replace(", true)", ", false)", 1),
+        set_speed.replace(
+            "set_stepper_target(0, 0, 0, true)",
+            "set_stepper_target(0, 0, 0, false)",
+            1,
+        ),
+        set_speed.replace("startService();", "", 1),
         set_speed.replace(
             "if (!applied) return ACTUATOR_COMMAND_FAILED;",
             "if (!applied) return ACTUATOR_COMMAND_APPLIED;",

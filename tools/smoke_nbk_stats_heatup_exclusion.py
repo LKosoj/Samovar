@@ -96,6 +96,14 @@ bool start_second_i2c_pump(float rate, uint16_t volume) {
   selectedPump.status.currentSpeedStepsPerSec = uint32_t(rate * 10.0f);
   return true;
 }
+uint16_t CurrrentStepperSpeed = 0;
+bool StepperMoving = false;
+float get_liquid_rate_by_step(uint32_t speed) { return float(speed) / 10.0f; }
+float get_speed_from_rate(float rate) { return rate * 10.0f; }
+void stopService() {}
+void startService() {}
+void stepper_safe_stop_reset() {}
+void stepper_safe_set_motion(float, int32_t, uint32_t) {}
 
 // Конверсия мощности не является предметом этого теста.
 float toPower(float v) { return v; }

@@ -77,6 +77,7 @@ uint8_t nbk_high_temp_ticks = 0; // [T2] счётчик тиков подряд 
 float nbk_pressure_ceiling = 0; // [T1-2026-09-03] рабочий потолок давления, мм (сессия, ОЗУ)
 uint8_t nbk_high_pressure_ticks = 0; // [T1-2026-09-03] счётчик тиков/итераций подряд с давлением ≥ потолка
 bool nbk_opt_entry_by_pressure = false; // [T1] автовход O→W вызван давлением — run_nbk_program включает причину в единственное сообщение; оба вызова с optimumEntry выставляют флаг явно (ранние return в run_nbk_program его не трогают)
+uint32_t nbk_end_steam_start_time = 0; // Тп > 98°C непрерывно 60 секунд до завершения НБК
 uint32_t nbk_dry_steam_start_time = 0; // [T3] отсчёт времени перегрева пара на Ручной настройке
 uint32_t nbk_pressure_stale_start_time = 0; // [П7] отсчёт устойчивой потери показаний ДД
 bool nbk_safe_waiting = false;
@@ -330,12 +331,30 @@ inline bool nbk_overflow_detection_available() {
 ActuatorCommandResult SetSpeed(float Speed) { // Прокладка для подсчета статистики
   if (!(Speed >= 0.0f)) return ACTUATOR_COMMAND_FAILED;
   I2CStepperDevice* pump = i2c_stepper_selected_pump();
-  if (!pump || !pump->present || !i2c_stepper_refresh(*pump)) return ACTUATOR_COMMAND_FAILED;
-  const float previousRate = i2c_get_liquid_rate_by_step(
-      pump->status.currentSpeedStepsPerSec);
-  const bool applied = Speed == 0
-      ? set_stepper_target(0, 0, 0, true)
-      : start_second_i2c_pump(Speed, 0);
+  if (pump && (!pump->present || !i2c_stepper_refresh(*pump))) {
+    return ACTUATOR_COMMAND_FAILED;
+  }
+  const float previousRate = pump
+      ? i2c_get_liquid_rate_by_step(pump->status.currentSpeedStepsPerSec)
+      : get_liquid_rate_by_step(CurrrentStepperSpeed);
+  bool applied = false;
+  if (pump) {
+    applied = Speed == 0
+        ? set_stepper_target(0, 0, 0, true)
+        : start_second_i2c_pump(Speed, 0);
+  } else if (Speed == 0) {
+    stopService();
+    stepper_safe_stop_reset();
+    CurrrentStepperSpeed = 0;
+    StepperMoving = false;
+    applied = true;
+  } else {
+    CurrrentStepperSpeed = uint16_t(get_speed_from_rate(Speed));
+    stopService();
+    stepper_safe_set_motion(CurrrentStepperSpeed, 0, 2147483640);
+    startService();
+    applied = true;
+  }
   if (!applied) return ACTUATOR_COMMAND_FAILED;
   uint32_t now = millis();
   if (time_speed == 0) {
@@ -617,7 +636,10 @@ inline bool nbk_manual_control_locked() {
 // шагового насоса (снижение на 1/3 при захлёбе на Ручной настройке и в
 // handle_overflow()).
 inline float nbk_actual_feed_rate() {
-  return i2c_get_liquid_rate_by_step(get_stepper_speed());
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  return pump
+      ? i2c_get_liquid_rate_by_step(get_stepper_speed())
+      : get_liquid_rate_by_step(CurrrentStepperSpeed);
 }
 
 void nbk_proc() { //главный цикл НБК
@@ -779,7 +801,7 @@ void handle_nbk_stage_optimization() {
       return;
     }
 
-    #ifndef USE_HEAD_LEVEL_SENSOR //даём время пользователю задать вручную параметры в "Работе", если не задал - передадутся те, что были в Настройке
+    if (!nbk_overflow_detection_available()) { //даём время пользователю задать вручную параметры в "Работе", если не задал - передадутся те, что были в Настройке
       if (!noDZ_message_sent) {
         SendMsg("Оптимизация невозможна - отсутствует датчик захлёба. Установите вручную нужные параметры в программе этапа Работа и нажмите кнопку Следующая программа. Через 10 минут процесс перейдёт в безопасное ожидание (нагрев и подача выключены).", ALARM_MSG);
       }
@@ -796,7 +818,7 @@ void handle_nbk_stage_optimization() {
       }
       run_nbk_program(ProgramNum + 1);
       return;
-    #endif
+    }
 
     nbk_opt_in_progress = true; // Пауза на пропуск Оптимизации закончена
     begintime = 0; // Сбрасываем отсчет для корректной обработки разницы окончания оптимизации, по захлёбу или нет
@@ -810,9 +832,8 @@ void handle_nbk_stage_optimization() {
       float candidateM = toPower(target_power_volt) > 100
           ? toPower(target_power_volt)
           : 0.3 * nbk_M_max;
-      float candidateP = get_stepper_speed() > 0
-          ? i2c_get_liquid_rate_by_step(get_stepper_speed())
-          : 10;
+      float candidateP = nbk_actual_feed_rate();
+      if (!(candidateP > 0)) candidateP = 10;
       if (program[ProgramNum].Power > 0) {
         candidateM = toPower(program[ProgramNum].Power);
       }
@@ -1332,6 +1353,7 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
   msgfl = true;
   if (num == 0) {
     nbk_overheat_start_time = 0;
+    nbk_end_steam_start_time = 0;
     nbk_dry_steam_start_time = 0; // [Ревью П1, находка 2] симметрично nbk_overheat_start_time
     nbk_pressure_stale_start_time = 0; // [П7] симметрично
   }
@@ -1633,6 +1655,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
  В строке "Ручная настройка" это условие не проверяем, т.к. в инструкции будет юстировка датчика Тб по воде*/
   if (SamovarStatusInt != SAMOVAR_STATUS_NBK || !PowerOn || startval < SAMOVAR_STARTVAL_NBK_RUNNING) {
     nbk_overheat_start_time = 0;
+    nbk_end_steam_start_time = 0;
     nbk_dry_steam_start_time = 0; // [Ревью П1, находка 2] симметрично nbk_overheat_start_time
     nbk_pressure_stale_start_time = 0; // [П7] симметрично
 #ifdef USE_NBK_END_BY_STEAM_RISE
@@ -1658,11 +1681,16 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
 
   if (currentType != 'S') { // если не Ручная настройка
     if (SteamSensor.avgTemp > 98.0) { // если Т пара больше 98
-      SendMsg("Кончилась брага. Программа НБК завершена.", NOTIFY_MSG);
-      if (!queue_samovar_command(SAMOVAR_POWER)) {
-        request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)");
+      if (nbk_end_steam_start_time == 0) nbk_end_steam_start_time = millis();
+      if (millis() - nbk_end_steam_start_time >= 60000) {
+        SendMsg("Температура пара выше 98°C в течение 60 секунд. Кончилась брага. Программа НБК завершена.", NOTIFY_MSG);
+        if (!queue_samovar_command(SAMOVAR_POWER)) {
+          request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)");
+        }
+        return true; //возвращаем аварию
       }
-      return true; //возвращаем аварию
+    } else {
+      nbk_end_steam_start_time = 0;
     }
     nbk_dry_steam_start_time = 0; // [T3] предел действует только на Ручной настройке
 #ifdef USE_NBK_END_BY_STEAM_RISE
@@ -1699,6 +1727,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
     }
 #endif
   } else if (SteamSensor.avgTemp >= 100.0) { // [T3] верхний предел Тп на Ручной настройке — защита от сухого хода парогенератора
+    nbk_end_steam_start_time = 0;
     if (nbk_dry_steam_start_time == 0) nbk_dry_steam_start_time = millis();
     if (millis() - nbk_dry_steam_start_time > 60000) {
       SendMsg("Т пара выше предела 60 секунд на Ручной настройке. Возможен сухой ход парогенератора. Программа НБК завершена.", NOTIFY_MSG);
@@ -1708,6 +1737,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
       return true;
     }
   } else {
+    nbk_end_steam_start_time = 0;
     nbk_dry_steam_start_time = 0;
   }
     //ТЗ: Во всех "Разгон", "Ручная настройка", "Оптимизация", "Работа":
@@ -1909,6 +1939,7 @@ void nbk_finish_common(bool resetWorkState) {
         ALARM_MSG);
   }
   nbk_overheat_start_time = 0;
+  nbk_end_steam_start_time = 0;
   // Вычислить и отправить статистику
   uint32_t totalTime = stats.startTime > 0 ? (millis() - stats.startTime) / 1000 : 0; // в секундах
   if (totalTime > 0) {

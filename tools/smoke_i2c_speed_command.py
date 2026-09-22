@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Команда «скорость» вкладки I2CStepper: свободный привод запускается, занятый процессом
-получает новую скорость вместо программной. Единицы: об/мин мешалки, мл/ч и мл насоса."""
+получает новую скорость вместо программной, кроме насоса активной НБК. Единицы:
+об/мин мешалки, мл/ч и мл насоса."""
 
 import subprocess
 import sys
@@ -31,6 +32,10 @@ uint8_t i2cStepperSessionPumpAddress = 0;
 float i2cStepperPumpRateOverride = 0.0f;
 bool rectSecondPumpHeadsRow = false;
 float ActualVolumePerHour = 0.0f;
+static int16_t SamovarStatusInt = 0;
+static constexpr int16_t SAMOVAR_STATUS_NBK = 4000;
+static bool sessionActive = false;
+bool i2c_stepper_session_active() { return sessionActive; }
 int applies = 0, finiteStarts = 0, continuous = 0, mixerOverrides = 0, pumpOverrides = 0;
 int lastCommand = 0;
 int lastOverrideDirection = -1;
@@ -114,6 +119,11 @@ int main() {
   pump.config.stepsPerMl = 100;
   i2cStepperSessionPumpAddress = 2;
   rectSecondPumpHeadsRow = true;
+  SamovarStatusInt = SAMOVAR_STATUS_NBK;
+  sessionActive = true;
+  check(!apply_i2c_speed_command(pump, pumpRequest, 1) && pumpOverrides == 0,
+        "manual pump speed must be rejected while NBK owns the pump");
+  SamovarStatusInt = 0;
   check(apply_i2c_speed_command(pump, pumpRequest, 1) && pumpOverrides == 1 && lastOverrideDirection == 1 &&
         finiteStarts == 1 &&
         continuous == 1 && ActualVolumePerHour == 1.8f,
@@ -148,6 +158,10 @@ def main() -> int:
   owned = "device.address == i2cStepperSessionMixerAddress"
   if body.count(owned) != 1 or run(body.replace(owned, owned + " && false"), quiet=True) != 1:
     print("FAIL: mutation of the process ownership check was not rejected")
+    return 1
+  nbk_guard = "SamovarStatusInt == SAMOVAR_STATUS_NBK && i2c_stepper_session_active()"
+  if body.count(nbk_guard) != 1 or run(body.replace(nbk_guard, "false"), quiet=True) != 1:
+    print("FAIL: mutation of the NBK manual-speed guard was not rejected")
     return 1
   return 0
 

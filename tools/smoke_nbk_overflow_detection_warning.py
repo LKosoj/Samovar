@@ -6,10 +6,10 @@
 теперь НЕ блокируется, но оператор получает явное предупреждение (раньше
 об этом факте вообще не сообщалось - процесс тихо стартовал без защиты).
 
-П9: старый текст "Автоматический переход к Работе" в сообщении про
-отсутствие датчика уровня в Оптимизации был неточен (переход НЕ
-автоматический - нужно вручную задать параметры и нажать кнопку) и заменён
-на явное "Через 10 минут процесс перейдёт в безопасное ожидание".
+П9: одного рабочего датчика давления достаточно для Оптимизации. Только при
+отсутствии обоих датчиков оператор должен вручную перейти к Работе. Старый
+текст "Автоматический переход к Работе" был неточен и заменён на явное
+"Через 10 минут процесс перейдёт в безопасное ожидание".
 
 Три независимых проверки:
 A) РЕАЛЬНАЯ nbk_overflow_detection_available() - таблица истинности по
@@ -41,7 +41,8 @@ WARNING_START_ANCHOR = "manual_overflow = false; // [Ремонт-2026-09-02 П6
 WARNING_END_ANCHOR = "String sessionDescription;"
 WARNING_MUTATION_ANCHOR = "if (!nbk_overflow_detection_available()) {"
 
-P9_START_ANCHOR = "#ifndef USE_HEAD_LEVEL_SENSOR"
+P9_START_ANCHOR = "if (!nbk_overflow_detection_available()) {"
+P9_END_ANCHOR = "nbk_opt_in_progress = true;"
 P9_NEW_TEXT = "Через 10 минут процесс перейдёт в безопасное ожидание (нагрев и подача выключены)."
 P9_OLD_TEXT = "Автоматический переход к Работе"
 
@@ -286,15 +287,18 @@ def compile_and_run(harness: str, tag: str, emit: bool) -> int:
 
 def check_p9_text_pin(nbk_source: str) -> list:
     errors: list = []
-    start = nbk_source.find(P9_START_ANCHOR)
+    optimization_body = extract_function_body(
+        nbk_source, "void handle_nbk_stage_optimization() {"
+    )
+    start = optimization_body.find(P9_START_ANCHOR)
     if start < 0:
-        errors.append("П9 anchor not found: #ifndef USE_HEAD_LEVEL_SENSOR")
+        errors.append(f"П9 anchor not found: {P9_START_ANCHOR}")
         return errors
-    end = nbk_source.find("#endif", start)
+    end = optimization_body.find(P9_END_ANCHOR, start)
     if end < 0:
-        errors.append("П9 segment #endif not found")
+        errors.append(f"П9 segment end not found: {P9_END_ANCHOR}")
         return errors
-    segment = strip_cpp_comments(nbk_source[start:end])
+    segment = strip_cpp_comments(optimization_body[start:end])
     if P9_NEW_TEXT not in segment:
         errors.append(f"П9: новый текст не найден в сегменте: {P9_NEW_TEXT!r}")
     if P9_OLD_TEXT in segment:
@@ -317,10 +321,15 @@ def mutate_available_and_instead_of_or(source: str) -> str:
 def mutate_drop_warning_branch(source: str) -> str:
     # П12: отключает саму ветку предупреждения - должно сломать B1
     # (предупреждение перестанет уходить при недоступном детекторе).
-    if WARNING_MUTATION_ANCHOR not in source:
+    start = source.find(WARNING_START_ANCHOR)
+    end = source.find(WARNING_END_ANCHOR, start)
+    branch = source.find(WARNING_MUTATION_ANCHOR, start, end)
+    if start < 0 or end < 0 or branch < 0:
         raise ValueError("mutation anchor missing: nbk_overflow_detection_available warning branch")
-    return source.replace(
-        WARNING_MUTATION_ANCHOR, "if (false && !nbk_overflow_detection_available()) {", 1
+    return (
+        source[:branch]
+        + "if (false && !nbk_overflow_detection_available()) {"
+        + source[branch + len(WARNING_MUTATION_ANCHOR):]
     )
 
 

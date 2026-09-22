@@ -47,6 +47,12 @@ HARNESS_TEMPLATE = r'''
 #define SAMOVAR_USE_POWER
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum ActuatorCommandResult {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
+};
 
 class String {
  public:
@@ -140,6 +146,9 @@ static ControlNbkCommand pending_pnbk_value = {};
 
 static uint32_t stepperSpeedStub = 0;
 uint32_t get_stepper_speed() { return stepperSpeedStub; }
+static uint16_t CurrrentStepperSpeed = 0;
+float get_speed_from_rate(float rate) { return rate * 10.0f; }
+float get_liquid_rate_by_step(uint32_t speed) { return float(speed) / 10.0f; }
 static int setStepperTargetCalls = 0;
 static uint32_t lastStepperTargetSpeed = 0;
 bool set_stepper_target(uint32_t spd, uint8_t, uint32_t, bool = false) {
@@ -163,8 +172,13 @@ static I2CStepperDevice* selectedPump = &pump;
 I2CStepperDevice* i2c_stepper_selected_pump() { return selectedPump; }
 float i2c_get_speed_from_rate(float rate) { return rate * pump.config.stepsPerMl / 100.0f; }
 float i2c_get_liquid_rate_by_step(uint32_t speed) { return float(speed) / 10.0f; }
-static int secondPumpStarts = 0;
-bool start_second_i2c_pump(float, uint16_t) { secondPumpStarts++; return true; }
+static int setSpeedCalls = 0;
+static float lastSetSpeedRate = -1;
+ActuatorCommandResult SetSpeed(float rate) {
+  setSpeedCalls++;
+  lastSetSpeedRate = rate;
+  return ACTUATOR_COMMAND_APPLIED;
+}
 
 @PNBK_BODY@
 
@@ -276,24 +290,27 @@ static void test_pnbk_unlocked() {
   pending_pnbk_flag = true;
   pending_pnbk_value = {CONTROL_NBK_ABSOLUTE, 777};
   setStepperTargetCalls = 0;
+  setSpeedCalls = 0;
   sendMsgCalls = 0;
   tick_apply_pending_pnbk();
-  check(secondPumpStarts == 1, "unlocked: выбранный I2C-насос обязан запуститься");
+  check(setSpeedCalls == 1 && lastSetSpeedRate == 77.7f,
+        "unlocked: выбранный I2C-насос обязан получить команду подачи");
   check(sendMsgCalls == 0, "unlocked: сообщения о блокировке быть не должно");
   check(!pending_pnbk_flag, "unlocked: pending-флаг обязан быть снят");
 }
 
-static void test_pnbk_requires_selected_calibrated_pump() {
+static void test_pnbk_uses_local_pump_when_i2c_was_not_selected() {
   reset_status(SAMOVAR_STATUS_NBK, SAMOVAR_STARTVAL_NBK_RUNNING, 'S');
   PowerOn = true;
   selectedPump = nullptr;
   pending_pnbk_flag = true;
   pending_pnbk_value = {CONTROL_NBK_ABSOLUTE, 777};
-  secondPumpStarts = 0;
+  setSpeedCalls = 0;
   sendMsgCalls = 0;
   tick_apply_pending_pnbk();
-  check(secondPumpStarts == 0 && sendMsgCalls == 1 && !pending_pnbk_flag,
-        "НБК без выбранного Nano обязана отклониться без fallback");
+  check(setSpeedCalls == 1 && lastSetSpeedRate == 77.7f &&
+            sendMsgCalls == 0 && !pending_pnbk_flag,
+        "НБК без выбранного при старте I2C обязана управлять встроенным насосом");
   selectedPump = &pump;
 }
 
@@ -303,10 +320,10 @@ static void test_pnbk_rejects_lost_pinned_pump() {
   pump.present = false;
   pending_pnbk_flag = true;
   pending_pnbk_value = {CONTROL_NBK_ABSOLUTE, 777};
-  secondPumpStarts = 0;
+  setSpeedCalls = 0;
   sendMsgCalls = 0;
   tick_apply_pending_pnbk();
-  check(secondPumpStarts == 0 && sendMsgCalls == 1 && !pending_pnbk_flag,
+  check(setSpeedCalls == 0 && sendMsgCalls == 1 && !pending_pnbk_flag,
         "НБК с потерянным закреплённым Nano обязана снять pending без retry/fallback");
   pump.present = true;
 }
@@ -318,9 +335,9 @@ static void test_pnbk_keeps_u32_calibration() {
   stepperSpeedStub = 100;
   pending_pnbk_flag = true;
   pending_pnbk_value = {CONTROL_NBK_INCREMENT, 0};
-  secondPumpStarts = 0;
+  setSpeedCalls = 0;
   tick_apply_pending_pnbk();
-  check(secondPumpStarts == 1 && !pending_pnbk_flag,
+  check(setSpeedCalls == 1 && !pending_pnbk_flag,
         "НБК increment обязан использовать calibration больше uint16 без усечения");
   pump.config.stepsPerMl = 16000;
 }
@@ -333,10 +350,10 @@ static void test_pnbk_rejects_above_canonical_speed() {
   stepperSpeedStub = I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC;
   pending_pnbk_flag = true;
   pending_pnbk_value = {CONTROL_NBK_INCREMENT, 0};
-  secondPumpStarts = 0;
+  setSpeedCalls = 0;
   sendMsgCalls = 0;
   tick_apply_pending_pnbk();
-  check(secondPumpStarts == 0 && sendMsgCalls == 1 && !pending_pnbk_flag,
+  check(setSpeedCalls == 0 && sendMsgCalls == 1 && !pending_pnbk_flag,
         "НБК не должна превышать канонический лимит скорости I2CStepper");
   stepperSpeedStub = 0;
   SamSetup.NbkDP = 0.5f;
@@ -427,7 +444,7 @@ int main() {
   test_pnbk_locked_on_optimization();
   test_pnbk_locked_on_work();
   test_pnbk_unlocked();
-  test_pnbk_requires_selected_calibrated_pump();
+  test_pnbk_uses_local_pump_when_i2c_was_not_selected();
   test_pnbk_rejects_lost_pinned_pump();
   test_pnbk_keeps_u32_calibration();
   test_pnbk_rejects_above_canonical_speed();
@@ -540,12 +557,24 @@ def mutate_pnbk_speed_limit(nbk_source: str, ino_source: str):
     return nbk_source, ino_source.replace(anchor, "false", 1)
 
 
+def mutate_pnbk_rejects_local_pump(nbk_source: str, ino_source: str):
+    anchor = "if (pump && (!pump->present || pump->config.stepsPerMl == 0)) {"
+    if anchor not in ino_source:
+        raise ValueError("mutation anchor missing: pnbk local-pump selection")
+    return nbk_source, ino_source.replace(
+        anchor,
+        "if (!pump || !pump->present || pump->config.stepsPerMl == 0) {",
+        1,
+    )
+
+
 MUTATIONS = (
     ("lock row-type check disabled", mutate_lock_row_check),
     ("voltage executor ignores lock", mutate_voltage_skip_lock),
     ("nbkopt accepts any row", mutate_nbkopt_accept_any_row),
     ("nbkopt ignores mode", mutate_nbkopt_ignore_mode),
     ("pnbk ignores canonical speed limit", mutate_pnbk_speed_limit),
+    ("pnbk rejects built-in pump", mutate_pnbk_rejects_local_pump),
 )
 
 
