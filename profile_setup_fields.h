@@ -19,6 +19,7 @@
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
 //   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, V9ONLY,
+//             V10ONLY,
 //             UPTO4, UPTO5, UPTO6 или UPTO7.
 //             V2ONLY/V3ONLY/V4ONLY/V9ONLY образуют последовательные хвосты канонического
 //             формата (поле появляется начиная с этой версии и остаётся во всех
@@ -37,6 +38,12 @@
 static const float SAMOVAR_BK_POWER_DEFAULT = 45.0f;
 #else
 static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
+#endif
+
+#ifdef SAMOVAR_USE_SEM_AVR
+static const float SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT = 2000.0f;
+#else
+static const float SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT = 167.0f;
 #endif
 
 #define SAMOVAR_PROFILE_FIELDS(X) \
@@ -124,4 +131,15 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(U8, CheesePhSmoothPercent, 1, /* retired in V7 */, UPTO6) \
   X(U16, CheeseDoserSpeed, 2, /* retired in V6 */, UPTO5) \
   X(U16, CheeseDoserSteps, 2, /* retired in V6 */, UPTO5) \
-  X(BOOL, HideProcessScheme, 1, candidate.HideProcessScheme = false, V9ONLY)
+  X(BOOL, HideProcessScheme, 1, candidate.HideProcessScheme = false, V9ONLY) \
+  X(FLOAT, NbkOptimalPower, 4, candidate.NbkOptimalPower = 0.0f, V10ONLY) \
+  X(FLOAT, NbkOptimalFeed, 4, candidate.NbkOptimalFeed = 0.0f, V10ONLY) \
+  X(U8, NbkProgramLength, 1, candidate.NbkProgramLength = 4, V10ONLY) \
+  X(FLOAT, NbkProgramHSpeed, 4, candidate.NbkProgramHSpeed = 1.0f, V10ONLY) \
+  X(FLOAT, NbkProgramHPower, 4, candidate.NbkProgramHPower = 0.0f, V10ONLY) \
+  X(FLOAT, NbkProgramSSpeed, 4, candidate.NbkProgramSSpeed = 10.0f, V10ONLY) \
+  X(FLOAT, NbkProgramSPower, 4, candidate.NbkProgramSPower = SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT, V10ONLY) \
+  X(FLOAT, NbkProgramOSpeed, 4, candidate.NbkProgramOSpeed = 0.0f, V10ONLY) \
+  X(FLOAT, NbkProgramOPower, 4, candidate.NbkProgramOPower = 0.0f, V10ONLY) \
+  X(FLOAT, NbkProgramWSpeed, 4, candidate.NbkProgramWSpeed = 0.0f, V10ONLY) \
+  X(FLOAT, NbkProgramWPower, 4, candidate.NbkProgramWPower = 0.0f, V10ONLY)

@@ -160,6 +160,9 @@ enum ProgramUpdateAction : uint8_t {
   PROGRAM_UPDATE_CLEAR,
 };
 
+static void program_store_nbk_profile(
+    SetupEEPROM&, const ProgramDraft&, ProgramUpdateAction) {}
+
 @PROFILE_DEFS@
 @MODE_RESULT@
 @PERSIST_RESULT@
@@ -170,7 +173,7 @@ static_assert(sizeof(ProfileOperationPhase) == sizeof(uint8_t),
               "ProfileOperationPhase must remain byte-sized");
 static_assert(std::is_trivially_copyable<ProfileOperationSlot>::value,
               "ProfileOperationSlot must remain trivially copyable");
-static_assert(sizeof(ProfileOperationSlot) <= 2872,
+static_assert(sizeof(ProfileOperationSlot) <= 2916,
               "ProfileOperationSlot exceeds firmware budget");
 
 static inline ProfileOperationPhase profile_operation_phase_load() {
@@ -1565,7 +1568,7 @@ def static_checks() -> list[str]:
 
     if samovar.count("ProfileOperationSlot active_profile_operation{};") != 1:
         errors.append("single fixed active ProfileOperationSlot is missing")
-    if "sizeof(ProfileOperationSlot) <= 2872" not in samovar:
+    if "sizeof(ProfileOperationSlot) <= 2916" not in samovar:
         errors.append("ProfileOperationSlot RAM replacement budget is missing")
     if "sizeof(ProfileOperationPhase) == sizeof(uint8_t)" not in samovar:
         errors.append("ProfileOperationPhase byte-size contract is missing")

@@ -1374,6 +1374,10 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
   }
   if (!nbk_stage_sensors_valid(program[num].WType)) return;
   if (program[num].WType == 'W') {
+    if (ProgramNum < ProgramLen && program[ProgramNum].WType == 'O' &&
+        nbk_opt_found) {
+      persist_nbk_optimum(nbk_Mo, nbk_Po);
+    }
     const bool resumeSafeWait = nbk_safe_waiting;
     if (!nbkSessionConfig.valid) {
       nbk_enter_safe_wait(
@@ -1551,8 +1555,8 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
     stats.activeFeedMs = 0;
     manual_overflow = false; // [Ремонт-2026-09-02 П6] сброс латча Ручной настройки на новом старте сессии
     nbk_manual_overflow_until = 0;
-    nbk_Mo = 0; // [Ремонт-2026-09-02, ревью R2] Мо/По прошлой сессии не должны подставляться в явный W
-    nbk_Po = 0;
+    nbk_Mo = SamSetup.NbkOptimalPower;
+    nbk_Po = SamSetup.NbkOptimalFeed;
     nbk_pressure_ceiling = nbkSessionConfig.overflowPressure * NBK_WORK_PRESSURE_RATIO; // [T1-2026-09-03] инициализация рабочего потолка на новую сессию
     nbk_tn_autocal_done = false; // [Тарировка Тн] новая сессия — новая попытка уточнения
 #ifdef USE_NBK_END_BY_STEAM_RISE

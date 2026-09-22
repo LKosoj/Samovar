@@ -96,6 +96,10 @@ struct ProgramRow {
 };
 struct SessionProbe { bool valid; };
 static ProgramRow program[4] = {};
+static uint8_t ProgramNum = 0;
+static uint8_t ProgramLen = 1;
+static bool nbk_opt_found = false;
+void persist_nbk_optimum(float, float) {}
 static SessionProbe nbkSessionConfig = {true};
 static bool nbk_safe_waiting = false;
 static bool nbk_safe_wait_feed_stopped = false;

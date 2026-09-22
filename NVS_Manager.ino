@@ -11,7 +11,7 @@
 
 static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
 static const char* const SAMOVAR_PROFILE_KEY = "profile";
-static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 9;
+static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 10;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
@@ -30,9 +30,11 @@ static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V8 = 473;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V8 = 473;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V9 = 474;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V9 = 474;
+static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V10 = 515;
+static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V10 = 515;
 
-static_assert(sizeof(SetupEEPROM) == 496,
-              "SetupEEPROM v9 ABI changed; bump the profile format version");
+static_assert(sizeof(SetupEEPROM) == 540,
+              "SetupEEPROM v10 ABI changed; bump the profile format version");
 static_assert(std::is_trivially_copyable<SetupEEPROM>::value,
               "SetupEEPROM must remain trivially copyable");
 static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
@@ -42,8 +44,11 @@ static_assert(sizeof(int) == 4, "profile v1 requires 32-bit int");
 static void set_profile_version_defaults(SetupEEPROM&, uint8_t);
 
 using ProfileCodec = ProfileBlobCodec<
-    SAMOVAR_PROFILE_PAYLOAD_SIZE_V9,
+    SAMOVAR_PROFILE_PAYLOAD_SIZE_V10,
     SAMOVAR_PROFILE_FORMAT_VERSION>;
+using V9ProfileCodec = ProfileBlobCodec<
+    SAMOVAR_PROFILE_PAYLOAD_SIZE_V9,
+    9>;
 using V8ProfileCodec = ProfileBlobCodec<
     SAMOVAR_PROFILE_PAYLOAD_SIZE_V8,
     8>;
@@ -78,7 +83,7 @@ enum ProfileValueResult : uint8_t {
 static bool encode_setup_payload(
     const SetupEEPROM& candidate,
     uint8_t* payload) {
-  CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V9> writer(payload);
+  CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V10> writer(payload);
 #define SAMOVAR_PUT_U8(name) writer.put_u8(candidate.name)
 #define SAMOVAR_PUT_BOOL(name) writer.put_bool(candidate.name)
 #define SAMOVAR_PUT_U16(name) writer.put_u16(candidate.name)
@@ -91,6 +96,7 @@ static bool encode_setup_payload(
 #define SAMOVAR_ENCODE_TERM_V3ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
 #define SAMOVAR_ENCODE_TERM_V4ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
 #define SAMOVAR_ENCODE_TERM_V9ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_ENCODE_TERM_V10ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
 #define SAMOVAR_ENCODE_TERM_UPTO4(kind, name)
 #define SAMOVAR_ENCODE_TERM_UPTO5(kind, name)
 #define SAMOVAR_ENCODE_TERM_UPTO6(kind, name)
@@ -105,6 +111,7 @@ static bool encode_setup_payload(
 #undef SAMOVAR_ENCODE_TERM_UPTO6
 #undef SAMOVAR_ENCODE_TERM_UPTO7
 #undef SAMOVAR_ENCODE_TERM_V9ONLY
+#undef SAMOVAR_ENCODE_TERM_V10ONLY
 #undef SAMOVAR_ENCODE_TERM_V4ONLY
 #undef SAMOVAR_ENCODE_TERM_V3ONLY
 #undef SAMOVAR_ENCODE_TERM_V2ONLY
@@ -116,13 +123,30 @@ static bool encode_setup_payload(
 #undef SAMOVAR_PUT_U16
 #undef SAMOVAR_PUT_BOOL
 #undef SAMOVAR_PUT_U8
-  return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V9 &&
+  return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V10 &&
          writer.finish();
 }
 
 #include "profile_decode_fields.h"
 
 static bool decode_setup_payload(
+    const uint8_t* payload,
+    SetupEEPROM& candidate) {
+  SetupEEPROM decoded{};
+  CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V10> reader(payload);
+  if (!decode_setup_payload_fields<false, false>(reader, decoded) ||
+      !decode_setup_payload_v2only_fields(reader, decoded) ||
+      !decode_setup_payload_v3only_fields(reader, decoded) ||
+      !decode_setup_payload_v4only_fields<false, false>(reader, decoded) ||
+      !decode_setup_payload_v9only_fields(reader, decoded) ||
+      !decode_setup_payload_v10only_fields(reader, decoded) ||
+      reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V10 ||
+      !reader.finish()) return false;
+  candidate = decoded;
+  return true;
+}
+
+static bool decode_setup_payload_v9(
     const uint8_t* payload,
     SetupEEPROM& candidate) {
   SetupEEPROM decoded{};
@@ -134,6 +158,7 @@ static bool decode_setup_payload(
       !decode_setup_payload_v9only_fields(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V9 ||
       !reader.finish()) return false;
+  set_profile_version_defaults(decoded, 9);
   candidate = decoded;
   return true;
 }
@@ -222,6 +247,7 @@ static void set_profile_version_defaults(SetupEEPROM& candidate, uint8_t version
 #define SAMOVAR_DEFAULT_TERM_V3ONLY(deflt) if (version < 3) { deflt; }
 #define SAMOVAR_DEFAULT_TERM_V4ONLY(deflt) if (version < 4) { deflt; }
 #define SAMOVAR_DEFAULT_TERM_V9ONLY(deflt) if (version < 9) { deflt; }
+#define SAMOVAR_DEFAULT_TERM_V10ONLY(deflt) if (version < 10) { deflt; }
 #define SAMOVAR_DEFAULT_TERM_UPTO4(deflt)
 #define SAMOVAR_DEFAULT_TERM_UPTO5(deflt)
 #define SAMOVAR_DEFAULT_TERM_UPTO6(deflt)
@@ -235,6 +261,7 @@ static void set_profile_version_defaults(SetupEEPROM& candidate, uint8_t version
 #undef SAMOVAR_DEFAULT_TERM_UPTO6
 #undef SAMOVAR_DEFAULT_TERM_UPTO7
 #undef SAMOVAR_DEFAULT_TERM_V9ONLY
+#undef SAMOVAR_DEFAULT_TERM_V10ONLY
 #undef SAMOVAR_DEFAULT_TERM_V4ONLY
 #undef SAMOVAR_DEFAULT_TERM_V3ONLY
 #undef SAMOVAR_DEFAULT_TERM_V2ONLY
@@ -504,6 +531,7 @@ void set_default_setup_profile(SetupEEPROM& candidate) {
 #define SAMOVAR_DEFAULT_INIT_V3ONLY(deflt) deflt;
 #define SAMOVAR_DEFAULT_INIT_V4ONLY(deflt) deflt;
 #define SAMOVAR_DEFAULT_INIT_V9ONLY(deflt) deflt;
+#define SAMOVAR_DEFAULT_INIT_V10ONLY(deflt) deflt;
 #define SAMOVAR_DEFAULT_INIT_UPTO4(deflt)
 #define SAMOVAR_DEFAULT_INIT_UPTO5(deflt)
 #define SAMOVAR_DEFAULT_INIT_UPTO6(deflt)
@@ -516,6 +544,7 @@ void set_default_setup_profile(SetupEEPROM& candidate) {
 #undef SAMOVAR_DEFAULT_INIT_UPTO6
 #undef SAMOVAR_DEFAULT_INIT_UPTO7
 #undef SAMOVAR_DEFAULT_INIT_V9ONLY
+#undef SAMOVAR_DEFAULT_INIT_V10ONLY
 #undef SAMOVAR_DEFAULT_INIT_V4ONLY
 #undef SAMOVAR_DEFAULT_INIT_V3ONLY
 #undef SAMOVAR_DEFAULT_INIT_V2ONLY
@@ -594,6 +623,7 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persis
     return PROFILE_LOAD_READ_FAILED;
   }
   if (storedSize != ProfileCodec::BLOB_SIZE &&
+      storedSize != V9ProfileCodec::BLOB_SIZE &&
       storedSize != V8ProfileCodec::BLOB_SIZE &&
       storedSize != V7ProfileCodec::BLOB_SIZE &&
       storedSize != V6ProfileCodec::BLOB_SIZE &&
@@ -604,6 +634,27 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persis
       storedSize != LegacyProfileCodec::BLOB_SIZE) {
     nvs_close(readHandle);
     return PROFILE_LOAD_STORED_SIZE_MISMATCH;
+  }
+
+  if (storedSize == V9ProfileCodec::BLOB_SIZE) {
+    V9ProfileCodec::Blob encoded{};
+    size_t readSize = V9ProfileCodec::BLOB_SIZE;
+    const uint8_t readResult = nvs_read_blob(
+        readHandle, SAMOVAR_PROFILE_KEY, encoded.bytes, readSize);
+    nvs_close(readHandle);
+    if (readResult != PROFILE_VALUE_FOUND) return PROFILE_LOAD_READ_FAILED;
+    if (readSize != V9ProfileCodec::BLOB_SIZE) return PROFILE_LOAD_SHORT_READ;
+
+    uint8_t payload[V9ProfileCodec::PAYLOAD_SIZE] = {};
+    const ProfileLoadResult validation = load_codec_result(V9ProfileCodec::decode(
+        encoded.bytes, V9ProfileCodec::BLOB_SIZE, payload));
+    if (validation != PROFILE_LOAD_OK) return validation;
+    SetupEEPROM migrated{};
+    if (!decode_setup_payload_v9(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
+    candidate = migrated;
+    persistResult = save_profile_nvs(migrated);
+    if (persistResult != PERSIST_OK) return PROFILE_LOAD_MIGRATION_PERSIST_FAILED;
+    return PROFILE_LOAD_OK;
   }
 
   if (storedSize == V8ProfileCodec::BLOB_SIZE) {
@@ -1010,6 +1061,7 @@ struct LegacyEepromLayout {
 #define SAMOVAR_LEGACY_COPY_TERM_V3ONLY(name) memcpy(&out.name, &name, sizeof(out.name));
 #define SAMOVAR_LEGACY_COPY_TERM_V4ONLY(name) memcpy(&out.name, &name, sizeof(out.name));
 #define SAMOVAR_LEGACY_COPY_TERM_V9ONLY(name)
+#define SAMOVAR_LEGACY_COPY_TERM_V10ONLY(name)
 #define SAMOVAR_LEGACY_COPY_TERM_UPTO4(name)
 #define SAMOVAR_LEGACY_COPY_TERM_UPTO5(name)
 #define SAMOVAR_LEGACY_COPY_TERM_UPTO6(name)
@@ -1022,6 +1074,7 @@ struct LegacyEepromLayout {
 #undef SAMOVAR_LEGACY_COPY_TERM_UPTO6
 #undef SAMOVAR_LEGACY_COPY_TERM_UPTO7
 #undef SAMOVAR_LEGACY_COPY_TERM_V9ONLY
+#undef SAMOVAR_LEGACY_COPY_TERM_V10ONLY
 #undef SAMOVAR_LEGACY_COPY_TERM_V4ONLY
 #undef SAMOVAR_LEGACY_COPY_TERM_V3ONLY
 #undef SAMOVAR_LEGACY_COPY_TERM_V2ONLY

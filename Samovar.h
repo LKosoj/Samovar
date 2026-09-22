@@ -610,6 +610,17 @@ struct SetupEEPROM {
   float CheesePhSlope;                                         //Коэффициент наклона калибровки pH
   float CheesePhOffset;                                        //Смещение калибровки pH
   bool HideProcessScheme;                                      //Не показывать схему процесса в веб-интерфейсе устройства
+  float NbkOptimalPower;                                       //Сохранённая оптимальная мощность НБК
+  float NbkOptimalFeed;                                        //Сохранённая оптимальная подача НБК
+  uint8_t NbkProgramLength;                                    //Количество строк программы НБК
+  float NbkProgramHSpeed;
+  float NbkProgramHPower;
+  float NbkProgramSSpeed;
+  float NbkProgramSPower;
+  float NbkProgramOSpeed;
+  float NbkProgramOPower;
+  float NbkProgramWSpeed;
+  float NbkProgramWPower;
 };
 
 struct ImpurityDetector {

@@ -226,7 +226,7 @@ portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE ipstMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE dsAddressMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE emergencyStopMux = portMUX_INITIALIZER_UNLOCKED;
-// [T29] Защищает SamSetup (копируется присваиванием структуры, ~536 байт - не
+// [T29] Защищает SamSetup (копируется присваиванием структуры, 540 байт - не
 // атомарно) и program[]/ProgramLen от рваного чтения: writer'ы живут в loop()
 // (приоритет 1), а handleSave()/serialize_program_for_mode() читают их из
 // async_tcp (приоритет 5, вытесняет loop() в любой момент). Мьютекс не нужен -
@@ -248,6 +248,22 @@ bool shouldSaveWiFiConfig = false;
 // читаются из JSON-статуса телеметрии уже после старта веба — гонок нет.
 bool bootDegraded = false;
 String bootDegradedReason = "";
+
+void persist_nbk_optimum(float optimalPower, float optimalFeed) {
+  SetupEEPROM candidate{};
+  portENTER_CRITICAL(&configMux);
+  candidate = SamSetup;
+  portEXIT_CRITICAL(&configMux);
+  if (candidate.NbkOptimalPower == optimalPower &&
+      candidate.NbkOptimalFeed == optimalFeed) return;
+  candidate.NbkOptimalPower = optimalPower;
+  candidate.NbkOptimalFeed = optimalFeed;
+  if (save_profile_nvs(candidate) != PERSIST_OK) return;
+  portENTER_CRITICAL(&configMux);
+  SamSetup.NbkOptimalPower = optimalPower;
+  SamSetup.NbkOptimalFeed = optimalFeed;
+  portEXIT_CRITICAL(&configMux);
+}
 
 // ---------------------------------------------------------------------------
 // Отложенные команды для выполнения из loop() (set из async-обработчиков)
@@ -300,7 +316,7 @@ static_assert(sizeof(ProfileOperationPhase) == sizeof(uint8_t),
               "ProfileOperationPhase must remain byte-sized");
 static_assert(std::is_trivially_copyable<ProfileOperationSlot>::value,
               "ProfileOperationSlot must remain safe for fixed slot copies");
-static_assert(sizeof(ProfileOperationSlot) <= 2872,
+static_assert(sizeof(ProfileOperationSlot) <= 2916,
               "ProfileOperationSlot exceeds replaced pending storage");
 
 static inline ProfileOperationPhase profile_operation_phase_load() {
@@ -411,6 +427,25 @@ static void apply_setup_sensor_fields(uint8_t resetMask) {
 #endif
 }
 
+static void program_store_nbk_profile(
+    SetupEEPROM& profile,
+    const ProgramDraft& draft,
+    ProgramUpdateAction action) {
+  if (action == PROGRAM_UPDATE_CLEAR) {
+    profile.NbkProgramLength = 0;
+    return;
+  }
+  profile.NbkProgramLength = draft.len;
+  profile.NbkProgramHSpeed = draft.rows[0].Speed;
+  profile.NbkProgramHPower = draft.rows[0].Power;
+  profile.NbkProgramSSpeed = draft.rows[1].Speed;
+  profile.NbkProgramSPower = draft.rows[1].Power;
+  profile.NbkProgramOSpeed = draft.rows[2].Speed;
+  profile.NbkProgramOPower = draft.rows[2].Power;
+  profile.NbkProgramWSpeed = draft.rows[3].Speed;
+  profile.NbkProgramWPower = draft.rows[3].Power;
+}
+
 static OperationError commit_profile_operation() {
   const bool hasSettings =
       (active_profile_operation.flags & PROFILE_OPERATION_HAS_SETTINGS) != 0;
@@ -421,6 +456,8 @@ static OperationError commit_profile_operation() {
        PROFILE_OPERATION_METADATA_DESCRIPTION) != 0;
   const bool modeChange =
       (active_profile_operation.flags & PROFILE_OPERATION_MODE_CHANGE) != 0;
+  const bool persistNbkProgram = hasProgram &&
+      active_profile_operation.targetMode == SAMOVAR_NBK_MODE;
 
   // Правка программы при идущем процессе (решение владельца 20.09.2026, как было в
   // 6.20): менять, добавлять и удалять можно только строки ПОСЛЕ текущей. Проверка
@@ -468,8 +505,34 @@ static OperationError commit_profile_operation() {
   // расхождении ОЗУ и NVS не доходило ни до консоли, ни до интерфейса - ровно
   // тогда, когда оно нужнее всего.
   String persistFailureMessage;
+  SetupEEPROM nbkProgramProfile{};
+  if (persistNbkProgram) {
+    if (hasSettings) {
+      nbkProgramProfile = active_profile_operation.settings;
+    } else {
+      portENTER_CRITICAL(&configMux);
+      nbkProgramProfile = SamSetup;
+      portEXIT_CRITICAL(&configMux);
+    }
+    program_store_nbk_profile(
+        nbkProgramProfile,
+        active_profile_operation.program,
+        active_profile_operation.programAction);
+  }
+  if (persistNbkProgram && !hasSettings) {
+    const PersistResult persistResult = save_profile_nvs(nbkProgramProfile);
+    if (persistResult != PERSIST_OK) {
+      runtime_state_unlock(runtimeLocked);
+      String message = "Программа НБК не сохранена: ";
+      message += persist_result_code(persistResult);
+      SendMsg(message, ALARM_MSG);
+      return OPERATION_ERROR_PROFILE_PERSIST_FAILED;
+    }
+  }
   if (hasSettings) {
-    const PersistResult persistResult = save_profile_nvs(active_profile_operation.settings);
+    const SetupEEPROM& settingsToSave =
+        persistNbkProgram ? nbkProgramProfile : active_profile_operation.settings;
+    const PersistResult persistResult = save_profile_nvs(settingsToSave);
     if (persistResult != PERSIST_OK) {
       // modeChange: режим ниже применяется в RAM несмотря на отказ NVS, поэтому
       // ОЗУ и NVS расходятся - работает новый режим, сохранён прежний. Текст
@@ -495,10 +558,17 @@ static OperationError commit_profile_operation() {
 
   if (hasSettings) {
     // [T29] handleSave() читает SamSetup из async_tcp (другая задача/ядро) под
-    // тем же спинлоком - без него присваивание структуры (~536 байт) может
+    // тем же спинлоком - без него присваивание структуры (540 байт) может
     // быть вытеснено async_tcp на середине.
     portENTER_CRITICAL(&configMux);
-    SamSetup = active_profile_operation.settings;
+    SamSetup = persistNbkProgram
+        ? nbkProgramProfile
+        : active_profile_operation.settings;
+    portEXIT_CRITICAL(&configMux);
+  }
+  if (persistNbkProgram && !hasSettings) {
+    portENTER_CRITICAL(&configMux);
+    SamSetup = nbkProgramProfile;
     portEXIT_CRITICAL(&configMux);
   }
   if (modeChange) {
@@ -2579,6 +2649,41 @@ static void tick_wifi_reconnect() {
 static bool sessionResumeAvailable = false;
 static uint32_t sessionResumeId = 0;
 
+static ProgramParseResult restore_nbk_program_from_profile() {
+  if (SamSetup.NbkProgramLength == 0) {
+    program_clear();
+    return program_parse_result(PROGRAM_PARSE_OK, 0, nullptr);
+  }
+  if (SamSetup.NbkProgramLength != NBK_PROGRAM_MAX) {
+    return program_parse_result(
+        PROGRAM_PARSE_WRONG_ROW_COUNT, 0,
+        "Некорректная длина программы НБК в NVS");
+  }
+  ProgramDraft draft{};
+  program_reset_draft(draft);
+  static const ProgramType types[NBK_PROGRAM_MAX] = {'H', 'S', 'O', 'W'};
+  const float speeds[NBK_PROGRAM_MAX] = {
+      SamSetup.NbkProgramHSpeed,
+      SamSetup.NbkProgramSSpeed,
+      SamSetup.NbkProgramOSpeed,
+      SamSetup.NbkProgramWSpeed,
+  };
+  const float powers[NBK_PROGRAM_MAX] = {
+      SamSetup.NbkProgramHPower,
+      SamSetup.NbkProgramSPower,
+      SamSetup.NbkProgramOPower,
+      SamSetup.NbkProgramWPower,
+  };
+  for (uint8_t i = 0; i < NBK_PROGRAM_MAX; i++) {
+    draft.rows[i].WType = types[i];
+    draft.rows[i].Speed = speeds[i];
+    draft.rows[i].Power = powers[i];
+  }
+  draft.len = NBK_PROGRAM_MAX;
+  program_commit(draft);
+  return program_parse_result(PROGRAM_PARSE_OK, 0, nullptr);
+}
+
 static void restore_state_snapshot() {
   StateSnapshot snapshot;
   if (!read_state_snapshot(snapshot)) return;
@@ -2588,7 +2693,9 @@ static void restore_state_snapshot() {
 
   bool restored = false;
   String programParseFailureReason;
-  if (snapshot.programText.length() > 0) {
+  if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    restored = ProgramLen == NBK_PROGRAM_MAX;
+  } else if (snapshot.programText.length() > 0) {
     ProgramDraft draft{};
     const ProgramParseResult result =
         prepare_program_for_mode(Samovar_Mode, snapshot.programText, draft);
@@ -2623,7 +2730,8 @@ static void restore_state_snapshot() {
   // snapshot.powerOn, иначе пользователь молча получает дефолтную программу вместо своей
   // и не понимает, куда она делась. А вот если программа восстановилась и нагрев в снимке
   // был выключен - это штатное выключение, тревожить незачем (то прежнее поведение).
-  const bool programLost = snapshot.programText.length() > 0 && !restored;
+  const bool programLost = Samovar_Mode != SAMOVAR_NBK_MODE &&
+      snapshot.programText.length() > 0 && !restored;
   if (!snapshot.powerOn && !programLost) return;
 
   String notice;
@@ -3384,10 +3492,20 @@ void setup() {
     error += format_program_parse_error(defaultProgramResult);
     Serial.println(error);
     request_emergency_stop(error);
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    const ProgramParseResult storedProgramResult =
+        restore_nbk_program_from_profile();
+    if (!storedProgramResult.ok()) {
+      String error = "Аварийная блокировка: программа НБК из NVS повреждена: ";
+      error += format_program_parse_error(storedProgramResult);
+      Serial.println(error);
+      request_emergency_stop(error);
+    }
   }
 
-  // Поверх дефолта кладём программу из снимка предыдущей работы, если он от этого же
-  // режима. ФС уже смонтирована (FS_init выше), семафор журнала создан.
+  // Для НБК программа уже восстановлена из NVS; /state.csv используется только
+  // для сведений о прерванной сессии и не подменяет сохранённую программу.
+  // Для остальных режимов поведение снимка не меняется.
   restore_state_snapshot();
 
   setup_init_output_pins();

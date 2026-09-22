@@ -89,6 +89,7 @@ void set_default_setup_profile(SetupEEPROM& candidate);
 ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persistResult);
 ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate);
 PersistResult save_profile_nvs(const SetupEEPROM& candidate);
+void persist_nbk_optimum(float optimalPower, float optimalFeed);
 const char* persist_result_code(PersistResult result);
 const char* profile_load_result_code(ProfileLoadResult result);
 void print_nvs_stats(const char* context);

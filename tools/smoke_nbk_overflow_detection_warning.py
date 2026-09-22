@@ -123,6 +123,11 @@ bool manual_overflow = true;
 uint32_t nbk_manual_overflow_until = 1;
 float nbk_Mo = 0;
 float nbk_Po = 0;
+struct SetupEEPROM {
+  float NbkOptimalPower;
+  float NbkOptimalFeed;
+};
+SetupEEPROM SamSetup{};
 
 // [T1-2026-09-03] инициализация рабочего потолка давления - не предмет этого
 // теста, но входит в извлекаемый сегмент num==0.
@@ -177,17 +182,21 @@ static void reset_fixture() {
   nbkSessionConfig.overflowPressure = 40.0f;
   nbk_pressure_ceiling = 0;
   nbk_tn_autocal_done = true;
+  SamSetup.NbkOptimalPower = 0;
+  SamSetup.NbkOptimalFeed = 0;
 }
 
-// B4 (ревью R2): Мо/По прошлой сессии обязаны обнуляться на старте новой,
-// иначе fallback явной строки W подставит протухший оптимум без ослабления.
-static void test_stale_optimum_reset(float staleMo, float stalePo) {
+// B4: новая сессия загружает последний успешно сохранённый результат
+// Оптимизации. Нулевая строка W использует его как fallback.
+static void test_saved_optimum_loaded(float savedMo, float savedPo) {
   reset_fixture();
-  nbk_Mo = staleMo;
-  nbk_Po = stalePo;
+  SamSetup.NbkOptimalPower = savedMo;
+  SamSetup.NbkOptimalFeed = savedPo;
+  nbk_Mo = -1.0f;
+  nbk_Po = -1.0f;
   fake_session_start_prefix();
-  check(nbk_Mo == 0.0f, "B4: старт сессии обязан обнулить nbk_Mo прошлой сессии");
-  check(nbk_Po == 0.0f, "B4: старт сессии обязан обнулить nbk_Po прошлой сессии");
+  check(nbk_Mo == savedMo, "B4: старт сессии обязан загрузить сохранённый nbk_Mo");
+  check(nbk_Po == savedPo, "B4: старт сессии обязан загрузить сохранённый nbk_Po");
   check(!manual_overflow, "B4: старт сессии обязан сбросить латч захлёба Ручной настройки");
   check(nbk_manual_overflow_until == 0, "B4: старт сессии обязан обнулить дедлайн латча");
   check(reachedAfterSegment, "B4: сброс не должен мешать продолжению старта");
@@ -235,8 +244,8 @@ int main() {
   test_warning_sent_when_unavailable();
   test_no_warning_when_available();
   test_create_data_failure_short_circuits();
-  test_stale_optimum_reset(1200.0f, 8.0f);
-  test_stale_optimum_reset(700.0f, 3.0f);
+  test_saved_optimum_loaded(1200.0f, 8.0f);
+  test_saved_optimum_loaded(700.0f, 3.0f);
   if (failures != 0) return 1;
   std::cout << "nbk num==0 overflow-detection warning behaviour passed\n";
   return 0;
