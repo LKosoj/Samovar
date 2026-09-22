@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
-<link rel="stylesheet" href="style.css?v=7.00u9">
+<link rel="stylesheet" href="style.css?v=7.00u10">
 <title>Самовар</title>
 
 <script src="app.js"></script>
@@ -17,6 +17,8 @@
   #beerRecipesCard .recipes-toolbar input[type="search"] { flex: 1 1 12rem; }
   #beerRecipesCard .recipes-toolbar select { flex: 1 1 10rem; }
   #beerRecipesCard .recipes-tabs button[aria-pressed="true"] { background: var(--accent-hover); color: var(--text-on-accent); }
+  #beerRecipesCard .recipes-tabs .file-upload-control { display: contents; }
+  #beerRecipesCard .recipes-tabs .custom-file-upload { margin: 0; }
   #beerRecipesCard .recipe-list { display: grid; gap: .5rem; margin: .75rem 0; }
   #beerRecipesCard .recipe-list button { width: 100%; text-align: left; background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border-card); border-radius: var(--radius-sm); padding: .6rem .75rem; cursor: pointer; }
   #beerRecipesCard .recipe-list small { display: block; color: var(--text-muted); margin-top: .2rem; }
@@ -93,6 +95,7 @@ function applyRecipeText(text, kind, generation) {
 function loadBeerXML(e) {
 	var file = e;
 	if (!file) return;
+	showRecipeSource("");
 	is_program = false;
 	program = "";
 	var generation = ++recipeImportGeneration;
@@ -135,7 +138,7 @@ function loadBeerXML(e) {
 function showRecipeSource(name) {
 	var el = document.getElementById("recipeSource");
 	if (!el) return;
-	el.textContent = "Источник: " + (name || "");
+	el.textContent = name ? ("Источник: " + name) : "";
 	el.style.display = name ? "" : "none";
 }
 
@@ -858,6 +861,12 @@ document.addEventListener('DOMContentLoaded', function () {
     <button type="button" class="button" data-beer-catalog="main" aria-pressed="true"></button>
     <button type="button" class="button secondary" data-beer-catalog="user" aria-pressed="false"></button>
     <button type="button" class="button secondary" data-beer-catalog="my" aria-pressed="false"></button>
+    <div class="file-upload-control">
+      <label for="fileToLoad" class="button secondary custom-file-upload">
+        <i class="fa fa-cloud-upload"></i>Загрузить рецепт
+      </label>
+      <input type="file" id="fileToLoad" accept="application/xml" onchange="loadBeerXML(this.files[0])"/>
+    </div>
   </div>
   <div class="recipes-toolbar">
     <input id="beerRecipeQuery" type="search" maxlength="200">
@@ -874,13 +883,6 @@ document.addEventListener('DOMContentLoaded', function () {
 </section>
 
 <div class="text">Программа затирания</div>
-
-<div class="file-upload-control btn-cell" style="margin: 20px auto;">
-<label for="fileToLoad" class="button custom-file-upload">
-    <i class="fa fa-cloud-upload"></i>Загрузить рецепт
-</label>
-<input type="file" id="fileToLoad" accept="application/xml" onchange="loadBeerXML(this.files[0])"/>
-</div>
 
 <!-- Источник рецепта, выбранного в каталоге этой страницы. -->
 <div id="recipeSource" class="dvcs" style="display:none; margin:10px auto; text-align:center;"></div>

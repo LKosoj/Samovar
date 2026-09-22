@@ -222,6 +222,20 @@ BROWSER_TEST = r'''async page => {
   if (setprogram.disabled) throw new Error("brewxml.htm: setprogram must stay enabled: " + JSON.stringify(setprogram));
   if (setprogram.beerModeAttr !== null) throw new Error("brewxml.htm: data-is-beer-mode must not be on <body>: " + JSON.stringify(setprogram));
 
+  const uploadPlacement = await page.evaluate(() => {
+    const tabs = document.querySelector("#beerRecipesCard .recipes-tabs");
+    const input = document.getElementById("fileToLoad");
+    const control = input && input.closest(".file-upload-control");
+    return {
+      insideRecipeButtons: Boolean(tabs && control && control.parentElement === tabs),
+      afterMy: Boolean(control && control.previousElementSibling &&
+        control.previousElementSibling.dataset.beerCatalog === "my")
+    };
+  });
+  if (!uploadPlacement.insideRecipeButtons || !uploadPlacement.afterMy) {
+    throw new Error("recipe upload must be placed after the catalog buttons: " + JSON.stringify(uploadPlacement));
+  }
+
   const programPosts = [];
   await page.route("**/program", async route => {
     if (route.request().method() === "POST") programPosts.push(await route.request().postData());
@@ -241,7 +255,11 @@ BROWSER_TEST = r'''async page => {
     const out = {};
 
     // 1) [D0/D1] несколько RECIPE -> select с двумя пунктами, смена значения меняет NAME/program
+    showRecipeSource("Старый источник");
     await loadOnce(f.twoRecipes, "two_recipes.xml");
+    const source = document.getElementById("recipeSource");
+    out.localSourceText = source.textContent;
+    out.localSourceHidden = source.style.display === "none";
     const row = document.getElementById("recipe-select-row");
     const select = document.getElementById("recipe-select");
     out.selectVisible = row.style.display !== "none";
@@ -459,6 +477,10 @@ BROWSER_TEST = r'''async page => {
   // ---------- assert: 1) выбор рецепта ----------
   if (!results.selectVisible || results.optionCount !== 2) {
     throw new Error("recipe-select-row must be visible with 2 options for two_recipes.xml: " + JSON.stringify(results));
+  }
+  if (!results.localSourceHidden || results.localSourceText !== "") {
+    throw new Error("local recipe upload must clear the stale catalog source: " +
+      JSON.stringify({ hidden: results.localSourceHidden, text: results.localSourceText }));
   }
   if (results.firstName !== "Sample Blonde Ale" || results.secondName !== "Avg. Perfect Northeast IPA (NEIPA)") {
     throw new Error("recipe select did not switch NAME correctly: " + JSON.stringify({ first: results.firstName, second: results.secondName }));
