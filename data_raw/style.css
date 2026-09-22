@@ -1297,6 +1297,7 @@ select {
     gap: 6px 24px;
   }
   .brewxml-form .spec-row { min-width: 0; }
+  .brewxml-form .recipe-notes-row { grid-column: 1 / -1; }
   .brewxml-form .spec-row > label:first-child { font-weight: 600; }
   .brewxml-form .spec-row > label:last-child { overflow-wrap: break-word; }
   .brewxml-form #ingredients > div > .ingredients,

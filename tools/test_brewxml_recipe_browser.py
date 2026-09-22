@@ -314,9 +314,12 @@ BROWSER_TEST = r'''async page => {
     const ingredientHeader = document.querySelector("#ingredients > div > .ingredients");
     const mashHeader = document.querySelector("#mash > div > .ingredients");
     const description = document.querySelector("#brew > .container_row > .specs");
+    const notesRow = document.getElementById("NOTES").parentElement;
     out.desktopLayout = {
       formWidth: formRect.width,
       descriptionColumns: getComputedStyle(description).gridTemplateColumns.split(" ").length,
+      descriptionWidth: description.getBoundingClientRect().width,
+      notesWidth: notesRow.getBoundingClientRect().width,
       ingredientColumns: getComputedStyle(ingredientHeader).gridTemplateColumns.split(" ").length,
       mashColumns: getComputedStyle(mashHeader).gridTemplateColumns.split(" ").length,
       ingredientHeaderHeight: ingredientHeader.getBoundingClientRect().height,
@@ -589,6 +592,7 @@ BROWSER_TEST = r'''async page => {
   if (results.blondeEquip !== "Grainfather") throw new Error("equipment name missing: " + results.blondeEquip);
   if (results.desktopLayout.formWidth < 1200 ||
       results.desktopLayout.descriptionColumns !== 3 ||
+      results.desktopLayout.notesWidth < results.desktopLayout.descriptionWidth * 0.95 ||
       results.desktopLayout.ingredientColumns !== 4 ||
       results.desktopLayout.mashColumns !== 5 ||
       results.desktopLayout.ingredientHeaderHeight > 44 ||
