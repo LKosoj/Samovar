@@ -344,6 +344,7 @@ struct DetectorFixture {
 
 struct I2CCacheFixture {
   bool mixer_present;
+  uint8_t mixer_status;
   bool pump_present;
   uint16_t pump_current_speed;
   float pump_current_rate;
@@ -403,7 +404,7 @@ int32_t suvid_hold_remaining_sec() { return suvidHold.active ? 420 : -1; }
 // снимок реально читает эти глобалы, а не просто печатает дефолт структуры.
 volatile bool bk_water_auto = true;
 volatile float bk_steam_setpoint = 78.4f;
-volatile I2CCacheFixture i2c_stepper_cache{true, true, 400, 2.5f, 7, 1};
+volatile I2CCacheFixture i2c_stepper_cache{true, I2CSTEPPER_V3_STATUS_RUNNING, true, 400, 2.5f, 7, 1};
 volatile float I2CPumpTargetMl = 12.5f;
 uint32_t total_byte = 100000;
 uint32_t used_byte = 1234;
@@ -890,7 +891,7 @@ EXPECTED_DEFAULT = (
     '"CurrrentSpeed":13.00,"UseBBuzzer":1,"StepperStepMl":800,'
     '"BodyTemp_Steam":77.000,"BodyTemp_Pipe":76.000,"mixer":1,'
     '"bk_water_auto":1,"bk_steam_setpoint":78.4,'
-    '"ISspd":2.500,"i2c_stepper_present":1,"i2c_mixer_present":1,'
+    '"ISspd":2.500,"i2c_stepper_present":1,"i2c_mixer_present":1,"i2c_mixer_running":1,'
     '"i2c_pump_present":1,"i2c_pump_speed":400,"i2c_pump_target_ml":12.5,'
     '"i2c_pump_remaining_ml":7.0,"i2c_pump_running":1,'
     '"i2c_second_pump":1,"i2c_second_pump_running":1,"heap":123456,'

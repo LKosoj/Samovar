@@ -74,7 +74,9 @@ bool beer_control_sensor(uint8_t sensor, const DSSensor*& out, const char*& name
   name = "test";
   return true;
 }
+static bool mixerPresent = false;
 static bool pumpPresent = false;
+bool i2c_stepper_mixer_present() { return mixerPresent; }
 bool i2c_stepper_pump_present() { return pumpPresent; }
 
 inline bool program_validate_beer_row_semantics(
@@ -91,7 +93,12 @@ int failures = 0;
 void check(bool condition, const char* message) {
   if (!condition) { std::cerr << "FAIL: " << message << '\n'; failures++; }
 }
-void reset() { for (auto& row : program) row = {}; ProgramLen = 1; }
+void reset() {
+  for (auto& row : program) row = {};
+  ProgramLen = 1;
+  mixerPresent = false;
+  pumpPresent = false;
+}
 
 int main() {
   String error;
@@ -111,11 +118,19 @@ int main() {
 
   reset();
   program[0] = {'W', 0, 0, 1, -100, 0, 2, 0, 0};
+  mixerPresent = true;
   check(beer_validate_program(error), "continuous W mixer schedule rejected before start");
 
   reset();
   program[0] = {'W', 0, 0, 1, -100, 0, 2, 0, 4};
+  mixerPresent = true;
   check(beer_validate_program(error), "W row with sensor 4 rejected before start");
+
+  reset();
+  program[0] = {'W', 0, 0, 1, 100, 0, 2, 0, 0};
+  check(!beer_validate_program(error), "I2C mixer row passed without a connected mixer");
+  mixerPresent = true;
+  check(beer_validate_program(error), "I2C mixer row was rejected with a connected mixer");
 
   reset();
   program[0] = {'W', 0, 0, 2, 0, 1200, 2, 0, 0};
@@ -165,6 +180,22 @@ def main() -> int:
         print("FAIL: start validation did not catch a removed semantic recheck", file=sys.stderr)
         return 1
     print("Beer start semantic recheck mutation was rejected as expected")
+
+    mixer_mutation = VALIDATE.replace(
+        "if (BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {",
+        "if (false && BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {",
+        1,
+    )
+    if mixer_mutation == VALIDATE:
+        print("FAIL: could not build I2C mixer availability mutation", file=sys.stderr)
+        return 1
+    mixer_mutation_harness = HARNESS.replace("@SEMANTIC@", SEMANTIC).replace(
+        "@VALIDATE@", mixer_mutation
+    )
+    if compile_and_run(mixer_mutation_harness, "I2C mixer availability mutation", False) == 0:
+        print("FAIL: missing I2C mixer validation mutation survived", file=sys.stderr)
+        return 1
+    print("Beer I2C mixer availability mutation was rejected as expected")
 
     mutated_semantic = SEMANTIC.replace(
         "if (zeroTempTime) return true;",

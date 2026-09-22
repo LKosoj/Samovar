@@ -755,18 +755,20 @@ String pending_lua_reload_file;
 // [W-3] Кэш I2C-шагового двигателя — обновляется в SysTicker, читается из async
 struct I2CStepperCache {
   bool mixer_present;
+  uint8_t mixer_status;
   bool pump_present;
   uint16_t pump_current_speed;
   float pump_current_rate;
   uint32_t pump_remaining;
   uint8_t pump_status;
 };
-volatile I2CStepperCache i2c_stepper_cache = {false, false, 0, 0, 0, 0};
+volatile I2CStepperCache i2c_stepper_cache = {false, 0, false, 0, 0, 0, 0};
 
 static void refresh_i2c_stepper_cache() {
   I2CStepperDevice* mixer = i2c_stepper_selected_mixer();
   I2CStepperDevice* pump = i2c_stepper_selected_pump();
   i2c_stepper_cache.mixer_present = mixer && mixer->present;
+  i2c_stepper_cache.mixer_status = mixer && mixer->present ? mixer->status.status : 0;
   i2c_stepper_cache.pump_present = pump && pump->present;
   if (!pump || !pump->present) return;
   i2c_stepper_cache.pump_current_speed = pump->status.currentSpeedStepsPerSec;
@@ -5108,6 +5110,7 @@ struct AjaxTelemetrySnapshot {
   bool bkWaterAuto;
   bool i2cStepperPresent;
   bool i2cMixerPresent;
+  bool i2cMixerRunning;
   bool i2cPumpPresent;
   bool i2cPumpRunning;
   // Второй I2C-насос отбора голов над ЦП (ректификация): включён настройкой и плата
@@ -5211,6 +5214,8 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.i2cStepperSpeed = i2c_stepper_cache.pump_current_rate;
   snapshot.i2cStepperPresent = i2cMixerPresent || i2cPumpPresent;
   snapshot.i2cMixerPresent = i2cMixerPresent;
+  snapshot.i2cMixerRunning = i2cMixerPresent &&
+      (i2c_stepper_cache.mixer_status & I2CSTEPPER_V3_STATUS_RUNNING) != 0;
   snapshot.i2cPumpPresent = i2cPumpPresent;
   if (i2cPumpPresent) {
     snapshot.i2cPumpSpeed = i2c_stepper_cache.pump_current_speed;
@@ -5361,6 +5366,7 @@ static void writeAjaxTelemetryFields(
   jsonFieldFloat(out, first, "ISspd", snapshot.i2cStepperSpeed, 3);
   jsonFieldBool(out, first, "i2c_stepper_present", snapshot.i2cStepperPresent);
   jsonFieldBool(out, first, "i2c_mixer_present", snapshot.i2cMixerPresent);
+  jsonFieldBool(out, first, "i2c_mixer_running", snapshot.i2cMixerRunning);
   jsonFieldBool(out, first, "i2c_pump_present", snapshot.i2cPumpPresent);
 
   if (snapshot.i2cPumpPresent) {

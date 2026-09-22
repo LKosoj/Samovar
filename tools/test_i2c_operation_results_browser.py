@@ -280,8 +280,8 @@ CHECK_SETUP_SAVE = r'''async page => {
   check(/[?&]newAddress=3(?:&|$)/.test(saved) && /[?&]mode=1(?:&|$)/.test(saved),
     'mixer address must be saved with the mixer mode: ' + saved);
   check((await page.textContent('#request_error')).startsWith(
-      'Настройки сохранены в Nano. Новый адрес начнёт работать после перезагрузки Nano.'),
-    'changed address must explain that Nano needs a reboot');
+      'Настройки сохранены в Nano. Перезагрузите Nano, затем один раз нажмите «Пересканировать I2C-устройства».'),
+    'changed address must explain the Nano reboot and one rescan');
   check(!s.consoleError, s.consoleError || 'console error');
   return 'setup-save';
 }'''
@@ -291,7 +291,16 @@ CHECK_SETUP_SCAN = r'''async page => {
   const base = __BASE__;
   const check = (condition, message) => { if (!condition) throw new Error(message); };
   s.devices.forEach(device => { device.present = false; device.everPresent = false; });
-  s.selected = s.devices[0];
+  // До перезагрузки Nano была насосом на адресе 2; сохранённая конфигурация
+  // уже содержит новый адрес мешалки 1.
+  s.devices[1].present = true;
+  s.devices[1].everPresent = true;
+  s.devices[1].config.address = 1;
+  s.selected = s.devices[1];
+  await page.evaluate(() => {
+    const form = document.getElementById('setupform');
+    if (form) form.dataset.dirty = 'false';
+  });
   await page.unroute('**/i2cstepper?*');
   let scanStarted = false;
   let scanPolls = 0;
@@ -307,8 +316,9 @@ CHECK_SETUP_SCAN = r'''async page => {
       scanPolls++;
       scanning = scanPolls < 2 ? 1 : 0;
       if (!scanning) {
-        s.devices[1].present = true;
-        s.devices[1].everPresent = true;
+        s.devices[1].present = false;
+        s.devices[0].present = true;
+        s.devices[0].everPresent = true;
       }
     }
     const addressMatch = requestUrl.match(/[?&]address=(\d+)/);
@@ -319,25 +329,25 @@ CHECK_SETUP_SCAN = r'''async page => {
   });
   await page.goto(base + '/setup.htm', {waitUntil:'load'});
   await page.waitForFunction(() => typeof rescanSetupI2c === 'function' &&
-    document.getElementById('i2c-missing').textContent === 'I2CStepper не найден.');
+    document.getElementById('i2c-panel').hidden === false);
   await page.evaluate(() => SamovarApp.openTab(null, 'I2CStepper'));
   let view = await page.evaluate(() => ({
+    address:setupI2cAddress,
     tab:document.getElementById('i2cStepperSetupTab').hidden,
     button:document.getElementById('i2c-scan').textContent,
     missing:document.getElementById('i2c-missing').textContent
   }));
+  check(view.address === 2, 'role-change fixture did not start on old address 2');
   check(!view.tab, 'I2CStepper tab must remain visible without devices');
   check(view.button === 'Пересканировать I2C-устройства', 'manual scan button is missing');
-  check(view.missing === 'I2CStepper не найден.', 'missing-device text is unclear');
-  await page.locator('#i2c-scan').click();
-  await page.waitForFunction(() => document.getElementById('i2c-panel').hidden === false);
+  check(await page.evaluate(() => rescanSetupI2c()), 'manual scan returned failure');
   view = await page.evaluate(() => ({
     address:setupI2cAddress,
     button:document.getElementById('i2c-scan').textContent,
     disabled:document.getElementById('i2c-scan').disabled
   }));
   check(scanStarted && scanPolls >= 2, 'manual scan was not polled to completion');
-  check(view.address === 2, 'first device found by manual scan was not opened');
+  check(view.address === 1, 'new Nano address was not opened after one manual scan');
   check(!view.disabled && view.button === 'Пересканировать I2C-устройства',
     'scan button did not return to idle state');
   check(s.requests.some(url => url.includes('cmd=scan')), 'scan request was not sent');

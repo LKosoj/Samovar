@@ -398,6 +398,10 @@ inline bool beer_validate_program(String& errorMessage) {
       errorMessage = "I2C-насос недоступен в строке " + String(i + 1);
       return false;
     }
+    if (BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {
+      errorMessage = "I2C-мешалка недоступна в строке " + String(i + 1);
+      return false;
+    }
   }
   return true;
 }
@@ -1247,11 +1251,14 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
     bool i2cPumpStarted = false;
     //включаем мешалку
     if (BitIsSet(program[ProgramNum].capacity_num, 0)) {
+      if (!i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {
+        return ACTUATOR_COMMAND_FAILED;
+      }
       //включаем реле 2
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
       mixerRelayEnabled = true;
       //включаем I2CStepper шаговик; если оператор остановил его сам - не трогаем
-      if (i2c_stepper_mixer_present() && !i2cStepperMixerManualHold) {
+      if (!i2cStepperMixerManualHold) {
 	        int tm = abs(program[ProgramNum].Volume);
 	        // Время 0 и пауза 0 = постоянное вращение (Nano крутит, пока не остановят).
 	        if (tm == 0 && program[ProgramNum].Power > 0) tm = 10;

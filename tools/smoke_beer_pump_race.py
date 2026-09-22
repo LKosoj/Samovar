@@ -539,6 +539,7 @@ static void test_mixer_schedule_absorbs_short_pause_without_shortening_on_phase(
   program[0].capacity_num = 0b01;  // только мешалка (бит 0), без насоса
   program[0].Volume = 100;         // 100 c включённого состояния
   program[0].Power = 50;           // 50 c паузы мешалки после
+  mixerStepperPresent = true;
 
   fakeMillis = 1000;
   check_mixer_state();  // старт цикла
@@ -573,6 +574,7 @@ static void test_mixer_schedule_does_not_collapse_after_long_pause() {
   program[0].capacity_num = 0b01;
   program[0].Volume = 100;
   program[0].Power = 50;
+  mixerStepperPresent = true;
 
   fakeMillis = 1000;
   check_mixer_state();  // старт цикла
@@ -929,14 +931,28 @@ static void test_no_local_or_i2c_target_fails_without_status_change() {
   check(relayWrites == 0, "FAILED насос без target тронул реле мешалки");
 }
 
-static void test_mixer_relay_is_rolled_back_without_stepper() {
+static void test_mixer_relay_is_rolled_back_without_pump_target() {
   reset_fixture();
   program[0].capacity_num = 0b11;
+  mixerStepperPresent = true;
   check(set_mixer_state(true, false) == ACTUATOR_COMMAND_FAILED,
         "мешалка с недоступным pump target не вернула FAILED");
   check(!mixer_status, "FAILED мешалка с недоступным pump target изменила mixer_status");
   check(relayWrites == 2 && relayState == !SamSetup.rele2,
-        "FAILED мешалка оставила включённым реле без I2C-шаговика");
+        "FAILED насос оставил включённым реле мешалки");
+}
+
+static void test_missing_i2c_mixer_fails_without_touching_relay() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_FAILED,
+        "недоступная I2C-мешалка не вернула FAILED");
+  check(!mixer_status && !beerScheduledDeviceRunning,
+        "недоступная I2C-мешалка опубликовала состояние работы");
+  check(stepperCalls == 0,
+        "недоступной I2C-мешалке была отправлена команда");
+  check(relayWrites == 0,
+        "недоступная I2C-мешалка тронула реле");
 }
 
 static void test_i2c_target_start_is_applied_without_local_pwm() {
@@ -965,7 +981,8 @@ static void test_manual_hold_keeps_schedule_away_from_i2c_pump() {
 
 int main() {
   test_no_local_or_i2c_target_fails_without_status_change();
-  test_mixer_relay_is_rolled_back_without_stepper();
+  test_mixer_relay_is_rolled_back_without_pump_target();
+  test_missing_i2c_mixer_fails_without_touching_relay();
   test_i2c_target_start_is_applied_without_local_pwm();
   test_manual_hold_keeps_schedule_away_from_i2c_pump();
   test_manual_hold_keeps_schedule_away_from_i2c_mixer();
@@ -1112,6 +1129,22 @@ def main() -> int:
     if returncode != 0:
         return 1
 
+    missing_mixer_mutant = no_local_harness.replace(
+        "if (!i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {",
+        "if (false && !i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {",
+        1,
+    )
+    if missing_mixer_mutant == no_local_harness:
+        print("FAIL: could not build missing I2C mixer mutation", file=sys.stderr)
+        return 1
+    returncode, output = compile_and_run(
+        missing_mixer_mutant, "missing I2C mixer mutation", show_output=False
+    )
+    if returncode == 0 or "недоступная I2C-мешалка не вернула FAILED" not in output:
+        print("FAIL: missing I2C mixer mutation survived smoke", file=sys.stderr)
+        sys.stderr.write(output)
+        return 1
+
     no_target_mutant = no_local_harness.rsplit(
         "if (!set_mixer_pump_target(1)) {", 1
     )
@@ -1140,7 +1173,7 @@ def main() -> int:
     returncode, output = compile_and_run(
         relay_rollback_mutant, "mixer relay rollback mutation", show_output=False
     )
-    if returncode == 0 or "FAILED мешалка оставила включённым реле" not in output:
+    if returncode == 0 or "FAILED насос оставил включённым реле мешалки" not in output:
         print("FAIL: mixer relay rollback mutation survived smoke", file=sys.stderr)
         sys.stderr.write(output)
         return 1

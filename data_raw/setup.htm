@@ -379,6 +379,7 @@
     async function rescanSetupI2c() {
       const button = setupI2cValue('scan');
       const hadSelectedDevice = Boolean(setupI2cSelected && setupI2cSelected.present);
+      const expectedAddress = hadSelectedDevice ? Number(setupI2cSelected.config.address) : 0;
       button.disabled = true;
       try {
         const response = await fetch(setupI2cUrl('scan'), {cache: 'no-store'});
@@ -391,12 +392,14 @@
           if (!await refreshSetupI2c()) throw new Error('Не удалось получить результат поиска I2CStepper');
         } while (setupI2cScanning && Date.now() < deadline);
         if (setupI2cScanning) throw new Error('Поиск I2CStepper не завершён за 5 секунд');
-        if (!hadSelectedDevice) {
-          const first = setupI2cDevices.find(function (device) { return device.present; });
-          if (first) {
-            setupI2cAddress = first.address;
-            await refreshSetupI2c();
-          }
+        const expected = expectedAddress !== setupI2cAddress && setupI2cDevices.find(function (device) {
+          return device.present && device.address === expectedAddress;
+        });
+        const first = !hadSelectedDevice && setupI2cDevices.find(function (device) { return device.present; });
+        const next = expected || first;
+        if (next) {
+          setupI2cAddress = next.address;
+          await refreshSetupI2c();
         }
         return true;
       } catch (error) {
@@ -432,7 +435,7 @@
         await SamovarApp.waitForOperation(accepted.operationId);
         await refreshSetupI2c();
         SamovarApp.showRequestError(addressChanged
-          ? 'Настройки сохранены в Nano. Новый адрес начнёт работать после перезагрузки Nano.'
+          ? 'Настройки сохранены в Nano. Перезагрузите Nano, затем один раз нажмите «Пересканировать I2C-устройства».'
           : 'Настройки сохранены в Nano.');
         return true;
       } catch (error) {

@@ -170,6 +170,25 @@ BROWSER_TEST = r'''async page => {
     }
   }
 
+  // У I2C-мешалки анимация следует подтверждённому Nano флагу RUNNING,
+  // а не одному программному намерению mixer=true.
+  scenario = "animation/i2c-mixer";
+  await page.goto(baseUrl + "/beer.htm", { waitUntil: "load" });
+  const mixerAnimation = await page.evaluate(base => {
+    const state = Object.assign({}, base, {
+      PowerOn: 1, mixer: 1, i2c_mixer_present: 1, i2c_mixer_running: 0
+    });
+    const elements = Array.from(document.querySelectorAll('[data-on="_mixerOn"]'));
+    SamovarApp.renderScheme(state);
+    const stopped = elements.length > 0 && elements.every(element => !element.classList.contains("is-on"));
+    SamovarApp.renderScheme(Object.assign({}, state, { i2c_mixer_running: 1 }));
+    const running = elements.every(element => element.classList.contains("is-on"));
+    return { count: elements.length, stopped, running };
+  }, base);
+  if (!mixerAnimation.count || !mixerAnimation.stopped || !mixerAnimation.running) {
+    throw new Error(scenario + " mismatch: " + JSON.stringify(mixerAnimation));
+  }
+
   // В БК нарисован другой насос — насос охлаждающей воды. Он должен следовать
   // своей скорости wp_spd, а не состоянию внешнего I2C-насоса.
   scenario = "animation/bk.htm";

@@ -2311,7 +2311,9 @@
     v._pumpOn = kind === 'nbk' ? (num(data.ISspd) > 0 && v._running) || i2cPumpOn
       : kind === 'beer' || kind === 'cheese' ? (!!data.mixer && v._running) || i2cPumpOn
       : (v._withdrawing && rate > 0) || i2cPumpOn;
-    v._mixerOn = !!data.mixer && v._running;
+    const i2cMixerPresent = Number(data.i2c_mixer_present) === 1;
+    const i2cMixerRunning = Number(data.i2c_mixer_running) === 1;
+    v._mixerOn = !!data.mixer && v._running && (!i2cMixerPresent || i2cMixerRunning);
     // Второй I2C-насос отбора голов над ЦП (ректификация): ЦП и насос на схеме только
     // если он включён в настройках и плата отвечает; анимация — пока насос качает.
     v._cp = kind === 'rect' && !!Number(data.i2c_second_pump);
