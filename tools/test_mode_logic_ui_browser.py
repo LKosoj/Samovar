@@ -17,6 +17,7 @@ from test_accessibility_ui_browser import (
     run_cli,
     run_cli_report,
 )
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -189,6 +190,8 @@ BROWSER_TEST = r'''async page => {
       await checkPowerStaleLabel("startnbk=", "NBK");
 
       await page.goto(baseUrl + "/beer.htm", {waitUntil:"load"});
+      expect(await page.evaluate(() => beerExternalPumpAvailable) === false,
+             "Beer offered a separate pump with only one I2CStepper in bootstrap");
       expect(await page.locator("#BeerBrewOrder").count() === 0,
              "brew order must not be chosen on beer.htm (settings only)");
       expect((await page.locator("body").textContent()).includes(
@@ -232,7 +235,9 @@ BROWSER_TEST = r'''async page => {
           text:document.getElementById("WProgram").value,
           reason:program_error("P;61.00;0.00;0^0^0^0^0;1"),
           fermentTimed:check_program("F;18;4320;0^0^0^0^0;0") && check_program("F;18;0;0^0^0^0^0;0"),
-          fermentTooLong:program_error("F;18;43201;0^0^0^0^0;0")
+          fermentTooLong:program_error("F;18;43201;0^0^0^0^0;0"),
+          relayPump:check_program("W;0;0;3^100^0^30^10;0"),
+          negativePump:program_error("W;0;0;2^0^-1^30^10;0")
         };
       });
       expect(beerRowSync.text.split("\n")[0].startsWith("P;61.00;20.00;"),
@@ -243,6 +248,8 @@ BROWSER_TEST = r'''async page => {
       expect(beerRowSync.fermentTimed, "Beer F row must accept time 0 and time > 0");
       expect(beerRowSync.fermentTooLong.includes("43200"),
              "Beer F row longer than 30 days must be rejected with the limit named");
+      expect(beerRowSync.relayPump && beerRowSync.negativePump.includes("Строка 1"),
+             "Beer relay pump program validation disagrees with firmware");
 
       // П46: та же проверка реального состояния для кнопки нагрева на beer.htm.
       await page.evaluate(() => {
@@ -277,14 +284,22 @@ BROWSER_TEST = r'''async page => {
       const deviceEditor = await page.evaluate(() => {
         const input = document.createElement("input");
         input.value = "3^-100^1200^30^10";
-        const opened = SamovarApp.openDeviceScheduleModal(input);
+        const opened = SamovarApp.openDeviceScheduleModal(input, null, true);
         const loaded = ["m_type", "m_mixer_rpm", "m_pump_rate", "m_time", "m_pause"]
           .map(id => document.getElementById(id).value);
         const saved = SamovarApp.saveDeviceScheduleModal();
         const oldInput = document.createElement("input");
         oldInput.value = "1^-1^30^60";
-        const oldOpened = SamovarApp.openDeviceScheduleModal(oldInput);
-        return {opened, loaded, saved, value:input.value, oldOpened};
+        const oldOpened = SamovarApp.openDeviceScheduleModal(oldInput, null, true);
+        const relayInput = document.createElement("input");
+        relayInput.value = "3^-100^1200^30^10";
+        const relayOpened = SamovarApp.openDeviceScheduleModal(relayInput, null, false);
+        const relayOnly = document.getElementById("m_pump_rate").parentElement.hidden &&
+          !document.getElementById("m_pump_relay").hidden;
+        const relayNote = document.getElementById("m_pump_relay").textContent;
+        const relaySaved = SamovarApp.saveDeviceScheduleModal();
+        return {opened, loaded, saved, value:input.value, oldOpened,
+          relayOpened, relayOnly, relayNote, relaySaved, relayValue:relayInput.value};
       });
       expect(deviceEditor.opened && deviceEditor.saved &&
              JSON.stringify(deviceEditor.loaded) === JSON.stringify(["3", "-100", "1200", "30", "10"]) &&
@@ -292,6 +307,19 @@ BROWSER_TEST = r'''async page => {
              "beer device editor did not preserve independent mixer/pump speeds: " + JSON.stringify(deviceEditor));
       expect(deviceEditor.oldOpened === false,
              "beer device editor still accepted the removed four-part format");
+      expect(deviceEditor.relayOpened && deviceEditor.relayOnly &&
+             deviceEditor.relayNote.includes("При сохранении") && deviceEditor.relaySaved &&
+             deviceEditor.relayValue === "3^-100^0^30^10",
+             "one I2CStepper did not offer relay 1 only: " + JSON.stringify(deviceEditor));
+
+      await page.route("**/ui-bootstrap", route => route.fulfill({
+        status:200,contentType:"application/json",body:JSON.stringify(__BOTH_I2C_BOOTSTRAP__)
+      }));
+      await page.reload({waitUntil:"load"});
+      await page.waitForFunction(() => !document.body.inert);
+      expect(await page.evaluate(() => beerExternalPumpAvailable) === true,
+             "Beer did not offer stepper pump when both I2C devices were present");
+      await page.unroute("**/ui-bootstrap");
 
       await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
       expect(await page.locator("#BeerBrewOrder").count() === 1,
@@ -349,6 +377,15 @@ def main() -> int:
             code = BROWSER_TEST.replace(
                 "__BASE_URL__",
                 json.dumps(f"http://127.0.0.1:{server.server_port}"),
+            )
+            both_devices = [
+                {"address": 1, "present": True},
+                {"address": 2, "present": True},
+                *({} for _ in range(8)),
+            ]
+            code = code.replace(
+                "__BOTH_I2C_BOOTSTRAP__",
+                json.dumps({**UI_BOOTSTRAP_FIXTURE, "i2cSteppers": both_devices}),
             )
             report = run_cli_report(cli, session, code, temp, 120)
         except (OSError, RuntimeError) as caught:

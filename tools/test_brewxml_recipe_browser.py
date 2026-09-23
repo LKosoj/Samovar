@@ -337,6 +337,7 @@ BROWSER_TEST = r'''async page => {
     // 8) [D6] семантика строки: температура на "M"/"B" не по правилам типа
     out.errM = validateBeerProgramText("M;68.00;5;1^-20^0^2^3;0");
     out.errB = validateBeerProgramText("B;68.00;10;1^-20^0^2^3;0");
+    out.relayPump = validateBeerProgramText("W;0;0;2^0^0^30^10;0");
 
     // 9) [ревью п.1, случай а] хмель без TIME не сдвигает bth для последующих строк B
     await loadOnce(f.hopsNoTimeEdge, "hops_no_time.xml");
@@ -547,6 +548,9 @@ BROWSER_TEST = r'''async page => {
   if (!results.errB || !results.errB.includes("шаг 1")) {
     throw new Error("validateBeerProgramText must reject B row with non-zero temp: " + JSON.stringify(results.errB));
   }
+  if (results.relayPump !== "") {
+    throw new Error("validateBeerProgramText must accept relay pump: " + JSON.stringify(results.relayPump));
+  }
 
   // ---------- assert: 9) хмель без TIME не сдвигает bth ----------
   if (!results.noTimeHopIsProgram) throw new Error("hop without TIME must still produce a valid program: " + results.noTimeHopProgram);
@@ -643,10 +647,10 @@ BROWSER_TEST = r'''async page => {
     throw new Error("brewxml.htm must not offer a per-recipe brew order select");
   }
 
-  if (!results.hermsProgram.startsWith("M;65;0;2^0^1200^65535^0;1")) {
+  if (!results.hermsProgram.startsWith("M;65;0;2^0^0^65535^0;1")) {
     throw new Error("HERMS settings must put M/P on water sensor with continuous pump: " + results.hermsProgram);
   }
-  if (!results.hermsProgram.includes("P;65;60;2^0^1200^65535^0;1")) {
+  if (!results.hermsProgram.includes("P;65;60;2^0^0^65535^0;1")) {
     throw new Error("HERMS P row must follow mash sensor/pump mapping: " + results.hermsProgram);
   }
 

@@ -394,8 +394,14 @@ inline bool beer_validate_program(String& errorMessage) {
       errorMessage = "Ошибка программы: неверный датчик температуры в строке " + String(i + 1);
       return false;
     }
-    if (BitIsSet(program[i].capacity_num, 1) && !i2c_stepper_pump_present()) {
+    if (BitIsSet(program[i].capacity_num, 1) && program[i].Param > 0 &&
+        !i2c_stepper_pump_present()) {
       errorMessage = "I2C-насос недоступен в строке " + String(i + 1);
+      return false;
+    }
+    if (BitIsSet(program[i].capacity_num, 1) && program[i].Param == 0 &&
+        !select_relay_capable_device()) {
+      errorMessage = "I2C-реле насоса недоступно в строке " + String(i + 1);
       return false;
     }
     if (BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {
@@ -1162,7 +1168,9 @@ void check_mixer_state() {
   if (heater_safety_latched()) return;
   // Оператор вернул привод программе: цикл начинаем заново, чтобы он запустился сразу,
   // а не ждал следующей фазы (при постоянной работе следующей фазы нет вовсе).
-  if (i2cStepperMixerManualHold || i2cStepperPumpManualHold) {
+  if ((BitIsSet(program[ProgramNum].capacity_num, 0) && i2cStepperMixerManualHold) ||
+      (BitIsSet(program[ProgramNum].capacity_num, 1) &&
+       program[ProgramNum].Param > 0 && i2cStepperPumpManualHold)) {
     beerMixerWasHeld = true;
   } else if (beerMixerWasHeld) {
     beerMixerWasHeld = false;
@@ -1270,13 +1278,17 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         mixerStepperStarted = true;
 	      }
     }
-    if (BitIsSet(program[ProgramNum].capacity_num, 1) && !i2cStepperPumpManualHold) {
-      if (!start_second_i2c_pump(program[ProgramNum].Param / 1000.0f, 0)) {
-        if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);
-        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-        return ACTUATOR_COMMAND_FAILED;
+    const bool externalPump = program[ProgramNum].Param > 0;
+    if (BitIsSet(program[ProgramNum].capacity_num, 1) &&
+        (!externalPump || !i2cStepperPumpManualHold)) {
+      if (externalPump) {
+        if (!start_second_i2c_pump(program[ProgramNum].Param / 1000.0f, 0)) {
+          if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);
+          if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+          return ACTUATOR_COMMAND_FAILED;
+        }
+        i2cPumpStarted = true;
       }
-      i2cPumpStarted = true;
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
       if (set_pump_pwm(1023) != ACTUATOR_COMMAND_APPLIED) {
@@ -1289,7 +1301,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	        return ACTUATOR_COMMAND_FAILED;
       }
 	      //включаем I2CStepper реле 1
-	      if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
+	      if (!externalPump) {
 	        if (!set_mixer_pump_target(1)) {
           bool rollbackFailed = set_pump_pwm(0) != ACTUATOR_COMMAND_APPLIED;
           if (mixerStepperStarted && !set_stepper_by_time(0, 0, 0)) rollbackFailed = true;
@@ -1303,7 +1315,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         beerMixerPumpRelayOn = true;
 	      }
 #else
-      if (!set_mixer_pump_target(1)) {
+      if (!externalPump && !set_mixer_pump_target(1)) {
         bool rollbackFailed = false;
         if (mixerStepperStarted) {
           rollbackFailed = !set_stepper_by_time(0, 0, 0);
@@ -1315,7 +1327,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         }
         return ACTUATOR_COMMAND_FAILED;
       }
-      beerMixerPumpRelayOn = true;
+      beerMixerPumpRelayOn = !externalPump;
 #endif
       beerI2cPumpStarted = i2cPumpStarted;
     }

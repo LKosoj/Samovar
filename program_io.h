@@ -359,12 +359,12 @@ inline bool program_validate_beer_row_semantics(
   const bool zeroTempTime = temp == 0.0f && timeMin == 0.0f;
   const bool validDeviceMask = devType >= 1 && devType <= 3;
   const bool validMixerSpeed = (devType & 1) ? mixerRpm != 0 : mixerRpm == 0;
-  const bool validPumpSpeed = (devType & 2) ? pumpMlHour > 0 : pumpMlHour == 0;
+  const bool validPumpSpeed = (devType & 2) ? pumpMlHour >= 0 : pumpMlHour == 0;
   const bool validDeviceSchedule = validDeviceMask && validMixerSpeed &&
       validPumpSpeed && onTime > 0;
   const bool mixerScheduleValid = noDevice || validDeviceSchedule;
   if (!mixerScheduleValid) {
-    errorMessage = "устройство должно быть 0^0^0^0^0 или маской 1..3 со скоростями выбранных устройств и ненулевым расписанием";
+    errorMessage = "устройство должно быть 0^0^0^0^0 или маской 1..3 с оборотами мешалки, скоростью насоса от 0 и ненулевым расписанием";
     return false;
   }
   switch (type) {

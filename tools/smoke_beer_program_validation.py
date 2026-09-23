@@ -76,8 +76,10 @@ bool beer_control_sensor(uint8_t sensor, const DSSensor*& out, const char*& name
 }
 static bool mixerPresent = false;
 static bool pumpPresent = false;
+static bool relayPresent = false;
 bool i2c_stepper_mixer_present() { return mixerPresent; }
 bool i2c_stepper_pump_present() { return pumpPresent; }
+bool select_relay_capable_device() { return relayPresent; }
 
 inline bool program_validate_beer_row_semantics(
     ProgramType type, float temp, float timeMin, long devType, long mixerRpm,
@@ -98,6 +100,7 @@ void reset() {
   ProgramLen = 1;
   mixerPresent = false;
   pumpPresent = false;
+  relayPresent = false;
 }
 
 int main() {
@@ -137,6 +140,18 @@ int main() {
   check(!beer_validate_program(error), "I2C pump row passed without a connected pump");
   pumpPresent = true;
   check(beer_validate_program(error), "I2C pump row was rejected with a connected pump");
+
+  reset();
+  program[0] = {'W', 0, 0, 3, 100, 0, 2, 0, 0};
+  mixerPresent = true;
+  check(!beer_validate_program(error), "relay pump row passed without a relay");
+  relayPresent = true;
+  check(beer_validate_program(error), "mixer and relay pump on one board were rejected");
+
+  reset();
+  program[0] = {'W', 0, 0, 2, 0, 0, 2, 0, 0};
+  relayPresent = true;
+  check(beer_validate_program(error), "relay pump without a mixer was rejected");
 
   return failures == 0 ? 0 : 1;
 }

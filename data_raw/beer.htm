@@ -12,6 +12,7 @@
     // предел прошивки: program_io.h program_parse_beer_device - время вкл/выкл мешалки
     // хранится в uint16_t (0..UINT16_MAX)
     var PROGRAM_BACKUP_VERSION = 1;
+    var beerExternalPumpAvailable = false;
 
     function programBackupError(message) {
       SamovarApp.notify('Ошибка файла программы: ' + message, 1);
@@ -123,9 +124,8 @@
         var timeMax = type === 'F' ? 43200 : 1440;
         if (time > timeMax) return row + 'время не больше ' + timeMax + ' минут';
         var noDevice = device.every(function(v) { return v === 0; });
-        var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
-          (!!(device[0] & 1) === (device[1] !== 0)) && (!!(device[0] & 2) === (device[2] > 0));
-        if (!(noDevice || scheduledDevice)) return row + 'задайте скорости выбранных устройств и время работы';
+        var scheduledDevice = SamovarApp.beerScheduledDeviceValid(device);
+        if (!(noDevice || scheduledDevice)) return row + 'задайте обороты мешалки и время работы';
         if (!SamovarApp.beerRowTypeOk(type, temp, time, noDevice, sensor)) return row + (PROGRAM_ROW_RULES[type] || 'неизвестный тип «' + type + '»');
       }
       return '';
@@ -300,7 +300,7 @@
         if (document.getElementById('ptype' + luaRowIndex).value === 'L') {
           SamovarApp.openLuaProgramModal(pmixer, ptime, calc_program);
         }
-        else SamovarApp.openDeviceScheduleModal(pmixer, calc_program);
+        else SamovarApp.openDeviceScheduleModal(pmixer, calc_program, beerExternalPumpAvailable);
       });
       dl.appendChild(pmixer);
 
@@ -407,6 +407,11 @@
 
     function applyBeerBootstrap(data) {
       if (!check_program(data.program)) throw new Error('неверный формат программы.');
+      beerExternalPumpAvailable = data.i2cSteppers.some(function (device) {
+        return device.present && (device.address & 1);
+      }) && data.i2cSteppers.some(function (device) {
+        return device.present && !(device.address & 1);
+      });
       pwr_unit = data.powerUnit;
       powerInputMax = data.heaterMaxPower;
       document.body.setAttribute('data-beer-brew-order', data.beerBrewOrder);
@@ -608,10 +613,10 @@
             <p><span>&nbsp;</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>Описание устройств: предпоследнее поле имеет вид 3^-100^1200^30^10, где</span></p>
-            <p><span>3 — мешалка и насос; -100 — 100 об/мин со сменой направления после паузы; 1200 — скорость I2C-насоса в мл/ч; 30 — работа, сек; 10 — пауза, сек.</span></p>
-            <p><span>Первое число — устройство: 1 — мешалка, 2 — I2C-насос, 3 — оба устройства.</span></p>
+            <p><span>3 — мешалка и насос; -100 — 100 об/мин со сменой направления после паузы; 1200 — скорость шагового I2C-насоса в мл/ч; 30 — работа, сек; 10 — пауза, сек.</span></p>
+            <p><span>Первое число — устройство: 1 — мешалка, 2 — насос, 3 — оба устройства.</span></p>
             <p><span>Второе число — обороты мешалки. Отрицательное значение включает смену направления после каждой паузы.</span></p>
-            <p><span>Третье число — скорость I2C-насоса в мл/ч; четвёртое и пятое — время работы и паузы в секундах.</span></p>
+            <p><span>Третье число: 0 — насос на реле 1 I2CStepper, больше 0 — скорость отдельного шагового I2C-насоса в мл/ч. Четвёртое и пятое — время работы и паузы в секундах.</span></p>
           </div>
         </div>
       </details>

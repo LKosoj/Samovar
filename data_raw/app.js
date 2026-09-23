@@ -108,6 +108,7 @@
   let bootstrapStarted = false;
   let deviceScheduleInput = null;
   let deviceScheduleOnSave = null;
+  let deviceScheduleExternalPumpAvailable = false;
   let luaProgramTextInput = null;
   let luaProgramTimeoutInput = null;
   let luaProgramOnSave = null;
@@ -175,8 +176,14 @@
     return false;
   }
 
+  function beerScheduledDeviceValid(device) {
+    return device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
+      (!!(device[0] & 1) === (device[1] !== 0)) &&
+      ((device[0] & 2) || device[2] === 0) && device[2] >= 0;
+  }
+
   var BEER_MASH_DEVICE_DEFAULT = '1^-20^0^2^3';
-  var BEER_PUMP_CONTINUOUS = '2^0^1200^65535^0';
+  var BEER_PUMP_CONTINUOUS = '2^0^0^65535^0';
   var BEER_WAIT_DEVICE = '0^0^0^0^0';
   var BEER_PROGRAM_MAX_ROWS = 20;
   var configuredBeerBrewOrderId = 'allinone';
@@ -678,14 +685,20 @@
     }
   }
 
-  function openDeviceScheduleModal(input, onSave) {
+  function openDeviceScheduleModal(input, onSave, externalPumpAvailable) {
     const values = String(input.value || '0^0^0^0^0').split('^');
     if (values.length !== 5) return false;
     deviceScheduleInput = input;
     deviceScheduleOnSave = typeof onSave === 'function' ? onSave : null;
+    deviceScheduleExternalPumpAvailable = Boolean(externalPumpAvailable);
+    byId('m_pump_rate').parentElement.hidden = !deviceScheduleExternalPumpAvailable;
+    byId('m_pump_relay').hidden = deviceScheduleExternalPumpAvailable;
+    byId('m_pump_relay').textContent = Number(values[2]) > 0
+      ? 'Насос: реле 1 I2CStepper. При сохранении шаговый насос будет заменён реле 1.'
+      : 'Насос: реле 1 I2CStepper';
     byId('m_type').value = values[0];
     byId('m_mixer_rpm').value = values[1];
-    byId('m_pump_rate').value = values[2];
+    byId('m_pump_rate').value = deviceScheduleExternalPumpAvailable ? values[2] : '0';
     byId('m_time').value = values[3];
     byId('m_pause').value = values[4];
     byId('popup').style.display = 'block';
@@ -720,8 +733,8 @@
     });
     if (!pump) return false;
     if (((type & 1) !== 0) !== (Number(mixer.text) !== 0) ||
-        ((type & 2) !== 0) !== (Number(pump.text) > 0)) {
-      showRequestError('Задайте скорость каждого выбранного устройства, а для выключенного — 0.');
+        (!(type & 2) && Number(pump.text) !== 0)) {
+      showRequestError('Задайте обороты выбранной мешалки; для выключенного устройства укажите 0.');
       return false;
     }
     normalizeDeviceScheduleSeconds(byId('m_time'));
@@ -2728,6 +2741,7 @@
     addLuaButtons: addLuaButtons,
     addMessage: addMessage,
     beerRowTypeOk: beerRowTypeOk,
+    beerScheduledDeviceValid: beerScheduledDeviceValid,
     beerBrewOrders: beerBrewOrders,
     beerBrewOrder: beerBrewOrder,
     beerProgramMaxRows: BEER_PROGRAM_MAX_ROWS,

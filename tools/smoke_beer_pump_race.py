@@ -367,6 +367,7 @@ static void test_i2c_pump_start_uses_program_rate_without_mixer_animation() {
 static void test_partial_mixer_start_failure_is_compensated() {
   reset_fixture();
   program[0].capacity_num = 0b11;
+  program[0].Param = 0;
   program[0].Volume = 7;
   mixer_status = false;
   mixerStepperPresent = true;
@@ -426,12 +427,14 @@ static void test_mixer_only_row_keeps_manual_i2c_relay() {
 static void test_program_owned_i2c_relay_is_switched_off_once() {
   reset_fixture();
   program[0].capacity_num = 0b11;
+  program[0].Param = 0;
   mixer_status = false;
   mixerStepperPresent = true;
-  pumpStepperPresent = true;
+  pumpStepperPresent = false;
 
   check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED, "мешалка с насосом не запустилась");
   check(mixerPumpCalls == 1 && lastMixerPumpTarget == 1, "программа не включила реле 1 I2CStepper");
+  check(i2cPumpStartCalls == 0, "реле 1 запустило отдельный шаговый насос");
   check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED, "мешалка с насосом не остановилась");
   check(mixerPumpCalls == 2 && lastMixerPumpTarget == 0,
         "пауза не выключила реле 1 I2CStepper, включённое программой");
@@ -467,6 +470,7 @@ static void test_failed_start_rollback_latches_and_stops_schedule_retry() {
 static void test_failed_pump_rollback_latches_and_stops_schedule_retry() {
   reset_fixture();
   program[0].capacity_num = 0b11;
+  program[0].Param = 0;
   mixerStepperPresent = true;
   pumpStepperPresent = true;
   mixerPumpCommandResult = false;
@@ -783,9 +787,23 @@ static void test_hold_release_restarts_mixer_immediately() {
   check(stepperCalls == 2, "после возврата управления мешалка перезапускается повторно");
 }
 
+static void test_unused_pump_hold_does_not_pause_relay_schedule() {
+  reset_fixture();
+  program[0].capacity_num = 0b10;
+  program[0].Param = 0;
+  mixer_status = false;
+  mixerStepperPresent = true;
+  pumpStepperPresent = true;
+  i2cStepperPumpManualHold = true;
+  check_mixer_state();
+  check(!beerMixerWasHeld && mixerPumpCalls == 1 && lastMixerPumpTarget == 1,
+        "ручной стоп неиспользуемого шагового насоса остановил реле 1");
+}
+
 int main() {
   test_continuous_mixer_starts_once_per_row();
   test_hold_release_restarts_mixer_immediately();
+  test_unused_pump_hold_does_not_pause_relay_schedule();
   test_lua_entry_safes_outputs_for_all_heating_stages();
   test_active_cooling_blocks_planned_pump_off();
   test_no_cooling_allows_planned_pump_off();
@@ -934,7 +952,9 @@ static void test_no_local_or_i2c_target_fails_without_status_change() {
 static void test_mixer_relay_is_rolled_back_without_pump_target() {
   reset_fixture();
   program[0].capacity_num = 0b11;
+  program[0].Param = 0;
   mixerStepperPresent = true;
+  mixerPumpCommandResult = false;
   check(set_mixer_state(true, false) == ACTUATOR_COMMAND_FAILED,
         "мешалка с недоступным pump target не вернула FAILED");
   check(!mixer_status, "FAILED мешалка с недоступным pump target изменила mixer_status");
@@ -957,6 +977,7 @@ static void test_missing_i2c_mixer_fails_without_touching_relay() {
 
 static void test_i2c_target_start_is_applied_without_local_pwm() {
   reset_fixture();
+  program[0].Param = 0;
   pumpStepperPresent = true;
   check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED,
         "доступный I2C target без локального PWM не вернул APPLIED");
@@ -965,10 +986,19 @@ static void test_i2c_target_start_is_applied_without_local_pwm() {
   check(mixerPumpCalls == 1, "доступный I2C target не получил команду запуска");
 }
 
+static void test_external_pump_does_not_switch_relay() {
+  reset_fixture();
+  pumpStepperPresent = true;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED,
+        "шаговый I2C-насос не запустился");
+  check(mixerPumpCalls == 0, "шаговый I2C-насос включил реле 1");
+}
+
 // Локальный STOP насоса действует до явного возврата управления программе:
 // очередная ON-фаза расписания не должна неожиданно запустить его снова.
 static void test_manual_hold_keeps_schedule_away_from_i2c_pump() {
   reset_fixture();
+  program[0].Param = 1200;
   pumpStepperPresent = true;
   i2cStepperPumpManualHold = true;
   check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED,
@@ -984,6 +1014,7 @@ int main() {
   test_mixer_relay_is_rolled_back_without_pump_target();
   test_missing_i2c_mixer_fails_without_touching_relay();
   test_i2c_target_start_is_applied_without_local_pwm();
+  test_external_pump_does_not_switch_relay();
   test_manual_hold_keeps_schedule_away_from_i2c_pump();
   test_manual_hold_keeps_schedule_away_from_i2c_mixer();
   test_zero_time_means_continuous_only_without_pause();
@@ -1145,10 +1176,10 @@ def main() -> int:
         sys.stderr.write(output)
         return 1
 
-    no_target_mutant = no_local_harness.rsplit(
-        "if (!set_mixer_pump_target(1)) {", 1
+    no_target_mutant = no_local_harness.replace(
+        "if (!externalPump && !set_mixer_pump_target(1)) {",
+        "if (!externalPump && false && !set_mixer_pump_target(1)) {", 1
     )
-    no_target_mutant = "if (false && !set_mixer_pump_target(1)) {".join(no_target_mutant)
     if no_target_mutant == no_local_harness:
         print("FAIL: could not build no-target mixer mutation", file=sys.stderr)
         return 1
@@ -1161,9 +1192,9 @@ def main() -> int:
         return 1
 
     relay_rollback_mutant = no_local_harness.replace(
-        "if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);\n"
+        "if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;\n"
         "        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);",
-        "if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);\n"
+        "if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;\n"
         "        if (false && mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);",
         1,
     )

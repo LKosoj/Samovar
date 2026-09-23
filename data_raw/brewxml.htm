@@ -805,8 +805,7 @@ function validateBeerProgramText(text) {
     var device = f[3].split("^").map(Number);
     var deviceValid = device.length === 5 && device.every(Number.isFinite);
     var noDevice = deviceValid && device.every(function (value) { return value === 0; });
-    var scheduledDevice = deviceValid && device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
-      (!!(device[0] & 1) === (device[1] !== 0)) && (!!(device[0] & 2) === (device[2] > 0));
+    var scheduledDevice = deviceValid && SamovarApp.beerScheduledDeviceValid(device);
     if (!noDevice && !scheduledDevice) {
       return "шаг " + n + ": повреждена структура устройства «" + f[3] + "»";
     }
