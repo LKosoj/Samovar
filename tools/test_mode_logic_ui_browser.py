@@ -190,8 +190,9 @@ BROWSER_TEST = r'''async page => {
       await checkPowerStaleLabel("startnbk=", "NBK");
 
       await page.goto(baseUrl + "/beer.htm", {waitUntil:"load"});
-      expect(await page.evaluate(() => beerExternalPumpAvailable) === false,
-             "Beer offered a separate pump with only one I2CStepper in bootstrap");
+      await page.waitForFunction(() => !document.body.inert);
+      expect(await page.evaluate(() => !beerMixerStepperAvailable && beerPumpStepperAvailable),
+             "Beer did not recognize a single pump-mode I2CStepper");
       expect(await page.locator("#BeerBrewOrder").count() === 0,
              "brew order must not be chosen on beer.htm (settings only)");
       expect((await page.locator("body").textContent()).includes(
@@ -237,6 +238,8 @@ BROWSER_TEST = r'''async page => {
           fermentTimed:check_program("F;18;4320;0^0^0^0^0;0") && check_program("F;18;0;0^0^0^0^0;0"),
           fermentTooLong:program_error("F;18;43201;0^0^0^0^0;0"),
           relayPump:check_program("W;0;0;3^100^0^30^10;0"),
+          relayMixer:check_program("W;0;0;3^0^1200^30^10;0"),
+          relayConflict:program_error("W;0;0;3^0^0^30^10;0"),
           negativePump:program_error("W;0;0;2^0^-1^30^10;0")
         };
       });
@@ -250,6 +253,8 @@ BROWSER_TEST = r'''async page => {
              "Beer F row longer than 30 days must be rejected with the limit named");
       expect(beerRowSync.relayPump && beerRowSync.negativePump.includes("Строка 1"),
              "Beer relay pump program validation disagrees with firmware");
+      expect(beerRowSync.relayMixer && beerRowSync.relayConflict.includes("Строка 1"),
+             "Beer relay mixer program validation disagrees with firmware");
 
       // П46: та же проверка реального состояния для кнопки нагрева на beer.htm.
       await page.evaluate(() => {
@@ -284,22 +289,34 @@ BROWSER_TEST = r'''async page => {
       const deviceEditor = await page.evaluate(() => {
         const input = document.createElement("input");
         input.value = "3^-100^1200^30^10";
-        const opened = SamovarApp.openDeviceScheduleModal(input, null, true);
+        const opened = SamovarApp.openDeviceScheduleModal(input, null, true, true);
         const loaded = ["m_type", "m_mixer_rpm", "m_pump_rate", "m_time", "m_pause"]
           .map(id => document.getElementById(id).value);
         const saved = SamovarApp.saveDeviceScheduleModal();
         const oldInput = document.createElement("input");
         oldInput.value = "1^-1^30^60";
-        const oldOpened = SamovarApp.openDeviceScheduleModal(oldInput, null, true);
+        const oldOpened = SamovarApp.openDeviceScheduleModal(oldInput, null, true, true);
         const relayInput = document.createElement("input");
         relayInput.value = "3^-100^1200^30^10";
-        const relayOpened = SamovarApp.openDeviceScheduleModal(relayInput, null, false);
+        const relayOpened = SamovarApp.openDeviceScheduleModal(relayInput, null, true, false);
         const relayOnly = document.getElementById("m_pump_rate").parentElement.hidden &&
           !document.getElementById("m_pump_relay").hidden;
         const relayNote = document.getElementById("m_pump_relay").textContent;
         const relaySaved = SamovarApp.saveDeviceScheduleModal();
+        const pumpBoardInput = document.createElement("input");
+        pumpBoardInput.value = "3^-100^0^30^10";
+        const pumpBoardOpened = SamovarApp.openDeviceScheduleModal(pumpBoardInput, null, false, true);
+        const mixerRelay = document.getElementById("m_mixer_rpm").parentElement.hidden &&
+          !document.getElementById("m_mixer_relay").hidden;
+        const pumpRateVisible = !document.getElementById("m_pump_rate").parentElement.hidden &&
+          document.getElementById("m_pump_text").textContent === "Насос, мл/ч";
+        const mixerRelayNote = document.getElementById("m_mixer_relay").textContent;
+        document.getElementById("m_pump_rate").value = "1200";
+        const pumpBoardSaved = SamovarApp.saveDeviceScheduleModal();
         return {opened, loaded, saved, value:input.value, oldOpened,
-          relayOpened, relayOnly, relayNote, relaySaved, relayValue:relayInput.value};
+          relayOpened, relayOnly, relayNote, relaySaved, relayValue:relayInput.value,
+          pumpBoardOpened, mixerRelay, pumpRateVisible, mixerRelayNote,
+          pumpBoardSaved, pumpBoardValue:pumpBoardInput.value};
       });
       expect(deviceEditor.opened && deviceEditor.saved &&
              JSON.stringify(deviceEditor.loaded) === JSON.stringify(["3", "-100", "1200", "30", "10"]) &&
@@ -311,14 +328,30 @@ BROWSER_TEST = r'''async page => {
              deviceEditor.relayNote.includes("При сохранении") && deviceEditor.relaySaved &&
              deviceEditor.relayValue === "3^-100^0^30^10",
              "one I2CStepper did not offer relay 1 only: " + JSON.stringify(deviceEditor));
+      expect(deviceEditor.pumpBoardOpened && deviceEditor.mixerRelay &&
+             deviceEditor.pumpRateVisible && deviceEditor.mixerRelayNote.includes("При сохранении") &&
+             deviceEditor.pumpBoardSaved && deviceEditor.pumpBoardValue === "3^0^1200^30^10",
+             "pump-mode I2CStepper did not use relay mixer and stepper pump: " + JSON.stringify(deviceEditor));
+
+      await page.locator("[id^=pmixer]").first().dispatchEvent("focus");
+      const pumpModeEditor = await page.evaluate(() => ({
+        open:document.getElementById("popup").style.display,
+        mixerRelay:!document.getElementById("m_mixer_relay").hidden,
+        pumpRate:!document.getElementById("m_pump_rate").parentElement.hidden,
+        mixerBoard:beerMixerStepperAvailable,pumpBoard:beerPumpStepperAvailable
+      }));
+      expect(pumpModeEditor.open === "block" && pumpModeEditor.mixerRelay &&
+             pumpModeEditor.pumpRate,
+             "Beer program row did not open the pump-mode editor: " + JSON.stringify(pumpModeEditor));
+      await page.evaluate(() => SamovarApp.closeDeviceScheduleModal());
 
       await page.route("**/ui-bootstrap", route => route.fulfill({
         status:200,contentType:"application/json",body:JSON.stringify(__BOTH_I2C_BOOTSTRAP__)
       }));
       await page.reload({waitUntil:"load"});
       await page.waitForFunction(() => !document.body.inert);
-      expect(await page.evaluate(() => beerExternalPumpAvailable) === true,
-             "Beer did not offer stepper pump when both I2C devices were present");
+      expect(await page.evaluate(() => beerMixerStepperAvailable && beerPumpStepperAvailable),
+             "Beer did not offer both stepper drives when both I2C devices were present");
       await page.unroute("**/ui-bootstrap");
 
       await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});

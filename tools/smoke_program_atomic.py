@@ -540,6 +540,8 @@ void test_beer_row_semantics() {
       {'W', 0, 1, 1, 20, 0, 3, 4, 0, false},
       {'W', 0, 0, 2, 0, 1200, 3, 4, 4, true},
       {'W', 0, 0, 2, 20, 1200, 3, 4, 4, false},
+      {'W', 0, 0, 3, 0, 1200, 3, 4, 0, true},
+      {'W', 0, 0, 3, 0, 0, 3, 4, 0, false},
       {'A', 70, 0, 0, 0, 0, 0, 0, 1, true},
       {'A', 70, 0, 1, 20, 0, 3, 4, 1, false},
       {'A', 0, 0, 0, 0, 0, 0, 0, 1, false},
@@ -1073,7 +1075,7 @@ def main() -> int:
         # written.
         mutated_program_io = (ROOT / "program_io.h").read_text(encoding="utf-8")
         mutated_program_io = mutated_program_io.replace(
-            "const bool validMixerSpeed = (devType & 1) ? mixerRpm != 0 : mixerRpm == 0;",
+            "const bool validMixerSpeed = (devType & 1) || mixerRpm == 0;",
             "const bool validMixerSpeed = true;", 1,
         )
         if mutated_program_io == (ROOT / "program_io.h").read_text(encoding="utf-8"):

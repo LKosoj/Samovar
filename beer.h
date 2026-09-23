@@ -404,9 +404,15 @@ inline bool beer_validate_program(String& errorMessage) {
       errorMessage = "I2C-реле насоса недоступно в строке " + String(i + 1);
       return false;
     }
-    if (BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {
-      errorMessage = "I2C-мешалка недоступна в строке " + String(i + 1);
-      return false;
+    if (BitIsSet(program[i].capacity_num, 0)) {
+      if (program[i].Speed == 0 && !select_relay_capable_device()) {
+        errorMessage = "I2C-реле мешалки недоступно в строке " + String(i + 1);
+        return false;
+      }
+      if (program[i].Speed != 0 && !i2c_stepper_mixer_present()) {
+        errorMessage = "I2C-мешалка недоступна в строке " + String(i + 1);
+        return false;
+      }
     }
   }
   return true;
@@ -1168,7 +1174,8 @@ void check_mixer_state() {
   if (heater_safety_latched()) return;
   // Оператор вернул привод программе: цикл начинаем заново, чтобы он запустился сразу,
   // а не ждал следующей фазы (при постоянной работе следующей фазы нет вовсе).
-  if ((BitIsSet(program[ProgramNum].capacity_num, 0) && i2cStepperMixerManualHold) ||
+  if ((BitIsSet(program[ProgramNum].capacity_num, 0) &&
+       program[ProgramNum].Speed != 0 && i2cStepperMixerManualHold) ||
       (BitIsSet(program[ProgramNum].capacity_num, 1) &&
        program[ProgramNum].Param > 0 && i2cStepperPumpManualHold)) {
     beerMixerWasHeld = true;
@@ -1257,26 +1264,33 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
     bool mixerRelayEnabled = false;
     bool mixerStepperStarted = false;
     bool i2cPumpStarted = false;
+    const bool relayMixer = BitIsSet(program[ProgramNum].capacity_num, 0) &&
+        program[ProgramNum].Speed == 0;
     //включаем мешалку
     if (BitIsSet(program[ProgramNum].capacity_num, 0)) {
-      if (!i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {
-        return ACTUATOR_COMMAND_FAILED;
-      }
-      //включаем реле 2
-      digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
-      mixerRelayEnabled = true;
-      //включаем I2CStepper шаговик; если оператор остановил его сам - не трогаем
-      if (!i2cStepperMixerManualHold) {
+      if (relayMixer) {
+        if (!set_mixer_pump_target(1)) return ACTUATOR_COMMAND_FAILED;
+        beerMixerPumpRelayOn = true;
+      } else {
+        if (!i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {
+          return ACTUATOR_COMMAND_FAILED;
+        }
+        //включаем реле 2
+        digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
+        mixerRelayEnabled = true;
+        //включаем I2CStepper шаговик; если оператор остановил его сам - не трогаем
+        if (!i2cStepperMixerManualHold) {
 	        int tm = abs(program[ProgramNum].Volume);
 	        // Время 0 и пауза 0 = постоянное вращение (Nano крутит, пока не остановят).
 	        if (tm == 0 && program[ProgramNum].Power > 0) tm = 10;
-        if (!set_stepper_by_time(static_cast<uint16_t>(fabsf(program[ProgramNum].Speed)),
-                                 dir, tm)) {
-          if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-          return ACTUATOR_COMMAND_FAILED;
+          if (!set_stepper_by_time(static_cast<uint16_t>(fabsf(program[ProgramNum].Speed)),
+                                   dir, tm)) {
+            if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+            return ACTUATOR_COMMAND_FAILED;
+          }
+          mixerStepperStarted = true;
         }
-        mixerStepperStarted = true;
-	      }
+      }
     }
     const bool externalPump = program[ProgramNum].Param > 0;
     if (BitIsSet(program[ProgramNum].capacity_num, 1) &&
@@ -1284,6 +1298,9 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
       if (externalPump) {
         if (!start_second_i2c_pump(program[ProgramNum].Param / 1000.0f, 0)) {
           if (mixerStepperStarted) set_stepper_by_time(0, 0, 0);
+          if (relayMixer && !set_mixer_pump_target(0)) {
+            request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
+          } else if (relayMixer) beerMixerPumpRelayOn = false;
           if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
           return ACTUATOR_COMMAND_FAILED;
         }
@@ -1294,6 +1311,10 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
       if (set_pump_pwm(1023) != ACTUATOR_COMMAND_APPLIED) {
 	        bool rollbackFailed = mixerStepperStarted && !set_stepper_by_time(0, 0, 0);
 	        if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
+	        if (relayMixer) {
+          if (!set_mixer_pump_target(0)) rollbackFailed = true;
+          else beerMixerPumpRelayOn = false;
+        }
 	        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	        if (rollbackFailed) {
           request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
@@ -1327,7 +1348,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         }
         return ACTUATOR_COMMAND_FAILED;
       }
-      beerMixerPumpRelayOn = !externalPump;
+      if (!externalPump) beerMixerPumpRelayOn = true;
 #endif
       beerI2cPumpStarted = i2cPumpStarted;
     }

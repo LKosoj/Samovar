@@ -153,6 +153,19 @@ int main() {
   relayPresent = true;
   check(beer_validate_program(error), "relay pump without a mixer was rejected");
 
+  reset();
+  program[0] = {'W', 0, 0, 3, 0, 1200, 2, 0, 0};
+  pumpPresent = true;
+  check(!beer_validate_program(error), "relay mixer row passed without a relay");
+  relayPresent = true;
+  check(beer_validate_program(error), "relay mixer and stepper pump on one board were rejected");
+
+  reset();
+  program[0] = {'W', 0, 0, 3, 0, 0, 2, 0, 0};
+  pumpPresent = true;
+  relayPresent = true;
+  check(!beer_validate_program(error), "mixer and pump both assigned to relay 1 passed");
+
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -197,8 +210,8 @@ def main() -> int:
     print("Beer start semantic recheck mutation was rejected as expected")
 
     mixer_mutation = VALIDATE.replace(
-        "if (BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {",
-        "if (false && BitIsSet(program[i].capacity_num, 0) && !i2c_stepper_mixer_present()) {",
+        "if (program[i].Speed != 0 && !i2c_stepper_mixer_present()) {",
+        "if (false && program[i].Speed != 0 && !i2c_stepper_mixer_present()) {",
         1,
     )
     if mixer_mutation == VALIDATE:

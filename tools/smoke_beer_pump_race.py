@@ -448,6 +448,39 @@ static void test_program_owned_i2c_relay_is_switched_off_once() {
         "смена строки на строку без устройств оставила реле 1 I2CStepper включённым");
 }
 
+static void test_pump_board_runs_relay_mixer_and_stepper_pump() {
+  reset_fixture();
+  program[0].capacity_num = 0b11;
+  program[0].Speed = 0;
+  program[0].Param = 1200;
+  mixer_status = false;
+  pumpStepperPresent = true;
+
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED,
+        "насосный Nano не запустил мешалку и насос одновременно");
+  check(mixerPumpCalls == 1 && lastMixerPumpTarget == 1 && beerMixerPumpRelayOn,
+        "мешалка не включила реле 1 насосного Nano");
+  check(i2cPumpStartCalls == 1 && stepperCalls == 0 && digitalWriteCalls == 0,
+        "насосный Nano запустил шаговую мешалку или локальное реле вместо насоса");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED,
+        "насосный Nano не остановил мешалку и насос");
+  check(mixerPumpCalls == 2 && lastMixerPumpTarget == 0 && i2cPumpStopCalls == 1,
+        "пауза не остановила реле мешалки и шаговый насос");
+}
+
+static void test_relay_mixer_rolls_back_when_pump_fails() {
+  reset_fixture();
+  program[0].capacity_num = 0b11;
+  program[0].Speed = 0;
+  pumpStepperPresent = true;
+  i2cPumpStartResult = false;
+
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_FAILED,
+        "отказ шагового насоса не отменил запуск строки");
+  check(mixerPumpCalls == 2 && lastMixerPumpTarget == 0 && !beerMixerPumpRelayOn,
+        "отказ шагового насоса оставил реле мешалки включённым");
+}
+
 static void test_failed_start_rollback_latches_and_stops_schedule_retry() {
   reset_fixture();
   program[0].capacity_num = 0b11;
@@ -745,6 +778,7 @@ static void test_continuous_mixer_starts_once_per_row() {
   reset_fixture();
   program[0].capacity_num = 0b01;
   program[1].capacity_num = 0b01;
+  program[1].Speed = 100;
   mixer_status = false;
   mixerStepperPresent = true;
 
@@ -812,6 +846,8 @@ int main() {
   test_mixer_stop_attempts_every_required_actuator();
   test_mixer_only_row_keeps_manual_i2c_relay();
   test_program_owned_i2c_relay_is_switched_off_once();
+  test_pump_board_runs_relay_mixer_and_stepper_pump();
+  test_relay_mixer_rolls_back_when_pump_fails();
   test_failed_start_rollback_latches_and_stops_schedule_retry();
   test_failed_pump_rollback_latches_and_stops_schedule_retry();
   test_schedule_state_commits_only_after_applied_start();
@@ -899,6 +935,7 @@ static void check(bool condition, const char* message) {
 static void reset_fixture() {
   program[0] = WProgram{};
   program[0].capacity_num = 0b10;
+  program[0].Speed = 100;
   mixer_status = false;
   relayWrites = 0;
   relayState = false;
@@ -994,6 +1031,20 @@ static void test_external_pump_does_not_switch_relay() {
   check(mixerPumpCalls == 0, "шаговый I2C-насос включил реле 1");
 }
 
+static void test_relay_mixer_with_stepper_pump_without_local_pwm() {
+  reset_fixture();
+  program[0].capacity_num = 0b11;
+  program[0].Speed = 0;
+  pumpStepperPresent = true;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED,
+        "насосный Nano без локального PWM не запустил оба устройства");
+  check(mixerPumpCalls == 1 && beerMixerPumpRelayOn && stepperCalls == 0,
+        "запуск шагового насоса потерял реле мешалки без локального PWM");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED &&
+        mixerPumpCalls == 2 && !beerMixerPumpRelayOn,
+        "остановка без локального PWM не выключила реле мешалки");
+}
+
 // Локальный STOP насоса действует до явного возврата управления программе:
 // очередная ON-фаза расписания не должна неожиданно запустить его снова.
 static void test_manual_hold_keeps_schedule_away_from_i2c_pump() {
@@ -1015,6 +1066,7 @@ int main() {
   test_missing_i2c_mixer_fails_without_touching_relay();
   test_i2c_target_start_is_applied_without_local_pwm();
   test_external_pump_does_not_switch_relay();
+  test_relay_mixer_with_stepper_pump_without_local_pwm();
   test_manual_hold_keeps_schedule_away_from_i2c_pump();
   test_manual_hold_keeps_schedule_away_from_i2c_mixer();
   test_zero_time_means_continuous_only_without_pause();
@@ -1160,6 +1212,21 @@ def main() -> int:
     if returncode != 0:
         return 1
 
+    relay_mixer_mutant = harness.replace(
+        "if (relayMixer) {\n        if (!set_mixer_pump_target(1))",
+        "if (false && relayMixer) {\n        if (!set_mixer_pump_target(1))", 1,
+    )
+    if relay_mixer_mutant == harness:
+        print("FAIL: could not build relay mixer mutation", file=sys.stderr)
+        return 1
+    returncode, output = compile_and_run(
+        relay_mixer_mutant, "relay mixer mutation", show_output=False
+    )
+    if returncode == 0 or "мешалка не включила реле 1 насосного Nano" not in output:
+        print("FAIL: relay mixer mutation survived smoke", file=sys.stderr)
+        sys.stderr.write(output)
+        return 1
+
     missing_mixer_mutant = no_local_harness.replace(
         "if (!i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {",
         "if (false && !i2cStepperMixerManualHold && !i2c_stepper_mixer_present()) {",
@@ -1272,8 +1339,8 @@ def main() -> int:
         return 1
 
     emergency_mutant = harness.replace(
-        'request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");',
-        "(void)0;",
+        'if (rollbackFailed) {\n          request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");',
+        'if (rollbackFailed) {\n          (void)0;',
         1,
     )
     if emergency_mutant == harness:

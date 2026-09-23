@@ -12,7 +12,8 @@
     // предел прошивки: program_io.h program_parse_beer_device - время вкл/выкл мешалки
     // хранится в uint16_t (0..UINT16_MAX)
     var PROGRAM_BACKUP_VERSION = 1;
-    var beerExternalPumpAvailable = false;
+    var beerMixerStepperAvailable = false;
+    var beerPumpStepperAvailable = false;
 
     function programBackupError(message) {
       SamovarApp.notify('Ошибка файла программы: ' + message, 1);
@@ -300,7 +301,8 @@
         if (document.getElementById('ptype' + luaRowIndex).value === 'L') {
           SamovarApp.openLuaProgramModal(pmixer, ptime, calc_program);
         }
-        else SamovarApp.openDeviceScheduleModal(pmixer, calc_program, beerExternalPumpAvailable);
+        else SamovarApp.openDeviceScheduleModal(pmixer, calc_program,
+          beerMixerStepperAvailable, beerPumpStepperAvailable);
       });
       dl.appendChild(pmixer);
 
@@ -407,9 +409,10 @@
 
     function applyBeerBootstrap(data) {
       if (!check_program(data.program)) throw new Error('неверный формат программы.');
-      beerExternalPumpAvailable = data.i2cSteppers.some(function (device) {
+      beerMixerStepperAvailable = data.i2cSteppers.some(function (device) {
         return device.present && (device.address & 1);
-      }) && data.i2cSteppers.some(function (device) {
+      });
+      beerPumpStepperAvailable = data.i2cSteppers.some(function (device) {
         return device.present && !(device.address & 1);
       });
       pwr_unit = data.powerUnit;
@@ -615,8 +618,8 @@
             <p><span>Описание устройств: предпоследнее поле имеет вид 3^-100^1200^30^10, где</span></p>
             <p><span>3 — мешалка и насос; -100 — 100 об/мин со сменой направления после паузы; 1200 — скорость шагового I2C-насоса в мл/ч; 30 — работа, сек; 10 — пауза, сек.</span></p>
             <p><span>Первое число — устройство: 1 — мешалка, 2 — насос, 3 — оба устройства.</span></p>
-            <p><span>Второе число — обороты мешалки. Отрицательное значение включает смену направления после каждой паузы.</span></p>
-            <p><span>Третье число: 0 — насос на реле 1 I2CStepper, больше 0 — скорость отдельного шагового I2C-насоса в мл/ч. Четвёртое и пятое — время работы и паузы в секундах.</span></p>
+            <p><span>Второе число: 0 — мешалка на реле 1 I2CStepper, другое значение — обороты шаговой мешалки. Отрицательное значение включает смену направления после каждой паузы.</span></p>
+            <p><span>Третье число: 0 — насос на реле 1 I2CStepper, больше 0 — скорость шагового I2C-насоса в мл/ч. Мешалку и насос нельзя одновременно назначить на реле 1. Четвёртое и пятое — время работы и паузы в секундах.</span></p>
           </div>
         </div>
       </details>

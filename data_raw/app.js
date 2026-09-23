@@ -108,7 +108,8 @@
   let bootstrapStarted = false;
   let deviceScheduleInput = null;
   let deviceScheduleOnSave = null;
-  let deviceScheduleExternalPumpAvailable = false;
+  let deviceScheduleMixerStepperAvailable = false;
+  let deviceSchedulePumpStepperAvailable = false;
   let luaProgramTextInput = null;
   let luaProgramTimeoutInput = null;
   let luaProgramOnSave = null;
@@ -178,8 +179,9 @@
 
   function beerScheduledDeviceValid(device) {
     return device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
-      (!!(device[0] & 1) === (device[1] !== 0)) &&
-      ((device[0] & 2) || device[2] === 0) && device[2] >= 0;
+      ((device[0] & 1) || device[1] === 0) &&
+      ((device[0] & 2) || device[2] === 0) && device[2] >= 0 &&
+      !(device[0] === 3 && device[1] === 0 && device[2] === 0);
   }
 
   var BEER_MASH_DEVICE_DEFAULT = '1^-20^0^2^3';
@@ -685,20 +687,29 @@
     }
   }
 
-  function openDeviceScheduleModal(input, onSave, externalPumpAvailable) {
+  function openDeviceScheduleModal(input, onSave, mixerStepperAvailable, pumpStepperAvailable) {
     const values = String(input.value || '0^0^0^0^0').split('^');
     if (values.length !== 5) return false;
     deviceScheduleInput = input;
     deviceScheduleOnSave = typeof onSave === 'function' ? onSave : null;
-    deviceScheduleExternalPumpAvailable = Boolean(externalPumpAvailable);
-    byId('m_pump_rate').parentElement.hidden = !deviceScheduleExternalPumpAvailable;
-    byId('m_pump_relay').hidden = deviceScheduleExternalPumpAvailable;
+    deviceScheduleMixerStepperAvailable = Boolean(mixerStepperAvailable);
+    deviceSchedulePumpStepperAvailable = Boolean(pumpStepperAvailable);
+    byId('m_mixer_rpm').parentElement.hidden = !deviceScheduleMixerStepperAvailable;
+    byId('m_mixer_relay').hidden = deviceScheduleMixerStepperAvailable;
+    byId('m_mixer_relay').textContent = Number(values[1]) !== 0
+      ? 'Мешалка: реле 1 I2CStepper. При сохранении шаговая мешалка будет заменена реле 1.'
+      : 'Мешалка: реле 1 I2CStepper';
+    byId('m_pump_rate').parentElement.hidden = !deviceSchedulePumpStepperAvailable;
+    byId('m_pump_text').textContent = deviceSchedulePumpStepperAvailable &&
+      !deviceScheduleMixerStepperAvailable ? 'Насос, мл/ч' :
+      'Насос: 0 — реле 1, больше 0 — шаговый I2C-насос, мл/ч';
+    byId('m_pump_relay').hidden = deviceSchedulePumpStepperAvailable;
     byId('m_pump_relay').textContent = Number(values[2]) > 0
       ? 'Насос: реле 1 I2CStepper. При сохранении шаговый насос будет заменён реле 1.'
       : 'Насос: реле 1 I2CStepper';
     byId('m_type').value = values[0];
-    byId('m_mixer_rpm').value = values[1];
-    byId('m_pump_rate').value = deviceScheduleExternalPumpAvailable ? values[2] : '0';
+    byId('m_mixer_rpm').value = deviceScheduleMixerStepperAvailable ? values[1] : '0';
+    byId('m_pump_rate').value = deviceSchedulePumpStepperAvailable ? values[2] : '0';
     byId('m_time').value = values[3];
     byId('m_pause').value = values[4];
     byId('popup').style.display = 'block';
@@ -732,9 +743,14 @@
       integer: true, min: 0, max: 65535, label: 'Скорость I2C-насоса'
     });
     if (!pump) return false;
-    if (((type & 1) !== 0) !== (Number(mixer.text) !== 0) ||
+    if ((!(type & 1) && Number(mixer.text) !== 0) ||
+        ((type & 1) && deviceScheduleMixerStepperAvailable && Number(mixer.text) === 0) ||
         (!(type & 2) && Number(pump.text) !== 0)) {
       showRequestError('Задайте обороты выбранной мешалки; для выключенного устройства укажите 0.');
+      return false;
+    }
+    if (type === 3 && Number(mixer.text) === 0 && Number(pump.text) === 0) {
+      showRequestError('Мешалка и насос не могут одновременно использовать реле 1.');
       return false;
     }
     normalizeDeviceScheduleSeconds(byId('m_time'));
