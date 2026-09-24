@@ -339,7 +339,7 @@ BROWSER_TEST = r'''async page => {
     out.errB = validateBeerProgramText("B;68.00;10;1^-20^0^2^3;0");
     out.relayPump = validateBeerProgramText("W;0;0;2^0^0^30^10;0");
     out.relayMixer = validateBeerProgramText("W;0;0;3^0^1200^30^10;0");
-    out.relayConflict = validateBeerProgramText("W;0;0;3^0^0^30^10;0");
+    out.bothRelays = validateBeerProgramText("W;0;0;3^0^0^30^10;0");
 
     // 9) [ревью п.1, случай а] хмель без TIME не сдвигает bth для последующих строк B
     await loadOnce(f.hopsNoTimeEdge, "hops_no_time.xml");
@@ -553,9 +553,9 @@ BROWSER_TEST = r'''async page => {
   if (results.relayPump !== "") {
     throw new Error("validateBeerProgramText must accept relay pump: " + JSON.stringify(results.relayPump));
   }
-  if (results.relayMixer !== "" || !results.relayConflict.includes("шаг 1")) {
-    throw new Error("validateBeerProgramText must accept relay mixer and reject shared relay: " +
-      JSON.stringify([results.relayMixer, results.relayConflict]));
+  if (results.relayMixer !== "" || results.bothRelays !== "") {
+    throw new Error("validateBeerProgramText must accept ESP32 mixer relay with I2C pump relay: " +
+      JSON.stringify([results.relayMixer, results.bothRelays]));
   }
 
   // ---------- assert: 9) хмель без TIME не сдвигает bth ----------

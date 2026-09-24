@@ -126,7 +126,7 @@
         if (time > timeMax) return row + 'время не больше ' + timeMax + ' минут';
         var noDevice = device.every(function(v) { return v === 0; });
         var scheduledDevice = SamovarApp.beerScheduledDeviceValid(device);
-        if (!(noDevice || scheduledDevice)) return row + 'задайте обороты мешалки и время работы';
+        if (!(noDevice || scheduledDevice)) return row + 'проверьте устройство и время работы';
         if (!SamovarApp.beerRowTypeOk(type, temp, time, noDevice, sensor)) return row + (PROGRAM_ROW_RULES[type] || 'неизвестный тип «' + type + '»');
       }
       return '';

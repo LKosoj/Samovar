@@ -360,12 +360,11 @@ inline bool program_validate_beer_row_semantics(
   const bool validDeviceMask = devType >= 1 && devType <= 3;
   const bool validMixerSpeed = (devType & 1) || mixerRpm == 0;
   const bool validPumpSpeed = (devType & 2) ? pumpMlHour >= 0 : pumpMlHour == 0;
-  const bool relayConflict = (devType & 3) == 3 && mixerRpm == 0 && pumpMlHour == 0;
   const bool validDeviceSchedule = validDeviceMask && validMixerSpeed &&
-      validPumpSpeed && !relayConflict && onTime > 0;
+      validPumpSpeed && onTime > 0;
   const bool mixerScheduleValid = noDevice || validDeviceSchedule;
   if (!mixerScheduleValid) {
-    errorMessage = "устройство должно быть 0^0^0^0^0 или маской 1..3 с ненулевым расписанием; мешалку и насос нельзя одновременно назначать на реле 1";
+    errorMessage = "устройство должно быть 0^0^0^0^0 или маской 1..3 с ненулевым расписанием";
     return false;
   }
   switch (type) {

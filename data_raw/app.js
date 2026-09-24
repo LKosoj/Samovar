@@ -180,8 +180,7 @@
   function beerScheduledDeviceValid(device) {
     return device[0] >= 1 && device[0] <= 3 && device[3] > 0 &&
       ((device[0] & 1) || device[1] === 0) &&
-      ((device[0] & 2) || device[2] === 0) && device[2] >= 0 &&
-      !(device[0] === 3 && device[1] === 0 && device[2] === 0);
+      ((device[0] & 2) || device[2] === 0) && device[2] >= 0;
   }
 
   var BEER_MASH_DEVICE_DEFAULT = '1^-20^0^2^3';
@@ -738,13 +737,8 @@
     });
     if (!pump) return false;
     if ((!(type & 1) && Number(mixer.text) !== 0) ||
-        ((type & 1) && deviceScheduleMixerStepperAvailable && Number(mixer.text) === 0) ||
         (!(type & 2) && Number(pump.text) !== 0)) {
-      showRequestError('Задайте обороты выбранной мешалки; для выключенного устройства укажите 0.');
-      return false;
-    }
-    if (type === 3 && Number(mixer.text) === 0 && Number(pump.text) === 0) {
-      showRequestError('Мешалка и насос не могут одновременно использовать реле 1.');
+      showRequestError('Для выключенного устройства укажите 0.');
       return false;
     }
     normalizeDeviceScheduleSeconds(byId('m_time'));

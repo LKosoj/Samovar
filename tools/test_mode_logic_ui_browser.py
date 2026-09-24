@@ -257,7 +257,7 @@ BROWSER_TEST = r'''async page => {
           fermentTooLong:program_error("F;18;43201;0^0^0^0^0;0"),
           relayPump:check_program("W;0;0;3^100^0^30^10;0"),
           relayMixer:check_program("W;0;0;3^0^1200^30^10;0"),
-          relayConflict:program_error("W;0;0;3^0^0^30^10;0"),
+          bothRelays:check_program("W;0;0;3^0^0^30^10;0"),
           negativePump:program_error("W;0;0;2^0^-1^30^10;0")
         };
       });
@@ -271,7 +271,7 @@ BROWSER_TEST = r'''async page => {
              "Beer F row longer than 30 days must be rejected with the limit named");
       expect(beerRowSync.relayPump && beerRowSync.negativePump.includes("Строка 1"),
              "Beer relay pump program validation disagrees with firmware");
-      expect(beerRowSync.relayMixer && beerRowSync.relayConflict.includes("Строка 1"),
+      expect(beerRowSync.relayMixer && beerRowSync.bothRelays,
              "Beer relay mixer program validation disagrees with firmware");
 
       // П46: та же проверка реального состояния для кнопки нагрева на beer.htm.
@@ -311,6 +311,19 @@ BROWSER_TEST = r'''async page => {
         const loaded = ["m_type", "m_mixer_rpm", "m_pump_rate", "m_time", "m_pause"]
           .map(id => document.getElementById(id).value);
         const saved = SamovarApp.saveDeviceScheduleModal();
+        const bothRelaysInput = document.createElement("input");
+        bothRelaysInput.value = "3^0^0^30^10";
+        const bothRelaysOpened = SamovarApp.openDeviceScheduleModal(bothRelaysInput, null, true, true);
+        const mixerLabel = document.querySelector('label[for="m_mixer_rpm"]');
+        const modal = document.querySelector('.popup__content').getBoundingClientRect();
+        const mixerLabelFits = mixerLabel.getBoundingClientRect().right <= modal.right;
+        const bothRelaysSaved = SamovarApp.saveDeviceScheduleModal();
+        const noStepperInput = document.createElement("input");
+        noStepperInput.value = "1^0^0^30^10";
+        const noStepperOpened = SamovarApp.openDeviceScheduleModal(noStepperInput, null, false, false);
+        const noStepperRelay = document.getElementById("m_mixer_relay").textContent ===
+          "Мешалка: реле 2 ESP32" && !document.getElementById("m_mixer_relay").hidden;
+        const noStepperSaved = SamovarApp.saveDeviceScheduleModal();
         const oldInput = document.createElement("input");
         oldInput.value = "1^-1^30^60";
         const oldOpened = SamovarApp.openDeviceScheduleModal(oldInput, null, true, true);
@@ -331,7 +344,10 @@ BROWSER_TEST = r'''async page => {
         const mixerRelayNote = document.getElementById("m_mixer_relay").textContent;
         document.getElementById("m_pump_rate").value = "1200";
         const pumpBoardSaved = SamovarApp.saveDeviceScheduleModal();
-        return {opened, loaded, saved, value:input.value, oldOpened,
+        return {opened, loaded, saved, value:input.value, bothRelaysOpened, mixerLabelFits,
+          bothRelaysSaved, bothRelaysValue:bothRelaysInput.value,
+          noStepperOpened, noStepperRelay, noStepperSaved,
+          noStepperValue:noStepperInput.value, oldOpened,
           relayOpened, relayOnly, relayNote, relaySaved, relayValue:relayInput.value,
           pumpBoardOpened, mixerRelay, pumpRateVisible, mixerRelayNote,
           pumpBoardSaved, pumpBoardValue:pumpBoardInput.value};
@@ -340,6 +356,13 @@ BROWSER_TEST = r'''async page => {
              JSON.stringify(deviceEditor.loaded) === JSON.stringify(["3", "-100", "1200", "30", "10"]) &&
              deviceEditor.value === "3^-100^1200^30^10",
              "beer device editor did not preserve independent mixer/pump speeds: " + JSON.stringify(deviceEditor));
+      expect(deviceEditor.bothRelaysOpened && deviceEditor.mixerLabelFits &&
+             deviceEditor.bothRelaysSaved &&
+             deviceEditor.bothRelaysValue === "3^0^0^30^10",
+             "Beer editor did not allow the ESP32 mixer relay with the I2C pump relay");
+      expect(deviceEditor.noStepperOpened && deviceEditor.noStepperRelay &&
+             deviceEditor.noStepperSaved && deviceEditor.noStepperValue === "1^0^0^30^10",
+             "Beer editor did not allow the ESP32 mixer relay without I2CStepper");
       expect(deviceEditor.oldOpened === false,
              "beer device editor still accepted the removed four-part format");
       expect(deviceEditor.relayOpened && deviceEditor.relayOnly &&
@@ -347,7 +370,7 @@ BROWSER_TEST = r'''async page => {
              deviceEditor.relayValue === "3^-100^0^30^10",
              "one I2CStepper did not offer relay 1 only: " + JSON.stringify(deviceEditor));
       expect(deviceEditor.pumpBoardOpened && deviceEditor.mixerRelay &&
-             deviceEditor.pumpRateVisible && deviceEditor.mixerRelayNote === "Мешалка: реле 1 I2CStepper" &&
+             deviceEditor.pumpRateVisible && deviceEditor.mixerRelayNote === "Мешалка: реле 2 ESP32" &&
              deviceEditor.pumpBoardSaved && deviceEditor.pumpBoardValue === "3^0^1200^30^10",
              "pump-mode I2CStepper did not use relay mixer and stepper pump: " + JSON.stringify(deviceEditor));
 

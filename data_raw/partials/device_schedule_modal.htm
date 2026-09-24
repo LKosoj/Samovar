@@ -4,8 +4,8 @@
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 20px !important;">
         <div id="popup_mesh" class="modalline">
           <label for="m_type">Устройство<select id="m_type"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select></label>
-          <label for="m_mixer_rpm">Мешалка, об/мин<input type="number" id="m_mixer_rpm" min="-32768" max="32767" step="1"></label>
-          <span id="m_mixer_relay" hidden>Мешалка: реле 1 I2CStepper</span>
+          <label for="m_mixer_rpm">Мешалка: 0 — реле 2 ESP32, иначе I2C, об/мин<input type="number" id="m_mixer_rpm" min="-32768" max="32767" step="1"></label>
+          <span id="m_mixer_relay" hidden>Мешалка: реле 2 ESP32</span>
           <label for="m_pump_rate"><span id="m_pump_text">Насос: 0 — реле 1, больше 0 — шаговый I2C-насос, мл/ч</span><input type="number" id="m_pump_rate" min="0" max="65535" step="1"></label>
           <span id="m_pump_relay" hidden>Насос: реле 1 I2CStepper</span>
           <label for="m_time" class="tooltip">Работа, сек<span class="tooltiptext">Максимальное время — 65535 сек (18 ч 12 мин)</span><input type="number" id="m_time" min="0" max="65535" step="1" onchange="SamovarApp.normalizeDeviceScheduleSeconds(this)" onblur="SamovarApp.normalizeDeviceScheduleSeconds(this)"></label>
