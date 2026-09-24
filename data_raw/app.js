@@ -699,6 +699,8 @@
     byId('m_pump_text').textContent = deviceSchedulePumpStepperAvailable &&
       !deviceScheduleMixerStepperAvailable ? 'Насос, мл/ч' :
       'Насос: 0 — реле 1, больше 0 — шаговый I2C-насос, мл/ч';
+    byId('m_pump_relay').textContent = deviceScheduleMixerStepperAvailable ?
+      'Насос: реле 1 I2CStepper' : 'Насос: выход ESP32';
     byId('m_pump_relay').hidden = deviceSchedulePumpStepperAvailable;
     byId('m_type').value = values[0];
     byId('m_mixer_rpm').value = deviceScheduleMixerStepperAvailable ? values[1] : '0';

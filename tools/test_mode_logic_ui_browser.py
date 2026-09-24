@@ -319,10 +319,12 @@ BROWSER_TEST = r'''async page => {
         const mixerLabelFits = mixerLabel.getBoundingClientRect().right <= modal.right;
         const bothRelaysSaved = SamovarApp.saveDeviceScheduleModal();
         const noStepperInput = document.createElement("input");
-        noStepperInput.value = "1^0^0^30^10";
+        noStepperInput.value = "3^0^0^30^10";
         const noStepperOpened = SamovarApp.openDeviceScheduleModal(noStepperInput, null, false, false);
         const noStepperRelay = document.getElementById("m_mixer_relay").textContent ===
           "Мешалка: реле 2 ESP32" && !document.getElementById("m_mixer_relay").hidden;
+        const noStepperPump = document.getElementById("m_pump_relay").textContent ===
+          "Насос: выход ESP32" && !document.getElementById("m_pump_relay").hidden;
         const noStepperSaved = SamovarApp.saveDeviceScheduleModal();
         const oldInput = document.createElement("input");
         oldInput.value = "1^-1^30^60";
@@ -346,7 +348,7 @@ BROWSER_TEST = r'''async page => {
         const pumpBoardSaved = SamovarApp.saveDeviceScheduleModal();
         return {opened, loaded, saved, value:input.value, bothRelaysOpened, mixerLabelFits,
           bothRelaysSaved, bothRelaysValue:bothRelaysInput.value,
-          noStepperOpened, noStepperRelay, noStepperSaved,
+          noStepperOpened, noStepperRelay, noStepperPump, noStepperSaved,
           noStepperValue:noStepperInput.value, oldOpened,
           relayOpened, relayOnly, relayNote, relaySaved, relayValue:relayInput.value,
           pumpBoardOpened, mixerRelay, pumpRateVisible, mixerRelayNote,
@@ -361,8 +363,9 @@ BROWSER_TEST = r'''async page => {
              deviceEditor.bothRelaysValue === "3^0^0^30^10",
              "Beer editor did not allow the ESP32 mixer relay with the I2C pump relay");
       expect(deviceEditor.noStepperOpened && deviceEditor.noStepperRelay &&
-             deviceEditor.noStepperSaved && deviceEditor.noStepperValue === "1^0^0^30^10",
-             "Beer editor did not allow the ESP32 mixer relay without I2CStepper");
+             deviceEditor.noStepperPump && deviceEditor.noStepperSaved &&
+             deviceEditor.noStepperValue === "3^0^0^30^10",
+             "Beer editor did not allow the ESP32 mixer and pump without I2CStepper");
       expect(deviceEditor.oldOpened === false,
              "beer device editor still accepted the removed four-part format");
       expect(deviceEditor.relayOpened && deviceEditor.relayOnly &&

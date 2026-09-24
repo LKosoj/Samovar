@@ -144,9 +144,19 @@ int main() {
   reset();
   program[0] = {'W', 0, 0, 3, 100, 0, 2, 0, 0};
   mixerPresent = true;
+#ifdef USE_WATER_PUMP
+  check(beer_validate_program(error), "I2C mixer and ESP32 pump were rejected without an I2C relay");
+#else
   check(!beer_validate_program(error), "relay pump row passed without a relay");
+#endif
   relayPresent = true;
   check(beer_validate_program(error), "mixer and relay pump on one board were rejected");
+
+#ifdef USE_WATER_PUMP
+  reset();
+  program[0] = {'W', 0, 0, 3, 0, 0, 2, 0, 0};
+  check(beer_validate_program(error), "ESP32 mixer and pump require an absent I2CStepper");
+#endif
 
   reset();
   program[0] = {'W', 0, 0, 2, 0, 0, 2, 0, 0};
@@ -172,13 +182,16 @@ int main() {
 '''
 
 
-def compile_and_run(harness: str, label: str, show_output: bool = True) -> int:
+def compile_and_run(harness: str, label: str, show_output: bool = True,
+                    use_water_pump: bool = False) -> int:
     with tempfile.TemporaryDirectory(prefix="samovar-beer-start-validation-") as temp_dir:
         source = Path(temp_dir) / "beer_start_validation.cpp"
         binary = Path(temp_dir) / "beer_start_validation"
         source.write_text(harness, encoding="utf-8")
         result = subprocess.run(
-            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
+            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror"] +
+            (["-DUSE_WATER_PUMP"] if use_water_pump else []) +
+            [str(source), "-o", str(binary)],
             capture_output=True, text=True, check=False,
         )
         if result.returncode:
@@ -196,6 +209,8 @@ def compile_and_run(harness: str, label: str, show_output: bool = True) -> int:
 def main() -> int:
     harness = HARNESS.replace("@SEMANTIC@", SEMANTIC).replace("@VALIDATE@", VALIDATE)
     if compile_and_run(harness, "production") != 0:
+        return 1
+    if compile_and_run(harness, "production with ESP32 pump", use_water_pump=True) != 0:
         return 1
 
     mutated_validate = VALIDATE.replace(

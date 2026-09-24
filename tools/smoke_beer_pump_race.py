@@ -481,6 +481,29 @@ static void test_relay_mixer_without_i2c_board() {
         "реле 2 мешалки не выключилось без I2CStepper");
 }
 
+static void test_esp32_mixer_and_pump_without_i2c_board() {
+  reset_fixture();
+  program[0].capacity_num = 0b10;
+  program[0].Param = 0;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED &&
+        lastPumpPwm == 1023 && mixerPumpCalls == 0 && digitalWriteCalls == 0,
+        "насос ESP32 не запустился отдельно без I2CStepper");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED && lastPumpPwm == 0,
+        "насос ESP32 не остановился отдельно без I2CStepper");
+
+  reset_fixture();
+  program[0].capacity_num = 0b11;
+  program[0].Speed = 0;
+  program[0].Param = 0;
+  check(set_mixer_state(true, false) == ACTUATOR_COMMAND_APPLIED &&
+        lastRelayState == SamSetup.rele2 && lastPumpPwm == 1023 &&
+        mixerPumpCalls == 0 && stepperCalls == 0,
+        "мешалка и насос ESP32 не запустились без I2CStepper");
+  check(set_mixer_state(false, false) == ACTUATOR_COMMAND_APPLIED &&
+        lastRelayState == !SamSetup.rele2 && lastPumpPwm == 0,
+        "мешалка и насос ESP32 не остановились без I2CStepper");
+}
+
 static void test_relay_mixer_and_relay_pump_run_together() {
   reset_fixture();
   program[0].capacity_num = 0b11;
@@ -877,6 +900,7 @@ int main() {
   test_program_owned_i2c_relay_is_switched_off_once();
   test_pump_board_runs_relay_mixer_and_stepper_pump();
   test_relay_mixer_without_i2c_board();
+  test_esp32_mixer_and_pump_without_i2c_board();
   test_relay_mixer_and_relay_pump_run_together();
   test_relay_mixer_rolls_back_when_pump_fails();
   test_failed_start_rollback_latches_and_stops_schedule_retry();

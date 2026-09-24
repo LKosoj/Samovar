@@ -399,11 +399,13 @@ inline bool beer_validate_program(String& errorMessage) {
       errorMessage = "I2C-насос недоступен в строке " + String(i + 1);
       return false;
     }
+#ifndef USE_WATER_PUMP
     if (BitIsSet(program[i].capacity_num, 1) && program[i].Param == 0 &&
         !select_relay_capable_device()) {
       errorMessage = "I2C-реле насоса недоступно в строке " + String(i + 1);
       return false;
     }
+#endif
     if (BitIsSet(program[i].capacity_num, 0) && program[i].Speed != 0 &&
         !i2c_stepper_mixer_present()) {
       errorMessage = "I2C-мешалка недоступна в строке " + String(i + 1);
@@ -1304,7 +1306,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	        return ACTUATOR_COMMAND_FAILED;
       }
 	      //включаем I2CStepper реле 1
-	      if (!externalPump) {
+	      if (!externalPump && (i2c_stepper_mixer_present() || i2c_stepper_pump_present())) {
 	        if (!set_mixer_pump_target(1)) {
           bool rollbackFailed = set_pump_pwm(0) != ACTUATOR_COMMAND_APPLIED;
           if (mixerStepperStarted && !set_stepper_by_time(0, 0, 0)) rollbackFailed = true;
