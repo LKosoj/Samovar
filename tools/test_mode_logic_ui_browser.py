@@ -325,11 +325,11 @@ BROWSER_TEST = r'''async page => {
       expect(deviceEditor.oldOpened === false,
              "beer device editor still accepted the removed four-part format");
       expect(deviceEditor.relayOpened && deviceEditor.relayOnly &&
-             deviceEditor.relayNote.includes("При сохранении") && deviceEditor.relaySaved &&
+             deviceEditor.relayNote === "Насос: реле 1 I2CStepper" && deviceEditor.relaySaved &&
              deviceEditor.relayValue === "3^-100^0^30^10",
              "one I2CStepper did not offer relay 1 only: " + JSON.stringify(deviceEditor));
       expect(deviceEditor.pumpBoardOpened && deviceEditor.mixerRelay &&
-             deviceEditor.pumpRateVisible && deviceEditor.mixerRelayNote.includes("При сохранении") &&
+             deviceEditor.pumpRateVisible && deviceEditor.mixerRelayNote === "Мешалка: реле 1 I2CStepper" &&
              deviceEditor.pumpBoardSaved && deviceEditor.pumpBoardValue === "3^0^1200^30^10",
              "pump-mode I2CStepper did not use relay mixer and stepper pump: " + JSON.stringify(deviceEditor));
 

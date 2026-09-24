@@ -696,17 +696,11 @@
     deviceSchedulePumpStepperAvailable = Boolean(pumpStepperAvailable);
     byId('m_mixer_rpm').parentElement.hidden = !deviceScheduleMixerStepperAvailable;
     byId('m_mixer_relay').hidden = deviceScheduleMixerStepperAvailable;
-    byId('m_mixer_relay').textContent = Number(values[1]) !== 0
-      ? 'Мешалка: реле 1 I2CStepper. При сохранении шаговая мешалка будет заменена реле 1.'
-      : 'Мешалка: реле 1 I2CStepper';
     byId('m_pump_rate').parentElement.hidden = !deviceSchedulePumpStepperAvailable;
     byId('m_pump_text').textContent = deviceSchedulePumpStepperAvailable &&
       !deviceScheduleMixerStepperAvailable ? 'Насос, мл/ч' :
       'Насос: 0 — реле 1, больше 0 — шаговый I2C-насос, мл/ч';
     byId('m_pump_relay').hidden = deviceSchedulePumpStepperAvailable;
-    byId('m_pump_relay').textContent = Number(values[2]) > 0
-      ? 'Насос: реле 1 I2CStepper. При сохранении шаговый насос будет заменён реле 1.'
-      : 'Насос: реле 1 I2CStepper';
     byId('m_type').value = values[0];
     byId('m_mixer_rpm').value = deviceScheduleMixerStepperAvailable ? values[1] : '0';
     byId('m_pump_rate').value = deviceSchedulePumpStepperAvailable ? values[2] : '0';
