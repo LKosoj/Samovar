@@ -147,6 +147,24 @@ BROWSER_TEST = r'''async page => {
       // рисоваться без них, поэтому фикстура их не содержит вовсе.
       expect((await page.locator("#SteamTemp").textContent()).trim() === "78.1",
              "core telemetry is not rendered without detector stability fields");
+      const rowDelta = await page.evaluate(sample => {
+        document.getElementById("WProgram").value = "H;106;0.07;0;0;135";
+        SamovarApp.renderScheme({...sample, ProgramNum:1});
+        const field = document.querySelector(".sec-program [data-tele='_delta']");
+        const valueBox = field.parentElement.getBoundingClientRect();
+        const cardBox = document.querySelector(".sec-program .line-card").getBoundingClientRect();
+        return {label:field.parentElement.previousElementSibling.textContent.trim(),
+                value:field.textContent.trim(),
+                fits:valueBox.right <= cardBox.right && valueBox.bottom <= cardBox.bottom};
+      }, telemetry);
+      expect(rowDelta.label === "Дельта" && rowDelta.value === "-0.20",
+             "rectification row must show sensor delta instead of unused program temperature");
+      expect(rowDelta.fits, "rectification row delta must fit inside the program card");
+      const changedDelta = await page.evaluate(sample => {
+        SamovarApp.renderScheme({...sample, SteamTemp:77.3, PipeTemp:78.1, ProgramNum:1});
+        return document.querySelector(".sec-program [data-tele='_delta']").textContent.trim();
+      }, telemetry);
+      expect(changedDelta === "+0.80", "rectification row delta must follow changed sensor readings");
 
       // П46: PowerOn=1 -> реальное состояние "нагрев включён". Портим ТОЛЬКО
       // надпись на кнопке (как будто страница не успела обновиться) и проверяем,
