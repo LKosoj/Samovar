@@ -170,6 +170,40 @@ BROWSER_TEST = r'''async page => {
     }
   }
 
+  scenario = "animation/rectification-heads";
+  await page.goto(baseUrl + "/index.htm", { waitUntil: "load" });
+  const rectAnimation = await page.evaluate(base => {
+    const state = Object.assign({}, base, {
+      PowerOn: 1, WthdrwlStatus: 1, ActualVolumePerHour: 1.5,
+      i2c_pump_running: 1, i2c_second_pump: 1, i2c_second_pump_running: 1,
+      PrgType: "H"
+    });
+    const mainFeed = document.querySelector('[data-show="_cp"] [data-on="_withdrawing"]');
+    const mainPump = document.querySelector('#sec-scheme [data-on="_pumpOn"]');
+    const headsPump = document.querySelector('[data-show="_cp"] [data-on="_cpPumpOn"]');
+    const visible = document.querySelector('[data-show="_cp"]');
+    function read() {
+      return [!visible.classList.contains("is-hidden"),
+        mainFeed.classList.contains("is-on"), mainPump.classList.contains("is-on"),
+        headsPump.classList.contains("is-on")];
+    }
+    SamovarApp.renderScheme(state);
+    const heads = read();
+    SamovarApp.renderScheme(Object.assign({}, state, { PrgType: "B" }));
+    const body = read();
+    SamovarApp.renderScheme(Object.assign({}, state, {
+      i2c_second_pump: 0, i2c_second_pump_running: 0
+    }));
+    const localHeads = document.querySelector('[data-show="_noCp"] [data-on="_withdrawing"]')
+      .classList.contains("is-on");
+    return { heads, body, localHeads, cpVisible: !visible.classList.contains("is-hidden") };
+  }, base);
+  if (JSON.stringify(rectAnimation.heads) !== JSON.stringify([true, false, false, true]) ||
+      JSON.stringify(rectAnimation.body) !== JSON.stringify([true, true, true, true]) ||
+      !rectAnimation.localHeads || rectAnimation.cpVisible) {
+    throw new Error(scenario + " mismatch: " + JSON.stringify(rectAnimation));
+  }
+
   // У I2C-мешалки анимация следует подтверждённому Nano флагу RUNNING,
   // а не одному программному намерению mixer=true.
   scenario = "animation/i2c-mixer";

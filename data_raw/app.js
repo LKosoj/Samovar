@@ -2328,19 +2328,22 @@
     v._heaterOn = Number(data.PowerOn) === 1;
     v._paused = Number(data.PauseOn) === 1 || Number(data.BeerManualPause) === 1;
     v._running = v._heaterOn && !v._paused;
-    v._withdrawing = Number(data.WthdrwlStatus) > 0 && !v._paused;
+    // При втором насосе на головах локальный тракт отбора остановлен.
+    v._cp = kind === 'rect' && !!Number(data.i2c_second_pump);
+    v._noCp = !v._cp;
+    v._withdrawing = Number(data.WthdrwlStatus) > 0 && !v._paused &&
+      !(v._cp && data.PrgType === 'H');
     const rate = num(data.ActualVolumePerHour);
     const i2cPumpOn = Number(data.i2c_pump_running) === 1;
     v._pumpOn = kind === 'nbk' ? (num(data.ISspd) > 0 && v._running) || i2cPumpOn
       : kind === 'beer' || kind === 'cheese' ? (!!data.mixer && v._running) || i2cPumpOn
+      : v._cp ? v._withdrawing && rate > 0
       : (v._withdrawing && rate > 0) || i2cPumpOn;
     const i2cMixerPresent = Number(data.i2c_mixer_present) === 1;
     const i2cMixerRunning = Number(data.i2c_mixer_running) === 1;
     v._mixerOn = !!data.mixer && v._running && (!i2cMixerPresent || i2cMixerRunning);
     // Второй I2C-насос отбора голов над ЦП (ректификация): ЦП и насос на схеме только
     // если он включён в настройках и плата отвечает; анимация — пока насос качает.
-    v._cp = kind === 'rect' && !!Number(data.i2c_second_pump);
-    v._noCp = !v._cp;
     v._cpPumpOn = v._cp && !!Number(data.i2c_second_pump_running);
     // Варочный порядок пива (BeerBrewOrder): у HERMS/RIMS вместо мешалки — насос
     // рециркуляции и бойлер/труба с ТЭНом; сыр и су-вид всегда рисуют обычный котёл.
