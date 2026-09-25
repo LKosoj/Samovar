@@ -287,32 +287,35 @@ inline void nbk_learn_pressure_ceiling() { // [T1-2026-09-03] предзахлё
   }
 }
 
+const char* nbkOverflowSource = "?";
+
 bool overflow(){
+  nbkOverflowSource = "?";
   if (PowerOn) {
    #ifdef USE_HEAD_LEVEL_SENSOR
-      if (head_level_sensor_holded()) return true;
+      if (head_level_sensor_holded()) {
+        nbkOverflowSource = "ДЗ";
+        return true;
+      }
    #endif
     // [П7] Без свежих данных ДД нельзя отличить «всё хорошо» от «идёт
     // захлёб» — безопаснее остановить рост мощности/подачи, как при
     // реальном захлёбе.
-    if (nbk_pressure_stale()) return true;
-    if (pressure_value >= nbk_overflow_pressure) return true;
+    if (nbk_pressure_stale()) {
+      nbkOverflowSource = "нет данных ДД";
+      return true;
+    }
+    if (pressure_value >= nbk_overflow_pressure) {
+      nbkOverflowSource = "ДД";
+      return true;
+    }
   }
   return false;
 }
 
-// [Ревью П1, находка 3] какой датчик вызвал срабатывание overflow() — те же условия, без побочных эффектов
+// Источник уже определён при опросе: повторный опрос ДЗ сбрасывает его состояние.
 inline const char* nbk_overflow_source() {
-  if (PowerOn) {
-   #ifdef USE_HEAD_LEVEL_SENSOR
-      if (head_level_sensor_holded()) return "ДЗ";
-   #endif
-    // [П7] Отдельный текст: несвежие данные — не то же самое, что реальный
-    // захлёб по ДД, сообщение не должно врать оператору.
-    if (nbk_pressure_stale()) return "нет данных ДД";
-    if (pressure_value >= nbk_overflow_pressure) return "ДД";
-  }
-  return "?";
+  return nbkOverflowSource;
 }
 
 // [Ремонт-2026-09-02 П12] Доступен ли хоть один детектор захлёба. SamSetup.UseHLS НЕ

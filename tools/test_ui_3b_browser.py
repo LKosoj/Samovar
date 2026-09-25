@@ -57,7 +57,14 @@ BROWSER_TEST = r'''async page => {
     BoilingEvidence:0, BoilingPrecisionSensorConfigured:false, bk_water_auto:false, bk_steam_setpoint:0,
     prvl:0, ISspd:0, ProgramNum:1
   };
-  await page.route('**/ajax*', route => { requests.push('ajax'); return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(telemetry)}); });
+  await page.route('**/ajax*', route => {
+    requests.push('ajax');
+    const data = {...telemetry, prvl: plan.index ? 12.5 : 0};
+    if (plan.path === '/nbk.htm') data.ui = {m:4, p:1, c:plan.kind === 'no-feed' ? [] : [{k:6, u:3, s:1, a:plan.index ? 12.5 : 5.001}]};
+    if (plan.kind === 'no-pressure') delete data.prvl;
+    if (plan.kind === 'disconnected-pressure') data.prvl = -1;
+    return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(data)});
+  });
   await page.route('**/command', route => { commands.push(route.request().postData() || ''); return route.fulfill({status:200, body:'OK'}); });
   await page.route('**/program', route => { programs.push(route.request().postData() || ''); return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({ok:true,err:'',program:''})}); });
   await page.route('**/i2cpump*', route => { i2c.push(route.request().url()); return route.fulfill({status:200, body:'OK'}); });
@@ -116,15 +123,16 @@ BROWSER_TEST = r'''async page => {
       path + ' I2C pump visibility missing');
     const colorIds = path === '/nbk.htm' ? ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp'] : ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp'];
     const colors = await page.evaluate(ids => ids.map(id => {
-      const style = getComputedStyle(document.getElementById(id).parentElement);
-      return [style.color, style.textDecorationColor];
+      const value = document.getElementById(id).parentElement;
+      const style = getComputedStyle(value);
+      return [style.color, style.textDecorationColor, getComputedStyle(value.parentElement.querySelector('i')).backgroundColor];
     }), colorIds);
     const expectedColors = await page.evaluate(expectedColors => expectedColors.map(color => {
       const probe = document.createElement('span'); probe.style.color = color; return probe.style.color;
     }), [expected.steamColor, expected.pipeColor, expected.waterColor, expected.tankColor, expected.acpColor]);
     expect(colors.every((value, index) =>
-      value[0] === expectedColors[index] && value[1] === expectedColors[index]),
-      path + ' sensor colors missing');
+      value.every(color => color === expectedColors[index])),
+      path + ' sensor value or marker color missing');
     await page.setViewportSize({width:390,height:844});
     expect(!await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), path + ' overflows on mobile');
   }
@@ -142,6 +150,22 @@ BROWSER_TEST = r'''async page => {
       'NBK row feed must come from the second program field');
     expect(await page.locator('[data-tele="_linePower"]').textContent() === (index ? '3600' : '3500'),
       'NBK row power must come from the third program field');
+    const pressure = page.locator('.sec-sensors #Pressure');
+    expect(await pressure.isVisible(), 'NBK pressure missing from visible sensor card');
+    expect(await pressure.locator('#pressure_value').textContent() === (index ? '12.5' : '0.0'),
+      'NBK pressure reading missing');
+    expect(await page.locator('.sec-pressure').count() === 0, 'NBK pressure card duplicated');
+    expect(await page.locator('#nbkFeedRate').textContent() === (index ? '12.5' : '5.0'),
+      'NBK applied feed missing from headline');
+    expect(await page.locator('#nbkSchemeFeedRate').textContent() === (index ? '12.5' : '5.0'),
+      'NBK scheme feed differs from headline');
+    expect(await page.locator('#opt_ISspd').textContent() === (index ? '12.5' : '5.0'),
+      'NBK applied feed missing from optimization control');
+    expect(await page.locator('.nbk-stage .progress').count() === 0, 'NBK empty progress bar remains');
+    expect(await page.locator('#nbkFeedRate').evaluate(element => parseFloat(getComputedStyle(element.parentElement).fontSize)) >= 28,
+      'NBK feed headline is too small');
+    await page.setViewportSize({width:1280,height:800});
+    expect(await pressure.isVisible(), 'NBK pressure missing from desktop sensor card');
   }
   await open('/distiller.htm', {kind:'success', index:0});
   await assertBootstrap('/distiller.htm', 0);
@@ -160,6 +184,18 @@ BROWSER_TEST = r'''async page => {
   await open('/nbk.htm', {kind:'success', index:1});
   await assertBootstrap('/nbk.htm', 1);
   await assertNbk(1);
+  await page.setViewportSize({width:390,height:844});
+  await open('/nbk.htm', {kind:'no-feed', index:0});
+  expect(await page.locator('#nbkFeedRate').textContent() === '—', 'NBK invented feed without applied control');
+  expect(await page.locator('#nbkSchemeFeedRate').textContent() === '—', 'NBK scheme invented feed without applied control');
+  await open('/nbk.htm', {kind:'no-pressure', index:0});
+  expect(await page.locator('.sec-sensors').isHidden(), 'NBK sensor card shown on mobile without pressure');
+  expect(await page.locator('.sec-sensors #Pressure').evaluate(element => getComputedStyle(element).display === 'none'),
+    'NBK pressure shown without sensor data');
+  await open('/nbk.htm', {kind:'disconnected-pressure', index:0});
+  expect(await page.locator('.sec-sensors').isHidden(), 'NBK sensor card shown on mobile for disconnected pressure');
+  expect(await page.locator('.sec-sensors #Pressure').evaluate(element => getComputedStyle(element).display === 'none'),
+    'NBK pressure shown for disconnected sensor');
   expect(consoleProblems.length === 0, 'console/page errors before failure case: ' + consoleProblems.join('; '));
   await open('/distiller.htm', {kind:'status', index:0});
   await open('/bk.htm', {kind:'status', index:0});

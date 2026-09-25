@@ -1014,6 +1014,25 @@ static void blynk_push_slow(bool force) {
   const bool programChanged = blynk_changed(lastProgramFingerprint, blynk_program_fingerprint(), force);
   const bool programModeChanged = blynk_changed(lastProgramMode, (int)Samovar_Mode, force);
   if (programChanged || programModeChanged) Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));
+
+  // V38: цвета температур из настроек (пар, царга, вода, куб, ТСА) через запятую -
+  // приложения и сайт красят ими датчики так же, как веб-интерфейс Самовара (PIN_SPEC.md §2).
+  static String lastColors;
+  char colors[5][sizeof(SamSetup.SteamColor)];
+  portENTER_CRITICAL(&configMux);
+  memcpy(colors[0], SamSetup.SteamColor, sizeof(colors[0]));
+  memcpy(colors[1], SamSetup.PipeColor, sizeof(colors[1]));
+  memcpy(colors[2], SamSetup.WaterColor, sizeof(colors[2]));
+  memcpy(colors[3], SamSetup.TankColor, sizeof(colors[3]));
+  memcpy(colors[4], SamSetup.ACPColor, sizeof(colors[4]));
+  portEXIT_CRITICAL(&configMux);
+  String colorLine;
+  for (uint8_t i = 0; i < 5; i++) {
+    colors[i][sizeof(colors[i]) - 1] = '\0';
+    if (i) colorLine += ',';
+    colorLine += colors[i];
+  }
+  if (blynk_changed(lastColors, colorLine, force)) Blynk.virtualWrite(V38, colorLine);
 }
 
 void blynk_push_tick() {

@@ -9,7 +9,7 @@
   и включён в таблицу kBlynkFastPush; V0/V1/V6/V7/V9/V25/V23 (T2, blynk-log-channel.md)
   из быстрых пинов убраны - те же значения теперь идут 25 полями в V34;
 - быстрые пины шлются порциями (BLYNK_PUSH_PER_TICK), а не все за одну итерацию loop();
-- медленные пины (V3, V4, V32, V13, V15, V20, V19, V16, V24) шлются из blynk_push_slow
+- медленные пины (V3, V4, V32, V13, V15, V20, V19, V16, V24, V38) шлются из blynk_push_slow
   только при изменении/force, V24 - по отпечатку program[] (blynk_program_fingerprint),
   program_io.h при этом не трогается (он заморожен другими smoke-тестами); V5 (T2) тоже
   убран - дублируется в V34;
@@ -317,6 +317,7 @@ if blynk:
         "Blynk.virtualWrite(V19, SAMOVAR_VERSION);",
         "Blynk.virtualWrite(V16, target_power_volt);",
         "Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));",
+        "if (blynk_changed(lastColors, colorLine, force)) Blynk.virtualWrite(V38, colorLine);",
     ]:
         if slow_body and write not in slow_body:
             errors.append(f"blynk_push_slow must contain: {write}")

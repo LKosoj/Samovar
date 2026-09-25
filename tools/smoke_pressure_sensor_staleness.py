@@ -80,6 +80,15 @@ int pressure_err_count = 0;
 // --- заглушки окружения nbk.h::overflow()/nbk_overflow_source() ---
 bool PowerOn = true;
 float nbk_overflow_pressure = 40.0f;
+const char* nbkOverflowSource = "?";
+static bool headSensorEvent = false;
+static int headSensorReads = 0;
+bool head_level_sensor_holded() {
+  headSensorReads++;
+  bool held = headSensorEvent;
+  headSensorEvent = false;
+  return held;
+}
 
 @STALE@
 
@@ -133,6 +142,23 @@ int main() {
   std::string source = nbk_overflow_source();
   check(source != "ДД", "источник несвежих данных не должен маскироваться под реальный захлёб по ДД");
   check(source == "нет данных ДД", "источник несвежих данных должен явно называть причину");
+
+  // ДЗ отдаёт событие только один раз: повторный опрос при формировании сообщения терял название.
+#ifdef USE_HEAD_LEVEL_SENSOR
+  pressure_err_count = 0;
+  pressure_value = 10.0f;
+  headSensorEvent = true;
+  headSensorReads = 0;
+  check(overflow(), "событие ДЗ должно вызвать захлёб");
+  check(std::string(nbk_overflow_source()) == "ДЗ", "сообщение должно сохранить источник ДЗ");
+  check(headSensorReads == 1, "название источника не должно повторно опрашивать ДЗ");
+#endif
+  pressure_err_count = 0;
+  pressure_value = 42.0f;
+  check(overflow(), "давление выше порога должно вызвать захлёб");
+  check(std::string(nbk_overflow_source()) == "ДД", "сообщение должно назвать источник ДД");
+  pressure_value = 10.0f;
+  check(!overflow(), "после исчезновения сигнала захлёба быть не должно");
 
   // --- семафор не захвачен - тоже неудача, pressure_value не подменяется ---
   pressure_err_count = 0;
@@ -202,7 +228,8 @@ def build_harness() -> str:
     stale_body = extract_function_body(nbk_source, STALE_SIGNATURE)
     overflow_body = extract_function_body(nbk_source, OVERFLOW_SIGNATURE)
     source_body = extract_function_body(nbk_source, SOURCE_SIGNATURE)
-    escalation_if_body, if_end = extract_braced_block_after(nbk_source, ESCALATION_ANCHOR)
+    alarm_start = nbk_source.index("bool check_nbk_critical_alarms() {")
+    escalation_if_body, if_end = extract_braced_block_after(nbk_source, ESCALATION_ANCHOR, alarm_start)
     # Тот же if - обязан иметь "else { ...сброс таймера... }" сразу следом
     # (сброс nbk_pressure_stale_start_time при восстановлении свежести) -
     # вытаскиваем и его, иначе тест пинил бы только половину логики.
@@ -239,32 +266,36 @@ def main() -> int:
         source = temp / "pressure_sensor_staleness_test.cpp"
         binary = temp / "pressure_sensor_staleness_test"
         source.write_text(harness, encoding="utf-8")
-        compile_result = subprocess.run(
-            [
-                "g++",
-                "-std=c++11",
-                "-Wall",
-                "-Wextra",
-                "-Werror",
-                str(source),
-                "-o",
-                str(binary),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if compile_result.returncode != 0:
-            sys.stderr.write("compile failed:\n")
-            sys.stderr.write(compile_result.stdout)
-            sys.stderr.write(compile_result.stderr)
-            return compile_result.returncode
-        run_result = subprocess.run(
-            [str(binary)], capture_output=True, text=True, check=False
-        )
-        sys.stdout.write(run_result.stdout)
-        sys.stderr.write(run_result.stderr)
-        return run_result.returncode
+        for head_sensor in (False, True):
+            compile_result = subprocess.run(
+                [
+                    "g++",
+                    "-std=c++11",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    *(["-DUSE_HEAD_LEVEL_SENSOR"] if head_sensor else []),
+                    str(source),
+                    "-o",
+                    str(binary),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if compile_result.returncode != 0:
+                sys.stderr.write("compile failed:\n")
+                sys.stderr.write(compile_result.stdout)
+                sys.stderr.write(compile_result.stderr)
+                return compile_result.returncode
+            run_result = subprocess.run(
+                [str(binary)], capture_output=True, text=True, check=False
+            )
+            sys.stdout.write(run_result.stdout)
+            sys.stderr.write(run_result.stderr)
+            if run_result.returncode != 0:
+                return run_result.returncode
+        return 0
 
 
 if __name__ == "__main__":

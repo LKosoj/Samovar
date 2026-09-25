@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-store, max-age=0">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="style.css?v=7.00u9">
+  <link rel="stylesheet" href="style.css?v=7.00u11">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=7.00.60"></script>
   <script>
     
     // ==================== POWER UNIT ===================================================================
@@ -185,13 +185,20 @@
           document.getElementById('opt_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
-          document.getElementById('ISspd').innerHTML = myObj.ISspd.toFixed(1);
-          document.getElementById('opt_ISspd').innerHTML = myObj.ISspd.toFixed(1);
-          // console.log('Pressure: ', myObj.prvl)
-          if (myObj.hasOwnProperty('prvl')) {
+          const feedControl = myObj.ui && Array.isArray(myObj.ui.c)
+            ? myObj.ui.c.find(control => control.k === 6 && control.u === 3 && Number.isFinite(control.a))
+            : null;
+          const feedRate = feedControl ? feedControl.a.toFixed(1) : '—';
+          document.getElementById('nbkFeedRate').textContent = feedRate;
+          document.getElementById('nbkSchemeFeedRate').textContent = feedRate;
+          document.getElementById('opt_ISspd').textContent = feedRate;
+          const pressureAvailable = typeof myObj.prvl === 'number' && Number.isFinite(myObj.prvl) && myObj.prvl >= 0;
+          document.body.classList.toggle('pressure-available', pressureAvailable);
+          if (pressureAvailable) {
             document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
+            document.getElementById('Pressure').style.display = '';
           } else {
-            document.getElementById('Pressure').style = "display: none"
+            document.getElementById('Pressure').style.display = 'none';
           }
 
           if (myObj.hasOwnProperty('PipeTemp') && myObj.PipeTemp !== undefined) {
@@ -227,11 +234,11 @@
       document.getElementById('WProgram').value = data.program;
       document.getElementById('Descr').value = data.description;
       document.getElementById('samovar_lua_btn_list').textContent = JSON.stringify(data.luaButtonList);
-      document.getElementById('SteamTemp').parentElement.style.color = data.steamColor;
-      document.getElementById('TankTemp').parentElement.style.color = data.tankColor;
-      document.getElementById('BragaTemp').parentElement.style.color = data.pipeColor;
-      document.getElementById('WaterTemp').parentElement.style.color = data.waterColor;
-      document.getElementById('ACPTemp').parentElement.style.color = data.acpColor;
+      SamovarApp.applySensorColor('SteamTemp', data.steamColor);
+      SamovarApp.applySensorColor('TankTemp', data.tankColor);
+      SamovarApp.applySensorColor('BragaTemp', data.pipeColor);
+      SamovarApp.applySensorColor('WaterTemp', data.waterColor);
+      SamovarApp.applySensorColor('ACPTemp', data.acpColor);
       document.getElementById('i2cStepperTab').hidden = !data.i2cStepperVisible;
       document.getElementById('i2cPumpTab').hidden = !data.i2cPumpVisible;
       document.getElementById('pmmn').title = 'Уменьшить скорость на шаг подачи (' + data.nbkDp + ' л/ч)';
@@ -285,12 +292,9 @@
   <form action='none' onsubmit='return false' name="mainform" id="mainform" class="mode-form">
 
     <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
-      <div class="stage" id="status_div">
+      <div class="stage nbk-stage" id="status_div">
         <h1><span id='Status'></span> <small>строка <span data-tele="_lineOf"></span></small></h1>
-        <div><div class="progress"><i data-width="_progress"></i></div></div>
-        <div class="meta">
-          <span>Подача <b><span id='ISspd'></span> л/ч</b></span>
-        </div>
+        <div class="nbk-feed"><span>Подача браги</span><strong><span id="nbkFeedRate">—</span><small>л/ч</small></strong></div>
       </div>
 
       <div class="grid">
@@ -312,7 +316,6 @@
             <div class="key-row">
               <div class="key-item"><div class="k">Пар</div><div class="v"><span data-tele="SteamTemp" data-fmt="2"></span><u>°C</u></div></div>
               <div class="key-item"><div class="k">Барда</div><div class="v"><span data-tele="TankTemp" data-fmt="2"></span><u>°C</u></div></div>
-              <div class="key-item"><div class="k">Подача</div><div class="v"><span data-tele="ISspd"></span><u>л/ч</u></div></div>
               <div class="key-item"><div class="k">Давление</div><div class="v"><span data-tele="prvl" data-fmt="1"></span><u>мм</u></div></div>
             </div>
           </section>
@@ -325,6 +328,7 @@
               <div class="sensor" id='BragaTemp_block'><i style="background: var(--pipe)"></i><span class="name">Брага</span><span class="val"><span id='BragaTemp'></span><u>°C</u></span></div>
               <div class="sensor"><i style="background: var(--water)"></i><span class="name">Вода</span><span class="val"><span id='WaterTemp'></span><u>°C</u></span></div>
               <div class="sensor"><i style="background: var(--acp)"></i><span class="name">ТСА</span><span class="val"><span id='ACPTemp'></span><u>°C</u></span></div>
+              <div class="sensor" id="Pressure" style="display: none"><i style="background: var(--text-muted)"></i><span class="name">Давление</span><span class="val"><span id="pressure_value"></span><u>мм рт.ст.</u></span></div>
             </div>
           </section>
         </div>
@@ -374,13 +378,6 @@
               <label class="text" id='set_power_label' for="Voltage" style="margin: 0;"></label>
               <input name='Voltage' id='Voltage' size='4' type='text' inputmode='decimal' value=''>
               <input id='SetVoltage' type='button' name='SetVoltage' onclick='sendvoltage();' class="button">
-            </div>
-          </section>
-
-          <section class="card sec-pressure" id="Pressure">
-            <h2>Давление</h2>
-            <div class="kv">
-              <div><div class="k">В бардоотводчике</div><div class="v"><span id='pressure_value'></span><u>мм рт.ст.</u></div></div>
             </div>
           </section>
 

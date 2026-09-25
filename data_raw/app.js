@@ -149,6 +149,12 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  function applySensorColor(id, color) {
+    const value = document.getElementById(id).parentElement;
+    value.style.color = color;
+    value.parentElement.querySelector('i').style.backgroundColor = color;
+  }
+
   function escapeHtml(value) {
     if (value === undefined || value === null) return '';
     return String(value)
@@ -2804,6 +2810,7 @@
     markProgramDirty: markProgramDirty,
     confirmLeave: confirmLeave,
     applyModeNavigation: applyModeNavigation,
+    applySensorColor: applySensorColor,
     reportUiError: reportUiError,
     readNumericInput: readNumericInput,
     responseErrorText: responseErrorText,

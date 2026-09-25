@@ -311,6 +311,11 @@ a { color: var(--accent); }
 }
 .stage .meta { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--text-muted); font-size: 13px; }
 .stage .meta b { color: var(--text-strong); font-weight: 600; font-size: 14px; }
+.nbk-stage { grid-template-columns: minmax(0, 1fr) auto; }
+.nbk-stage #ui_details { grid-column: 1 / -1; }
+.nbk-feed { display: flex; flex-direction: column; align-items: flex-end; color: var(--text-muted); font-size: 12px; }
+.nbk-feed strong { color: var(--text-strong); font-size: 30px; line-height: 1; font-weight: 700; white-space: nowrap; }
+.nbk-feed small { margin-left: 5px; color: var(--text-muted); font-size: 13px; font-weight: 500; }
 
 /* Баннер деградации конфигурации: цвета ставит JS через --detector-alarm-*. */
 .banner {
@@ -1645,6 +1650,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
   .brand small { display: none; }
   .stage { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
   .stage .meta { gap: 6px 14px; }
+  .nbk-stage { grid-template-columns: minmax(0, 1fr) auto; }
   .grid { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; padding-bottom: 88px; }
   .grid.grid-without-scheme { grid-template-columns: minmax(0, 1fr); }
   /* Панель действий вынесена из вкладки «Режим» (app.js, relocateActionsPanel) и
@@ -1660,6 +1666,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
   .sec-extra { order: 6; }
   .sec-sys { order: 7; }
   .sec-sensors { display: none; }                 /* температуры видны на схеме */
+  body[data-scheme="nbk"].pressure-available .sec-sensors { display: block; }
   .sec-detector { display: none !important; }      /* детектор - в «Ключевом»; !important перебивает inline display из скрипта */
   .top .tab { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .top .tab::-webkit-scrollbar { display: none; }

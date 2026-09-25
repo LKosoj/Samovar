@@ -10,7 +10,7 @@
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=7.00.60"></script>
   <script>
       
     var current_progNum = 0;
@@ -553,11 +553,11 @@
       document.getElementById('WProgram').value = data.program;
       document.getElementById('Descr').value = data.description;
       document.getElementById('samovar_lua_btn_list').textContent = JSON.stringify(data.luaButtonList);
-      document.getElementById('SteamTemp').parentElement.style.color = data.steamColor;
-      document.getElementById('PipeTemp').parentElement.style.color = data.pipeColor;
-      document.getElementById('WaterTemp').parentElement.style.color = data.waterColor;
-      document.getElementById('TankTemp').parentElement.style.color = data.tankColor;
-      document.getElementById('ACPTemp').parentElement.style.color = data.acpColor;
+      SamovarApp.applySensorColor('SteamTemp', data.steamColor);
+      SamovarApp.applySensorColor('PipeTemp', data.pipeColor);
+      SamovarApp.applySensorColor('WaterTemp', data.waterColor);
+      SamovarApp.applySensorColor('TankTemp', data.tankColor);
+      SamovarApp.applySensorColor('ACPTemp', data.acpColor);
       document.getElementById('version').textContent = data.version;
       document.getElementById('i2cStepperTab').style.display = data.i2cStepperVisible ? 'inline-block' : 'none';
       document.getElementById('i2cPumpTab').style.display = data.i2cPumpVisible ? 'inline-block' : 'none';
