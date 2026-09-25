@@ -891,6 +891,12 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
     errorMessage = "неверный шаблон устройства cheese";
     ok = false;
   }
+  if (ok) {
+    if (parsedType != 'D' || sensor != 3) temp = roundf(temp * 100.0f) / 100.0f;
+    timeMin = roundf(timeMin * 100.0f) / 100.0f;
+    if (parsedType != 'F' && (parsedType != 'D' || sensor != 3))
+      param = roundf(param * 100.0f) / 100.0f;
+  }
   if (ok && !program_validate_cheese_row_semantics(
       parsedType, temp, timeMin, devType, speed, onTime, offTime,
       sensor, parsedType == 'F' ? flocMultiplier : param, errorMessage)) {
@@ -1174,10 +1180,10 @@ inline void program_append_cheese_row(String& out, const WProgram& row, const ch
     out += program_load_cheese_doser_steps(row);
     out += ';';
   } else {
-    out += String(row.Temp, 6);
+    out += String(row.Temp, 2);
     out += ';';
   }
-  out += String(row.Time, 6);
+  out += String(row.Time, 2);
   out += ';';
   if (row.WType == 'F') {
     const uint32_t multiplierMilli = program_load_cheese_f_multiplier(row);
@@ -1191,7 +1197,7 @@ inline void program_append_cheese_row(String& out, const WProgram& row, const ch
   } else if (row.WType == 'D' && row.TempSensor == 3) {
     out += "0;";
   } else {
-    out += String(row.Param, 6);
+    out += String(row.Param, 2);
     out += ';';
   }
   out += row.capacity_num;

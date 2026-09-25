@@ -638,6 +638,20 @@ void test_cheese_field_mapping() {
       draft.rows[0].TempSensor == 0, "cheese mixer or sensor fields were mapped incorrectly");
 
   result = program_parse_lines(
+      String("H;63.126;90.126;1.126;0^0^0^0;0\n"), cheese_program_parse_spec(), draft);
+  check(result.ok() && draft.rows[0].Temp == 63.13f &&
+      draft.rows[0].Time == 90.13f && draft.rows[0].Param == 1.13f,
+      "cheese program values were not rounded before storage");
+  result = program_parse_lines(
+      String("N;32.124;60.124;6.124;0^0^0^0;0\n"), cheese_program_parse_spec(), draft);
+  check(result.ok() && draft.rows[0].Temp == 32.12f &&
+      draft.rows[0].Time == 60.12f && draft.rows[0].Param == 6.12f,
+      "cheese program values were not rounded down before storage");
+  result = program_parse_lines(
+      String("H;63;90;0.001;0^0^0^0;0\n"), cheese_program_parse_spec(), draft);
+  check(!result.ok(), "cheese row accepted a required value rounded to zero");
+
+  result = program_parse_lines(
       String("F;32;60;2.5005;2^-90^20^5;4\n"), cheese_program_parse_spec(), draft);
   check(result.ok(), "valid F row was rejected");
   uint32_t multiplierMilli = 0;
@@ -658,7 +672,7 @@ void test_cheese_field_mapping() {
   String maxSerialized;
   program_append_cheese_row(maxSerialized, draft.rows[0], draft.textPool);
   check(std::strcmp(maxSerialized.c_str(),
-      "F;150.000000;1440.000000;4294967.295;0^0^0^0;4\n") == 0,
+      "F;150.00;1440.00;4294967.295;0^0^0^0;4\n") == 0,
       "F uint32 maximum multiplier did not round-trip exactly");
 
   result = program_parse_lines(
@@ -669,7 +683,7 @@ void test_cheese_field_mapping() {
   String stepsSerialized;
   program_append_cheese_row(stepsSerialized, draft.rows[0], draft.textPool);
   check(std::strcmp(stepsSerialized.c_str(),
-      "D;2147483647;15.000000;0;0^0^0^0;3\n") == 0,
+      "D;2147483647;15.00;0;0^0^0^0;3\n") == 0,
       "D direct-step target did not round-trip exactly");
 }
 
@@ -888,9 +902,9 @@ void test_serializer_reference_values() {
   }
   {
     WProgram row{};
-    row.WType = 'C'; row.Temp = -12.375f; row.Time = -0.001f; row.Param = 999.125f;
+    row.WType = 'C'; row.Temp = -12.376f; row.Time = -0.011f; row.Param = 999.126f;
     row.capacity_num = 255; row.Speed = -3.5f; row.Volume = 65535; row.Power = -0.1f; row.TempSensor = 255;
-    check(run(program_append_cheese_row, row) == "C;-12.375000;-0.001000;999.125000;255^-3^65535^0;255\n",
+    check(run(program_append_cheese_row, row) == "C;-12.38;-0.01;999.13;255^-3^65535^0;255\n",
           "cheese serializer reference default-branch mismatch");
   }
   {
@@ -898,15 +912,15 @@ void test_serializer_reference_values() {
     row.WType = 'D'; row.TempSensor = 3;
     program_store_cheese_doser_steps(row, 4294967295u);
     row.Time = 12.5f; row.capacity_num = 0; row.Speed = 0.0f; row.Volume = 0; row.Power = 0.0f;
-    check(run(program_append_cheese_row, row) == "D;4294967295;12.500000;0;0^0^0^0;3\n",
+    check(run(program_append_cheese_row, row) == "D;4294967295;12.50;0;0^0^0^0;3\n",
           "cheese serializer reference doser-branch mismatch");
   }
   {
     WProgram row{};
     row.WType = 'F'; row.TempSensor = 7;
     program_store_cheese_f_multiplier(row, 4294967295u);
-    row.Temp = -55.5f; row.Time = 88.125f; row.capacity_num = 1; row.Speed = 1.0f; row.Volume = 1; row.Power = 1.0f;
-    check(run(program_append_cheese_row, row) == "F;-55.500000;88.125000;4294967.295;1^1^1^1;7\n",
+    row.Temp = -55.5f; row.Time = 88.126f; row.capacity_num = 1; row.Speed = 1.0f; row.Volume = 1; row.Power = 1.0f;
+    check(run(program_append_cheese_row, row) == "F;-55.50;88.13;4294967.295;1^1^1^1;7\n",
           "cheese serializer reference F-branch mismatch");
   }
   {
@@ -1199,8 +1213,8 @@ def main() -> int:
 
         mutated_serializer = (ROOT / "program_io.h").read_text(encoding="utf-8")
         mutated_serializer = mutated_serializer.replace(
-            "out += String(row.Param, 6);",
             "out += String(row.Param, 2);",
+            "out += String(row.Param, 6);",
             1,
         )
         if mutated_serializer == (ROOT / "program_io.h").read_text(encoding="utf-8"):
