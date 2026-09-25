@@ -144,6 +144,26 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(loaded["USE_EXPANDER"], "0x21")
         self.assertEqual(loaded["wifi_ssid"], "Домашняя сеть")
 
+    def test_pump_frequency_is_local_override(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        self.assertEqual(state["PUMP_PWM_FREQ"], "15")
+        state["PUMP_PWM_FREQ"] = "450"
+        model.save(state)
+        self.assertEqual(model.load()["PUMP_PWM_FREQ"], "450")
+        self.assertIn("#define PUMP_PWM_FREQ 450", (root / "user_config_override.h").read_text(encoding="utf-8"))
+        self.assertIn("#define PWM_LOW_VALUE 10", (root / "Samovar_ini.h").read_text(encoding="utf-8"))
+        self.assertNotIn("PUMP_PWM_FREQ", (root / "Samovar_ini.h").read_text(encoding="utf-8"))
+        state["PUMP_PWM_FREQ"] = "15"
+        model.save(state)
+        self.assertIn("//#define PUMP_PWM_FREQ 15", (root / "user_config_override.h").read_text(encoding="utf-8"))
+        self.assertEqual(model.load()["PUMP_PWM_FREQ"], "15")
+        for invalid in ("0", "450.5"):
+            state["PUMP_PWM_FREQ"] = invalid
+            with self.assertRaisesRegex(configurator.ConfigError, "Частота насоса"):
+                model.save(state)
+
     def test_second_board_and_regulator_are_not_hardcoded(self) -> None:
         root = self.make_project()
         model = configurator.SamovarConfig(root)
@@ -336,6 +356,7 @@ class ConfiguratorModelTests(unittest.TestCase):
             spec.macro: Variable(state[spec.macro])
             for spec in (
                 *configurator.VALUE_SPECS,
+                *configurator.LOCAL_VALUE_SPECS,
                 *configurator.OPTIONAL_SPECS,
                 *configurator.CHOICE_VALUE_SPECS,
                 *configurator.MQTT_VALUE_SPECS,
@@ -366,6 +387,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(window.ssid_var.get(), "Домашняя сеть")
         self.assertEqual(window.password_var.get(), "correct-pass")
         self.assertEqual(window.saved_state, before)
+        self.assertEqual(window.value_vars["PUMP_PWM_FREQ"].get(), "15")
         window._refresh_dirty.assert_called_once_with()
 
         errors, prompts = [], []
@@ -1850,6 +1872,7 @@ class ConfiguratorModelTests(unittest.TestCase):
             spec.section
             for specs in (
                 configurator.VALUE_SPECS,
+                configurator.LOCAL_VALUE_SPECS,
                 configurator.BOOL_SPECS,
                 configurator.OPTIONAL_SPECS,
                 configurator.CHOICE_VALUE_SPECS,

@@ -253,7 +253,7 @@ if water_pid_body:
             "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {",
             "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);",
             "} else {",
-            "set_pump_speed_pid(WaterSensor.avgTemp);",
+            "set_pump_speed_pid(WaterSensor.avgTemp, !waterRisingFast);",
         ],
         errors,
     )
@@ -295,9 +295,9 @@ if commit_body:
         "profile owner reapplies runtime config",
         commit_body,
         [
-            "save_profile_nvs(active_profile_operation.settings)",
+            "save_profile_nvs(settingsToSave)",
             "if (persistResult != PERSIST_OK)",
-            "SamSetup = active_profile_operation.settings;",
+            "SamSetup = persistNbkProgram",
             "if (hasSettings) apply_config_runtime();",
         ],
         errors,

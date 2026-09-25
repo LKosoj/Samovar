@@ -28,6 +28,7 @@ ALARM_SIGNATURES = [
 MODE_COMMON_SIGNATURES = [
     "inline bool mode_acp_above_boost_threshold(float acpBoostThreshold)",
     "inline void mode_warn_acp_hot_once(bool acpHot, float acpBoostThreshold)",
+    "inline bool mode_water_rising_fast()",
     "inline void mode_update_water_pump_pid(float acpBoostThreshold)",
 ]
 
@@ -54,6 +55,8 @@ static DSSensor ACPSensor;
 static Setup SamSetup;
 static bool PowerOn = false;
 static bool valve_status = true;
+static uint32_t fakeMillis = 0;
+static uint32_t millis() { return fakeMillis; }
 
 static int buzzerCalls = 0;
 static int messageCount = 0;
@@ -246,8 +249,8 @@ MUTATIONS = [
     ("предупреждение без нагрева", "  if (!PowerOn) {\n    warned = false;\n    return;\n  }",
      "  if (!PowerOn) {\n    warned = false;\n  }", "без нагрева предупреждений о ТСА нет"),
     ("предупреждение спрятано за клапаном",
-     "  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);\n#ifdef USE_WATER_PUMP\n  if (!valve_status) return;",
-     "#ifdef USE_WATER_PUMP\n  if (!valve_status) return;\n  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
+     "  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);\n#ifdef USE_WATER_PUMP\n  const bool waterRisingFast = mode_water_rising_fast();\n  if (!valve_status) return;",
+     "#ifdef USE_WATER_PUMP\n  const bool waterRisingFast = mode_water_rising_fast();\n  if (!valve_status) return;\n  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
      "не зависит от клапана воды"),
     ("насос не сравнивает ТСА с водой", "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp)", "if (acpHot)",
      "ТСА холоднее воды - насос"),

@@ -323,8 +323,9 @@ void check_alarm_bk() {
   mode_handle_water_pre_alarm_if_due();
 
 #ifdef USE_WATER_PUMP
-  // [9b] Шаговый регулятор охлаждения дефлегматора. Не в одном if с остальными
-  // авариями - process_sensor_failed() не должен прерывать функцию через
+  // В авторежиме насос поддерживает уставку пара. При быстром росте воды шаг
+  // вверх усиливается, даже если пар ещё не успел нагреться. Не в одном if с
+  // остальными авариями - process_sensor_failed() не должен прерывать функцию через
   // return (см. mode_request_overheat_emergency_if_needed() выше - её вызовы
   // тоже не гейтятся ранним return).
   if (bk_water_auto) {
@@ -333,20 +334,21 @@ void check_alarm_bk() {
       // а не откат в ручной режим: process_sensor_failed синхронно останавливает
       // нагрев с защёлкой, как при отказе датчика куба.
       process_sensor_failed("БК", "пара");
-    } else if (valve_status && wp_count >= 10 &&
-               (uint32_t)(millis() - bk_water_last_adjust_ms) >= BK_WATER_ADJUST_PERIOD_MS) {
-      bk_water_last_adjust_ms = millis();
-      float diff = SteamSensor.avgTemp - bk_steam_setpoint;
-      if (diff >= BK_WATER_DEADBAND) {
-        bk_pwm += BK_WATER_PWM_STEP;
-      } else if (diff <= -BK_WATER_DEADBAND && WaterSensor.avgTemp < ALARM_WATER_TEMP - 5) {
-        // Защита по воде важнее уставки пара: если вода уже в пред-аварийной
-        // зоне (>= ALARM_WATER_TEMP - 5), шаг ВНИЗ запрещён - см. ветку выше,
-        // где шаг ВВЕРХ (diff >= DEADBAND) не имеет такого ограничения вовсе.
-        bk_pwm -= BK_WATER_PWM_STEP;
+    } else if (valve_status && wp_count >= 10) {
+      const bool waterRisingFast = mode_water_rising_fast();
+      if ((uint32_t)(millis() - bk_water_last_adjust_ms) >= BK_WATER_ADJUST_PERIOD_MS) {
+        bk_water_last_adjust_ms = millis();
+        const float diff = SteamSensor.avgTemp - bk_steam_setpoint;
+        if (waterRisingFast) {
+          bk_pwm += BK_WATER_PWM_STEP * 4;
+        } else if (diff >= BK_WATER_DEADBAND) {
+          bk_pwm += BK_WATER_PWM_STEP;
+        } else if (diff <= -BK_WATER_DEADBAND && WaterSensor.avgTemp < ALARM_WATER_TEMP - 5) {
+          bk_pwm -= BK_WATER_PWM_STEP;
+        }
+        bk_pwm = constrain(bk_pwm, PWM_LOW_VALUE * 10, 1023);
+        set_pump_pwm(bk_pwm);
       }
-      bk_pwm = constrain(bk_pwm, PWM_LOW_VALUE * 10, 1023);
-      set_pump_pwm(bk_pwm);
     }
   }
 #endif

@@ -20,6 +20,7 @@
 //#define USE_ANALOG_EXPANDER 0x48
 //#define USE_ADS1115 0x48  // pH автоматически считывается с AIN0
 //#define SAMOVAR_USE_BLYNK
+//#define PUMP_PWM_FREQ 450
 
 #define MQTT_SERVER ""
 #define MQTT_PORT 1883

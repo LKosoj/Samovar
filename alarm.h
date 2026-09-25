@@ -393,10 +393,7 @@ void check_alarm() {
   mode_request_water_flow_emergency_if_needed();
 
   if (mode_water_pre_alarm_due()) {
-    set_buzzer(true);
-    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
-
+    mode_warn_water_hot();
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {

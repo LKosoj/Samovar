@@ -1812,8 +1812,7 @@ void check_alarm_nbk() {// вызывается из Samovar.ino, надо ра�
   mode_request_water_flow_emergency_if_needed(); //датчик протока сломался уже
 
   if (mode_water_pre_alarm_due()) {
-    set_buzzer(true);
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
+    mode_warn_water_hot();
     mode_set_alarm_pause_ms(60000);
   }
 

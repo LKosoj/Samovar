@@ -143,6 +143,14 @@ if mode_common:
             ],
         ),
         (
+            "inline void mode_warn_water_hot",
+            [
+                "set_buzzer(true);",
+                "format_float(WaterSensor.avgTemp, 1)",
+                "SendMsg(\"Высокая температура воды: \"",
+            ],
+        ),
+        (
             "inline bool mode_acp_above_boost_threshold",
             [
                 "sensor_configured(ACPSensor)",
@@ -156,10 +164,11 @@ if mode_common:
                 "mode_acp_above_boost_threshold(acpBoostThreshold)",
                 "mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
                 "#ifdef USE_WATER_PUMP",
+                "mode_water_rising_fast()",
                 "if (!valve_status) return;",
                 "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {",
                 "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false)",
-                "set_pump_speed_pid(WaterSensor.avgTemp)",
+                "set_pump_speed_pid(WaterSensor.avgTemp, !waterRisingFast)",
             ],
         ),
         (
@@ -182,8 +191,7 @@ if mode_common:
             "inline void mode_handle_water_pre_alarm_if_due",
             [
                 "if (mode_water_pre_alarm_due()) {",
-                "set_buzzer(true);",
-                "SendMsg((\"Критическая температура воды!\"), WARNING_MSG);",
+                "mode_warn_water_hot();",
                 "#ifdef SAMOVAR_USE_POWER",
                 "mode_reduce_power_for_water_alarm_by_volts(",
                 "mode_set_alarm_pause_ms(30000);",
@@ -239,11 +247,10 @@ if mode_common:
         errors.append(str(exc))
         body = ""
     require_ordered_tokens(
-        "mode_handle_water_pre_alarm_if_due message before optional power reduction",
+        "mode_handle_water_pre_alarm_if_due warning before optional power reduction",
         body,
         [
-            "set_buzzer(true);",
-            "SendMsg((\"Критическая температура воды!\"), WARNING_MSG);",
+            "mode_warn_water_hot();",
             "#ifdef SAMOVAR_USE_POWER",
             "mode_reduce_power_for_water_alarm_by_volts(",
             "mode_set_alarm_pause_ms(30000);",
@@ -331,6 +338,7 @@ for name, text, signature, ordered in [
             "mode_update_water_pump_pid(SamSetup.SetACPTemp < 45.0f ? 45.0f : SamSetup.SetACPTemp);",
             "mode_request_water_flow_emergency_if_needed();",
             "mode_water_pre_alarm_due()",
+            "mode_warn_water_hot();",
             "mode_reduce_power_for_water_alarm_by_volts(",
             "mode_set_alarm_pause_ms(30000);",
             "mode_update_water_valve_by_setpoint();",
@@ -377,6 +385,7 @@ for name, text, signature, ordered in [
             "mode_update_water_pump_pid(SamSetup.SetACPTemp);",
             "mode_request_water_flow_emergency_if_needed();",
             "mode_water_pre_alarm_due()",
+            "mode_warn_water_hot();",
             "mode_set_alarm_pause_ms(60000);",
         ],
     ),

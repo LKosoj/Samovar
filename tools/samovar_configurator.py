@@ -118,10 +118,14 @@ VALUE_SPECS = (
     ValueSpec("BODY_TEMP_AUTOSET_MAX_RISE", "Предел автоподъёма температуры тела, °C", "Ректификация"),
     ValueSpec("BK_STEAM_SETPOINT_MIN", "Минимальная уставка пара БК, °C", "БК"),
     ValueSpec("BK_STEAM_SETPOINT_MAX", "Максимальная уставка пара БК, °C", "БК"),
-    ValueSpec("BK_WATER_ADJUST_PERIOD_MS", "Период регулировки воды БК, мс", "БК"),
+    ValueSpec("BK_WATER_ADJUST_PERIOD_MS", "Период регулировки насоса БК, мс", "БК"),
     ValueSpec("BK_WATER_DEADBAND", "Мёртвая зона воды БК, °C", "БК"),
-    ValueSpec("BK_WATER_PWM_STEP", "Шаг ШИМ воды БК", "БК"),
+    ValueSpec("BK_WATER_PWM_STEP", "Шаг ШИМ насоса БК", "БК"),
     ValueSpec("BLYNK_SAMOVAR_TOOL", "Сервер Blynk", "Сеть", "text"),
+)
+
+LOCAL_VALUE_SPECS = (
+    ValueSpec("PUMP_PWM_FREQ", "Частота насоса, Гц", "Насосы"),
 )
 
 BOOL_SPECS = (
@@ -439,6 +443,11 @@ class SamovarConfig:
                 if spec.kind == "text"
                 else numeric_value_for_ui(line.value)
             )
+        pump_frequency = override.find("PUMP_PWM_FREQ")
+        state["PUMP_PWM_FREQ"] = (
+            numeric_value_for_ui(pump_frequency.value)
+            if pump_frequency is not None and pump_frequency.enabled else "15"
+        )
         for spec in BOOL_SPECS:
             state[spec.macro] = self._required_line(ini, spec.macro).enabled
         for spec in OPTIONAL_SPECS:
@@ -491,6 +500,10 @@ class SamovarConfig:
             description = ini.description(spec.macro)
             if description:
                 descriptions[spec.macro] = description
+        descriptions["PUMP_PWM_FREQ"] = (
+            "Частота ШИМ насоса охлаждения. 15 Гц — стандартное значение; "
+            "другое значение сохраняется только в локальном файле настроек и применяется после прошивки."
+        )
 
         for index, line in enumerate(ini.lines):
             if re.match(r"^\s*int8_t\s+servoDelta\s*\[11\]", line):
@@ -541,6 +554,14 @@ class SamovarConfig:
                 if spec.kind == "text"
                 else numeric_value_for_source(value, current.value),
             )
+        pump_frequency = str(state["PUMP_PWM_FREQ"]).strip()
+        if not re.fullmatch(r"[0-9]+", pump_frequency) or int(pump_frequency) < 1:
+            raise ConfigError("Частота насоса должна быть целым положительным числом")
+        pump_frequency = str(int(pump_frequency))
+        current_pump_frequency = override.find("PUMP_PWM_FREQ")
+        if current_pump_frequency is None:
+            override.insert_before_final_endif(["//#define PUMP_PWM_FREQ 15"])
+        override.set_macro("PUMP_PWM_FREQ", pump_frequency != "15", pump_frequency)
         for spec in BOOL_SPECS:
             current = self._required_line(ini, spec.macro)
             ini.set_macro(spec.macro, bool(state[spec.macro]), current.value)
@@ -2298,7 +2319,7 @@ class ConfiguratorWindow:
             "column_pressure_sensor",
         )
 
-        for spec in VALUE_SPECS:
+        for spec in VALUE_SPECS + LOCAL_VALUE_SPECS:
             variable = tk.StringVar()
             self.value_vars[spec.macro] = variable
             self._add_entry(

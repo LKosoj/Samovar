@@ -157,6 +157,12 @@ inline bool mode_water_pre_alarm_due() {
   return WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5 && PowerOn && alarm_t_min == 0;
 }
 
+inline void mode_warn_water_hot() {
+  set_buzzer(true);
+  SendMsg("Высокая температура воды: " + format_float(WaterSensor.avgTemp, 1) +
+      "°C (порог предупреждения " + String(ALARM_WATER_TEMP - 5) + "°C). Проверьте охлаждение.", WARNING_MSG);
+}
+
 // Превышение уставки ТСА для предупреждения и усиления охлаждения.
 inline bool mode_acp_above_boost_threshold(float acpBoostThreshold) {
   return sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor) && ACPSensor.avgTemp > acpBoostThreshold;
@@ -180,15 +186,45 @@ inline void mode_warn_acp_hot_once(bool acpHot, float acpBoostThreshold) {
   SendMsg("Высокая температура ТСА: " + format_float(ACPSensor.avgTemp, 1) + "°C (порог " + format_float(acpBoostThreshold, 1) + "°C)! Проверьте охлаждение.", WARNING_MSG);
 }
 
+#ifdef USE_WATER_PUMP
+inline bool mode_water_rising_fast() {
+  static bool initialized = false;
+  static bool fast = false;
+  static uint32_t windowStartMs = 0;
+  static float windowStartTemp = 0;
+  if (!PowerOn || !valve_status) {
+    initialized = false;
+    fast = false;
+    return false;
+  }
+  const uint32_t now = millis();
+  if (!initialized || (uint32_t)(now - windowStartMs) > 10000) {
+    initialized = true;
+    windowStartMs = now;
+    windowStartTemp = WaterSensor.avgTemp;
+    fast = false;
+  } else if ((uint32_t)(now - windowStartMs) >= 5000) {
+    fast = WaterSensor.avgTemp >= SamSetup.SetWaterTemp - 2.0f &&
+           WaterSensor.avgTemp - windowStartTemp >= 1.0f;
+    windowStartMs = now;
+    windowStartTemp = WaterSensor.avgTemp;
+  } else if (WaterSensor.avgTemp < windowStartTemp) {
+    fast = false;
+  }
+  return fast;
+}
+#endif
+
 inline void mode_update_water_pump_pid(float acpBoostThreshold) {
   const bool acpHot = mode_acp_above_boost_threshold(acpBoostThreshold);
   mode_warn_acp_hot_once(acpHot, acpBoostThreshold);
 #ifdef USE_WATER_PUMP
+  const bool waterRisingFast = mode_water_rising_fast();
   if (!valve_status) return;
   if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {
     set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);
   } else {
-    set_pump_speed_pid(WaterSensor.avgTemp);
+    set_pump_speed_pid(WaterSensor.avgTemp, !waterRisingFast);
   }
 #endif
 }
@@ -225,10 +261,7 @@ inline void mode_reduce_power_for_water_alarm_by_volts(const String& alarmMessag
 // паузу) - туда этот хелпер не переносим.
 inline void mode_handle_water_pre_alarm_if_due() {
   if (mode_water_pre_alarm_due()) {
-    set_buzzer(true);
-    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
-
+    mode_warn_water_hot();
 #ifdef SAMOVAR_USE_POWER
     //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
     mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)mode_water_alarm_power_base(), 5);

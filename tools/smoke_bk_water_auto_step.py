@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""[9b] Шаговый регулятор охлаждения дефлегматора БК (check_alarm_bk(), блок
-`if (bk_water_auto) { ... }` под #ifdef USE_WATER_PUMP): период применения не
-чаще BK_WATER_ADJUST_PERIOD_MS, мёртвая зона BK_WATER_DEADBAND, шаг
-BK_WATER_PWM_STEP, приоритет защиты по воде над уставкой пара, авария при
-отказе датчика пара имеет приоритет над шагом регулятора.
+"""Регулятор насоса БК держит температуру пара с шагом раз в секунду.
+Быстрый рост температуры воды увеличивает шаг без ожидания пара; защита воды
+запрещает шаг вниз, отказ датчика пара останавливает процесс.
 
 Харнесс компилирует РЕАЛЬНОЕ тело check_alarm_bk() целиком (BK.h) - как и
 tools/smoke_bk_full_route.py - чтобы не поддерживать два разных способа
@@ -28,12 +26,9 @@ static void vTaskDelay(int) {}
 #define SAMOVAR_USE_POWER_NOT_DEFINED 1  // намеренно НЕ определяем SAMOVAR_USE_POWER
 #define USE_WATER_PUMP 1
 
-// [9b] Харнесс сам задаёт эти параметры (не подключая Samovar_ini.h целиком,
-// как и остальные харнессы проекта) - значениями из §8 плана, это не
-// заглушки-константы, а реальные параметры сценариев регулятора.
-#define BK_WATER_ADJUST_PERIOD_MS 60000u
+#define BK_WATER_ADJUST_PERIOD_MS 1000u
 #define BK_WATER_DEADBAND 0.2f
-#define BK_WATER_PWM_STEP 30
+#define BK_WATER_PWM_STEP 3
 #define ALARM_WATER_TEMP 70
 #define PWM_LOW_VALUE 10
 
@@ -107,6 +102,7 @@ static bool bk_water_auto = false;
 static float bk_steam_setpoint = 0.0f;
 static uint32_t bk_water_last_adjust_ms = 0;
 
+inline bool mode_water_rising_fast() { @RISE@ }
 @CHECK_ALARM_BK@
 
 static int failures = 0;
@@ -115,6 +111,8 @@ static void check(bool condition, const char* message) {
 }
 
 static void reset_all() {
+  PowerOn = false;
+  mode_water_rising_fast();
   TankSensor = Sensor(); SteamSensor = Sensor(); PipeSensor = Sensor(); WaterSensor = Sensor();
   SamSetup = Setup();
   PowerOn = true;
@@ -134,18 +132,18 @@ static void reset_all() {
 }
 
 int main() {
-  // Сценарий 1: период не прошёл - шаг не делается.
+  // Сценарий 1: до следующего секундного шага насос не меняется.
   reset_all();
   bk_water_auto = true;
   valve_status = true;
   wp_count = 10;
   bk_steam_setpoint = 80.0f;
   SteamSensor.avgTemp = 90.0f;   // diff = 10, далеко за пределами мёртвой зоны
-  bk_water_last_adjust_ms = fakeMillis - 1000;   // прошло всего 1с из 60с периода
+  bk_water_last_adjust_ms = fakeMillis - 500;
   int pwmBefore = bk_pwm;
   check_alarm_bk();
-  check(setPumpPwmCalls == 0, "сценарий 1: период не прошёл - set_pump_pwm не должен вызываться");
-  check(bk_pwm == pwmBefore, "сценарий 1: период не прошёл - bk_pwm не должен измениться");
+  check(setPumpPwmCalls == 0, "сценарий 1: до следующей секунды насос не должен меняться");
+  check(bk_pwm == pwmBefore, "сценарий 1: до следующей секунды bk_pwm не должен измениться");
 
   // Сценарий 2: период прошёл, мёртвая зона - ШИМ не меняется, но таймер сдвигается.
   reset_all();
@@ -196,7 +194,7 @@ int main() {
   bk_steam_setpoint = 80.0f;
   SteamSensor.avgTemp = 90.0f;
   bk_water_last_adjust_ms = fakeMillis - BK_WATER_ADJUST_PERIOD_MS;
-  bk_pwm = 1023 - 10;
+  bk_pwm = 1023 - 1;
   check_alarm_bk();
   check(bk_pwm == 1023, "сценарий 5а: bk_pwm не должен превысить верхнюю границу 1023");
 
@@ -209,7 +207,7 @@ int main() {
   SteamSensor.avgTemp = 70.0f;
   WaterSensor.avgTemp = 20.0f;
   bk_water_last_adjust_ms = fakeMillis - BK_WATER_ADJUST_PERIOD_MS;
-  bk_pwm = PWM_LOW_VALUE * 10 + 10;
+  bk_pwm = PWM_LOW_VALUE * 10 + 1;
   check_alarm_bk();
   check(bk_pwm == PWM_LOW_VALUE * 10, "сценарий 5б: bk_pwm не должен уйти ниже нижней границы PWM_LOW_VALUE*10");
 
@@ -242,7 +240,7 @@ int main() {
     SteamSensor.avgTemp = 90.0f;
     bk_water_last_adjust_ms = periodElapsed
         ? fakeMillis - BK_WATER_ADJUST_PERIOD_MS
-        : fakeMillis - 1000;
+        : fakeMillis - 500;
     check_alarm_bk();
     check(processSensorFailedCalls == 1,
           "сценарий 7: авария датчика пара должна сработать ровно один раз за тик");
@@ -287,6 +285,32 @@ int main() {
   check(processSensorFailedCalls == 0, "сценарий 9б: датчик в порядке - авария не должна вызываться");
   check(setPumpPwmCalls == 0, "сценарий 9б: valve_status == false - шаг регулятора не должен выполняться");
 
+  // При росте воды пар ещё ниже уставки, но охлаждение должно усилиться.
+  reset_all();
+  bk_water_auto = true;
+  valve_status = true;
+  wp_count = 10;
+  bk_steam_setpoint = 80.0f;
+  SteamSensor.avgTemp = 70.0f;
+  WaterSensor.avgTemp = 23.0f;
+  bk_water_last_adjust_ms = fakeMillis;
+  check_alarm_bk();
+  fakeMillis += 5000;
+  WaterSensor.avgTemp = 24.2f;
+  check_alarm_bk();
+  check(bk_pwm == 500 + BK_WATER_PWM_STEP * 4,
+        "сценарий 10: быстрый рост воды должен усилить насос вопреки холодному пару");
+  fakeMillis += 1000;
+  WaterSensor.avgTemp = 24.3f;
+  check_alarm_bk();
+  check(bk_pwm == 500 + BK_WATER_PWM_STEP * 8,
+        "сценарий 10: насос должен реагировать каждую секунду быстрого роста");
+  fakeMillis += 4000;
+  WaterSensor.avgTemp = 24.4f;
+  check_alarm_bk();
+  check(bk_pwm == 500 + BK_WATER_PWM_STEP * 7,
+        "сценарий 10: после стабилизации воды снова действует уставка пара");
+
   if (failures != 0) return 1;
   std::cout << "BK water auto step passed\n";
   return 0;
@@ -313,13 +337,24 @@ def compile_and_run(name: str, source: str) -> subprocess.CompletedProcess:
 
 def main() -> int:
     bk_source = (ROOT / "BK.h").read_text(encoding="utf-8")
+    common_source = (ROOT / "mode_common.h").read_text(encoding="utf-8")
+    config_source = (ROOT / "Samovar_ini.h").read_text(encoding="utf-8")
+    if "#define BK_WATER_ADJUST_PERIOD_MS 1000" not in config_source:
+        print("FAIL: период регулировки насоса БК по умолчанию должен быть 1 с", file=sys.stderr)
+        return 1
+    if "#define BK_WATER_PWM_STEP 3" not in config_source:
+        print("FAIL: шаг насоса БК по умолчанию должен быть 3", file=sys.stderr)
+        return 1
     try:
         alarm_body = extract_function_body(bk_source, "void check_alarm_bk()")
+        rise_body = extract_function_body(common_source, "inline bool mode_water_rising_fast()")
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    harness = HARNESS.replace("@CHECK_ALARM_BK@", "void check_alarm_bk() {" + alarm_body + "}")
+    harness = HARNESS.replace("@RISE@", rise_body).replace(
+        "@CHECK_ALARM_BK@", "void check_alarm_bk() {" + alarm_body + "}"
+    )
 
     result = compile_and_run("bk_water_auto_step", harness)
     sys.stdout.write(result.stdout)
@@ -333,16 +368,25 @@ def main() -> int:
             print(f"FAIL: не удалось построить мутацию {name}", file=sys.stderr)
             return 1
         mutant_result = compile_and_run(name, mutant)
-        if mutant_result.returncode == 0:
-            print(f"FAIL: мутация {name} ({description}) пережила тест", file=sys.stderr)
+        if mutant_result.returncode == 0 or "FAIL: сценарий" not in mutant_result.stderr:
+            print(f"FAIL: мутация {name} ({description}) не вызвала содержательный assert: {mutant_result.stderr}", file=sys.stderr)
             return 1
         return 0
 
     status = run_mutant(
         "wp_count_gate",
-        "valve_status && wp_count >= 10 &&",
-        "valve_status &&",
+        "valve_status && wp_count >= 10)",
+        "valve_status)",
         "шаг регулятора выполняется до конца плавного пуска насоса",
+    )
+    if status != 0:
+        return status
+
+    status = run_mutant(
+        "water_rise_ignored",
+        "if (waterRisingFast)",
+        "if (false && waterRisingFast)",
+        "быстрый рост воды не ускоряет насос",
     )
     if status != 0:
         return status

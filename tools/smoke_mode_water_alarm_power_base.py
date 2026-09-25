@@ -199,7 +199,7 @@ def compile_and_run(harness: str, label: str) -> tuple[int, str, str]:
         return run_result.returncode, run_result.stdout, run_result.stderr
 
 
-WATER_PRE_ALARM_ANCHOR = 'SendMsg(("Критическая температура воды!"), WARNING_MSG);'
+WATER_PRE_ALARM_ANCHOR = 'mode_warn_water_hot();'
 
 
 def extract_sem_water_block(alarm_source: str) -> str:

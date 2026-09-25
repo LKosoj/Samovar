@@ -178,12 +178,12 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #endif
 
 #ifndef BK_WATER_ADJUST_PERIOD_MS
-#define BK_WATER_ADJUST_PERIOD_MS 60000   //[9b] период шага регулятора воды БК, мс
+#define BK_WATER_ADJUST_PERIOD_MS 1000    //период шага по температуре пара БК, мс
 #endif
 #ifndef BK_WATER_DEADBAND
 #define BK_WATER_DEADBAND 0.2f            //[9b] мёртвая зона (°C) вокруг уставки пара БК
 #endif
 #ifndef BK_WATER_PWM_STEP
-#define BK_WATER_PWM_STEP 30              //[9b] шаг регулятора ШИМ воды БК (из 1023)
+#define BK_WATER_PWM_STEP 3               //шаг ШИМ насоса по температуре пара БК (из 1023)
 #endif  // BK_WATER_PWM_STEP
 #endif  // __SAMOVAR_I_H_
