@@ -561,7 +561,7 @@ inline void tick_nbk_actuator_command() {
     runtime_pair_end(
         UI_WAIT_NBK_TRANSITION,
         RUNTIME_PAIR_RESUMED,
-        "Разгон НБК завершён.",
+        "Мощность и подача для прогрева НБК установлены.",
         NOTIFY_MSG);
   }
   if (nbkActuatorCommand.deadlineTarget ==
