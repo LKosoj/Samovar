@@ -3,7 +3,7 @@
  "replace": {
   "lang=\"ru\"": "lang=\"fr\"",
   "ru-RU": "fr-FR",
-  "get('lang') === 'en' ? 'en' : 'ru'": "get('lang') === 'ru' ? 'ru' : 'en'"
+  "get('lang') === 'en' ? 'en' : 'ru'": "get('lang') === 'en' ? 'en' : 'fr'"
  },
  "segments": {
   "Устройство занято. Команда не принята": "Appareil occupé. Commande refusée",

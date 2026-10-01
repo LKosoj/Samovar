@@ -3,7 +3,7 @@
  "replace": {
   "lang=\"ru\"": "lang=\"es\"",
   "ru-RU": "es-ES",
-  "get('lang') === 'en' ? 'en' : 'ru'": "get('lang') === 'ru' ? 'ru' : 'en'"
+  "get('lang') === 'en' ? 'en' : 'ru'": "get('lang') === 'en' ? 'en' : 'es'"
  },
  "segments": {
   "Устройство занято. Команда не принята": "Dispositivo ocupado. Comando no aceptado",

@@ -124,12 +124,12 @@
 
   function byId(id) { return document.getElementById(id); }
   function t(key, values) {
-    var value = text[language][key] || text.ru[key] || key;
+    var value = (text[language] || text.ru)[key] || text.ru[key] || key;
     return values ? value.replace(/\{(\w+)\}/g, function (_, name) { return values[name] === undefined ? '' : values[name]; }) : value;
   }
   function catalogLabel(group, value) {
     var key = group === 'style' ? String(value || '').split('.').pop() : String(value || '');
-    var label = text[language][group][key] || text.ru[group][key];
+    var label = (text[language] || text.ru)[group][key] || text.ru[group][key];
     if (label) return label;
     return key ? key.replace(/_/g, ' ').replace(/(^|\s)\S/g, function (letter) { return letter.toUpperCase(); }) : '';
   }

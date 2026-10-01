@@ -1005,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function byId(id) { return document.getElementById(id); }
   function t(key, values) {
-    var value = text[language][key] || text.ru[key] || key;
+    var value = (text[language] || text.ru)[key] || text.ru[key] || key;
     return values ? value.replace(/\{(\w+)\}/g, function (_, name) { return values[name] === undefined ? '' : values[name]; }) : value;
   }
   function localizeCard() {

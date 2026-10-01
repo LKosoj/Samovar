@@ -861,12 +861,45 @@ def check_real() -> None:
         extra = sorted(set(dictionary.segments) - result.used)
         if extra:
             fail(f"{lang}: лишние записи словаря ({len(extra)}): {extra[:5]}")
+        check_recipe_pages(lang, result.files)
         for name in result.files:
             eq(f"{lang}: реальный суффикс {name}", web_i18n.i18n_name(name, lang).count(f".{lang}."), 1)
         for name, body, module in js_pieces(result.files):
             message = node_check(body, module)
             if message:
                 fail(f"{name} ({lang}): node --check: {message[:300]}")
+
+
+RECIPE_PAGES = ("brewxml.htm", "cheese-recipes.htm")
+
+
+def recipe_page_language(page: str) -> tuple[str, str]:
+    """Исполняет выбор языка и t() страницы рецептов: (язык запроса к сайту, t('heading'))."""
+    start = page.index("var language = ")
+    end = page.index("function t(", start)
+    end = page.index("\n  }\n", end) + len("\n  }\n")
+    code = ("var location = {search: ''};\n" + page[start:end] +
+            "\nconsole.log(JSON.stringify([language, t('heading')]));\n")
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / "recipe.js"
+        path.write_text(code, encoding="utf-8")
+        proc = subprocess.run(["node", str(path)], capture_output=True, text=True, timeout=60)
+    if proc.returncode:
+        raise RuntimeError(proc.stderr.strip()[:300])
+    return tuple(json.loads(proc.stdout))
+
+
+def check_recipe_pages(lang: str, files: dict) -> None:
+    """Каталог рецептов на сайте есть на всех языках: страница просит язык устройства."""
+    for name in RECIPE_PAGES:
+        try:
+            got_lang, heading = recipe_page_language(files[name])
+        except RuntimeError as exc:
+            fail(f"{lang}: {name}: код выбора языка падает: {exc}")
+            continue
+        eq(f"{lang}: {name} просит у сайта язык устройства", got_lang, lang)
+        if re.search("[А-Яа-яЁё]", heading):
+            fail(f"{lang}: {name}: заголовок страницы не переведён: {heading!r}")
 
 
 def main() -> int:

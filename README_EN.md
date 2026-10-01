@@ -206,8 +206,8 @@ Homebrew is required to install Python and Tkinter automatically on macOS. On Li
 
 The firmware and web-interface language is chosen when flashing; it cannot be switched on a
 running device. Available now: Russian, English (`en`), German (`de`), French (`fr`), Spanish
-(`es`), and Chinese (`zh`). The beer and cheese recipe catalog from the site exists only in
-Russian and English, so in every language except Russian it opens in English.
+(`es`), and Chinese (`zh`). The beer and cheese recipe catalog from the site
+opens in the device language.
 
 - **Configurator.** In the "Main" section, choose "Firmware and web interface language", then
   "Flash" and "Upload LittleFS": the configurator builds the web-interface image in the chosen
