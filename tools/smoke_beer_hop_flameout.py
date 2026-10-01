@@ -40,6 +40,7 @@ ROW_ENTRY_RESET_TOKEN = (
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 using ProgramType = char;
@@ -72,7 +73,8 @@ static int abortCalls = 0;
 void beer_abort_config_error(const char*) { abortCalls++; }
 
 static int sendMsgCalls = 0;
-void SendMsg(const char*, int) { sendMsgCalls++; }
+using String = std::string;
+void SendMsg(const String&, int) { sendMsgCalls++; }
 
 static int buzzerCalls = 0;
 void set_buzzer(bool) { buzzerCalls++; }
@@ -295,7 +297,7 @@ def main() -> int:
         return 1
 
     harness = (
-        HARNESS_TEMPLATE.replace("@ELAPSED@", elapsed_full)
+        HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@ELAPSED@", elapsed_full)
         .replace("@CONTINUE_GLUE@", "  " + continue_glue_token)
         .replace("@BOIL_DETECT@", boil_detect)
         .replace("@HOP_REMINDER@", hop_reminder)

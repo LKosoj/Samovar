@@ -22,6 +22,7 @@ ERROR_HARNESS = r'''
 #include <cstring>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 class String {
  public:
   String(const char* value = "") : value_(value) {}
@@ -58,6 +59,7 @@ TRANSITION_HARNESS = r'''
 #include <iostream>
 #include <string>
 #include <vector>
+#include "@ROOT@/i18n.h"
 using std::isfinite;
 #define USE_WATER_PUMP
 #define PWM_LOW_VALUE 40
@@ -206,13 +208,13 @@ def main() -> int:
     except ValueError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    error = ERROR_HARNESS.replace("@ABORT@", abort)
+    error = ERROR_HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@ABORT@", abort)
     if not run(error, "Cheese error message", True):
         return 1
     abort_mutant = abort.replace("ProgramNum + 1", "ProgramNum", 1)
-    if abort_mutant == abort or not run(ERROR_HARNESS.replace("@ABORT@", abort_mutant), "Cheese error line mutation", False):
+    if abort_mutant == abort or not run(ERROR_HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@ABORT@", abort_mutant), "Cheese error line mutation", False):
         return 1
-    transition = TRANSITION_HARNESS
+    transition = TRANSITION_HARNESS.replace("@ROOT@", ROOT.as_posix())
     for marker, value in pieces.items():
         transition = transition.replace(marker, value)
     if not run(transition, "Cheese safe transition", True):

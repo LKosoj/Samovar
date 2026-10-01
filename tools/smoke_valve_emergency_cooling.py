@@ -22,13 +22,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
 OPEN_VALVE_SIGNATURE = "ActuatorCommandResult open_valve(bool Val, bool msg = true)"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <iostream>
 
 #define RELE_CHANNEL3 3

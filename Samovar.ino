@@ -166,9 +166,9 @@ static void tick_mqtt();
 //#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
-static_assert(BLYNK_TIMEOUT_MS == 3000UL, "BLYNK_TIMEOUT_MS из Samovar.h не подействовал: BlynkConfig.h включён раньше");
-static_assert(BLYNK_MAX_SENDBYTES == 1024, "BLYNK_MAX_SENDBYTES из Samovar.h не подействовал: BlynkConfig.h включён раньше");
-static_assert(BLYNK_MSG_LIMIT == 0, "BLYNK_MSG_LIMIT из Samovar.h не подействовал: BlynkConfig.h включён раньше");
+static_assert(BLYNK_TIMEOUT_MS == 3000UL, TR(MAIN_ASSERT_BLYNK_TIMEOUT, "BLYNK_TIMEOUT_MS из Samovar.h не подействовал: BlynkConfig.h включён раньше"));
+static_assert(BLYNK_MAX_SENDBYTES == 1024, TR(MAIN_ASSERT_BLYNK_SENDBYTES, "BLYNK_MAX_SENDBYTES из Samovar.h не подействовал: BlynkConfig.h включён раньше"));
+static_assert(BLYNK_MSG_LIMIT == 0, TR(MAIN_ASSERT_BLYNK_MSG_LIMIT, "BLYNK_MSG_LIMIT из Samovar.h не подействовал: BlynkConfig.h включён раньше"));
 
 #endif
 
@@ -403,15 +403,15 @@ struct SensorSetupField {
 
 static const SensorSetupField kSensorSetupFields[DS_SENSOR_COUNT] = {
     {&SetupEEPROM::SteamAdress, PROFILE_SENSOR_RESET_STEAM, &SetupEEPROM::SetSteamTemp,
-     &SetupEEPROM::SteamDelay, "Ошибка датчика температуры пара!"},
+     &SetupEEPROM::SteamDelay, TR(MAIN_ERR_SENSOR_STEAM, "Ошибка датчика температуры пара!")},
     {&SetupEEPROM::PipeAdress, PROFILE_SENSOR_RESET_PIPE, &SetupEEPROM::SetPipeTemp,
-     &SetupEEPROM::PipeDelay, "Ошибка датчика температуры царги!"},
+     &SetupEEPROM::PipeDelay, TR(MAIN_ERR_SENSOR_PIPE, "Ошибка датчика температуры царги!")},
     {&SetupEEPROM::WaterAdress, PROFILE_SENSOR_RESET_WATER, &SetupEEPROM::SetWaterTemp,
-     &SetupEEPROM::WaterDelay, "Ошибка датчика температуры воды!"},
+     &SetupEEPROM::WaterDelay, TR(MAIN_ERR_SENSOR_WATER, "Ошибка датчика температуры воды!")},
     {&SetupEEPROM::TankAdress, PROFILE_SENSOR_RESET_TANK, &SetupEEPROM::SetTankTemp,
-     &SetupEEPROM::TankDelay, "Ошибка датчика температуры куба!"},
+     &SetupEEPROM::TankDelay, TR(MAIN_ERR_SENSOR_TANK, "Ошибка датчика температуры куба!")},
     {&SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP, &SetupEEPROM::SetACPTemp,
-     &SetupEEPROM::ACPDelay, "Ошибка датчика температуры в ТСА!"},
+     &SetupEEPROM::ACPDelay, TR(MAIN_ERR_SENSOR_ACP, "Ошибка датчика температуры в ТСА!")},
 };
 
 static void apply_setup_sensor_fields(uint8_t resetMask) {
@@ -467,15 +467,15 @@ static OperationError commit_profile_operation() {
   if (hasProgram && program_update_session_active()) {
     const uint8_t currentRow = ProgramNum;
     if (currentRow >= ProgramLen) {
-      SendMsg("Программа не изменена: все её строки уже выполнены.", WARNING_MSG);
+      SendMsg(TR(MAIN_PROG_UNCHANGED_ALL_DONE, "Программа не изменена: все её строки уже выполнены."), WARNING_MSG);
       return OPERATION_ERROR_PROGRAM_FINISHED;
     }
     const uint8_t changedRow = program_first_changed_locked_row(
         Samovar_Mode, active_profile_operation.program, currentRow + 1);
     if (changedRow != 0) {
-      String message = "Программа не изменена: строку ";
+      String message = TR(MAIN_PROG_UNCHANGED_LINE, "Программа не изменена: строку ");
       message += String(changedRow);
-      message += " менять уже нельзя, она выполняется или выполнена.";
+      message += TR(MAIN_PROG_LINE_LOCKED, " менять уже нельзя, она выполняется или выполнена.");
       SendMsg(message, WARNING_MSG);
       return OPERATION_ERROR_PROGRAM_ROW_LOCKED;
     }
@@ -492,7 +492,7 @@ static OperationError commit_profile_operation() {
   if (hasMetadata) {
     runtimeLocked = runtime_state_lock(pdMS_TO_TICKS(500));
     if (!runtimeLocked) {
-      SendMsg("Операция профиля отменена: runtime state занят.", WARNING_MSG);
+      SendMsg(TR(MAIN_PROFILE_OP_CANCELLED_BUSY, "Операция профиля отменена: runtime state занят."), WARNING_MSG);
       return OPERATION_ERROR_RUNTIME_BUSY;
     }
   }
@@ -523,7 +523,7 @@ static OperationError commit_profile_operation() {
     const PersistResult persistResult = save_profile_nvs(nbkProgramProfile);
     if (persistResult != PERSIST_OK) {
       runtime_state_unlock(runtimeLocked);
-      String message = "Программа НБК не сохранена: ";
+      String message = TR(MAIN_NBK_PROG_NOT_SAVED, "Программа НБК не сохранена: ");
       message += persist_result_code(persistResult);
       SendMsg(message, ALARM_MSG);
       return OPERATION_ERROR_PROFILE_PERSIST_FAILED;
@@ -541,8 +541,8 @@ static OperationError commit_profile_operation() {
       // msg_q (200 байт на запись минус приставки SendMsg) - 23 байта при самом
       // длинном коде persist_result_code, длиннее текст делать нельзя.
       persistFailureMessage = modeChange
-          ? "Режим переключён, но не сохранён, перезагрузка вернёт прежний: "
-          : "Настройки не сохранены: ";
+          ? TR(MAIN_MODE_SWITCHED_NOT_SAVED, "Режим переключён, но не сохранён, перезагрузка вернёт прежний: ")
+          : TR(MAIN_SETTINGS_NOT_SAVED, "Настройки не сохранены: ");
       persistFailureMessage += persist_result_code(persistResult);
       // !modeChange: менять нечего (только настройки) - ранний возврат безопасен.
       // modeChange: применение режима в RAM обязано дойти до конца всегда - см.
@@ -664,7 +664,7 @@ static void publish_profile_operation_terminal() {
   guard.release();
   if (publishFailed) {
     SendMsg(
-        "Операция профиля: terminal state не опубликован; требуется перезагрузка.",
+        TR(MAIN_PROFILE_OP_TERMINAL_NOT_PUBLISHED, "Операция профиля: terminal state не опубликован; требуется перезагрузка."),
         ALARM_MSG);
   }
 }
@@ -723,7 +723,7 @@ static void process_profile_operation() {
     guard.release();
     if (transitionFailed) {
       SendMsg(
-          "Операция профиля: record недоступен при запуске; требуется перезагрузка.",
+          TR(MAIN_PROFILE_OP_RECORD_UNAVAILABLE, "Операция профиля: record недоступен при запуске; требуется перезагрузка."),
           ALARM_MSG);
     }
     if (profile_operation_phase_load() != PROFILE_OPERATION_RUNNING) return;
@@ -1993,9 +1993,9 @@ void IRAM_ATTR emergencyButtonInterrupt() {
 // из перегретой ТСА, поэтому её температуру называем сразу - иначе оператор ищет
 // неисправность в датчиках, а не в охлаждении.
 String emergency_button_reason() {
-  String reason = "Аварийное отключение! Сработал вход аварийной кнопки (кнопка или подключённый к ней датчик).";
+  String reason = TR(MAIN_EMERGENCY_BUTTON_TRIGGERED, "Аварийное отключение! Сработал вход аварийной кнопки (кнопка или подключённый к ней датчик).");
   if (sensor_configured(ACPSensor) && sensor_reading_valid(ACPSensor)) {
-    reason += " Температура ТСА " + format_float(ACPSensor.avgTemp, 1) + "°C.";
+    reason += TR(MAIN_ACP_TEMP_LABEL, " Температура ТСА ") + format_float(ACPSensor.avgTemp, 1) + "°C.";
   }
   return reason;
 }
@@ -2188,8 +2188,11 @@ void triggerGetClock(void *parameter) {
           // Первый символ записи — тип сообщения (см. SendMsg), текст начинается со второго.
           const char msgLevel = c[0];
           String qMsg(c + 1);
-          // Blynk и V26: заголовок словами, по нему приложения отличают тревогу от остального.
-          String pushMsg = String(msgLevel == '0' ? "Тревога! " : (msgLevel == '1' ? "Предупреждение! " : "")) + qMsg;
+          // Blynk и V26: по заголовку сервер и приложения отличают тревогу от остального.
+          // Русские слова понимают и старые версии приложений, в других языках заголовок -
+          // знак ⛔/⚠, не зависящий от языка (PIN_SPEC.md §6).
+          String pushMsg = String(msgLevel == '0' ? TR(MAIN_V26_ALARM_HEADER, "Тревога! ")
+                                  : (msgLevel == '1' ? TR(MAIN_V26_WARNING_HEADER, "Предупреждение! ") : "")) + qMsg;
           BlynkLockGuard blynkLock(pdMS_TO_TICKS(500));
           if (!blynkLock) {
             blynkLockBusy = true;
@@ -2296,7 +2299,7 @@ void triggerSysTicker(void *parameter) {
       //Проверим, что давление не вышло за пределы, если вышло - авария
       if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
         if (!pressure_alarm_sent) {
-          request_emergency_stop("Превышено предельное давление!");
+          request_emergency_stop(TR(MAIN_PRESSURE_LIMIT_EXCEEDED, "Превышено предельное давление!"));
           pressure_alarm_sent = true;
         }
       } else if (pressure_alarm_sent) {
@@ -2333,7 +2336,7 @@ void triggerSysTicker(void *parameter) {
       }
       if (rescanDs) {
         if (samovar_process_active()) {
-          SendMsg("Сканирование датчиков отклонено: процесс активен.", WARNING_MSG);
+          SendMsg(TR(MAIN_SENSOR_SCAN_REJECTED, "Сканирование датчиков отклонено: процесс активен."), WARNING_MSG);
           DS_getvalue();
         } else {
           scan_ds_adress();
@@ -2526,9 +2529,9 @@ static void session_checkpoint_report_pending() {
   if (pendingCheckpoint == 0) return;
   const uint8_t mode = uint8_t(pendingCheckpoint >> 8);
   const uint8_t prog = uint8_t(pendingCheckpoint & 0xFF);
-  const String notice = String(F("Обнаружена незавершённая сессия, режим ")) + String(mode) +
-                         F(", программа №") + String(prog) +
-                         F("; нагрев НЕ возобновлён автоматически.");
+  const String notice = String(F(TR(MAIN_UNFINISHED_SESSION_MODE, "Обнаружена незавершённая сессия, режим "))) + String(mode) +
+                         F(TR(MAIN_PROGRAM_NUM, ", программа №")) + String(prog) +
+                         F(TR(MAIN_HEATING_NOT_RESUMED_AUTO, "; нагрев НЕ возобновлён автоматически."));
   WriteConsoleLog(notice);
   SendMsg(notice, is_crash_reset_reason(esp_reset_reason()) ? ALARM_MSG : NOTIFY_MSG);
   // [P8 fix#2] Без этого одно и то же предупреждение повторялось бы на каждой
@@ -2657,7 +2660,7 @@ static ProgramParseResult restore_nbk_program_from_profile() {
   if (SamSetup.NbkProgramLength != NBK_PROGRAM_MAX) {
     return program_parse_result(
         PROGRAM_PARSE_WRONG_ROW_COUNT, 0,
-        "Некорректная длина программы НБК в NVS");
+        TR(MAIN_NBK_PROG_LEN_BAD_NVS, "Некорректная длина программы НБК в NVS"));
   }
   ProgramDraft draft{};
   program_reset_draft(draft);
@@ -2736,27 +2739,27 @@ static void restore_state_snapshot() {
 
   String notice;
   if (snapshot.powerOn) {
-    notice = F("Сессия прервана перезагрузкой: строка ");
+    notice = F(TR(MAIN_SESSION_INTERRUPTED_LINE, "Сессия прервана перезагрузкой: строка "));
     notice += String(snapshot.programRow);
     notice += "/";
     notice += String(snapshot.programLen);
-    notice += restored ? F(", программа восстановлена") : F(", программа не восстановлена");
-    notice += F(". Нагрев не возобновлён.");
+    notice += restored ? F(TR(MAIN_PROGRAM_RESTORED, ", программа восстановлена")) : F(TR(MAIN_PROGRAM_NOT_RESTORED, ", программа не восстановлена"));
+    notice += F(TR(MAIN_HEATING_NOT_RESUMED, ". Нагрев не возобновлён."));
     // [T24.2] Только информационная приписка: живой suvidHold.accumulatedMs в это время
     // уже обнулён (check_alarm_suvid() сбрасывает его каждую секунду при !PowerOn) - сюда
     // не пишем, счётчик выдержки просто начнётся заново после включения нагрева.
     if (Samovar_Mode == SAMOVAR_SUVID_MODE && snapshot.suvidHoldAccumulatedSec > 0) {
-      notice += F(" Накопленная выдержка Сувида на момент сбоя: ");
+      notice += F(TR(MAIN_SUVID_HOLD_AT_FAILURE, " Накопленная выдержка Сувида на момент сбоя: "));
       notice += format_uptime(snapshot.suvidHoldAccumulatedSec);
       notice += F(".");
     }
   } else {
     notice = Samovar_Mode == SAMOVAR_CHEESE_MODE
-        ? F("Программа Сыр из снимка не восстановлена и очищена. Программа по умолчанию не установлена.")
-        : F("Программа из снимка не восстановлена, установлена программа по умолчанию.");
+        ? F(TR(MAIN_CHEESE_SNAPSHOT_CLEARED, "Программа Сыр из снимка не восстановлена и очищена. Программа по умолчанию не установлена."))
+        : F(TR(MAIN_SNAPSHOT_DEFAULT_SET, "Программа из снимка не восстановлена, установлена программа по умолчанию."));
   }
   if (programLost) {
-    notice += F(" Причина: ");
+    notice += F(TR(MAIN_REASON_LABEL, " Причина: "));
     notice += programParseFailureReason;
     notice += F(".");
   }
@@ -3016,7 +3019,7 @@ static bool setup_check_ap_button_hold() {
 static void setup_start_alarm_button_task() {
 #ifdef ALARM_BTN_PIN
   if (!initEmergencyButtonTask()) {
-    request_emergency_stop("Аварийное отключение! Задача аварийной кнопки не запущена");
+    request_emergency_stop(TR(MAIN_EMERGENCY_BUTTON_TASK_NOT_STARTED, "Аварийное отключение! Задача аварийной кнопки не запущена"));
   }
 #endif
 }
@@ -3136,8 +3139,8 @@ static void setup_report_degraded_boot() {
   // уже отработали, так что в сообщение попадают ВСЕ причины, а не только ранние.
   // bootDegradedReason сам называет отказавшую подсистему, поэтому текст общий.
   if (bootDegraded) {
-    const String notice = String(F("Загрузка с ошибками (")) + bootDegradedReason +
-                          F("). Часть функций недоступна, работаем в ограниченном режиме.");
+    const String notice = String(F(TR(MAIN_BOOT_WITH_ERRORS, "Загрузка с ошибками ("))) + bootDegradedReason +
+                          F(TR(MAIN_BOOT_LIMITED_MODE, "). Часть функций недоступна, работаем в ограниченном режиме."));
     WriteConsoleLog(notice);
     // WARNING, не ALARM: это отказ конфигурации, а не авария процесса. ALARM
     // включает зацикленную сирену в браузере, хотя оператору нужно спокойно
@@ -3488,7 +3491,7 @@ void setup() {
   // нужно заполнить его дефолтом именно текущего режима.
   ProgramParseResult defaultProgramResult = load_default_program_for_mode(Samovar_Mode);
   if (!defaultProgramResult.ok()) {
-    String error = "Аварийная блокировка: ";
+    String error = TR(MAIN_EMERGENCY_LOCKOUT, "Аварийная блокировка: ");
     error += format_program_parse_error(defaultProgramResult);
     Serial.println(error);
     request_emergency_stop(error);
@@ -3496,7 +3499,7 @@ void setup() {
     const ProgramParseResult storedProgramResult =
         restore_nbk_program_from_profile();
     if (!storedProgramResult.ok()) {
-      String error = "Аварийная блокировка: программа НБК из NVS повреждена: ";
+      String error = TR(MAIN_EMERGENCY_LOCKOUT_NBK_NVS, "Аварийная блокировка: программа НБК из NVS повреждена: ");
       error += format_program_parse_error(storedProgramResult);
       Serial.println(error);
       request_emergency_stop(error);
@@ -3553,7 +3556,7 @@ void setup() {
     //На всякий случай пошлем команду выключения питания на UART
     set_power_mode(POWER_SLEEP_MODE);
   } else {
-    request_emergency_stop("Аварийное отключение! Задача регулятора не запущена");
+    request_emergency_stop(TR(MAIN_EMERGENCY_REGULATOR_TASK_NOT_STARTED, "Аварийное отключение! Задача регулятора не запущена"));
   }
 #endif
 
@@ -3660,8 +3663,8 @@ static void tick_check_stack_headroom() {
   const UBaseType_t loopStackFree = uxTaskGetStackHighWaterMark(NULL);
   if (loopStackFree < 1024) {
     print_critical_stack_details("loopTask", loopStackFree);
-    request_emergency_stop("Аварийное отключение! Критически малый остаток стека");
-    SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
+    request_emergency_stop(TR(MAIN_EMERGENCY_STACK_LOW, "Аварийное отключение! Критически малый остаток стека"));
+    SendMsg(TR(MAIN_STACK_OVERFLOW_REBOOT, "Стек переполнился. Перезагрузка"), ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();
   }
@@ -3678,8 +3681,8 @@ static void tick_check_stack_headroom() {
     const UBaseType_t stackFree = uxTaskGetStackHighWaterMark(handle);
     if (stackFree < 1024) {
       print_critical_stack_details(stackWatchTable[i].name, stackFree);
-      request_emergency_stop(String("Аварийное отключение! Критически малый остаток стека задачи ") + stackWatchTable[i].name);
-      SendMsg(String("Стек задачи ") + stackWatchTable[i].name + " переполнился. Перезагрузка", ALARM_MSG);
+      request_emergency_stop(String(TR(MAIN_EMERGENCY_TASK_STACK_LOW, "Аварийное отключение! Критически малый остаток стека задачи ")) + stackWatchTable[i].name);
+      SendMsg(String(TR(MAIN_TASK_STACK_LABEL, "Стек задачи ")) + stackWatchTable[i].name + TR(MAIN_TASK_STACK_OVERFLOW_REBOOT, " переполнился. Перезагрузка"), ALARM_MSG);
       vTaskDelay(5000);
       ESP.restart();
     }
@@ -3710,8 +3713,8 @@ static void tick_check_systicker_liveness() {
   }
 
   if (millis() - lastChangeMs > 10000) {
-    request_emergency_stop("Аварийное отключение! Задача надзора SysTicker зависла");
-    SendMsg("Задача надзора SysTicker зависла. Перезагрузка", ALARM_MSG);
+    request_emergency_stop(TR(MAIN_EMERGENCY_SYSTICKER_HUNG, "Аварийное отключение! Задача надзора SysTicker зависла"));
+    SendMsg(TR(MAIN_SYSTICKER_HUNG_REBOOT, "Задача надзора SysTicker зависла. Перезагрузка"), ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();
   }
@@ -3891,7 +3894,7 @@ static void tick_reap_stale_operations() {
       }
       guard.release();
       if (reaped) {
-        SendMsg("Просроченная операция принудительно завершена (reaper)", ALARM_MSG);
+        SendMsg(TR(MAIN_OP_EXPIRED_FORCED, "Просроченная операция принудительно завершена (reaper)"), ALARM_MSG);
       }
     }
   }
@@ -3907,7 +3910,7 @@ static void tick_apply_pending_mixer() {
   bool mixerOn = false;
   if (take_pending_value(pending_mixer_flag, pending_mixer_on, mixerOn)) {
     if (set_mixer(mixerOn) == ACTUATOR_COMMAND_FAILED) {
-      SendMsg("Команда мешалки не выполнена: исполнитель не подтвердил состояние", ALARM_MSG);
+      SendMsg(TR(MAIN_MIXER_CMD_FAILED, "Команда мешалки не выполнена: исполнитель не подтвердил состояние"), ALARM_MSG);
     }
     // [Ревью 24.08, ошибка 1] Та же природа, что в process_pending_i2c_operations()
     // (см. комментарий там): set_mixer() -> set_mixer_state() (beer.h) при найденном
@@ -3949,7 +3952,7 @@ static void tick_apply_pending_voltage() {
   if (take_pending_value(pending_voltage_flag, pending_voltage_value, voltage)) {
     // [Ремонт-2026-09-02 П4] На Оптимизации/Работе НБК ручная Voltage обходит алгоритм.
     if (nbk_manual_control_locked()) {
-      SendMsg("Ручное управление недоступно на Оптимизации и в Работе НБК.", WARNING_MSG);
+      SendMsg(TR(MAIN_NBK_MANUAL_UNAVAILABLE, "Ручное управление недоступно на Оптимизации и в Работе НБК."), WARNING_MSG);
     } else {
       set_current_power(voltage);
     }
@@ -3963,7 +3966,7 @@ static void tick_apply_pending_nbkopt() {
     // [Ремонт-2026-09-02, ревью R3] буквы S/W есть и у других режимов (стабилизация БК/дистилляции,
     // ожидание пива) - кнопка принадлежит только НБК.
     if (!PowerOn || SamovarStatusInt != SAMOVAR_STATUS_NBK || (currentType != 'S' && currentType != 'W')) {
-      SendMsg("Кнопка доступна только на Ручной настройке и в Работе НБК.", WARNING_MSG);
+      SendMsg(TR(MAIN_NBK_BUTTON_ONLY_MANUAL_WORK, "Кнопка доступна только на Ручной настройке и в Работе НБК."), WARNING_MSG);
       return;
     }
     nbk_Mo = toPower(target_power_volt);
@@ -3973,7 +3976,7 @@ static void tick_apply_pending_nbkopt() {
       nbk_high_temp_ticks = 0;
     }
 #ifdef SAMOVAR_USE_POWER
-    SendMsg("Установлены оптимальные значения: " + String(fromPower(nbk_Mo), 0) + String(PWR_SIGN) + ",  " + String(nbk_Po, 1) + " л/ч", WARNING_MSG);
+    SendMsg(TR(MAIN_OPTIMAL_VALUES_SET, "Установлены оптимальные значения: ") + String(fromPower(nbk_Mo), 0) + String(PWR_SIGN) + ",  " + String(nbk_Po, 1) + TR(MAIN_UNIT_LPH, " л/ч"), WARNING_MSG);
 #endif
   }
 }
@@ -4110,10 +4113,10 @@ static void tick_apply_pending_pnbk() {
       // [Ремонт-2026-09-02 П4] На Оптимизации/Работе НБК ручная pnbk обходит алгоритм —
       // до разбора pnbk.kind, dispatch пропускается, флаг снимается через pnbkDone=true.
       if (pump && (!pump->present || pump->config.stepsPerMl == 0)) {
-        SendMsg("Команда НБК отклонена: выбранный I2C-насос недоступен.", WARNING_MSG);
+        SendMsg(TR(MAIN_NBK_CMD_PUMP_UNAVAILABLE, "Команда НБК отклонена: выбранный I2C-насос недоступен."), WARNING_MSG);
         pnbkDone = true;
       } else if (nbk_manual_control_locked()) {
-        SendMsg("Ручное управление недоступно на Оптимизации и в Работе НБК.", WARNING_MSG);
+        SendMsg(TR(MAIN_NBK_MANUAL_UNAVAILABLE, "Ручное управление недоступно на Оптимизации и в Работе НБК."), WARNING_MSG);
         pnbkDone = true;
       } else if (pnbk.kind == CONTROL_NBK_INCREMENT) {
         const float deltaSpeed = pump
@@ -4124,7 +4127,7 @@ static void tick_apply_pending_pnbk() {
         if (!(deltaSpeed > 0.0f) || deltaSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC ||
             requestedSpeed < currentSpeed ||
             requestedSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) {
-          SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
+          SendMsg(TR(MAIN_NBK_CMD_BAD_SPEED_CAL, "Команда НБК отклонена: неверная калибровка скорости."), WARNING_MSG);
           pnbkDone = true;
         } else {
           const float requestedRate = pump
@@ -4141,7 +4144,7 @@ static void tick_apply_pending_pnbk() {
             : 0.0f;
         if (deltaRate > 0.0f && (!(deltaSpeed > 0.0f) ||
                                  deltaSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC)) {
-          SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
+          SendMsg(TR(MAIN_NBK_CMD_BAD_SPEED_CAL, "Команда НБК отклонена: неверная калибровка скорости."), WARNING_MSG);
           pnbkDone = true;
         } else if (uint32_t(deltaSpeed) >= currentSpeed) {
           pnbkDone = SetSpeed(0) == ACTUATOR_COMMAND_APPLIED;
@@ -4227,7 +4230,7 @@ static void process_explicit_power_on_command() {
   if (modeCommand != SAMOVAR_POWER) {
 #ifndef SAMOVAR_USE_POWER
     if (modeCommand == SAMOVAR_NBK) {
-      SendMsg("Запуск НБК отклонён: регулятор мощности недоступен в этой сборке.", ALARM_MSG);
+      SendMsg(TR(MAIN_NBK_START_NO_REGULATOR, "Запуск НБК отклонён: регулятор мощности недоступен в этой сборке."), ALARM_MSG);
       return;
     }
 #endif
@@ -4298,7 +4301,7 @@ void loop() {
             pause_withdrawal(true);
             if (PauseOn && !program_Wait) {
               rectManualPauseActive = true;
-              runtime_pair_begin(UI_WAIT_MANUAL_RECT, "Ручная пауза отбора", NOTIFY_MSG);
+              runtime_pair_begin(UI_WAIT_MANUAL_RECT, TR(MAIN_MANUAL_TAKEOFF_PAUSE, "Ручная пауза отбора"), NOTIFY_MSG);
             }
           }
         } else if (startval != SAMOVAR_STARTVAL_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
@@ -4396,7 +4399,7 @@ void loop() {
 #ifdef SAMOVAR_USE_POWER
         mode_apply_power_on_command(commandMsg.command);
 #else
-        SendMsg("Запуск НБК отклонён: регулятор мощности недоступен в этой сборке.", ALARM_MSG);
+        SendMsg(TR(MAIN_NBK_START_NO_REGULATOR, "Запуск НБК отклонён: регулятор мощности недоступен в этой сборке."), ALARM_MSG);
 #endif
         break;
       case SAMOVAR_NBK_NEXT:
@@ -5712,8 +5715,8 @@ void apply_config_runtime() {
   if (!mode_available_in_build(Samovar_Mode)) {
     if ((int)Samovar_Mode != modeUnavailableWarnedFor) {
       const char* reason = mode_unavailable_reason(Samovar_Mode);
-      SendMsg(String("Режим из настроек не активирован: ") +
-                  (reason ? reason : "недоступен в этой сборке прошивки"),
+      SendMsg(String(TR(MAIN_MODE_FROM_SETTINGS_NOT_ACTIVATED, "Режим из настроек не активирован: ")) +
+                  (reason ? reason : TR(MAIN_UNAVAILABLE_IN_BUILD, "недоступен в этой сборке прошивки")),
               ALARM_MSG);
       modeUnavailableWarnedFor = (int)Samovar_Mode;
     }
@@ -5840,8 +5843,8 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   const bool flocEvent = m.startsWith("@F1;");
   if (flocEvent) {
     if (!blynk_stage_floc_event(m)) {
-      WriteConsoleLog(F("F1: очередь фактов переполнена, сырная программа остановлена"));
-      if (Samovar_Mode == SAMOVAR_CHEESE_MODE && PowerOn) cheese_abort("Не удалось сохранить факт флокуляции");
+      WriteConsoleLog(F(TR(MAIN_CHEESE_FACT_QUEUE_OVERFLOW, "F1: очередь фактов переполнена, сырная программа остановлена")));
+      if (Samovar_Mode == SAMOVAR_CHEESE_MODE && PowerOn) cheese_abort(TR(MAIN_CHEESE_FLOCCULATION_SAVE_FAILED, "Не удалось сохранить факт флокуляции"));
     }
   } else if (SamSetup.blynkauth[0] != 0 && !is_notification_token_invalid()) {
     // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),

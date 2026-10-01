@@ -52,7 +52,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments, require_ordered_tokens
+from smoke_helpers import split_top_level_commas, extract_function_body, strip_cpp_comments, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 API_PATH = ROOT / "samovar_api.h"
@@ -110,7 +110,7 @@ def check_table_rows(source: str, errors: list[str]) -> None:
         if rest is None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
-        fields = [f.strip() for f in rest.split(",")]
+        fields = split_top_level_commas(rest)
         if len(fields) < 2:
             errors.append(f"mode_registry table: row for {mode} has too few fields: {rest}")
             continue
@@ -433,7 +433,7 @@ def main() -> int:
     # поймано check_table_rows.
     mutant_registry = scoped_replace(
         registry_source, 'SAMOVAR_NBK_MODE',
-        "SAMOVAR_NBK_BUILD_AVAILABLE, \"Недоступно в этой сборке прошивки: нет регулятора мощности\"",
+        "SAMOVAR_NBK_BUILD_AVAILABLE, TR(MREG_UNAVAILABLE_NO_REGULATOR, \"Недоступно в этой сборке прошивки: нет регулятора мощности\")",
         "true, nullptr",
     )
     if mutant_registry is None:
@@ -455,7 +455,7 @@ def main() -> int:
         "            request, 400, \"application/json\",\n"
         "            build_error_envelope(\n"
         "                \"not_allowed\", \"mode\",\n"
-        "                reason ? String(reason) : String(\"Режим недоступен в этой сборке прошивки\")));\n"
+        "                reason ? String(reason) : String(TR(WEB_MODE_UNAVAILABLE_IN_BUILD, \"Режим недоступен в этой сборке прошивки\"))));\n"
         "        return;\n"
         "      }\n",
         "",

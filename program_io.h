@@ -142,13 +142,13 @@ inline ProgramParseResult program_parse_result(
 }
 
 inline String format_program_parse_error(const ProgramParseResult& result) {
-  String message = "Ошибка программы";
+  String message = TR(PROG_ERR_PROGRAM, "Ошибка программы");
   if (result.errorMessage) {
     message += ": ";
     message += result.errorMessage;
   }
   if (result.lineNumber > 0) {
-    message += " (строка ";
+    message += TR(PROG_LINE_OPEN, " (строка ");
     message += String(result.lineNumber);
     message += ")";
   }
@@ -288,14 +288,14 @@ inline bool program_store_lua_text(
   const char* end = strchr(start, ';');
   const size_t length = end ? static_cast<size_t>(end - start) : strlen(start);
   if (length == 0 || draft.textPoolLen + length + 1 > PROGRAM_TEXT_POOL_SIZE) {
-    errorMessage = "текст Lua пуст или слишком длинный";
+    errorMessage = TR(PROG_LUA_TEXT_BAD, "текст Lua пуст или слишком длинный");
     return false;
   }
   const uint16_t offset = draft.textPoolLen;
   memcpy(draft.textPool + offset, start, length);
   draft.textPool[offset + length] = '\0';
   if (!program_validate_lua_text(draft.textPool + offset)) {
-    errorMessage = "укажите файл .lua; пустой аргумент задаётся как \"\"";
+    errorMessage = TR(PROG_LUA_FILE_REQUIRED, "укажите файл .lua; пустой аргумент задаётся как \"\"");
     return false;
   }
   row.LuaTextOffset = offset;
@@ -364,46 +364,46 @@ inline bool program_validate_beer_row_semantics(
       validPumpSpeed && onTime > 0;
   const bool mixerScheduleValid = noDevice || validDeviceSchedule;
   if (!mixerScheduleValid) {
-    errorMessage = "устройство должно быть 0^0^0^0^0 или маской 1..3 с ненулевым расписанием";
+    errorMessage = TR(PROG_BEER_DEVICE_MASK, "устройство должно быть 0^0^0^0^0 или маской 1..3 с ненулевым расписанием");
     return false;
   }
   switch (type) {
     case 'M':
     case 'C':
       if (temp > 0.0f && timeMin == 0.0f) return true;
-      errorMessage = "для типа M/C Temp больше 0 и Time=0";
+      errorMessage = TR(PROG_BEER_TYPE_MC, "для типа M/C Temp больше 0 и Time=0");
       return false;
     case 'F':
       // Time=0 - держать температуру бесконечно, Time>0 - перейти дальше через Time минут.
       if (temp > 0.0f) return true;
-      errorMessage = "для типа F Temp больше 0";
+      errorMessage = TR(PROG_BEER_TYPE_F, "для типа F Temp больше 0");
       return false;
     case 'P':
       if (temp > 0.0f && timeMin > 0.0f) return true;
-      errorMessage = "для типа P Temp и Time должны быть больше 0";
+      errorMessage = TR(PROG_BEER_TYPE_P, "для типа P Temp и Time должны быть больше 0");
       return false;
     case 'B':
       if (temp == 0.0f && timeMin > 0.0f) return true;
-      errorMessage = "для типа B Temp=0 и Time больше 0";
+      errorMessage = TR(PROG_BEER_TYPE_B, "для типа B Temp=0 и Time больше 0");
       return false;
     case 'W':
       if (zeroTempTime) return true;
-      errorMessage = "для типа W Temp=0 и Time=0";
+      errorMessage = TR(PROG_BEER_TYPE_W, "для типа W Temp=0 и Time=0");
       return false;
     case 'L':
 #ifdef USE_LUA
       if (temp == 0.0f && timeMin > 0.0f && noDevice && sensor == 0) return true;
-      errorMessage = "для типа L нужен тайм-аут и нулевые параметры";
+      errorMessage = TR(PROG_BEER_TYPE_L, "для типа L нужен тайм-аут и нулевые параметры");
 #else
-      errorMessage = "тип L требует USE_LUA";
+      errorMessage = TR(PROG_L_NEEDS_USE_LUA, "тип L требует USE_LUA");
 #endif
       return false;
     case 'A':
       if (temp > 0.0f && timeMin == 0.0f && noDevice) return true;
-      errorMessage = "для типа A Temp больше 0, Time=0 и устройство=0^0^0^0^0";
+      errorMessage = TR(PROG_BEER_TYPE_A, "для типа A Temp больше 0, Time=0 и устройство=0^0^0^0^0");
       return false;
     default:
-      errorMessage = "неизвестный тип beer";
+      errorMessage = TR(PROG_BEER_UNKNOWN_TYPE, "неизвестный тип beer");
       return false;
   }
 }
@@ -488,7 +488,7 @@ inline bool program_parse_threshold_lua_row(
       (!hasSteamField || (tokSteam &&
        parse_bounded_float(tokSteam, 0.0f, 0.0f, steam).ok()));
   if (!ok) {
-    errorMessage = "для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
+    errorMessage = TR(PROG_L_TIMEOUT_RANGE, "для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля");
     return false;
   }
   row.WType = 'L';
@@ -530,15 +530,15 @@ inline bool program_parse_threshold_fields(
   // Типозависимое сужение общих границ PROGRAM_DIST_THRESHOLD_*: поле Speed
   // хранит разный физический смысл в зависимости от WType (см. комментарий выше).
   if (ok && (parsedType == 'S' || parsedType == 'R') && (speed <= 0.0f || speed >= 1.0f)) {
-    errorMessage = "для типа S/R Speed должен быть в диапазоне (0,1)";
+    errorMessage = TR(PROG_SPEED_SR, "для типа S/R Speed должен быть в диапазоне (0,1)");
     ok = false;
   }
   if (ok && (parsedType == 'A' || parsedType == 'P') && speed >= 100.0f) {
-    errorMessage = "для типа A/P Speed должен быть в диапазоне [0,100)";
+    errorMessage = TR(PROG_SPEED_AP, "для типа A/P Speed должен быть в диапазоне [0,100)");
     ok = false;
   }
   if (ok && parsedType == 'T' && speed <= 0.0f) {
-    errorMessage = "для типа T Speed должен быть в диапазоне (0,150]";
+    errorMessage = TR(PROG_SPEED_T, "для типа T Speed должен быть в диапазоне (0,150]");
     ok = false;
   }
   return ok;
@@ -598,7 +598,7 @@ inline bool program_parse_bk_row(char* line, size_t, uint8_t, WProgram& row, con
       parse_bounded_float(tokTemp, 0.0f, BK_STEAM_SETPOINT_MAX, temp).ok() &&
       (temp == 0.0f || temp >= BK_STEAM_SETPOINT_MIN);
   if (ok && !tempOk) {
-    errorMessage = "Т пара: 0 или 30..100";
+    errorMessage = TR(PROG_STEAM_TEMP_RANGE, "Т пара: 0 или 30..100");
     ok = false;
   }
 
@@ -635,7 +635,7 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
          parse_bounded_long(tokTime, 1, UINT16_MAX, timeout).ok() &&
          parse_bounded_long(tokSensor, 0, 0, sensor).ok();
     if (!ok) {
-      errorMessage = "для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
+      errorMessage = TR(PROG_L_TIMEOUT_RANGE, "для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля");
       return false;
     }
     row.WType = parsedType;
@@ -655,7 +655,7 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   long offTime = 0;
   if (ok && !program_parse_beer_device(tokDevice, devType, mixerRpm,
                                         pumpMlHour, onTime, offTime)) {
-    errorMessage = "неверный шаблон устройства beer";
+    errorMessage = TR(PROG_BEER_BAD_DEVICE, "неверный шаблон устройства beer");
     ok = false;
   }
 
@@ -751,28 +751,28 @@ inline bool program_validate_cheese_row_semantics(
   const bool validReversingMixer = devType == 3 && speed >= INT16_MIN && speed <= INT16_MAX &&
       speed != 0 && onTime > 0 && offTime > 0;
   if (!noDevice && !validRelayMixer && !validI2cMixer && !validReversingMixer) {
-    errorMessage = "мешалка должна быть 0^0^0^0, реле 1^0, I2C 2 с ненулевым RPM или I2C с реверсом 3 с RPM, ON и OFF";
+    errorMessage = TR(PROG_CHEESE_MIXER_FORM, "мешалка должна быть 0^0^0^0, реле 1^0, I2C 2 с ненулевым RPM или I2C с реверсом 3 с RPM, ON и OFF");
     return false;
   }
   switch (type) {
     case 'H':
       if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
           param > 0.0f && sensor >= 0 && sensor <= 4) return true;
-      errorMessage = "для H нужны Temp, Time, скорость нагрева и датчик";
+      errorMessage = TR(PROG_CHEESE_H, "для H нужны Temp, Time, скорость нагрева и датчик");
       return false;
     case 'P':
       if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
           param >= timeMin && sensor >= 0 && sensor <= 4) return true;
-      errorMessage = "для P нужен датчик и Param не меньше Time";
+      errorMessage = TR(PROG_CHEESE_P, "для P нужен датчик и Param не меньше Time");
       return false;
     case 'C':
       if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
           param == 0.0f && sensor >= 0 && sensor <= 4) return true;
-      errorMessage = "для C нужны Temp, Time, датчик и Param=0";
+      errorMessage = TR(PROG_CHEESE_C, "для C нужны Temp, Time, датчик и Param=0");
       return false;
     case 'M':
       if (temp == 0.0f && timeMin > 0.0f && param == 0.0f && sensor == 0 && !noDevice) return true;
-      errorMessage = "для M нужны Time, мешалка и нулевые Temp/Param/датчик";
+      errorMessage = TR(PROG_CHEESE_M, "для M нужны Time, мешалка и нулевые Temp/Param/датчик");
       return false;
     case 'D':
       if (timeMin > 0.0f &&
@@ -780,12 +780,12 @@ inline bool program_validate_cheese_row_semantics(
             param == (float)(uint8_t)param) ||
            ((sensor == 2 || sensor == 4) && temp > 0.0f && param > 0.0f) ||
            (sensor == 3 && temp == 0.0f && param == 0.0f))) return true;
-      errorMessage = "для D нужны Time, способ и параметры ручного, объёмного либо шагового дозирования";
+      errorMessage = TR(PROG_CHEESE_D, "для D нужны Time, способ и параметры ручного, объёмного либо шагового дозирования");
       return false;
     case 'N':
       if (temp > 0.0f && temp <= PROGRAM_TEMP_MAX && timeMin > 0.0f &&
           param > 0.0f && param <= 14.0f && sensor >= 0 && sensor <= 4) return true;
-      errorMessage = "для N нужны Temp, Time, pH 0..14 и датчик";
+      errorMessage = TR(PROG_CHEESE_N, "для N нужны Temp, Time, pH 0..14 и датчик");
       return false;
     case 'F': {
       uint32_t multiplierMilli = 0;
@@ -793,24 +793,24 @@ inline bool program_validate_cheese_row_semantics(
           timeMin > 0.0f && timeMin <= PROGRAM_TIME_MAX &&
           program_cheese_f_multiplier_milli(param, multiplierMilli) &&
           sensor >= 0 && sensor <= 4) return true;
-      errorMessage = "для F нужны Temp, Time, множитель не меньше 1 и датчик";
+      errorMessage = TR(PROG_CHEESE_F, "для F нужны Temp, Time, множитель не меньше 1 и датчик");
       return false;
     }
     case 'W':
       if (temp == 0.0f && timeMin > 0.0f && param >= 1.0f && param <= 8.0f &&
           param == (float)(uint8_t)param && sensor == 0) return true;
-      errorMessage = "для W нужны Time, код действия 1..8 и TempSensor=0";
+      errorMessage = TR(PROG_CHEESE_W, "для W нужны Time, код действия 1..8 и TempSensor=0");
       return false;
     case 'S':
       if (temp == 0.0f && timeMin > 0.0f && param == 0.0f && noDevice && sensor == 0) return true;
-      errorMessage = "для S нужны безопасные выходы, Time и нулевые поля";
+      errorMessage = TR(PROG_CHEESE_S, "для S нужны безопасные выходы, Time и нулевые поля");
       return false;
     case 'L':
       if (temp == 0.0f && timeMin > 0.0f && param == 0.0f && noDevice && sensor == 0) return true;
-      errorMessage = "для L нужны безопасные выходы, Time и нулевые поля";
+      errorMessage = TR(PROG_CHEESE_L, "для L нужны безопасные выходы, Time и нулевые поля");
       return false;
     default:
-      errorMessage = "неизвестный тип cheese";
+      errorMessage = TR(PROG_CHEESE_UNKNOWN_TYPE, "неизвестный тип cheese");
       return false;
   }
 }
@@ -844,7 +844,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
          parse_bounded_float(tokParam, 0.0f, 0.0f, zeroParam).ok() &&
          parse_bounded_long(tokSensor, 0, 0, sensor).ok();
     if (!ok) {
-      errorMessage = "для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля";
+      errorMessage = TR(PROG_L_TIMEOUT_RANGE, "для L нужен тайм-аут 1..65535 секунд и нулевые числовые поля");
       return false;
     }
     row.WType = parsedType;
@@ -875,7 +875,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
       }
     }
     if (!ok) {
-      errorMessage = "множитель F не представим как m=round(MULTIPLIER*1000)";
+      errorMessage = TR(PROG_CHEESE_F_MULT, "множитель F не представим как m=round(MULTIPLIER*1000)");
     }
   } else if (ok) {
     float parsedParam = 0.0f;
@@ -888,7 +888,7 @@ inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row,
   long onTime = 0;
   long offTime = 0;
   if (ok && !program_parse_cheese_mixer(tokDevice, devType, speed, onTime, offTime)) {
-    errorMessage = "неверный шаблон устройства cheese";
+    errorMessage = TR(PROG_CHEESE_BAD_DEVICE, "неверный шаблон устройства cheese");
     ok = false;
   }
   if (ok) {
@@ -955,7 +955,7 @@ inline ProgramParseResult program_parse_lines(
     return program_parse_result(
         PROGRAM_PARSE_EMPTY_INPUT,
         0,
-        "Пустая программа: используйте явную очистку");
+        TR(PROG_EMPTY_USE_CLEAR, "Пустая программа: используйте явную очистку"));
   }
   if (text.length() > MAX_PROGRAM_INPUT_LEN) {
     return program_parse_result(PROGRAM_PARSE_INPUT_TOO_LONG, 0, spec.tooLongMessage);
@@ -1003,7 +1003,7 @@ inline ProgramParseResult program_parse_lines(
 #ifndef USE_LUA
       return program_parse_result(
           PROGRAM_PARSE_INVALID_ROW, lineNumber,
-          "тип L требует USE_LUA");
+          TR(PROG_L_NEEDS_USE_LUA, "тип L требует USE_LUA"));
 #else
       if (!program_store_lua_text(line, spec, draft.rows[i], draft, rowErrorMessage)) {
       return program_parse_result(
@@ -1029,7 +1029,7 @@ inline ProgramParseResult program_parse_lines(
     return program_parse_result(
         PROGRAM_PARSE_EMPTY_INPUT,
         0,
-        "Пустая программа: используйте явную очистку");
+        TR(PROG_EMPTY_USE_CLEAR, "Пустая программа: используйте явную очистку"));
   }
 
   if (spec.expectedRowCount > 0 && i != spec.expectedRowCount) {
@@ -1231,9 +1231,9 @@ inline const ProgramParseSpec& rect_program_parse_spec() {
     PROGRAM_FIELD_POWER,
   };
   static const ProgramParseSpec spec = {
-    "слишком длинная строка (rect)",
-    "неверный формат строки rect",
-    "слишком много строк rect",
+    TR(PROG_RECT_LINE_TOO_LONG, "слишком длинная строка (rect)"),
+    TR(PROG_RECT_BAD_FORMAT, "неверный формат строки rect"),
+    TR(PROG_RECT_TOO_MANY, "слишком много строк rect"),
     nullptr,
     "HBCTPL",
     fields,
@@ -1254,9 +1254,9 @@ inline const ProgramParseSpec& dist_program_parse_spec() {
     PROGRAM_FIELD_POWER,
   };
   static const ProgramParseSpec spec = {
-    "слишком длинная строка (dist)",
-    "неверный формат строки dist",
-    "слишком много строк dist",
+    TR(PROG_DIST_LINE_TOO_LONG, "слишком длинная строка (dist)"),
+    TR(PROG_DIST_BAD_FORMAT, "неверный формат строки dist"),
+    TR(PROG_DIST_TOO_MANY, "слишком много строк dist"),
     nullptr,
     "TASPRL",
     fields,
@@ -1281,9 +1281,9 @@ inline const ProgramParseSpec& bk_program_parse_spec() {
     PROGRAM_FIELD_TEMP,
   };
   static const ProgramParseSpec spec = {
-    "слишком длинная строка (bk)",
-    "неверный формат строки bk",
-    "слишком много строк bk",
+    TR(PROG_BK_LINE_TOO_LONG, "слишком длинная строка (bk)"),
+    TR(PROG_BK_BAD_FORMAT, "неверный формат строки bk"),
+    TR(PROG_BK_TOO_MANY, "слишком много строк bk"),
     nullptr,
     "TASPRL",
     fields,
@@ -1305,9 +1305,9 @@ inline const ProgramParseSpec& beer_program_parse_spec() {
     PROGRAM_FIELD_TEMP_SENSOR,
   };
   static const ProgramParseSpec spec = {
-    "слишком длинная строка (beer)",
-    "неверный формат строки beer",
-    "слишком много строк beer",
+    TR(PROG_BEER_LINE_TOO_LONG, "слишком длинная строка (beer)"),
+    TR(PROG_BEER_BAD_FORMAT, "неверный формат строки beer"),
+    TR(PROG_BEER_TOO_MANY, "слишком много строк beer"),
     nullptr,
     "MPBCFWLA",
     fields,
@@ -1328,10 +1328,10 @@ inline const ProgramParseSpec& nbk_program_parse_spec() {
   };
   static const ProgramType expectedTypes[NBK_PROGRAM_MAX] = {'H', 'S', 'O', 'W'};
   static const ProgramParseSpec spec = {
-    "слишком длинная строка (nbk)",
-    "неверный формат строки nbk",
-    "слишком много строк nbk",
-    "НБК должна содержать 4 строки H/S/O/W",
+    TR(PROG_NBK_LINE_TOO_LONG, "слишком длинная строка (nbk)"),
+    TR(PROG_NBK_BAD_FORMAT, "неверный формат строки nbk"),
+    TR(PROG_NBK_TOO_MANY, "слишком много строк nbk"),
+    TR(PROG_NBK_FOUR_ROWS, "НБК должна содержать 4 строки H/S/O/W"),
     "HSOW",
     fields,
     static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
@@ -1353,9 +1353,9 @@ inline const ProgramParseSpec& cheese_program_parse_spec() {
     PROGRAM_FIELD_TEMP_SENSOR,
   };
   static const ProgramParseSpec spec = {
-    "слишком длинная строка (cheese)",
-    "неверный формат строки cheese",
-    "слишком много строк cheese",
+    TR(PROG_CHEESE_LINE_TOO_LONG, "слишком длинная строка (cheese)"),
+    TR(PROG_CHEESE_BAD_FORMAT, "неверный формат строки cheese"),
+    TR(PROG_CHEESE_TOO_MANY, "слишком много строк cheese"),
     nullptr,
     "HPCMDNWSFL",
     fields,
@@ -1429,7 +1429,7 @@ inline ProgramParseResult prepare_program_for_mode(
     return program_parse_result(
         PROGRAM_PARSE_UNSUPPORTED_MODE,
         0,
-        "неподдерживаемый режим");
+        TR(PROG_UNSUPPORTED_MODE, "неподдерживаемый режим"));
   }
   ProgramParseResult result = program_parse_lines(text, *spec, draft);
 #ifdef SAMOVAR_USE_POWER
@@ -1448,7 +1448,7 @@ inline ProgramParseResult prepare_program_for_mode(
     result = program_parse_result(
         PROGRAM_PARSE_INVALID_ROW,
         1,
-        "первая строка должна задавать абсолютную мощность/напряжение (иначе колонна останется на полной мощности разгона)");
+        TR(PROG_FIRST_ROW_ABSOLUTE, "первая строка должна задавать абсолютную мощность/напряжение (иначе колонна останется на полной мощности разгона)"));
   }
   // [П1] Дистилляция: правило устроено иначе, чем в ректификации. run_dist_program()
   // применяет program[i].Power не при старте строки i, а в момент, когда СРАБОТАЛО
@@ -1473,7 +1473,7 @@ inline ProgramParseResult prepare_program_for_mode(
         result = program_parse_result(
             PROGRAM_PARSE_INVALID_ROW,
             program_physical_line_for_row(text, i),
-            "первая строка с ненулевым напряжением/мощностью должна задавать абсолютное значение, а не поправку (иначе нагрев в разгоне может незаметно выключиться)");
+            TR(PROG_FIRST_NONZERO_ABSOLUTE, "первая строка с ненулевым напряжением/мощностью должна задавать абсолютное значение, а не поправку (иначе нагрев в разгоне может незаметно выключиться)"));
       }
       break;
     }

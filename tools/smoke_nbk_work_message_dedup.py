@@ -21,7 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,7 +32,7 @@ COMMAND_DEDUP_ANCHOR = (
 )
 MESSAGE_DEDUP_ANCHOR = "if (nbk_Po > previousPo) {"
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

@@ -53,9 +53,9 @@ if alarm_text:
     rectification_guards = [
         "if (!rectification_ds_sensors_assigned()) {",
         "notify_rectification_sensors_unassigned();",
-        "if (optional_sensor_failed(SteamSensor) && process_sensor_failed(\"Ректификация\", \"пара\")) return;",
-        "if (!mode_check_powered_cooling_sensors(\"Ректификация\")) return;",
-        "if (optional_sensor_failed(TankSensor) && process_sensor_failed(\"Ректификация\", \"куба\")) return;",
+        "if (optional_sensor_failed(SteamSensor) && process_sensor_failed(TR(ALARM_MODE_RECT, \"Ректификация\"), TR(ALARM_SENSOR_STEAM, \"пара\"))) return;",
+        "if (!mode_check_powered_cooling_sensors(TR(ALARM_MODE_RECT, \"Ректификация\"))) return;",
+        "if (optional_sensor_failed(TankSensor) && process_sensor_failed(TR(ALARM_MODE_RECT, \"Ректификация\"), TR(ALARM_SENSOR_TANK, \"куба\"))) return;",
     ]
     for token in rectification_guards:
         if token not in body:
@@ -122,8 +122,8 @@ if mode_common_text:
         errors.append(str(exc))
         body = ""
     for token in [
-        "if (!sensor_valid(WaterSensor) && process_sensor_failed(modeName, \"воды\")) return false;",
-        "if (optional_sensor_failed(ACPSensor) && process_sensor_failed(modeName, \"ТСА\")) return false;",
+        "if (!sensor_valid(WaterSensor) && process_sensor_failed(modeName, TR(MCOM_SENSOR_WATER, \"воды\"))) return false;",
+        "if (optional_sensor_failed(ACPSensor) && process_sensor_failed(modeName, TR(MCOM_SENSOR_ACP, \"ТСА\"))) return false;",
         "return true;",
     ]:
         if token not in body:
@@ -161,7 +161,7 @@ if beer_text:
             "beer_validate_program(programError)",
             "beer_control_sensor(program[0].TempSensor",
             "sensor_valid(*controlSensor)",
-            "process_sensor_failed(\"Пиво\", controlSensorName)",
+            "process_sensor_failed(TR(BEER_MODE_NAME, \"Пиво\"), controlSensorName)",
             "create_data()",
             "set_power(true);",
         ],
@@ -178,7 +178,7 @@ if beer_text:
         [
             "beer_control_sensor(program[ProgramNum].TempSensor",
             "sensor_valid(*controlSensor)",
-            "process_sensor_failed(\"Пиво\", controlSensorName)",
+            "process_sensor_failed(TR(BEER_MODE_NAME, \"Пиво\"), controlSensorName)",
             "temp = controlSensor->avgTemp;",
         ],
         errors,
@@ -188,7 +188,7 @@ if beer_text:
         body,
         [
             "beer_control_sensor(program[ProgramNum].TempSensor",
-            "beer_abort_config_error(\"Ошибка программы: неверный датчик температуры в строке \" + String(ProgramNum + 1))",
+            "beer_abort_config_error(TR(BEER_ERR_BAD_TEMP_SENSOR, \"Ошибка программы: неверный датчик температуры в строке \") + String(ProgramNum + 1))",
             "return;",
             "sensor_valid(*controlSensor)",
         ],
@@ -196,8 +196,8 @@ if beer_text:
     )
 
 for name, text, proc_signature, expected_sensor in [
-    ("distiller", distiller_text, "void distiller_proc()", "if (!sensor_valid(TankSensor) && process_sensor_failed(\"Дистилляция\", \"куба\")) return;"),
-    ("BK", bk_text, "void bk_proc()", "if (!sensor_valid(TankSensor) && process_sensor_failed(\"БК\", \"куба\")) return;"),
+    ("distiller", distiller_text, "void distiller_proc()", "if (!sensor_valid(TankSensor) && process_sensor_failed(TR(DIST_MODE_NAME, \"Дистилляция\"), TR(DIST_SENSOR_BOILER, \"куба\"))) return;"),
+    ("BK", bk_text, "void bk_proc()", "if (!sensor_valid(TankSensor) && process_sensor_failed(TR(BK_MODE_NAME, \"БК\"), TR(BK_SENSOR_BOILER, \"куба\"))) return;"),
 ]:
     if not text:
         continue
@@ -307,13 +307,13 @@ for name, text, signature, tokens in [
         "distiller",
         distiller_text,
         "void check_alarm_distiller()",
-        ["if (PowerOn && !mode_check_powered_cooling_sensors(\"Дистилляция\")) return;"],
+        ["if (PowerOn && !mode_check_powered_cooling_sensors(TR(DIST_MODE_NAME, \"Дистилляция\"))) return;"],
     ),
     (
         "BK",
         bk_text,
         "void check_alarm_bk()",
-        ["if (PowerOn && !mode_check_powered_cooling_sensors(\"БК\")) return;"],
+        ["if (PowerOn && !mode_check_powered_cooling_sensors(TR(BK_MODE_NAME, \"БК\"))) return;"],
     ),
 ]:
     if not text:
@@ -355,8 +355,8 @@ if nbk_text:
         errors.append(str(exc))
         body = ""
     for token in [
-        "if (!sensor_valid(SteamSensor) && process_sensor_failed(\"НБК\", \"пара\")) return false;",
-        "if (!sensor_valid(TankSensor) && process_sensor_failed(\"НБК\", \"куба\")) return false;",
+        "if (!sensor_valid(SteamSensor) && process_sensor_failed(TR(NBK_MODE_NAME, \"НБК\"), TR(NBK_SENSOR_VAPOR, \"пара\"))) return false;",
+        "if (!sensor_valid(TankSensor) && process_sensor_failed(TR(NBK_MODE_NAME, \"НБК\"), TR(NBK_SENSOR_BOILER, \"куба\"))) return false;",
     ]:
         if token not in body:
             errors.append(f"NBK stage sensor guard missing: {token}")
@@ -381,7 +381,7 @@ if nbk_text:
         errors.append(str(exc))
         body = ""
     for token in [
-        "if (!mode_check_powered_cooling_sensors(\"НБК\")) return true;",
+        "if (!mode_check_powered_cooling_sensors(TR(NBK_MODE_NAME, \"НБК\"))) return true;",
     ]:
         if token not in body:
             errors.append(f"NBK critical sensor guard missing: {token}")
@@ -389,7 +389,7 @@ if nbk_text:
         "NBK critical sensor guards before temperature logic",
         body,
         [
-            "if (!mode_check_powered_cooling_sensors(\"НБК\")) return true;",
+            "if (!mode_check_powered_cooling_sensors(TR(NBK_MODE_NAME, \"НБК\"))) return true;",
             "SteamSensor.avgTemp > 98.0",
         ],
         errors,

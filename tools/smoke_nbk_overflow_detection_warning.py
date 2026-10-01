@@ -25,7 +25,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,7 +46,7 @@ P9_END_ANCHOR = "nbk_opt_in_progress = true;"
 P9_NEW_TEXT = "Через 10 минут процесс перейдёт в безопасное ожидание (нагрев и подача выключены)."
 P9_OLD_TEXT = "Автоматический переход к Работе"
 
-COMMON = r'''
+COMMON = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

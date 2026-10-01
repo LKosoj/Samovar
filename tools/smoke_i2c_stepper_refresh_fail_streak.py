@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
@@ -47,7 +47,7 @@ def main() -> int:
   with tempfile.TemporaryDirectory(prefix="samovar-i2c-v3-presence-") as temp:
     cpp = Path(temp) / "test.cpp"
     binary = Path(temp) / "test"
-    cpp.write_text(HARNESS.replace("@FUNCTION@", function), encoding="utf-8")
+    cpp.write_text((I18N_INCLUDE + "\n" + HARNESS).replace("@FUNCTION@", function), encoding="utf-8")
     result = subprocess.run(
         ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(binary)],
         capture_output=True, text=True, check=False)

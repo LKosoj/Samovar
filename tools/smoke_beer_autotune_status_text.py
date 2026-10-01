@@ -25,6 +25,7 @@ HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 class String {
  public:
@@ -105,7 +106,7 @@ int main() {
 def build_harness(logic_source: str) -> str:
     body = extract_function_body(logic_source, GET_BEER_STATUS_TEXT_SIGNATURE)
     a_branch, _ = extract_braced_block_after(body, A_BRANCH_TOKEN)
-    return HARNESS_TEMPLATE.replace("@A_BRANCH_BODY@", a_branch)
+    return HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@A_BRANCH_BODY@", a_branch)
 
 
 def compile_and_run(harness: str) -> int:

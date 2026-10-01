@@ -156,8 +156,8 @@ def check_owner_reset_report_guard(source: str, errors: list[str]) -> None:
     guard = "if (ownerReset && !nbk_transition_reports_interruption()) {"
     warn = "mode_warn_log_close_failed();"
     send = (
-        'SendMsg("Сессия прервана: отказ регулятора нагрева. '
-        'Требуется повторный запуск.", ALARM_MSG);'
+        'SendMsg(TR(PWR_SESSION_ABORTED_REGULATOR_FAILURE, "Сессия прервана: отказ регулятора нагрева. '
+        'Требуется повторный запуск."), ALARM_MSG);'
     )
     exit_critical = "portEXIT_CRITICAL(&emergencyStopMux);"
 

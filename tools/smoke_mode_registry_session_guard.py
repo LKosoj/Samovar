@@ -31,7 +31,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import split_top_level_commas, I18N_INCLUDE, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,7 +48,7 @@ FUNCTIONS = [
     "inline bool mode_apply_power_on_command(SamovarCommands command)",
 ]
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <cstddef>
 #include <iostream>
@@ -257,7 +257,7 @@ def check_table_start_commands(source: str, errors: list[str]) -> None:
         errors.append("mode_registry.h: BK row not found in mode_registry() table")
         return
     row = row_match.group(0)
-    fields = [f.strip() for f in row.strip("{}").split(",")]
+    fields = split_top_level_commas(row.strip("{}"))
     # [T40 А3] Позиция startCommand сдвинулась с 6 на 8: между startvalRangeHigh
     # и pagePath добавились два новых поля границ статуса (statusRangeLow/High) -
     # см. ModeOps в mode_registry.h.
@@ -275,7 +275,7 @@ def check_table_start_commands(source: str, errors: list[str]) -> None:
             errors.append(f"mode_registry.h: {mode_name} row not found")
             continue
         row = row_match.group(0)
-        fields = [f.strip() for f in row.strip("{}").split(",")]
+        fields = split_top_level_commas(row.strip("{}"))
         if len(fields) < 9:
             errors.append(f"mode_registry.h: {mode_name} row has fewer than 9 fields: {row}")
             continue

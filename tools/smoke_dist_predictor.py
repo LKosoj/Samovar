@@ -6,11 +6,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cmath>
 #include <iostream>
 
@@ -52,7 +52,7 @@ int main() {
 }
 '''
 
-WRAP_HARNESS = r'''
+WRAP_HARNESS = I18N_INCLUDE + r'''
 #include <cmath>
 #include <cstdint>
 #include <iostream>

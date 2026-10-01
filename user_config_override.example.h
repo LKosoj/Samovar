@@ -22,6 +22,10 @@
 //#define SAMOVAR_USE_BLYNK
 //#define PUMP_PWM_FREQ 450
 
+// Язык прошивки и веб-интерфейса: en - английский, по умолчанию русский.
+// Перевод берётся из файла lang_<код>.h в папке проекта.
+//#define SAMOVAR_LANG en
+
 #define MQTT_SERVER ""
 #define MQTT_PORT 1883
 #define MQTT_USER ""

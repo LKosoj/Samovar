@@ -225,7 +225,7 @@ if nbk:
                 "nbk_overheat_start_time = 0;",
                 "if (nbk_overheat_start_time == 0) nbk_overheat_start_time = millis();",
                 "millis() - nbk_overheat_start_time > 60000",
-                "request_emergency_stop(\"Недостаточное охлаждение! Останов.\")",
+                "request_emergency_stop(TR(NBK_INSUFFICIENT_COOLING, \"Недостаточное охлаждение! Останов.\"))",
                 "nbk_overheat_start_time = 0;",
             ],
             errors,

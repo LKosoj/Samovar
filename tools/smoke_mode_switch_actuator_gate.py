@@ -34,7 +34,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,7 +44,7 @@ SET_PUMP_PWM_SIGNATURE = "ActuatorCommandResult set_pump_pwm(float duty)"
 OPEN_VALVE_GATE_LINE = "if (mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED;\n    "
 SET_PUMP_PWM_GATE_LINE = "if (duty > 0 && mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED;\n\n  "
 
-ACTUATOR_ERROR_HARNESS = r'''
+ACTUATOR_ERROR_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 
@@ -155,7 +155,7 @@ int main() {
 }
 '''
 
-OPEN_VALVE_HARNESS = r'''
+OPEN_VALVE_HARNESS = I18N_INCLUDE + r'''
 #include <iostream>
 
 #define RELE_CHANNEL3 3
@@ -247,7 +247,7 @@ int main() {
 }
 '''
 
-SET_PUMP_PWM_HARNESS = r'''
+SET_PUMP_PWM_HARNESS = I18N_INCLUDE + r'''
 #include <iostream>
 #include <cstdint>
 

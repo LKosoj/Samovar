@@ -21,7 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,7 +33,7 @@ P7_MUTATION_ANCHOR = """    if (startval == SAMOVAR_STARTVAL_NBK_START &&
         nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED &&
         !power_transition_active()) {"""
 
-COMMON_PRELUDE = r'''
+COMMON_PRELUDE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -73,7 +73,7 @@ static void check(bool condition, const std::string& message) {
 }
 '''
 
-P7_HARNESS = r'''
+P7_HARNESS = I18N_INCLUDE + r'''
 #include <vector>
 
 static volatile int16_t startval = SAMOVAR_STARTVAL_NBK_START;

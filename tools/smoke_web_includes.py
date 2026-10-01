@@ -13,23 +13,29 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_web_assets import INCLUDE_RE, PARTIALS_DIR, SOURCE, TARGET
+from build_web_assets import I18N_TARGET, INCLUDE_RE, PARTIALS_DIR, SOURCE, TARGET
 
 
 def check_built_has_no_unresolved_includes(errors: list[str]) -> None:
-    for path in sorted(p for p in TARGET.iterdir() if p.is_file()):
-        if path.name.endswith(".gz"):
-            try:
-                data = gzip.decompress(path.read_bytes())
-            except OSError as exc:
-                errors.append(f"data/{path.name}: не удалось распаковать gzip: {exc}")
-                continue
-        else:
-            data = path.read_bytes()
-        if INCLUDE_RE.search(data):
-            errors.append(
-                f"data/{path.name}: остался нерезолвленный <!--#include--> в собранном образе"
-            )
+    # data_i18n/ - те же файлы, переведённые: include в них тоже не должен уцелеть.
+    for directory in (TARGET, I18N_TARGET):
+        if not directory.is_dir():
+            errors.append(f"{directory.name}/ отсутствует - запустите tools/build_web_assets.py")
+            continue
+        for path in sorted(p for p in directory.iterdir() if p.is_file()):
+            if path.name.endswith(".gz"):
+                try:
+                    data = gzip.decompress(path.read_bytes())
+                except OSError as exc:
+                    errors.append(f"{directory.name}/{path.name}: не удалось распаковать gzip: {exc}")
+                    continue
+            else:
+                data = path.read_bytes()
+            if INCLUDE_RE.search(data):
+                errors.append(
+                    f"{directory.name}/{path.name}: остался нерезолвленный <!--#include--> "
+                    "в собранном образе"
+                )
 
 
 def check_every_partial_is_used(errors: list[str]) -> None:

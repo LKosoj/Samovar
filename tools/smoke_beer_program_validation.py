@@ -18,6 +18,7 @@ VALIDATE = extract_function_body(BEER, "inline bool beer_validate_program")
 HARNESS = r'''
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 using ProgramType = char;
@@ -207,7 +208,7 @@ def compile_and_run(harness: str, label: str, show_output: bool = True,
 
 
 def main() -> int:
-    harness = HARNESS.replace("@SEMANTIC@", SEMANTIC).replace("@VALIDATE@", VALIDATE)
+    harness = HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@SEMANTIC@", SEMANTIC).replace("@VALIDATE@", VALIDATE)
     if compile_and_run(harness, "production") != 0:
         return 1
     if compile_and_run(harness, "production with ESP32 pump", use_water_pump=True) != 0:
@@ -217,7 +218,7 @@ def main() -> int:
         "if (!program_validate_beer_row_semantics(",
         "if (false && !program_validate_beer_row_semantics(", 1,
     )
-    mutation_harness = HARNESS.replace("@SEMANTIC@", SEMANTIC).replace(
+    mutation_harness = HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@SEMANTIC@", SEMANTIC).replace(
         "@VALIDATE@", mutated_validate
     )
     if compile_and_run(mutation_harness, "semantic-recheck mutation", False) == 0:
@@ -235,7 +236,7 @@ def main() -> int:
     if mixer_mutation == VALIDATE:
         print("FAIL: could not build I2C mixer availability mutation", file=sys.stderr)
         return 1
-    mixer_mutation_harness = HARNESS.replace("@SEMANTIC@", SEMANTIC).replace(
+    mixer_mutation_harness = HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@SEMANTIC@", SEMANTIC).replace(
         "@VALIDATE@", mixer_mutation
     )
     if compile_and_run(mixer_mutation_harness, "I2C mixer availability mutation", False) == 0:
@@ -251,7 +252,7 @@ def main() -> int:
     if mutated_semantic == SEMANTIC:
         print("FAIL: could not build W sensor-range mutation", file=sys.stderr)
         return 1
-    sensor_mutation_harness = HARNESS.replace(
+    sensor_mutation_harness = HARNESS.replace("@ROOT@", ROOT.as_posix()).replace(
         "@SEMANTIC@", mutated_semantic
     ).replace("@VALIDATE@", VALIDATE)
     if compile_and_run(sensor_mutation_harness, "W sensor mutation", False) == 0:

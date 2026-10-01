@@ -14,17 +14,17 @@ ActuatorCommandResult open_valve(bool Val, bool msg = true) {
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
     valve_status = true;
     if (msg) {
-      SendMsg(("Откройте подачу воды!"), WARNING_MSG);
+      SendMsg((TR(VALVE_OPEN_WATER_SUPPLY, "Откройте подачу воды!")), WARNING_MSG);
     } else {
-      SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+      SendMsg((TR(VALVE_COOLING_OPENED, "Открыт клапан воды охлаждения!")), NOTIFY_MSG);
     }
   } else {
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
     valve_status = false;
     if (msg) {
-      SendMsg(("Закройте подачу воды!"), WARNING_MSG);
+      SendMsg((TR(VALVE_CLOSE_WATER_SUPPLY, "Закройте подачу воды!")), WARNING_MSG);
     } else {
-      SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+      SendMsg((TR(VALVE_COOLING_CLOSED, "Закрыт клапан воды охлаждения!")), NOTIFY_MSG);
     }
   }
   return ACTUATOR_COMMAND_APPLIED;

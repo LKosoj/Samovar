@@ -12,6 +12,7 @@ SIGNATURE = "inline bool mode_water_flow_demanded()"
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
+#include "@ROOT@/i18n.h"
 
 #define USE_WATER_PUMP
 #define USE_WATERSENSOR
@@ -92,7 +93,7 @@ int main() {
 
 
 def build_harness(demand_body: str, emergency_body: str) -> str:
-    harness = HARNESS_TEMPLATE.replace(
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace(
         "@MODE_WATER_FLOW_DEMANDED@",
         "inline bool mode_water_flow_demanded() {" + demand_body + "}",
     )

@@ -33,7 +33,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,7 +45,7 @@ OVERFLOW_ANCHOR = "if (overflow()) { // Если захлёб по ДЗ или �
 # ==========================================================================
 # Харнесс 1: W-ветка run_nbk_program(num, workConfirmed, optimumEntry)
 # ==========================================================================
-W_HARNESS = r'''
+W_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -414,7 +414,7 @@ def build_tail_harness(nbk_source: str) -> str:
 # ==========================================================================
 # Харнесс 2: блок коммита в tick_nbk_actuator_command
 # ==========================================================================
-COMMIT_HARNESS = r'''
+COMMIT_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 
@@ -528,7 +528,7 @@ def build_commit_harness(nbk_source: str) -> str:
 # ==========================================================================
 # Харнесс 3: ветка захлёба в ядре Оптимизации (О-сторона автоперехода)
 # ==========================================================================
-OVERFLOW_HARNESS = r'''
+OVERFLOW_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

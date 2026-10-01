@@ -351,7 +351,7 @@ if web_program_body:
             'const uint8_t wProgramCount = request_param_count(request, "WProgram");',
             'wProgramCount == 1 ? get_request_param(request, "WProgram") : nullptr',
             "wProgramCount == 1 && (!wProgramParam || wProgramParam->isFile())",
-            'F("WProgram должен быть текстовым параметром")',
+            'F(TR(WEB_WPROGRAM_MUST_BE_TEXT, "WProgram должен быть текстовым параметром"))',
             'clearParam->value() != "1"',
             "ProgramDraft programDraft{};",
             "ProgramUpdateAction programAction = PROGRAM_UPDATE_NONE;",
@@ -712,7 +712,7 @@ if samovar_file.exists():
                 "rescanDs = !mode_switch_in_progress();",
                 "if (rescanDs) {",
                 "samovar_process_active()",
-                'SendMsg("Сканирование датчиков отклонено: процесс активен.", WARNING_MSG);',
+                'SendMsg(TR(MAIN_SENSOR_SCAN_REJECTED, "Сканирование датчиков отклонено: процесс активен."), WARNING_MSG);',
                 "DS_getvalue();",
                 "scan_ds_adress();",
                 "DS_getvalue();",
@@ -729,7 +729,7 @@ if samovar_file.exists():
             )
             scan_rescan_body, _ = extract_braced_block_after(rescan_body, "else", active_rescan_end)
             poll_rescan_body, _ = extract_braced_block_after(sys_ticker_body, "else", rescan_end)
-            if 'SendMsg("Сканирование датчиков отклонено: процесс активен.", WARNING_MSG);' not in active_rescan_body:
+            if 'SendMsg(TR(MAIN_SENSOR_SCAN_REJECTED, "Сканирование датчиков отклонено: процесс активен."), WARNING_MSG);' not in active_rescan_body:
                 errors.append("SysTicker active OneWire rescan branch does not warn")
             if "DS_getvalue();" not in active_rescan_body:
                 errors.append("SysTicker active OneWire rescan branch does not poll DS values")

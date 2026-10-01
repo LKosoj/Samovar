@@ -24,7 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,10 +33,10 @@ IFDEF_MARKER = "#ifdef SAMOVAR_USE_SEM_AVR"
 REDUCE_SIGNATURE = "inline float reduce_power_by_volts(float power, float volts)"
 
 HLS_START = '#ifdef SAMOVAR_USE_SEM_AVR\n      // [T14 п.1] Нижняя граница - без неё уход ниже порога SLEEP бесшумно гасит нагрев.'
-WATER_START = 'SendMsg("Критическая температура воды! Ошибка подачи воды. "'
+WATER_START = 'SendMsg(TR(ALARM_WATER_CRIT_SUPPLY_ERR, "Критическая температура воды! Ошибка подачи воды. ")'
 WATER_END = 'set_current_power(max(mode_water_alarm_power_base() - mode_water_alarm_power_base() / 100 * 8, power_work_mode_threshold()));'
 
-COMMON_PRELUDE = r'''
+COMMON_PRELUDE = I18N_INCLUDE + r'''
 #include <iostream>
 
 // Не static: не в каждом харнессе, вклеенном ниже, используется max() -

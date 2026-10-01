@@ -6,12 +6,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 ANCHOR = "if (program[num].WType == 'W') {"
 
 HARNESS = r'''
+@I18N_INCLUDE@
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -241,7 +242,7 @@ def run(source: str, emit: bool) -> int:
         if emit:
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
-    harness = HARNESS.replace("@BODY@", body.replace("\r\n", "\n"))
+    harness = HARNESS.replace("@I18N_INCLUDE@", I18N_INCLUDE).replace("@BODY@", body.replace("\r\n", "\n"))
     with tempfile.TemporaryDirectory(prefix="samovar-nbk-explicit-work-") as temp_dir:
         temp = Path(temp_dir)
         cpp = temp / "test.cpp"

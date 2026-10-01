@@ -25,6 +25,7 @@ BEER_PROC_SIGNATURE = "void beer_proc()"
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 class String {
@@ -262,7 +263,7 @@ def build_harness(beer_header_path: Path) -> str:
     beer_source = beer_header_path.read_text(encoding="utf-8")
     beer_proc_body = extract_function_body(beer_source, BEER_PROC_SIGNATURE)
     beer_proc_fn = "void beer_proc() {" + beer_proc_body + "}"
-    return HARNESS_TEMPLATE.replace("@BEER_PROC_BODY@", beer_proc_fn)
+    return HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@BEER_PROC_BODY@", beer_proc_fn)
 
 
 def compile_and_run(harness: str, label: str) -> int:

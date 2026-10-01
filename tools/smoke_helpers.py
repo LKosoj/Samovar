@@ -1,3 +1,39 @@
+from pathlib import Path
+
+# Харнессы, компилирующие извлечённый код прошивки, подключают настоящий i18n.h:
+# в коде строки обёрнуты TR(KEY, "русский текст"), а копия макроса в тесте ничего не доказывает.
+I18N_INCLUDE = f'#include "{(Path(__file__).resolve().parents[1] / "i18n.h").as_posix()}"'
+
+
+def split_top_level_commas(text: str) -> list[str]:
+    """Делит text по запятым верхнего уровня: запятые внутри скобок и строковых литералов
+    (например, в TR(KEY, "текст, с запятой")) не считаются. Части возвращаются без пробелов по краям."""
+    parts: list[str] = []
+    depth = 0
+    quote = ""
+    start = 0
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            parts.append(text[start:i].strip())
+            start = i + 1
+        i += 1
+    parts.append(text[start:].strip())
+    return parts
+
+
 def extract_function_body(source: str, signature: str, *, strip_comments: bool = True) -> str:
     start = source.find(signature)
     if start < 0:

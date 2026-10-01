@@ -136,6 +136,7 @@ HARNESS = r'''
 #include <map>
 #include <set>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 typedef int esp_err_t;
 typedef int nvs_handle_t;
@@ -438,7 +439,7 @@ int main() {
 
 
 def build_harness() -> str:
-    harness = HARNESS
+    harness = HARNESS.replace("@ROOT@", ROOT.as_posix())
     harness = harness.replace("@MODE_ENUM@", mode_enum)
     harness = harness.replace("@MSG_ENUM@", msg_enum)
     harness = harness.replace("@NAMESPACE_STMT@", namespace_stmt)

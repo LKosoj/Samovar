@@ -1,0 +1,13 @@
+# Beispiel eines MK-Programms. Zeilenformat: Typ;Schwelle;Behälter;Leistung;TDampf
+# TDampf: 0 = Dephlegmator-Wasser in dieser Zeile manuell, 30..100 = Dampf halten
+#   bei dieser Temperatur (°C) mit dem Schrittregler. Der Dampfsensor wird platziert
+#   ÜBER dem Dephlegmator, in der Dampfzone vor dem Kühler.
+# Leistung: die erste Programmzeile mit einer Spannung ungleich null muss ein
+#   ABSOLUTER Wert sein - über 40 V (Regler in Volt) oder über
+#   400 W (Regler in Watt), sonst kann sich die Heizung beim Aufheizen unbemerkt
+#   abschalten. 0 in den übrigen Zeilen - aktuellen Wert beibehalten.
+# Die Leistungswerte in diesem Beispiel sind Volt; bei einem Regler in Watt muss die erste
+#   Leistung ungleich null größer sein als 400.
+T;78;1;190;70
+T;90;2;0;78
+T;93;2;0;0

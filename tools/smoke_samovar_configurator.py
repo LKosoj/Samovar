@@ -1313,7 +1313,11 @@ class ConfiguratorModelTests(unittest.TestCase):
             },
         )()
         window.save = lambda **kwargs: saved.append(kwargs) or True
-        window._start_process = lambda command, action: started.append((command, action))
+        environments = []
+        window._start_process = lambda command, action, env=None: (
+            started.append((command, action)), environments.append(env)
+        )
+        window._prepare_littlefs_environment = lambda: {"PLATFORMIO_DATA_DIR": "/tmp/samovar_fs/data"}
 
         window.start_action("upload")
         self.assertEqual(started, [])
@@ -1335,10 +1339,12 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.start_action("uploadfs")
         self.assertEqual(len(prompts), 2)
         self.assertEqual(started[-1][0][5], "uploadfs")
+        self.assertEqual(environments[-1], {"PLATFORMIO_DATA_DIR": "/tmp/samovar_fs/data"})
         window.port_var = Variable("COM7")
         window.start_action("upload")
         self.assertEqual(len(prompts), 2)
         self.assertEqual(started[-1][0][-1], "COM7")
+        self.assertIsNone(environments[-1])
         self.assertFalse(window.active_port_network)
 
     def test_shortcut_action_is_layout_independent(self) -> None:
@@ -1372,7 +1378,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIn('EditMenu(self.editor, "text", on_save=self.save)', editor)
         menu = inspect.getsource(configurator.EditMenu.__init__)
         for label in ("Вырезать", "Копировать", "Вставить", "Выделить всё", "Отменить", "Повторить"):
-            self.assertIn('label="{}"'.format(label), menu)
+            self.assertIn('label=tr("{}")'.format(label), menu)
         self.assertIn('widget.bind("<Button-3>", self.popup', menu)
         self.assertIn('widget.bind("<Control-KeyPress>", self.key', menu)
 
@@ -1478,7 +1484,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIn("настройки", prompts[0][1])
 
         source = MODULE_PATH.read_text(encoding="utf-8")
-        self.assertIn('text="Полностью очистить флеш"', source)
+        self.assertIn('text=tr("Полностью очистить флеш")', source)
         self.assertIn("self.erase_button.configure(state=state)", source)
 
     def test_cheese_shared_connections_warning_is_visible(self) -> None:
@@ -1519,18 +1525,18 @@ class ConfiguratorModelTests(unittest.TestCase):
     def test_main_window_device_controls_and_ip_gate(self) -> None:
         source = inspect.getsource(configurator.ConfiguratorWindow._build)
         for token in (
-            'text="Перезагрузить ESP"',
-            'text="Редактор файлов"',
+            'text=tr("Перезагрузить ESP")',
+            'text=tr("Редактор файлов")',
             'self.port_var.trace_add("write", lambda *_: self._port_changed())',
         ):
             self.assertIn(token, source)
         # Редактор файлов недоступен, пока нет адреса устройства (см. _port_changed)
         self.assertIn("self._port_changed()", inspect.getsource(configurator.ConfiguratorWindow._load))
-        self.assertNotIn('text="Получить IP"', source)
-        self.assertNotIn('text="Получить настройки"', source)
+        self.assertNotIn('text=tr("Получить IP")', source)
+        self.assertNotIn('text=tr("Получить настройки")', source)
         monitor_source = inspect.getsource(configurator.ConfiguratorWindow.open_monitor)
-        self.assertIn('text="Получить IP"', monitor_source)
-        self.assertIn('text="Получить настройки"', monitor_source)
+        self.assertIn('text=tr("Получить IP")', monitor_source)
+        self.assertIn('text=tr("Получить настройки")', monitor_source)
         for label in ("Перезагрузить ESP", "Редактор файлов"):
             self.assertNotIn(label, monitor_source)
 
@@ -1756,7 +1762,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertFalse(configurator.web_editor_supports("/INDEX.HTM.GZ"))
         self.assertFalse(configurator.web_editor_supports(None))
         editor = inspect.getsource(configurator.FileEditorWindow.__init__)
-        self.assertIn('text="Веб-редактор (/edit)"', editor)
+        self.assertIn('text=tr("Веб-редактор (/edit)")', editor)
         self.assertIn('self.web_button = ttk.Button(', editor)
         load_text = inspect.getsource(configurator.FileEditorWindow._load_text)
         self.assertIn('self.web_button.configure(state="normal" if web_editor_supports(path) else "disabled")', load_text)
@@ -1788,11 +1794,11 @@ class ConfiguratorModelTests(unittest.TestCase):
     def test_port_control_is_editable_and_refreshable(self) -> None:
         source = MODULE_PATH.read_text(encoding="utf-8")
         for token in (
-            'text="Порт или адрес"',
-            'text="Устройство"',
+            'text=tr("Порт или адрес")',
+            'text=tr("Устройство")',
             'self.port_combo = ttk.Combobox(',
             'state="normal"',
-            'text="Обновить"',
+            'text=tr("Обновить")',
             'command=self.refresh_ports',
         ):
             self.assertIn(token, source)
@@ -1854,7 +1860,7 @@ class ConfiguratorModelTests(unittest.TestCase):
             re.findall(r"^\s*(?://\s*)?#define\s+([A-Za-z_]\w*)", source, re.MULTILINE)
         )
         expected = defined - {"__SAMOVAR_I_H_", "NBK_DEFAULT_PROGRAM"}
-        controlled = {"BOARD"}
+        controlled = {"BOARD", "SAMOVAR_LANG"}
         controlled.update(spec.macro for spec in configurator.VALUE_SPECS)
         controlled.update(spec.macro for spec in configurator.BOOL_SPECS)
         controlled.update(spec.macro for spec in configurator.OPTIONAL_SPECS)

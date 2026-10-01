@@ -23,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,7 +32,7 @@ PAUSE_BRANCH_TOKEN = (
     "SamovarStatusInt == SAMOVAR_STATUS_PAUSED)"
 )
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 
@@ -342,9 +342,9 @@ def check_tick_status_fsm_lua_branch() -> list[str]:
         body,
         [
             "Samovar_Mode != SAMOVAR_LUA_MODE",
-            'F("Разгон колонны")',
+            'F(TR(LOGIC_COLUMN_HEATUP, "Разгон колонны"))',
             "Samovar_Mode == SAMOVAR_LUA_MODE",
-            'F("Выполнение Lua скрипта")',
+            'F(TR(LOGIC_RUNNING_LUA_SCRIPT, "Выполнение Lua скрипта"))',
         ],
         errors,
     )

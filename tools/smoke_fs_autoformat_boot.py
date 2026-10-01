@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import textwrap
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body, strip_cpp_comments
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -82,7 +82,7 @@ def compile_and_run_fs_init(fs_init_body: str) -> None:
         errors.append("g++ is required for the A-01 FS_init behavioral harness")
         return
 
-    harness = textwrap.dedent(
+    harness = I18N_INCLUDE + "\n" + textwrap.dedent(
         r'''
         #include <assert.h>
         #include <stddef.h>
@@ -341,12 +341,12 @@ if fs_init_body:
         fs_init_body,
         [
             "if (!SPIFFS.begin(false))",
-            'Serial.println(F("Не удалось подключиться к файловой системе, форматируем..."));',
+            'Serial.println(F(TR(FS_MOUNT_FAILED_FORMATTING, "Не удалось подключиться к файловой системе, форматируем...")));',
             "if (!SPIFFS.format())",
-            'Serial.println(F("Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino"));',
+            'Serial.println(F(TR(FS_FORMAT_FAILED, "Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino")));',
             "return FS_INIT_MOUNT_FAILED;",
             "if (!SPIFFS.begin(false))",
-            'Serial.println(F("Ошибка файловой системы! Загрузите через Arduino"));',
+            'Serial.println(F(TR(FS_ERROR_UPLOAD, "Ошибка файловой системы! Загрузите через Arduino")));',
             "return FS_INIT_MOUNT_FAILED;",
             "formatted = true;",
             "total_byte = SPIFFS.totalBytes();",

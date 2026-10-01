@@ -52,7 +52,7 @@ static String spiffsEditorJsonEscape(const String& value) {
   escaped.reserve(value.length());
   JsonStringPrint sink(escaped);
   if (!json_write_escaped(sink, value.c_str(), value.length())) {
-    Serial.println(F("spiffsEditorJsonEscape: строка обрезана, не хватило памяти"));
+    Serial.println(F(TR(EDIT_JSON_ESCAPE_TRUNCATED, "spiffsEditorJsonEscape: строка обрезана, не хватило памяти")));
   }
   return escaped;
 }

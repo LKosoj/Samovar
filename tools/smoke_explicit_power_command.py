@@ -12,7 +12,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, strip_cpp_comments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -142,7 +142,7 @@ int main() {
 
 
 def run_harness(body: str, name: str, with_power: bool = False, show_output: bool = True) -> int:
-    source = HARNESS.replace("@BODY@", f"{SIGNATURE} {{{body}}}")
+    source = (I18N_INCLUDE + "\n" + HARNESS).replace("@BODY@", f"{SIGNATURE} {{{body}}}")
     with tempfile.TemporaryDirectory(prefix=f"samovar-explicit-power-{name}-") as temp_dir:
         cpp = Path(temp_dir) / "test.cpp"
         binary = Path(temp_dir) / "test"

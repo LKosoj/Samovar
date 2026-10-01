@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
+from smoke_helpers import split_top_level_commas, I18N_INCLUDE, extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -260,7 +260,7 @@ require(
         "vTaskNotifyGiveFromISR",
         "void triggerEmergencyButton(void *parameter)",
         "Аварийное отключение! Сработал вход аварийной кнопки",
-        "\" Температура ТСА \" + format_float(ACPSensor.avgTemp, 1)",
+        "TR(MAIN_ACP_TEMP_LABEL, \" Температура ТСА \") + format_float(ACPSensor.avgTemp, 1)",
         "alarm_btn.tick();",
         "if (alarm_btn.isPress())",
         "request_emergency_stop(emergency_button_reason());",
@@ -294,8 +294,8 @@ require_ordered_tokens(
         "const UBaseType_t loopStackFree = uxTaskGetStackHighWaterMark(NULL)",
         "if (loopStackFree < 1024)",
         "print_critical_stack_details(\"loopTask\", loopStackFree)",
-        "request_emergency_stop(\"Аварийное отключение! Критически малый остаток стека\")",
-        "SendMsg(\"Стек переполнился. Перезагрузка\"",
+        "request_emergency_stop(TR(MAIN_EMERGENCY_STACK_LOW, \"Аварийное отключение! Критически малый остаток стека\"))",
+        "SendMsg(TR(MAIN_STACK_OVERFLOW_REBOOT, \"Стек переполнился. Перезагрузка\")",
         "vTaskDelay(5000)",
         # П24: проверка текущей задачи (loop()) - это только первая часть функции;
         # дальше идёт обход таблицы остальных наблюдаемых задач (SysTicker,
@@ -421,7 +421,7 @@ if stop_process_idx is not None:
         if rest is None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
-        fields = [f.strip() for f in rest.split(",")]
+        fields = split_top_level_commas(rest)
         if len(fields) <= stop_process_idx:
             errors.append(f"mode_registry table: row for {mode} too short: {rest}")
             continue
@@ -444,7 +444,7 @@ if stop_process_idx is not None:
         if rest is None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
-        fields = [f.strip() for f in rest.split(",")]
+        fields = split_top_level_commas(rest)
         actual = fields[stop_process_idx] if len(fields) > stop_process_idx else "<missing>"
         if actual != "nullptr":
             errors.append(
@@ -815,7 +815,7 @@ if not re.search(
 ):
     errors.append("manual RMVK selector must enable the base power-regulator dependency")
 
-host_source = r'''
+host_source = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <string>
 #include "safety_transition.h"

@@ -98,6 +98,7 @@ PREFLIGHT_HARNESS = r'''
 #include <cstring>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 @USE_LUA@
 using std::isfinite;
 
@@ -253,7 +254,7 @@ def build_preflight(validate_body: str, use_lua: bool) -> str:
         "@IS_I2C@": body("inline bool cheese_mixer_is_i2c(uint8_t device)"),
         "@VALIDATE@": validate_body,
     }
-    result = PREFLIGHT_HARNESS
+    result = PREFLIGHT_HARNESS.replace("@ROOT@", ROOT.as_posix())
     for marker, value in values.items():
         result = result.replace(marker, value)
     return result
@@ -360,8 +361,8 @@ def main() -> int:
             run(build_preflight(mutant, True), label, False)
         run(build_preflight(validate_body, False), "Cheese no-Lua preflight", True)
         no_lua_mutant = validate_body.replace(
-            'error = "Lua недоступна в этой сборке";\n      return false;',
-            'error = "Lua недоступна в этой сборке";\n      return true;',
+            'error = TR(CHEESE_ERR_LUA_NOT_IN_BUILD, "Lua недоступна в этой сборке");\n      return false;',
+            'error = TR(CHEESE_ERR_LUA_NOT_IN_BUILD, "Lua недоступна в этой сборке");\n      return true;',
             1,
         )
         if no_lua_mutant == validate_body:

@@ -27,6 +27,7 @@ import tempfile
 from pathlib import Path
 
 from smoke_helpers import (
+    I18N_INCLUDE,
     extract_braced_block_after,
     extract_function_body,
     strip_cpp_comments,
@@ -39,7 +40,7 @@ FUNCTIONS = [
     "inline void nbk_cancel_program_start(const String& message)",
 ]
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -202,7 +203,7 @@ def check_site(
             if fragment not in block:
                 errors.append(f"[{label}] missing fragment in nbk_cancel_program_start call: {fragment}")
     else:
-        call = f'nbk_cancel_program_start("{message}");'
+        call = f"nbk_cancel_program_start({message});"
         if call not in block:
             errors.append(f"[{label}] missing exact nbk_cancel_program_start call: {call}")
 
@@ -235,7 +236,7 @@ def run_structural_part() -> list[str]:
     check_site(
         errors, run_body, "A",
         "if (!PowerOn && power_transition_active()) {",
-        "Выключение нагрева ещё не завершено. Старт НБК отменён.",
+        'TR(NBK_START_HEATING_OFF_PENDING, "Выключение нагрева ещё не завершено. Старт НБК отменён.")',
         expect_close_log=False,
         expect_warn_log_close_failed=False,
     )
@@ -244,7 +245,8 @@ def run_structural_part() -> list[str]:
     check_site(
         errors, run_body, "B",
         "if (num > 0 && !PowerOn) {",
-        "Нагрев НБК выключен. Переход к строке №\" + String(num + 1) + \" отменён.",
+        'TR(NBK_HEATING_OFF_GOTO_LINE, "Нагрев НБК выключен. Переход к строке №")'
+        ' + String(num + 1) + TR(NBK_CANCELLED_DOT, " отменён.")',
         expect_close_log=False,
         expect_warn_log_close_failed=False,
     )
@@ -260,7 +262,7 @@ def run_structural_part() -> list[str]:
         expect_warn_log_close_failed=False,
         call_contains=[
             "nbk_cancel_program_start(",
-            '"Запуск НБК отклонён: некорректная настройка - "',
+            'TR(NBK_START_REJECTED_BAD_SETTING, "Запуск НБК отклонён: некорректная настройка - ")',
             "String(nbkSessionConfigError)",
         ],
     )
@@ -269,7 +271,7 @@ def run_structural_part() -> list[str]:
     check_site(
         errors, run_body, "D",
         "if (!create_data()) {",
-        "Ошибка создания файла лога. Старт НБК отменён.",
+        'TR(NBK_START_LOG_FILE_ERROR, "Ошибка создания файла лога. Старт НБК отменён.")',
         expect_close_log=False,
         expect_warn_log_close_failed=False,
     )
@@ -279,7 +281,7 @@ def run_structural_part() -> list[str]:
     check_site(
         errors, run_body, "E",
         "if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {",
-        "Описание сессии занято. Старт НБК отменён.",
+        'TR(NBK_START_SESSION_BUSY, "Описание сессии занято. Старт НБК отменён.")',
         expect_close_log=False,
         expect_warn_log_close_failed=True,
     )
@@ -294,7 +296,7 @@ def run_structural_part() -> list[str]:
         check_site(
             errors, run_body, "F",
             "if (!PowerOn) {",
-            "Нагрев НБК не включён. Старт отменён.",
+            'TR(NBK_START_HEATING_NOT_ON, "Нагрев НБК не включён. Старт отменён.")',
             expect_close_log=True,
             expect_warn_log_close_failed=False,
             offset=h_branch_index,

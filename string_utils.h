@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <string.h>
+#include "i18n.h"
 
 #ifndef MAX_PROGRAM_INPUT_LEN
 #define MAX_PROGRAM_INPUT_LEN 1024
@@ -140,6 +141,14 @@ class JsonStringPrint : public Print {
   String& target_;
 };
 
+/** Дописывает value ровно width шестнадцатеричными цифрами в верхнем регистре (поля меток @P1/@F1/@H1…). */
+inline void append_fixed_hex(String& out, uint32_t value, uint8_t width) {
+  static const char digits[] = "0123456789ABCDEF";
+  for (int8_t shift = static_cast<int8_t>((width - 1) * 4); shift >= 0; shift -= 4) {
+    out += digits[(value >> shift) & 0x0F];
+  }
+}
+
 /** JSON-строка (включая внешние кавычки) для вставки в <script type="application/json"> или JSON.parse. */
 inline String toJsonString(const String& s) {
   String out;
@@ -147,7 +156,7 @@ inline String toJsonString(const String& s) {
   out += '"';
   JsonStringPrint sink(out);
   if (!json_write_escaped(sink, s.c_str(), s.length())) {
-    Serial.println(F("toJsonString: строка обрезана, не хватило памяти"));
+    Serial.println(F(TR(STR_JSON_STRING_TRUNCATED, "toJsonString: строка обрезана, не хватило памяти")));
   }
   out += '"';
   return out;

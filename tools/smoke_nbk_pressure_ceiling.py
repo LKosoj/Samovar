@@ -31,7 +31,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,7 +66,7 @@ WORK_RESET_MUTATION_ANCHOR = (
     "— не даём веткам смешаться\n"
 )
 
-HEADER = r'''
+HEADER = I18N_INCLUDE + r'''
 #include <cmath>
 #include <cstdint>
 #include <iostream>

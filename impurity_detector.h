@@ -553,8 +553,8 @@ inline void apply_row_stop_pause_policy() {
   float reducedRate = CurrentBaseSpeedRate * (1.0f - PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT / 100.0f);
   float reducedStepSpeed = get_speed_from_rate(reducedRate);
   set_pump_speed(reducedStepSpeed, false, true, UI_CONTROL_SOURCE_AUTO_SPEED);  // continue_process=false: насос остаётся стоять, меняем только базу на будущее резюме
-  SendMsg("Строка №" + String(ProgramNum + 1) + ": " + String(PROGRAM_ROW_STOP_PAUSE_LIMIT) +
-          " стоп-паузы подряд. Базовая скорость снижена до " + String(reducedRate, 2) + " л/ч.", ALARM_MSG);
+  SendMsg(TR(DET_LINE_NUM, "Строка №") + String(ProgramNum + 1) + ": " + String(PROGRAM_ROW_STOP_PAUSE_LIMIT) +
+          TR(DET_STOP_PAUSES_RATE_CUT, " стоп-паузы подряд. Базовая скорость снижена до ") + String(reducedRate, 2) + TR(DET_UNIT_LPH_DOT, " л/ч."), ALARM_MSG);
 }
 
 /**
@@ -720,7 +720,7 @@ void process_impurity_detector() {
 
   ProgramWaitType currentWaitType = PROGRAM_WAIT_NONE;
   if (program_Wait && !copy_program_wait_type(currentWaitType)) {
-    SendMsg("Детектор: тип автоматической паузы занят. Проверка пропущена.", WARNING_MSG);
+    SendMsg(TR(DET_PAUSE_TYPE_BUSY, "Детектор: тип автоматической паузы занят. Проверка пропущена."), WARNING_MSG);
     impurityDetector.detectorStatus = 0;
     detector_idle_reason = DETECTOR_IDLE_PAUSE;
     return;
@@ -887,7 +887,7 @@ void process_impurity_detector() {
     // Но только если нет ручной паузы пользователя
     if (!program_Wait && !PauseOn) {
       if (!set_program_wait_type(PROGRAM_WAIT_DETECTOR, pdMS_TO_TICKS(500))) {
-        SendMsg("Детектор: не удалось установить тип паузы.", WARNING_MSG);
+        SendMsg(TR(DET_PAUSE_TYPE_SET_FAILED, "Детектор: не удалось установить тип паузы."), WARNING_MSG);
         impurityDetector.detectorStatus = 0;
         return;
       }
@@ -895,11 +895,11 @@ void process_impurity_detector() {
       program_Wait = true;
       pause_withdrawal(true);
       if (PauseOn) runtime_pair_begin(UI_WAIT_RECT_DETECTOR,
-                                      "Пауза отбора: критический тренд", ALARM_MSG);
+                                      TR(DET_PAUSE_CRITICAL_TREND, "Пауза отбора: критический тренд"), ALARM_MSG);
       uint16_t delaySec = usePipeSensor ? PipeSensor.Delay : SteamSensor.Delay;
       t_min = now + delaySec * 1000;
       set_buzzer(true);
-      SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " +
+      SendMsg(TR(DET_CRITICAL_TREND_PAUSE, "Детектор: Критический тренд! Пауза отбора. (тренд: ") +
               String(impurityDetector.currentTrend, 3) + ", variance: " +
               String(impurityDetector.tempVariance, 4) + ")", ALARM_MSG);
       RowStopPauseCount++;
@@ -924,7 +924,7 @@ void process_impurity_detector() {
       if (isFirstBodyProgram && body_temp_autoset_allowed()) {
         // Это первая программа тела - устанавливаем новую Т тела вместо снижения скорости
         set_body_temp();
-        SendMsg("Детектор: Установка новой Т тела (первая программа тела, тренд " +
+        SendMsg(TR(DET_NEW_BODY_T, "Детектор: Установка новой Т тела (первая программа тела, тренд ") +
                 String(impurityDetector.currentTrend, 3) + ", variance: " +
                 String(impurityDetector.tempVariance, 4) + ")", WARNING_MSG);
         // Не снижаем скорость сразу, дадим детектору время адаптироваться к новой Т тела
@@ -960,8 +960,8 @@ void process_impurity_detector() {
         if (factorChanged) {
           bool speedApplied = apply_detector_speed_correction(CurrentBaseSpeedRate);
           if (speedApplied) {
-            SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
-                    ", порог: " + String(warningThreshold, 3) + ", variance: " +
+            SendMsg(TR(DET_RATE_REDUCTION, "Детектор: Снижение скорости (тренд ") + String(impurityDetector.currentTrend, 3) +
+                    TR(DET_THRESHOLD, ", порог: ") + String(warningThreshold, 3) + ", variance: " +
                     String(impurityDetector.tempVariance, 4) + ")", NOTIFY_MSG);
           }
         }

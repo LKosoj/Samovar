@@ -34,7 +34,7 @@ if nbk_text:
         body = ""
 
     for token in [
-        "request_emergency_stop(\"Недостаточное охлаждение! Останов.\")",
+        "request_emergency_stop(TR(NBK_INSUFFICIENT_COOLING, \"Недостаточное охлаждение! Останов.\"))",
     ]:
         if token not in body:
             errors.append(f"NBK critical alarm missing emergency request: {token}")
@@ -82,7 +82,7 @@ if nbk_text:
                 "millis() - nbk_end_steam_start_time >= 60000",
                 "Температура пара выше 98°C в течение 60 секунд.",
                 "if (!queue_samovar_command(SAMOVAR_POWER)) {",
-                "request_emergency_stop(\"Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)\");",
+                "request_emergency_stop(TR(NBK_EMERGENCY_WASH_OUT, \"Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)\"));",
             ],
             errors,
         )

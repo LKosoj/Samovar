@@ -24,7 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,7 +69,7 @@ SPILL_DEFINE_ANCHOR = "#define NBK_SPILL_DT_MULT 3 // [Пролив] порог 
 # единственное вхождение "nbk_Po -= nbk_dP;" во всём файле - без "/ 10.0").
 SPILL_STEP_ANCHOR = "      nbk_Po -= nbk_dP;\n"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

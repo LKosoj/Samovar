@@ -29,7 +29,7 @@ inline void finish_self_test_now(bool completed) {
   selfTestCompleted = false;
   safety_owner_generation_release(selfTestOwnerGeneration);
   selfTestOwnerGeneration = 0;
-  if (completed) SendMsg(("Самотестирование закончено."), NOTIFY_MSG);
+  if (completed) SendMsg((TR(SELF_FINISHED, "Самотестирование закончено.")), NOTIFY_MSG);
 }
 
 inline bool abort_self_test_if_owner_lost() {
@@ -47,7 +47,7 @@ inline void start_self_test(void) {
   if (is_self_test || safety_transition_active(selfTestTransition)) return;
   if (samovar_process_active() || mode_switch_in_progress() ||
       !safety_owner_generation_acquire(selfTestOwnerGeneration)) {
-    SendMsg("Самотестирование отклонено: активен процесс или смена режима", WARNING_MSG);
+    SendMsg(TR(SELF_REJECTED, "Самотестирование отклонено: активен процесс или смена режима"), WARNING_MSG);
     selfTestOwnerGeneration = 0;
     return;
   }
@@ -64,7 +64,7 @@ inline void tick_self_test(void) {
 
   if (selfTestTransition.phase == SELF_TEST_START) {
     is_self_test = true;
-    SendMsg(("Запуск самотестирования."), NOTIFY_MSG);
+    SendMsg((TR(SELF_STARTING, "Запуск самотестирования.")), NOTIFY_MSG);
     if (abort_self_test_if_owner_lost()) return;
     open_valve(true, true);
     if (abort_self_test_if_owner_lost()) return;

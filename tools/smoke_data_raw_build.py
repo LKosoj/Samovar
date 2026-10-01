@@ -14,12 +14,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import web_i18n
 from build_web_assets import (
     COMPRESS,
+    DICTIONARIES_DIR,
+    I18N_TARGET,
     SOURCE,
     TARGET,
     canonical_gzip,
     check_no_placeholders,
+    render,
     resolve_includes,
 )
 
@@ -28,6 +32,40 @@ GZIP_PAGES = (
     "nbk.htm", "chart.htm", "program.htm", "cheese-recipes.htm", "calibrate.htm",
     "calibrate_ph.htm",
 )
+
+
+def check_i18n_build(sources: dict[str, bytes], errors: list[str]) -> None:
+    """data_i18n/ обязана быть ровно тем, что сборка делает из data_raw/ и словарей."""
+    languages = web_i18n.discover_languages(DICTIONARIES_DIR)
+    if not languages:
+        if I18N_TARGET.exists():
+            errors.append("data_i18n/: словарей нет, а каталог есть - его быть не должно")
+        return
+    if not I18N_TARGET.is_dir():
+        errors.append("data_i18n/: словари есть, а каталога нет - нужен прогон tools/build_web_assets.py")
+        return
+    built = {p.name for p in I18N_TARGET.iterdir() if p.is_file()}
+    expected: dict[str, tuple[str, bytes]] = {}
+    for lang in languages:
+        dictionary = web_i18n.load_dictionary(DICTIONARIES_DIR / f"{lang}.json")
+        result = web_i18n.translate_sources(sources, dictionary)
+        if result.errors or result.missing:
+            errors.append(f"data_i18n/{lang}: перевод data_raw/ не собирается словарём {lang}.json")
+            continue
+        for name, text in result.files.items():
+            out_name, content = render(name, text.encode("utf-8"), lang)
+            expected[out_name] = (name, content)
+    for extra in sorted(built - set(expected)):
+        errors.append(f"data_i18n/{extra}: в сборке есть, а сборщик такого не делает")
+    for missing in sorted(set(expected) - built):
+        errors.append(f"data_i18n/{missing}: должен быть в сборке - забыли пересобрать?")
+    for out_name, (name, content) in sorted(expected.items()):
+        path = I18N_TARGET / out_name
+        if path.exists() and path.read_bytes() != content:
+            errors.append(
+                f"data_i18n/{out_name} разъехался с data_raw/{name} и словарём - "
+                "нужен прогон tools/build_web_assets.py"
+            )
 
 
 def main() -> int:
@@ -83,6 +121,14 @@ def main() -> int:
             copied = TARGET / name
             if copied.exists() and copied.read_bytes() != source:
                 errors.append(f"data/{name} разъехался с data_raw/{name}")
+
+    resolved = {}
+    for name in sorted(sources):
+        try:
+            resolved[name] = resolve_includes(name, (SOURCE / name).read_bytes())
+        except ValueError:
+            pass  # про сломанный include уже сказано выше
+    check_i18n_build(resolved, errors)
 
     if errors:
         print("data/ не соответствует data_raw/:")

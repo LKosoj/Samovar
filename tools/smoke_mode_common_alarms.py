@@ -85,9 +85,9 @@ if mode_common:
             "inline bool mode_check_powered_cooling_sensors",
             [
                 "sensor_valid(WaterSensor)",
-                "process_sensor_failed(modeName, \"воды\")",
+                "process_sensor_failed(modeName, TR(MCOM_SENSOR_WATER, \"воды\"))",
                 "optional_sensor_failed(ACPSensor)",
-                "process_sensor_failed(modeName, \"ТСА\")",
+                "process_sensor_failed(modeName, TR(MCOM_SENSOR_ACP, \"ТСА\"))",
             ],
         ),
         (
@@ -131,7 +131,7 @@ if mode_common:
                 "mode_water_flow_demanded()",
                 "WFAlarmCount > WF_ALARM_COUNT",
                 "set_buzzer(true);",
-                "request_emergency_stop(\"Аварийное отключение! Прекращена подача воды.\")",
+                "request_emergency_stop(TR(MCOM_WATER_SUPPLY_STOPPED, \"Аварийное отключение! Прекращена подача воды.\"))",
             ],
         ),
         (
@@ -147,7 +147,7 @@ if mode_common:
             [
                 "set_buzzer(true);",
                 "format_float(WaterSensor.avgTemp, 1)",
-                "SendMsg(\"Высокая температура воды: \"",
+                "SendMsg(TR(MCOM_WATER_HIGH_HEAD, \"Высокая температура воды: \")",
             ],
         ),
         (
@@ -332,7 +332,7 @@ for name, text, signature, ordered in [
         "void check_alarm()",
         [
             "mode_clear_alarm_pause_if_expired();",
-            "mode_check_powered_cooling_sensors(\"Ректификация\")",
+            "mode_check_powered_cooling_sensors(TR(ALARM_MODE_RECT, \"Ректификация\"))",
             "mode_should_open_cooling(false, true, true)",
             "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, true)",
             "mode_update_water_pump_pid(SamSetup.SetACPTemp < 45.0f ? 45.0f : SamSetup.SetACPTemp);",
@@ -350,7 +350,7 @@ for name, text, signature, ordered in [
         "void check_alarm_distiller()",
         [
             "mode_clear_alarm_pause_if_expired();",
-            "mode_check_powered_cooling_sensors(\"Дистилляция\")",
+            "mode_check_powered_cooling_sensors(TR(DIST_MODE_NAME, \"Дистилляция\"))",
             "mode_should_open_cooling(false, true, true)",
             "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)",
             "mode_update_water_pump_pid(SamSetup.SetACPTemp);",
@@ -365,7 +365,7 @@ for name, text, signature, ordered in [
         "void check_alarm_bk()",
         [
             "mode_clear_alarm_pause_if_expired();",
-            "mode_check_powered_cooling_sensors(\"БК\")",
+            "mode_check_powered_cooling_sensors(TR(BK_MODE_NAME, \"БК\"))",
             "mode_should_open_cooling(false, true, true)",
             "set_pump_pwm(bk_pwm);",
             "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)",
@@ -463,7 +463,7 @@ if nbk:
         "NBK critical sensor helper before temperature checks",
         body,
         [
-            "if (!mode_check_powered_cooling_sensors(\"НБК\")) return true;",
+            "if (!mode_check_powered_cooling_sensors(TR(NBK_MODE_NAME, \"НБК\"))) return true;",
             "SteamSensor.avgTemp > 98.0",
         ],
         errors,

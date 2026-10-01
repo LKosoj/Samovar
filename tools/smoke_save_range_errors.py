@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from smoke_helpers import extract_function_body, require_ordered_tokens
+from smoke_helpers import I18N_INCLUDE, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 WEBSERVER = ROOT / "WebServer.ino"
@@ -314,7 +314,7 @@ def check_behavior(web_text: str) -> None:
     numeric_parse_body = numeric_parse_text.split("#include <string.h>", 1)[-1]
 
     program = (
-        CPP_HARNESS_TEMPLATE
+        (I18N_INCLUDE + "\n" + CPP_HARNESS_TEMPLATE)
         .replace("__JSON_WRITE_ESCAPED__", jwe_body)
         .replace("__TO_JSON_STRING__", json_body)
         .replace("__NUMERIC_PARSE__", numeric_parse_body)

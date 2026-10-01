@@ -11,6 +11,7 @@ import build_web_assets
 
 def main() -> int:
     original_target = build_web_assets.TARGET
+    original_i18n_target = build_web_assets.I18N_TARGET
     errors: list[str] = []
 
     try:
@@ -20,8 +21,9 @@ def main() -> int:
                 target.mkdir()
                 target.chmod(directory_mode)
                 build_web_assets.TARGET = target
+                build_web_assets.I18N_TARGET = Path(temporary) / "data_i18n"
 
-                if build_web_assets.main() != 0:
+                if build_web_assets.main([]) != 0:
                     errors.append(f"сборка завершилась ошибкой для data={directory_mode:o}")
                     continue
 
@@ -49,6 +51,7 @@ def main() -> int:
                 target.rmdir()
     finally:
         build_web_assets.TARGET = original_target
+        build_web_assets.I18N_TARGET = original_i18n_target
 
     if errors:
         print("web asset permissions smoke failed:")

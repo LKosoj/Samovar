@@ -42,7 +42,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens
+from smoke_helpers import I18N_INCLUDE, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -72,7 +72,7 @@ def forbid_token(name: str, body: str, token: str) -> None:
 RESET_REQUIRED_CALLS = [
     ("stop_active_process_for_mode();", "штатное завершение процесса текущего режима"),
     ("request_lua_mode_stop()", "добить Lua, если штатный finish вышел раньше времени"),
-    ('SendMsg("Процесс остановлен сбросом',
+    ('SendMsg(TR(MENU_RESET_STOP_UNCONFIRMED, "Процесс остановлен сбросом',
      "уведомить, если штатный finish не дошёл до собственного сообщения"),
     ("reset_sensor_counter();", "общий сброс счётчиков после завершения"),
 ]
@@ -639,7 +639,7 @@ def build_harness() -> str:
             files_cache[filename] = (ROOT / filename).read_text(encoding="utf-8")
         bodies[key] = extract_function_body(files_cache[filename], signature)
 
-    harness = HARNESS_TEMPLATE
+    harness = I18N_INCLUDE + "\n" + HARNESS_TEMPLATE
     harness = harness.replace(
         "@WITHDRAWAL_BODY@",
         "static void withdrawal(void) {" + bodies["withdrawal"] + "}",
@@ -787,7 +787,7 @@ def build_dispatch_harness() -> str:
         raise ValueError("mode_registry.h not found")
     tick_body = extract_function_body(registry_text, "inline void mode_tick_beer()")
     dispatch_body = extract_function_body(registry_text, "inline void mode_dispatch_loop()")
-    harness = DISPATCH_HARNESS
+    harness = I18N_INCLUDE + "\n" + DISPATCH_HARNESS
     harness = harness.replace(
         "@MODE_TICK_BEER_BODY@", "static void mode_tick_beer() {" + tick_body + "}")
     harness = harness.replace(

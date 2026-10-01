@@ -23,6 +23,7 @@ HARNESS = r'''
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 using std::isfinite;
 using std::min;
 #define USE_LUA
@@ -149,7 +150,7 @@ def build(tick_body: str, lua_body: str) -> str:
         "@LUA_TICK@": lua_body,
         "@TICK@": tick_body,
     }
-    result = HARNESS
+    result = HARNESS.replace("@ROOT@", ROOT.as_posix())
     for marker, content in replacements.items():
         result = result.replace(marker, content)
     return result

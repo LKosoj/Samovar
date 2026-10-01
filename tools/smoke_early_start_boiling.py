@@ -32,7 +32,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,7 +74,7 @@ def extract_if_statement(source: str, anchor_comment: str) -> str:
     return f"if ({condition}) {{\n{body}\n}}"
 
 
-PRELUDE = r'''
+PRELUDE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

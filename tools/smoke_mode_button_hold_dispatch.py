@@ -84,7 +84,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, split_top_level_commas, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "mode_registry.h"
@@ -172,7 +172,7 @@ def check_table_rows(source: str, errors: list[str]) -> None:
         if rest is None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
-        fields = [f.strip() for f in rest.split(",")]
+        fields = split_top_level_commas(rest)
         if len(fields) != len(rest_field_names):
             errors.append(
                 f"mode_registry table: row for {mode} has {len(fields)} fields, expected "
@@ -191,7 +191,7 @@ def check_table_rows(source: str, errors: list[str]) -> None:
         if rest is None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
-        fields = [f.strip() for f in rest.split(",")]
+        fields = split_top_level_commas(rest)
         if len(fields) != len(rest_field_names):
             errors.append(
                 f"mode_registry table: row for {mode} has {len(fields)} fields, expected "
@@ -226,7 +226,7 @@ def check_guard_texts(hold_body: str, errors: list[str]) -> None:
 
 
 # --- (b)/(c) динамический харнесс для mode_dispatch_button_hold()+press --------------------
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

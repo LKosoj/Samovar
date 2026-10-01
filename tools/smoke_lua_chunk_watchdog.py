@@ -37,6 +37,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from smoke_helpers import I18N_INCLUDE
+
 ROOT = Path(__file__).resolve().parents[1]
 LUA_DIR = ROOT / "libraries/ESP-Arduino-Lua/src/lua"
 
@@ -358,7 +361,7 @@ def build_harness(watchdog_block: str, coroutine_watchdog_block: str, timeout_ms
         f"#define LUA_CHUNK_TIMEOUT_MS {timeout_ms}\n"
         f"#define LUA_CHUNK_TIMEOUT_INSTRUCTIONS {instructions}\n"
     )
-    harness = HARNESS_TEMPLATE.replace("@TIMEOUT_OVERRIDE@", override)
+    harness = (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@TIMEOUT_OVERRIDE@", override)
     harness = harness.replace("@WATCHDOG_BLOCK@", watchdog_block)
     harness = harness.replace("@COROUTINE_WATCHDOG_BLOCK@", coroutine_watchdog_block)
     return harness

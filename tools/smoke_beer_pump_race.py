@@ -44,6 +44,7 @@ HARNESS_TEMPLATE = r'''
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 
 #define BitIsSet(reg, bit) ((reg & (1 << bit)) != 0)
 #define RELE_CHANNEL2 2
@@ -925,6 +926,7 @@ NO_LOCAL_HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <cmath>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 
 #define BitIsSet(reg, bit) ((reg & (1 << bit)) != 0)
 #define RELE_CHANNEL2 2
@@ -1149,7 +1151,8 @@ def build_harness(beer_source: str) -> str:
     reset_stage_fn = "inline void beer_reset_stage_state() {" + reset_stage_body + "}"
     finish_body = extract_function_body(beer_source, BEER_FINISH_SIGNATURE)
     finish_fn = "void beer_finish() {" + finish_body + "}"
-    harness = HARNESS_TEMPLATE.replace("@BEER_MIXER_REVERSE_DIR_BODY@", reverse_dir_fn)
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix())
+    harness = harness.replace("@BEER_MIXER_REVERSE_DIR_BODY@", reverse_dir_fn)
     harness = harness.replace("@CHECK_MIXER_STATE_BODY@", check_mixer_fn)
     harness = harness.replace("@SET_MIXER_STATE_BODY@", mixer_fn)
     harness = harness.replace("@COOLING_PUMP_BODY@", cooling_pump_fn)
@@ -1163,7 +1166,8 @@ def build_harness(beer_source: str) -> str:
 def build_no_local_harness(beer_source: str) -> str:
     mixer_body = extract_function_body(beer_source, SET_MIXER_STATE_SIGNATURE)
     mixer_fn = "ActuatorCommandResult set_mixer_state(bool state, bool dir) {" + mixer_body + "}"
-    return NO_LOCAL_HARNESS_TEMPLATE.replace("@SET_MIXER_STATE_BODY@", mixer_fn)
+    return NO_LOCAL_HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace(
+        "@SET_MIXER_STATE_BODY@", mixer_fn)
 
 
 def compile_and_run(
@@ -1222,7 +1226,7 @@ def main() -> int:
             pause_branch,
             [
                 "if (!beer_pause_fermentation_outputs()) {",
-                'beer_abort_config_error("Ошибка ручной паузы: не удалось выключить исполнитель");',
+                'beer_abort_config_error(TR(BEER_MANUAL_PAUSE_ACTUATOR_FAILED, "Ошибка ручной паузы: не удалось выключить исполнитель"));',
                 "return;",
             ],
             errors,
@@ -1396,7 +1400,7 @@ def main() -> int:
         return 1
 
     emergency_mutant = harness.replace(
-        'if (rollbackFailed) {\n          request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");',
+        'if (rollbackFailed) {\n          request_emergency_stop(TR(BEER_ESTOP_MIXER_RESTORE, "Аварийное отключение! Не удалось вернуть состояние мешалки"));',
         'if (rollbackFailed) {\n          (void)0;',
         1,
     )

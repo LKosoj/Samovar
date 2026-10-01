@@ -13,7 +13,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, split_top_level_commas, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -80,9 +80,9 @@ if lua:
             [
                 "mode_clear_alarm_pause_if_expired();",
                 "if (PowerOn || lua_heater_channel_raised())",
-                'optional_sensor_failed(WaterSensor) && process_sensor_failed("Lua", "воды")',
-                'optional_sensor_failed(ACPSensor) && process_sensor_failed("Lua", "ТСА")',
-                'optional_sensor_failed(TankSensor) && process_sensor_failed("Lua", "куба")',
+                'optional_sensor_failed(WaterSensor) && process_sensor_failed("Lua", TR(LUA_SENSOR_WATER, "воды"))',
+                'optional_sensor_failed(ACPSensor) && process_sensor_failed("Lua", TR(LUA_SENSOR_ACP, "ТСА"))',
+                'optional_sensor_failed(TankSensor) && process_sensor_failed("Lua", TR(LUA_SENSOR_TANK, "куба"))',
                 "mode_request_overheat_emergency_if_needed();",
                 "mode_request_water_flow_emergency_if_needed();",
             ],
@@ -142,7 +142,7 @@ if mode_registry:
         row_end = mode_registry.find("},", row_start)
         row = mode_registry[row_start:row_end + 1]
         require_token("mode_registry.h LUA row", row, "SAMOVAR_LUA_ALARM_FN")
-        fields = [f.strip() for f in row.strip("{}").rstrip(",").split(",")]
+        fields = split_top_level_commas(row.strip("{}").rstrip(","))
         if field_names and len(fields) != len(field_names):
             errors.append(
                 f"mode_registry.h LUA row: expected {len(field_names)} fields (per struct "
@@ -311,7 +311,7 @@ def run_behavioral_checks() -> list[str]:
     except ValueError as exc:
         return [str(exc)]
 
-    harness = HARNESS_TEMPLATE.replace("@HEATER_RAISED_BODY@", heater_raised_body)
+    harness = (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@HEATER_RAISED_BODY@", heater_raised_body)
     harness = harness.replace("@SET_HEATER_RAISED_BODY@", set_heater_raised_body)
     harness = harness.replace("@CHECK_ALARM_LUA_BODY@", check_alarm_lua_body)
 

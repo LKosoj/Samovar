@@ -18,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -190,7 +190,7 @@ def build_harness(define_power: bool) -> str:
     body = extract_function_body(source, "inline RuntimeEventPublishResult append_runtime_event(")
     power_define = "#define SAMOVAR_USE_POWER" if define_power else "// SAMOVAR_USE_POWER not defined for this build"
     return (
-        HARNESS_TEMPLATE
+        (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE)
         .replace("@BODY@", body)
         .replace("@POWER_DEFINE@", power_define)
     )

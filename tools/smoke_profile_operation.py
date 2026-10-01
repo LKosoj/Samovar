@@ -81,6 +81,7 @@ def build_harness() -> str:
 #include <deque>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 #include "operation_store.h"
 #include "safety_transition.h"
@@ -1535,6 +1536,7 @@ int main() {
   return 0;
 }
 '''
+    harness = harness.replace("@ROOT@", ROOT.as_posix())
     harness = harness.replace("@PROFILE_DEFS@", profile_defs)
     harness = harness.replace("@MODE_RESULT@", mode_result)
     harness = harness.replace("@PERSIST_RESULT@", persist_result)

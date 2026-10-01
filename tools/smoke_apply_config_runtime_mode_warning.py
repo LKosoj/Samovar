@@ -40,7 +40,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMOVAR_INO_PATH = ROOT / "Samovar.ino"
@@ -203,7 +203,7 @@ int main() {
 
 
 def build_harness(fragment: str) -> str:
-    return HARNESS_TEMPLATE.replace("@BODY@", fragment)
+    return (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@BODY@", fragment)
 
 
 def compile_and_run(harness_source: str, prefix: str) -> tuple[bool, int, str, str]:
@@ -295,8 +295,8 @@ def main() -> int:
     # Мутация 3: SendMsg удалён из веток (пользователь вообще не узнаёт о недоступном режиме) -
     # должна быть поймана проверкой 2 (первое сообщение).
     needle3 = (
-        'SendMsg(String("Режим из настроек не активирован: ") +\n'
-        '                  (reason ? reason : "недоступен в этой сборке прошивки"),\n'
+        'SendMsg(String(TR(MAIN_MODE_FROM_SETTINGS_NOT_ACTIVATED, "Режим из настроек не активирован: ")) +\n'
+        '                  (reason ? reason : TR(MAIN_UNAVAILABLE_IN_BUILD, "недоступен в этой сборке прошивки")),\n'
         '              ALARM_MSG);'
     )
     mutant3 = scoped_replace(fragment, needle3, "(void)reason;")

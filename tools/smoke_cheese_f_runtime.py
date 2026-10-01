@@ -11,6 +11,7 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "cheese.h").read_text(encoding="utf-8")
+STRING_UTILS = (ROOT / "string_utils.h").read_text(encoding="utf-8")
 SAMOVAR = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
 REGISTRY = (ROOT / "mode_registry.h").read_text(encoding="utf-8")
 BLYNK = (ROOT / "Blynk.ino").read_text(encoding="utf-8")
@@ -25,6 +26,7 @@ HARNESS = r'''
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 class String {
@@ -82,7 +84,7 @@ inline uint32_t cheese_f_elapsed_seconds(uint32_t nowMs) { @ELAPSED@ }
 inline uint32_t cheese_f_timeout_seconds(const WProgram& row) { @TIMEOUT@ }
 inline bool cheese_f_cut_seconds(uint32_t actualSeconds, uint32_t multiplierMilli,
                                  uint32_t& cutSeconds) { @CUT@ }
-inline void cheese_f_append_hex(String& out, uint32_t value, uint8_t width) { @HEX@ }
+inline void append_fixed_hex(String& out, uint32_t value, uint8_t width) { @HEX@ }
 inline String cheese_f_event_payload(uint32_t sessionId, uint8_t row,
                                      uint32_t actualSeconds, uint32_t multiplierMilli,
                                      uint32_t cutSeconds, uint32_t timeoutSeconds) { @PAYLOAD@ }
@@ -162,12 +164,12 @@ def source(next_body: str, cut_body: str) -> str:
         "@ELAPSED@": body("inline uint32_t cheese_f_elapsed_seconds(uint32_t nowMs)"),
         "@TIMEOUT@": body("inline uint32_t cheese_f_timeout_seconds(const WProgram& row)"),
         "@CUT@": cut_body,
-        "@HEX@": body("inline void cheese_f_append_hex(String& out, uint32_t value, uint8_t width)"),
+        "@HEX@": extract_function_body(STRING_UTILS, "inline void append_fixed_hex(String& out, uint32_t value, uint8_t width)"),
         "@PAYLOAD@": body("inline String cheese_f_event_payload(uint32_t sessionId, uint8_t row,"),
         "@NEXT@": next_body,
         "@RUN@": body("inline void run_cheese_program(uint8_t num)"),
     }
-    result = HARNESS
+    result = HARNESS.replace("@ROOT@", ROOT.as_posix())
     for marker, replacement in replacements.items():
         result = result.replace(marker, replacement)
     return result

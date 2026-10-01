@@ -213,7 +213,7 @@ def require_process_uses_shared_temperature(detector_source: str) -> None:
 def require_detector_message_guard(detector_source: str) -> None:
     body = extract_function_body(detector_source, "void process_impurity_detector()")
     guard = ('if (speedApplied) {\n'
-             '            SendMsg("Детектор: Снижение скорости')
+             '            SendMsg(TR(DET_RATE_REDUCTION, "Детектор: Снижение скорости')
     if body.count(guard) != 1:
         raise AssertionError("сообщение о снижении должно быть только под guard фактической команды")
     if "скорость уже на минимуме" in body:

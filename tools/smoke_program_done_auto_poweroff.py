@@ -33,6 +33,7 @@ COMMON_PRELUDE = r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 class String {
  public:
@@ -195,7 +196,7 @@ int main() {
 
 
 def build_harness(main_template: str, block: str, min_value: int, extra_mocks: str = "") -> str:
-    harness = COMMON_PRELUDE.replace("@MIN@", str(min_value))
+    harness = COMMON_PRELUDE.replace("@ROOT@", ROOT.as_posix()).replace("@MIN@", str(min_value))
     harness += extra_mocks
     harness += main_template.replace("@BLOCK@", block).replace("@MIN@", str(min_value))
     return harness

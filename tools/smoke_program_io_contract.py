@@ -253,7 +253,7 @@ if program_io:
         [
             "parse_program_type(tokType, spec.allowedTypes, parsedType)",
             "program_parse_beer_device",
-            "errorMessage = \"неверный шаблон устройства beer\";",
+            "errorMessage = TR(PROG_BEER_BAD_DEVICE, \"неверный шаблон устройства beer\");",
         ],
         errors,
     )

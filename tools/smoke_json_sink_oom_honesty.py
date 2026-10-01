@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from smoke_helpers import extract_function_body, extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_function_body, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -238,7 +238,7 @@ def build_cpp_source() -> str:
         + extract_function_body(spiffs_editor, SPIFFS_EDITOR_JSON_ESCAPE_SIGNATURE) + "\n}"
     )
 
-    source = HARNESS_TEMPLATE
+    source = I18N_INCLUDE + "\n" + HARNESS_TEMPLATE
     source = source.replace("@JSON_STRING_PRINT@", json_string_print)
     source = source.replace("@JSON_WRITE_ESCAPED@", json_write_escaped)
     source = source.replace("@TO_JSON_STRING@", to_json_string)

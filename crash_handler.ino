@@ -11,18 +11,18 @@ static bool fs_available = false;
 String get_reset_reason_string() {
   esp_reset_reason_t reason = esp_reset_reason();
   switch (reason) {
-    case ESP_RST_UNKNOWN:   return "Неизвестная причина перезагрузки (0)";
-    case ESP_RST_POWERON:   return "Перезагрузка из-за подачи питания (1)";
-    case ESP_RST_EXT:       return "Внешний сброс через пин RESET (2)";
-    case ESP_RST_SW:        return "Программный сброс, вызванный esp_restart() (3)";
-    case ESP_RST_PANIC:     return "Сброс из-за паники или необработанного исключения (4)";
-    case ESP_RST_INT_WDT:   return "Сброс из-за срабатывания внутреннего сторожевого таймера (5)";
-    case ESP_RST_TASK_WDT:  return "Сброс из-за срабатывания сторожевого таймера задачи (6)";
-    case ESP_RST_WDT:       return "Сброс из-за срабатывания любого из сторожевых таймеров (7)";
-    case ESP_RST_DEEPSLEEP: return "Сброс после выхода из режима глубокого сна (8)";
-    case ESP_RST_BROWNOUT:  return "Сброс из-за детектирования пониженного напряжения питания (9)";
-    case ESP_RST_SDIO:      return "Сброс по причине ошибки SDIO (10)";
-    default:                return "Неизвестный код причины: " + String((int)reason);
+    case ESP_RST_UNKNOWN:   return TR(CRASH_RST_UNKNOWN, "Неизвестная причина перезагрузки (0)");
+    case ESP_RST_POWERON:   return TR(CRASH_RST_POWERON, "Перезагрузка из-за подачи питания (1)");
+    case ESP_RST_EXT:       return TR(CRASH_RST_EXT, "Внешний сброс через пин RESET (2)");
+    case ESP_RST_SW:        return TR(CRASH_RST_SW, "Программный сброс, вызванный esp_restart() (3)");
+    case ESP_RST_PANIC:     return TR(CRASH_RST_PANIC, "Сброс из-за паники или необработанного исключения (4)");
+    case ESP_RST_INT_WDT:   return TR(CRASH_RST_INT_WDT, "Сброс из-за срабатывания внутреннего сторожевого таймера (5)");
+    case ESP_RST_TASK_WDT:  return TR(CRASH_RST_TASK_WDT, "Сброс из-за срабатывания сторожевого таймера задачи (6)");
+    case ESP_RST_WDT:       return TR(CRASH_RST_WDT, "Сброс из-за срабатывания любого из сторожевых таймеров (7)");
+    case ESP_RST_DEEPSLEEP: return TR(CRASH_RST_DEEPSLEEP, "Сброс после выхода из режима глубокого сна (8)");
+    case ESP_RST_BROWNOUT:  return TR(CRASH_RST_BROWNOUT, "Сброс из-за детектирования пониженного напряжения питания (9)");
+    case ESP_RST_SDIO:      return TR(CRASH_RST_SDIO, "Сброс по причине ошибки SDIO (10)");
+    default:                return TR(CRASH_RST_UNKNOWN_CODE, "Неизвестный код причины: ") + String((int)reason);
   }
 }
 
@@ -178,7 +178,7 @@ void init_crash_handler() {
   bool was_crash = is_crash_reset_reason(reason);
   
   if (was_crash) {
-    SendMsg("Аварийная перезагрузка", ALARM_MSG);
+    SendMsg(TR(CRASH_EMERGENCY_REBOOT, "Аварийная перезагрузка"), ALARM_MSG);
     Serial.println("[CRASH] Crash detected! Saving log...");
     // Сохраняем информацию о предыдущем сбое
     String crash_info = "Previous crash detected at startup. Reason: " + reasonStr;

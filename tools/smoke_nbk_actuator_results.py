@@ -6,11 +6,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
-SETSPEED_HARNESS = r'''
+SETSPEED_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 
@@ -183,7 +183,7 @@ int main() {
 }
 '''
 
-FSM_HARNESS = r'''
+FSM_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 
@@ -405,7 +405,7 @@ int main() {
 }
 '''
 
-SAFE_WAIT_HARNESS = r'''
+SAFE_WAIT_HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 

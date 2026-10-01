@@ -14,6 +14,7 @@ HARNESS = r'''
 #include <cstdint>
 #include <math.h>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 
 @HEAT_DELTA@
 @REACH_TIMEOUT@
@@ -391,7 +392,7 @@ def main():
     reach_timeout = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_REACH_TIMEOUT_MS"))
     stop_retry = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_STOP_RETRY_MS"))
     hold_band = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_HOLD_BAND_C"))
-    code = HARNESS.replace("@HEAT_DELTA@", heat).replace("@REACH_TIMEOUT@", reach_timeout)
+    code = HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@HEAT_DELTA@", heat).replace("@REACH_TIMEOUT@", reach_timeout)
     code = code.replace("@STOP_RETRY@", stop_retry)
     code = code.replace("@HOLD_BAND@", hold_band)
     code = code.replace("@HOLD_STATE@", definition(source, "struct SuvidHoldState") + "\nstatic SuvidHoldState suvidHold;")

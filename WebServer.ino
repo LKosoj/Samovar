@@ -787,7 +787,7 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
         send_no_store_response(
             request, 409, "application/json",
             build_error_envelope("stale", "generation",
-                                 "Настройки изменились на самом устройстве. Обновите страницу и повторите."));
+                                 TR(WEB_STALE_SETTINGS, "Настройки изменились на самом устройстве. Обновите страницу и повторите.")));
         return;
       }
     }
@@ -2236,7 +2236,7 @@ void handleSave(AsyncWebServerRequest *request) {
         request, 409, "application/json",
         build_error_envelope(
             "not_available", "CheesePhSlope",
-            "ADS1115 недоступен: калибровка pH заблокирована"));
+            TR(WEB_ADS1115_PH_BLOCKED, "ADS1115 недоступен: калибровка pH заблокирована")));
     return;
   }
   if (request_param_count(request, "clear") != 0) {
@@ -2306,7 +2306,7 @@ void handleSave(AsyncWebServerRequest *request) {
             request, 400, "application/json",
             build_error_envelope(
                 "not_allowed", "mode",
-                reason ? String(reason) : String("Режим недоступен в этой сборке прошивки")));
+                reason ? String(reason) : String(TR(WEB_MODE_UNAVAILABLE_IN_BUILD, "Режим недоступен в этой сборке прошивки"))));
         return;
       }
       modeRequested = true;
@@ -2811,7 +2811,7 @@ void web_program(AsyncWebServerRequest *request) {
     if (!known || !param->isPost() || param->isFile() ||
         request_param_count(request, param->name().c_str()) != 1) {
       send_program_json_response(
-          request, 400, false, F("Недопустимый параметр запроса"), String());
+          request, 400, false, F(TR(WEB_INVALID_REQUEST_PARAM, "Недопустимый параметр запроса")), String());
       return;
     }
   }
@@ -2824,7 +2824,7 @@ void web_program(AsyncWebServerRequest *request) {
         request,
         400,
         false,
-        F("Числовые и текстовые параметры должны быть единственными"),
+        F(TR(WEB_PARAMS_MUST_BE_UNIQUE, "Числовые и текстовые параметры должны быть единственными")),
         String());
     return;
   }
@@ -2835,7 +2835,7 @@ void web_program(AsyncWebServerRequest *request) {
         request,
         400,
         false,
-        F("WProgram должен быть текстовым параметром"),
+        F(TR(WEB_WPROGRAM_MUST_BE_TEXT, "WProgram должен быть текстовым параметром")),
         String());
     return;
   }
@@ -2846,7 +2846,7 @@ void web_program(AsyncWebServerRequest *request) {
           request,
           400,
           false,
-          F("Очистка программы требует ровно clear=1"),
+          F(TR(WEB_CLEAR_REQUIRES_CLEAR1, "Очистка программы требует ровно clear=1")),
           String());
       return;
     }
@@ -2855,7 +2855,7 @@ void web_program(AsyncWebServerRequest *request) {
           request,
           400,
           false,
-          F("Очистка программы должна быть отдельным действием"),
+          F(TR(WEB_CLEAR_MUST_BE_SEPARATE, "Очистка программы должна быть отдельным действием")),
           String());
       return;
     }
@@ -2893,13 +2893,13 @@ void web_program(AsyncWebServerRequest *request) {
   if (descriptionParam) {
     if (descriptionParam->isFile()) {
       send_program_json_response(
-          request, 400, false, F("Описание задано неверно"), String());
+          request, 400, false, F(TR(WEB_DESCR_INVALID, "Описание задано неверно")), String());
       return;
     }
     const String& description = descriptionParam->value();
     if (description.length() > 250) {
       send_program_json_response(
-          request, 400, false, F("Описание длиннее 250 байт"), String());
+          request, 400, false, F(TR(WEB_DESCR_TOO_LONG, "Описание длиннее 250 байт")), String());
       return;
     }
     memcpy(descriptionValue, description.c_str(), description.length());
@@ -3103,6 +3103,41 @@ static void normalize_web_if_version_string(String& v) {
   v.replace("\r", "");
 }
 
+// Имя файла интерфейса на сервере. Русский (исходный язык) - как есть. Для остальных текстовые файлы
+// (.htm .js .css .lua .txt, в том числе .gz) лежат под именем с кодом языка перед ПЕРВОЙ точкой:
+// index.htm.gz -> index.en.htm.gz. Бинарные и version.txt общие для всех языков.
+// Правило то же, что i18n_name()/BINARY_EXT/UNTRANSLATED в tools/web_i18n.py (сверяет smoke_web_interface_update.py).
+static String web_server_file_name(const String& fn) {
+#ifdef SAMOVAR_LANG_SOURCE
+  return fn;
+#else
+  static const char* const kSharedExt[] = {".png", ".gif", ".mp3", ".ico"};
+  if (fn == "version.txt") return fn;
+  for (const char* ext : kSharedExt) {
+    if (fn.endsWith(ext)) return fn;
+  }
+  const int dot = fn.indexOf('.');
+  if (dot < 0) return fn;
+  String out;
+  out.reserve(fn.length() + sizeof(SAMOVAR_LANG_CODE));
+  out.concat(fn.c_str(), dot);
+  out += '.';
+  out += SAMOVAR_LANG_CODE;
+  out += fn.c_str() + dot;
+  return out;
+#endif
+}
+
+// Маркер версии интерфейса, лежащий в /version.txt. ru: сама версия (файл как раньше). Иначе "<версия>:<код>":
+// после перепрошивки на другой язык ожидаемый маркер расходится с локальным, и интерфейс перекачивается.
+static String web_version_marker(const String& serverVersion) {
+#ifdef SAMOVAR_LANG_SOURCE
+  return serverVersion;
+#else
+  return serverVersion + ":" SAMOVAR_LANG_CODE;
+#endif
+}
+
 // Комплект data/ почти заполняет раздел LittleFS, поэтому файлы качаются по одному
 // и пишутся сразу в конечный путь: без *.tmp/*.bak и без rename (LittleFS не
 // переименовывает открытый файл). Тело ответа не копится в RAM — чанки сливаются
@@ -3179,9 +3214,10 @@ void get_web_interface() {
     return;
   }
   normalize_web_if_version_string(version);
+  const String expectedMarker = web_version_marker(version);
 
   Serial.print(F("WEB interface version = "));
-  Serial.println(version);
+  Serial.println(expectedMarker);
 
   File fn = SPIFFS.open("/version.txt", FILE_READ);
   if (fn) {
@@ -3191,7 +3227,7 @@ void get_web_interface() {
   }
   Serial.print(F("Local interface version = "));
   Serial.println(local_version);
-  if (version != local_version) {
+  if (expectedMarker != local_version) {
     bool updateOk = true;
     auto updateFile = [&](String fn, get_web_type type) {
       if (!updateOk) return;
@@ -3225,7 +3261,7 @@ void get_web_interface() {
     uint32_t freeBytes = SPIFFS.totalBytes() - SPIFFS.usedBytes();
     if (freeBytes < WEB_UPDATE_FREE_SPACE_MARGIN_BYTES) {
       Serial.println("WEB interface update aborted: not enough free space");
-      SendMsg("Обновление веб-интерфейса отменено: мало места на диске", ALARM_MSG);
+      SendMsg(TR(WEB_UPDATE_CANCELLED_LOW_SPACE, "Обновление веб-интерфейса отменено: мало места на диске"), ALARM_MSG);
       updateOk = false;
     }
 
@@ -3265,7 +3301,7 @@ void get_web_interface() {
 
     if (updateOk) {
       // Версию уже скачали в начале функции — записываем нормализованную строку, без повторного HTTP.
-      String versionMarker = version + "\n";
+      String versionMarker = expectedMarker + "\n";
       if (!write_web_file("/version.txt", versionMarker)) {
         Serial.println("WEB interface update failed on version marker; local version marker was not changed.");
         updateOk = false;
@@ -3274,7 +3310,7 @@ void get_web_interface() {
 
     if (!updateOk) {
       Serial.println("WEB interface update aborted; local version marker was not changed.");
-      SendMsg("Обновление веб-интерфейса не завершено, версия не изменилась", WARNING_MSG);
+      SendMsg(TR(WEB_UPDATE_INCOMPLETE, "Обновление веб-интерфейса не завершено, версия не изменилась"), WARNING_MSG);
     }
   }
 }
@@ -3504,7 +3540,7 @@ String get_web_file(String fn, get_web_type type) {
     return "";
   }
 
-  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn + "?" + micros();
+  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + web_server_file_name(fn) + "?" + micros();
   Serial.print("url = ");
   Serial.println(url);
 

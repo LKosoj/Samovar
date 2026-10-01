@@ -26,6 +26,157 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+SOURCE_LANGUAGE = "ru"
+DEFAULT_I18N_DIR = Path(__file__).resolve().parents[1] / "i18n" / "configurator"
+LANGUAGE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,15}$")
+CYRILLIC_RE = re.compile("[А-Яа-яЁё]")  # i18n-keep: признак русского текста
+DICTIONARY_KEYS = ("language_name", "strings", "macro_descriptions")
+SOURCE_LANGUAGE_NAME = "Русский"  # i18n-keep: название исходного языка пишется на нём самом
+
+
+class TranslationError(LookupError):
+    pass
+
+
+_language = SOURCE_LANGUAGE
+_i18n_dir = DEFAULT_I18N_DIR
+_strings: Dict[str, str] = {}
+_macro_descriptions: Dict[str, str] = {}
+
+
+def N_(text: str) -> str:
+    """Метка для словаря: текст остаётся как есть, переводится в момент показа через tr()."""
+    return text
+
+
+def tr(text: str) -> str:
+    if _language == SOURCE_LANGUAGE or not CYRILLIC_RE.search(text):
+        return text
+    try:
+        return _strings[text]
+    except KeyError:
+        raise TranslationError(
+            "Нет перевода на язык {} для строки: {!r}".format(_language, text)  # i18n-keep: сообщение разработчику
+        ) from None
+
+
+def macro_description(macro: str, source_text: str) -> str:
+    if _language == SOURCE_LANGUAGE:
+        return source_text
+    try:
+        return _macro_descriptions[macro]
+    except KeyError:
+        raise TranslationError(
+            "Нет перевода на язык {} для описания настройки {}".format(_language, macro)  # i18n-keep: сообщение разработчику
+        ) from None
+
+
+def current_language() -> str:
+    return _language
+
+
+def current_i18n_dir() -> Path:
+    return _i18n_dir
+
+
+def _read_dictionary(code: str, i18n_dir: Path) -> Dict[str, object]:
+    if not LANGUAGE_CODE_RE.fullmatch(code) or code == SOURCE_LANGUAGE:
+        raise TranslationError("Недопустимый код языка: {!r}".format(code))  # i18n-keep: сообщение разработчику
+    path = Path(i18n_dir) / (code + ".json")
+
+    def reject_duplicates(pairs):
+        keys = [key for key, _ in pairs]
+        duplicates = sorted({key for key in keys if keys.count(key) > 1})
+        if duplicates:
+            raise TranslationError("{}: повторяются ключи {}".format(path, duplicates))  # i18n-keep: сообщение разработчику
+        return dict(pairs)
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicates)
+    except OSError as error:
+        raise TranslationError("Нет словаря языка {}: {}".format(code, error)) from error  # i18n-keep: сообщение разработчику
+    except ValueError as error:
+        raise TranslationError("{}: некорректный JSON: {}".format(path, error)) from error  # i18n-keep: сообщение разработчику
+    if not isinstance(data, dict) or set(data) - set(DICTIONARY_KEYS):
+        raise TranslationError("{}: допустимы только ключи {}".format(path, DICTIONARY_KEYS))  # i18n-keep: сообщение разработчику
+    name = data.get("language_name")
+    if not isinstance(name, str) or not name.strip():
+        raise TranslationError("{}: не задан language_name".format(path))  # i18n-keep: сообщение разработчику
+    for key in ("strings", "macro_descriptions"):
+        table = data.get(key, {})
+        if not isinstance(table, dict) or not all(
+            isinstance(item, str) for pair in table.items() for item in pair
+        ):
+            raise TranslationError("{}: раздел {} должен быть словарём строк".format(path, key))  # i18n-keep: сообщение разработчику
+    return data
+
+
+def set_language(code: str, i18n_dir: Optional[Path] = None) -> None:
+    global _language, _i18n_dir, _strings, _macro_descriptions
+    directory = Path(i18n_dir) if i18n_dir is not None else DEFAULT_I18N_DIR
+    if code == SOURCE_LANGUAGE:
+        _language, _i18n_dir, _strings, _macro_descriptions = SOURCE_LANGUAGE, directory, {}, {}
+        return
+    data = _read_dictionary(code, directory)
+    _language, _i18n_dir = code, directory
+    _strings = dict(data.get("strings", {}))
+    _macro_descriptions = dict(data.get("macro_descriptions", {}))
+
+
+def available_languages(i18n_dir: Optional[Path] = None) -> List[Tuple[str, str]]:
+    directory = Path(i18n_dir) if i18n_dir is not None else _i18n_dir
+    languages = [(SOURCE_LANGUAGE, SOURCE_LANGUAGE_NAME)]
+    if directory.is_dir():
+        for path in sorted(directory.glob("*.json")):
+            if LANGUAGE_CODE_RE.fullmatch(path.stem) and path.stem != SOURCE_LANGUAGE:
+                languages.append((path.stem, str(_read_dictionary(path.stem, directory)["language_name"])))
+    return languages
+
+
+class ChoiceVariable:
+    """Переменная выбора: на экране переведённая подпись, в программе - внутренний идентификатор."""
+
+    def __init__(self, variable, labels: Dict[str, str]):
+        if len(set(labels.values())) != len(labels):
+            raise ConfigError(tr("Подписи вариантов не должны повторяться"))
+        self.variable = variable
+        self.labels = dict(labels)
+        self.identifiers = {label: identifier for identifier, label in self.labels.items()}
+
+    def get(self) -> str:
+        label = self.variable.get()
+        if label not in self.identifiers:
+            raise ConfigError(tr("Неизвестная подпись варианта: {}").format(label))
+        return self.identifiers[label]
+
+    def set(self, identifier: str) -> None:
+        if identifier not in self.labels:
+            raise ConfigError(tr("Неизвестное значение {}").format(identifier))
+        self.variable.set(self.labels[identifier])
+
+    def trace_add(self, mode, callback):
+        return self.variable.trace_add(mode, callback)
+
+SEC_MAIN = N_("Основные")
+SEC_TEMPERATURES = N_("Температуры")
+SEC_REGULATOR = N_("Регулятор")
+SEC_BK = N_("БК")
+SEC_NBK = N_("НБК")
+SEC_SENSORS = N_("Датчики")
+SEC_PUMPS = N_("Насосы")
+SEC_HARDWARE = N_("Оборудование")
+SEC_STEPPER = N_("Шаговый двигатель")
+SEC_RECTIFICATION = N_("Ректификация")
+SEC_NETWORK = N_("Сеть")
+
+OPTION_NONE = N_("Не использовать")
+OPTION_RMVK = N_("РМВ-К")
+OPTION_BMP280_ALT = N_("BMP280, альтернативный адрес")
+
+GROUP_REGULATOR = "Регулятор мощности"  # i18n-keep: внутренний ключ группы
+GROUP_ATMOSPHERIC = "Датчик атмосферного давления"  # i18n-keep: внутренний ключ группы
+GROUP_COLUMN_PRESSURE = "Датчик давления в колонне"  # i18n-keep: внутренний ключ группы
+
 BOARD_OPTIONS = {
     "ESP32 DevKit": ("DEVKIT", "Samovar"),
     "LILYGO": ("LILYGO", "Samovar"),
@@ -33,22 +184,22 @@ BOARD_OPTIONS = {
 }
 
 CHOICE_OPTIONS = {
-    "Регулятор мощности": {
-        "Не использовать": (),
+    GROUP_REGULATOR: {
+        OPTION_NONE: (),
         "KVIC": ("SAMOVAR_USE_POWER",),
-        "РМВ-К": ("SAMOVAR_USE_POWER", "SAMOVAR_USE_RMVK"),
+        OPTION_RMVK: ("SAMOVAR_USE_POWER", "SAMOVAR_USE_RMVK"),
         "SEM_AVR": ("SAMOVAR_USE_POWER", "SAMOVAR_USE_SEM_AVR"),
     },
-    "Датчик атмосферного давления": {
-        "Не использовать": (),
+    GROUP_ATMOSPHERIC: {
+        OPTION_NONE: (),
         "BMP180/BMP085": ("USE_BMP180",),
         "BMP280": ("USE_BMP280",),
-        "BMP280, альтернативный адрес": ("USE_BMP280_ALT",),
+        OPTION_BMP280_ALT: ("USE_BMP280_ALT",),
         "BME280": ("USE_BME280",),
         "BME680": ("USE_BME680",),
     },
-    "Датчик давления в колонне": {
-        "Не использовать": (),
+    GROUP_COLUMN_PRESSURE: {
+        OPTION_NONE: (),
         "XGZP6897D": ("USE_PRESSURE_XGZ",),
         "1-Wire": ("USE_PRESSURE_1WIRE",),
         "MPX5010D": ("USE_PRESSURE_MPX",),
@@ -87,76 +238,76 @@ class DeviceConfigField:
 
 
 VALUE_SPECS = (
-    ValueSpec("SAMOVAR_HOST", "Имя устройства в сети", "Основные", "text"),
-    ValueSpec("ALARM_WATER_TEMP", "Предупреждение по температуре воды, °C", "Температуры"),
-    ValueSpec("MAX_WATER_TEMP", "Аварийная температура воды, °C", "Температуры"),
-    ValueSpec("MAX_STEAM_TEMP", "Аварийная температура пара, °C", "Температуры"),
-    ValueSpec("MAX_ACP_TEMP", "Аварийная температура ТСА, °C", "Температуры"),
-    ValueSpec("CHANGE_POWER_MODE_STEAM_TEMP", "Температура перехода из разгона, °C", "Температуры"),
-    ValueSpec("OPEN_VALVE_TANK_TEMP", "Температура открытия охлаждения, °C", "Температуры"),
-    ValueSpec("DELTA_T_CLOSE_VALVE", "Запас температуры выключения охлаждения, °C", "Температуры"),
-    ValueSpec("HEAT_DELTA", "Порог полного нагрева, °C", "Температуры"),
-    ValueSpec("ACCELERATION_HEATER_DELTA", "Порог разгонного ТЭНа, °C", "Температуры"),
-    ValueSpec("BOILING_TEMP", "Температура кипения пива, °C", "Температуры"),
-    ValueSpec("DEFAULT_DIST_TEMP", "Температура завершения дистилляции, °C", "Температуры"),
-    ValueSpec("PWM_LOW_VALUE", "Минимальная мощность насоса, %", "Насосы"),
-    ValueSpec("PWM_START_VALUE", "Стартовая мощность насоса, %", "Насосы"),
-    ValueSpec("WF_CALIBRATION", "Калибровка датчика потока", "Насосы"),
-    ValueSpec("WATER_FLOW_MIN_PULSES", "Минимум импульсов потока", "Насосы"),
-    ValueSpec("CHEESE_DOSER_STEP_SPEED", "Скорость дозирования по шагам, шагов/с", "Шаговый двигатель"),
-    ValueSpec("NBK_MULT_PAUSE_OVERFLOW", "Пауза после захлёба, инерций", "НБК"),
-    ValueSpec("NBK_PUMP_LIMIT", "Предельная подача насоса, л/ч", "НБК"),
-    ValueSpec("NBK_WORK_PRESSURE_RATIO", "Доля рабочего давления", "НБК"),
-    ValueSpec("NBK_PRESSURE_MARGIN", "Запас давления, мм рт. ст.", "НБК"),
-    ValueSpec("NBK_END_STEAM_RISE", "Рост температуры пара для завершения, °C", "НБК"),
-    ValueSpec("SAMOVAR_USE_POWER_START_TIME", "Задержка запуска регулятора, мс", "Регулятор"),
-    ValueSpec("LCD_RESET_PERIOD_MS", "Период сброса дисплея, мс", "Оборудование"),
-    ValueSpec("PAUSE_RESUME_HYSTERESIS_DELTA", "Гистерезис паузы, °C", "Ректификация"),
-    ValueSpec("PROGRAM_ROW_STOP_PAUSE_LIMIT", "Число стоп-пауз строки", "Ректификация"),
-    ValueSpec("PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT", "Снижение скорости после стоп-пауз, %", "Ректификация"),
-    ValueSpec("PROGRAM_DONE_AUTO_POWEROFF_MIN", "Автовыключение после программы, мин", "Ректификация"),
-    ValueSpec("BODY_TEMP_AUTOSET_MAX_RISE", "Предел автоподъёма температуры тела, °C", "Ректификация"),
-    ValueSpec("BK_STEAM_SETPOINT_MIN", "Минимальная уставка пара БК, °C", "БК"),
-    ValueSpec("BK_STEAM_SETPOINT_MAX", "Максимальная уставка пара БК, °C", "БК"),
-    ValueSpec("BK_WATER_ADJUST_PERIOD_MS", "Период регулировки насоса БК, мс", "БК"),
-    ValueSpec("BK_WATER_DEADBAND", "Мёртвая зона воды БК, °C", "БК"),
-    ValueSpec("BK_WATER_PWM_STEP", "Шаг ШИМ насоса БК", "БК"),
-    ValueSpec("BLYNK_SAMOVAR_TOOL", "Сервер Blynk", "Сеть", "text"),
+    ValueSpec("SAMOVAR_HOST", N_("Имя устройства в сети"), SEC_MAIN, "text"),
+    ValueSpec("ALARM_WATER_TEMP", N_("Предупреждение по температуре воды, °C"), SEC_TEMPERATURES),
+    ValueSpec("MAX_WATER_TEMP", N_("Аварийная температура воды, °C"), SEC_TEMPERATURES),
+    ValueSpec("MAX_STEAM_TEMP", N_("Аварийная температура пара, °C"), SEC_TEMPERATURES),
+    ValueSpec("MAX_ACP_TEMP", N_("Аварийная температура ТСА, °C"), SEC_TEMPERATURES),
+    ValueSpec("CHANGE_POWER_MODE_STEAM_TEMP", N_("Температура перехода из разгона, °C"), SEC_TEMPERATURES),
+    ValueSpec("OPEN_VALVE_TANK_TEMP", N_("Температура открытия охлаждения, °C"), SEC_TEMPERATURES),
+    ValueSpec("DELTA_T_CLOSE_VALVE", N_("Запас температуры выключения охлаждения, °C"), SEC_TEMPERATURES),
+    ValueSpec("HEAT_DELTA", N_("Порог полного нагрева, °C"), SEC_TEMPERATURES),
+    ValueSpec("ACCELERATION_HEATER_DELTA", N_("Порог разгонного ТЭНа, °C"), SEC_TEMPERATURES),
+    ValueSpec("BOILING_TEMP", N_("Температура кипения пива, °C"), SEC_TEMPERATURES),
+    ValueSpec("DEFAULT_DIST_TEMP", N_("Температура завершения дистилляции, °C"), SEC_TEMPERATURES),
+    ValueSpec("PWM_LOW_VALUE", N_("Минимальная мощность насоса, %"), SEC_PUMPS),
+    ValueSpec("PWM_START_VALUE", N_("Стартовая мощность насоса, %"), SEC_PUMPS),
+    ValueSpec("WF_CALIBRATION", N_("Калибровка датчика потока"), SEC_PUMPS),
+    ValueSpec("WATER_FLOW_MIN_PULSES", N_("Минимум импульсов потока"), SEC_PUMPS),
+    ValueSpec("CHEESE_DOSER_STEP_SPEED", N_("Скорость дозирования по шагам, шагов/с"), SEC_STEPPER),
+    ValueSpec("NBK_MULT_PAUSE_OVERFLOW", N_("Пауза после захлёба, инерций"), SEC_NBK),
+    ValueSpec("NBK_PUMP_LIMIT", N_("Предельная подача насоса, л/ч"), SEC_NBK),
+    ValueSpec("NBK_WORK_PRESSURE_RATIO", N_("Доля рабочего давления"), SEC_NBK),
+    ValueSpec("NBK_PRESSURE_MARGIN", N_("Запас давления, мм рт. ст."), SEC_NBK),
+    ValueSpec("NBK_END_STEAM_RISE", N_("Рост температуры пара для завершения, °C"), SEC_NBK),
+    ValueSpec("SAMOVAR_USE_POWER_START_TIME", N_("Задержка запуска регулятора, мс"), SEC_REGULATOR),
+    ValueSpec("LCD_RESET_PERIOD_MS", N_("Период сброса дисплея, мс"), SEC_HARDWARE),
+    ValueSpec("PAUSE_RESUME_HYSTERESIS_DELTA", N_("Гистерезис паузы, °C"), SEC_RECTIFICATION),
+    ValueSpec("PROGRAM_ROW_STOP_PAUSE_LIMIT", N_("Число стоп-пауз строки"), SEC_RECTIFICATION),
+    ValueSpec("PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT", N_("Снижение скорости после стоп-пауз, %"), SEC_RECTIFICATION),
+    ValueSpec("PROGRAM_DONE_AUTO_POWEROFF_MIN", N_("Автовыключение после программы, мин"), SEC_RECTIFICATION),
+    ValueSpec("BODY_TEMP_AUTOSET_MAX_RISE", N_("Предел автоподъёма температуры тела, °C"), SEC_RECTIFICATION),
+    ValueSpec("BK_STEAM_SETPOINT_MIN", N_("Минимальная уставка пара БК, °C"), SEC_BK),
+    ValueSpec("BK_STEAM_SETPOINT_MAX", N_("Максимальная уставка пара БК, °C"), SEC_BK),
+    ValueSpec("BK_WATER_ADJUST_PERIOD_MS", N_("Период регулировки насоса БК, мс"), SEC_BK),
+    ValueSpec("BK_WATER_DEADBAND", N_("Мёртвая зона воды БК, °C"), SEC_BK),
+    ValueSpec("BK_WATER_PWM_STEP", N_("Шаг ШИМ насоса БК"), SEC_BK),
+    ValueSpec("BLYNK_SAMOVAR_TOOL", N_("Сервер Blynk"), SEC_NETWORK, "text"),
 )
 
 LOCAL_VALUE_SPECS = (
-    ValueSpec("PUMP_PWM_FREQ", "Частота насоса, Гц", "Насосы"),
+    ValueSpec("PUMP_PWM_FREQ", N_("Частота насоса, Гц"), SEC_PUMPS),
 )
 
 BOOL_SPECS = (
-    BoolSpec("USE_ADAPTIVE_PID", "Адаптивный PI нагрева и охлаждения", "Основные"),
-    BoolSpec("SAMOVAR_USE_BLYNK", "Использовать Blynk", "Сеть"),
-    BoolSpec("NOT_USE_INTERFACE_UPDATE", "Не обновлять веб-интерфейс автоматически", "Сеть"),
-    BoolSpec("USE_UPDATE_OTA", "Разрешить обновление по Wi-Fi", "Сеть"),
-    BoolSpec("KVIC_USE_9600", "KVIC: скорость UART 9600", "Регулятор"),
-    BoolSpec("KVIC_DEBUG", "Отладочные сообщения KVIC", "Регулятор"),
-    BoolSpec("USE_NBK_DELTA_PRESSURE", "Корректировать температуру барды по давлению", "НБК"),
-    BoolSpec("USE_NBK_END_BY_STEAM_RISE", "Завершать НБК по росту температуры пара", "НБК"),
-    BoolSpec("USE_WATERSENSOR", "Использовать датчик потока воды", "Насосы"),
-    BoolSpec("USE_WATER_PUMP", "Управлять насосом воды или мешалкой", "Насосы"),
-    BoolSpec("USE_HEAD_LEVEL_SENSOR", "Использовать датчик уровня флегмы", "Датчики"),
-    BoolSpec("IGNORE_HEAD_LEVEL_SENSOR_SETTING", "Запретить отключение датчика флегмы в веб-интерфейсе", "Датчики"),
-    BoolSpec("WHLS_HIGH_PULL", "Датчик уровня жидкости N-P-N", "Датчики"),
-    BoolSpec("USE_ALARM_BTN", "Использовать аварийную кнопку", "Оборудование"),
-    BoolSpec("USE_BTN", "Использовать кнопку управления", "Оборудование"),
-    BoolSpec("USE_BODY_TEMP_AUTOSET", "Автокоррекция температуры тела", "Ректификация"),
-    BoolSpec("USE_LUA", "Использовать Lua", "Оборудование"),
-    BoolSpec("USE_STEPPER_ACCELERATION", "Плавный разгон шагового двигателя", "Шаговый двигатель"),
-    BoolSpec("STEPPER_REVERSE", "Обратное направление шагового двигателя", "Шаговый двигатель"),
-    BoolSpec("COLUMN_WETTING", "Смачивание насадки перед ректификацией", "Ректификация"),
+    BoolSpec("USE_ADAPTIVE_PID", N_("Адаптивный PI нагрева и охлаждения"), SEC_MAIN),
+    BoolSpec("SAMOVAR_USE_BLYNK", N_("Использовать Blynk"), SEC_NETWORK),
+    BoolSpec("NOT_USE_INTERFACE_UPDATE", N_("Не обновлять веб-интерфейс автоматически"), SEC_NETWORK),
+    BoolSpec("USE_UPDATE_OTA", N_("Разрешить обновление по Wi-Fi"), SEC_NETWORK),
+    BoolSpec("KVIC_USE_9600", N_("KVIC: скорость UART 9600"), SEC_REGULATOR),
+    BoolSpec("KVIC_DEBUG", N_("Отладочные сообщения KVIC"), SEC_REGULATOR),
+    BoolSpec("USE_NBK_DELTA_PRESSURE", N_("Корректировать температуру барды по давлению"), SEC_NBK),
+    BoolSpec("USE_NBK_END_BY_STEAM_RISE", N_("Завершать НБК по росту температуры пара"), SEC_NBK),
+    BoolSpec("USE_WATERSENSOR", N_("Использовать датчик потока воды"), SEC_PUMPS),
+    BoolSpec("USE_WATER_PUMP", N_("Управлять насосом воды или мешалкой"), SEC_PUMPS),
+    BoolSpec("USE_HEAD_LEVEL_SENSOR", N_("Использовать датчик уровня флегмы"), SEC_SENSORS),
+    BoolSpec("IGNORE_HEAD_LEVEL_SENSOR_SETTING", N_("Запретить отключение датчика флегмы в веб-интерфейсе"), SEC_SENSORS),
+    BoolSpec("WHLS_HIGH_PULL", N_("Датчик уровня жидкости N-P-N"), SEC_SENSORS),
+    BoolSpec("USE_ALARM_BTN", N_("Использовать аварийную кнопку"), SEC_HARDWARE),
+    BoolSpec("USE_BTN", N_("Использовать кнопку управления"), SEC_HARDWARE),
+    BoolSpec("USE_BODY_TEMP_AUTOSET", N_("Автокоррекция температуры тела"), SEC_RECTIFICATION),
+    BoolSpec("USE_LUA", N_("Использовать Lua"), SEC_HARDWARE),
+    BoolSpec("USE_STEPPER_ACCELERATION", N_("Плавный разгон шагового двигателя"), SEC_STEPPER),
+    BoolSpec("STEPPER_REVERSE", N_("Обратное направление шагового двигателя"), SEC_STEPPER),
+    BoolSpec("COLUMN_WETTING", N_("Смачивание насадки перед ректификацией"), SEC_RECTIFICATION),
 )
 
 MQTT_VALUE_SPECS = (
-    ValueSpec("MQTT_SERVER", "Сервер MQTT", "Сеть", "text"),
-    ValueSpec("MQTT_PORT", "Порт MQTT", "Сеть", "number"),
-    ValueSpec("MQTT_USER", "Пользователь MQTT", "Сеть", "text"),
-    ValueSpec("MQTT_PASSWORD", "Пароль MQTT", "Сеть", "text"),
-    ValueSpec("MQTT_TOPIC", "Топик MQTT", "Сеть", "text"),
+    ValueSpec("MQTT_SERVER", N_("Сервер MQTT"), SEC_NETWORK, "text"),
+    ValueSpec("MQTT_PORT", N_("Порт MQTT"), SEC_NETWORK, "number"),
+    ValueSpec("MQTT_USER", N_("Пользователь MQTT"), SEC_NETWORK, "text"),
+    ValueSpec("MQTT_PASSWORD", N_("Пароль MQTT"), SEC_NETWORK, "text"),
+    ValueSpec("MQTT_TOPIC", N_("Топик MQTT"), SEC_NETWORK, "text"),
 )
 
 MQTT_DEFAULTS = {
@@ -168,17 +319,17 @@ MQTT_DEFAULTS = {
 }
 
 OPTIONAL_SPECS = (
-    OptionalSpec("USE_WATER_VALVE", "Управление клапаном воды", "Насосы", "token"),
-    OptionalSpec("USE_EXPANDER", "Адрес расширителя PCF8575", "Оборудование", "number"),
-    OptionalSpec("USE_ANALOG_EXPANDER", "Адрес расширителя PCF8591", "Оборудование", "number"),
-    OptionalSpec("USE_ADS1115", "Адрес АЦП ADS1115", "Оборудование", "number"),
-    OptionalSpec("I2CStepperStepMl", "Шагов на мл для I2CStepper", "Шаговый двигатель", "number"),
-    OptionalSpec("WETTING_POWER", "Мощность смачивания насадки", "Ректификация", "number"),
+    OptionalSpec("USE_WATER_VALVE", N_("Управление клапаном воды"), SEC_PUMPS, "token"),
+    OptionalSpec("USE_EXPANDER", N_("Адрес расширителя PCF8575"), SEC_HARDWARE, "number"),
+    OptionalSpec("USE_ANALOG_EXPANDER", N_("Адрес расширителя PCF8591"), SEC_HARDWARE, "number"),
+    OptionalSpec("USE_ADS1115", N_("Адрес АЦП ADS1115"), SEC_HARDWARE, "number"),
+    OptionalSpec("I2CStepperStepMl", N_("Шагов на мл для I2CStepper"), SEC_STEPPER, "number"),
+    OptionalSpec("WETTING_POWER", N_("Мощность смачивания насадки"), SEC_RECTIFICATION, "number"),
 )
 
 CHOICE_VALUE_SPECS = (
-    ValueSpec("USE_PRESSURE_XGZ", "Коэффициент датчика XGZP6897D", "Датчики", "number"),
-    ValueSpec("USE_PRESSURE_1WIRE", "Адрес датчика давления 1-Wire", "Датчики", "onewire"),
+    ValueSpec("USE_PRESSURE_XGZ", N_("Коэффициент датчика XGZP6897D"), SEC_SENSORS, "number"),
+    ValueSpec("USE_PRESSURE_1WIRE", N_("Адрес датчика давления 1-Wire"), SEC_SENSORS, "onewire"),
 )
 
 
@@ -190,21 +341,21 @@ FIRMWARE_BOARD_TOKENS = {
 }
 FIRMWARE_CHOICE_TOKENS = {
     "regulator": {
-        "none": "Не использовать",
+        "none": OPTION_NONE,
         "kvic": "KVIC",
-        "rmvk": "РМВ-К",
+        "rmvk": OPTION_RMVK,
         "sem_avr": "SEM_AVR",
     },
     "atmospheric_sensor": {
-        "none": "Не использовать",
+        "none": OPTION_NONE,
         "bmp180": "BMP180/BMP085",
         "bmp280": "BMP280",
-        "bmp280_alt": "BMP280, альтернативный адрес",
+        "bmp280_alt": OPTION_BMP280_ALT,
         "bme280": "BME280",
         "bme680": "BME680",
     },
     "column_pressure_sensor": {
-        "none": "Не использовать",
+        "none": OPTION_NONE,
         "xgz": "XGZP6897D",
         "onewire": "1-Wire",
         "mpx": "MPX5010D",
@@ -238,8 +389,8 @@ class DeviceConfig:
     settings: Dict[str, object]
 
 SECTIONS = (
-    "Основные", "Температуры", "Регулятор", "БК", "НБК", "Датчики",
-    "Насосы", "Оборудование", "Шаговый двигатель", "Ректификация", "Сеть",
+    SEC_MAIN, SEC_TEMPERATURES, SEC_REGULATOR, SEC_BK, SEC_NBK, SEC_SENSORS,
+    SEC_PUMPS, SEC_HARDWARE, SEC_STEPPER, SEC_RECTIFICATION, SEC_NETWORK,
 )
 
 NUMERIC_RE = re.compile(
@@ -320,7 +471,7 @@ class HeaderDocument:
     def set_macro(self, macro: str, enabled: bool, value: str = "") -> None:
         found = self.find(macro)
         if found is None:
-            raise ConfigError("В файле не найдена настройка {}".format(macro))
+            raise ConfigError(tr("В файле не найдена настройка {}").format(macro))
         prefix = found.indent + ("" if enabled else "//") + "#define " + macro
         self.lines[found.index] = prefix + ((" " + value) if value else "") + found.comment
 
@@ -328,7 +479,7 @@ class HeaderDocument:
         for macro in macros:
             found = self.find(macro)
             if found is None:
-                raise ConfigError("В файле не найдена настройка {}".format(macro))
+                raise ConfigError(tr("В файле не найдена настройка {}").format(macro))
             self.set_macro(macro, macro in selected, found.value)
 
     def insert_before_final_endif(self, lines: List[str]) -> None:
@@ -336,7 +487,7 @@ class HeaderDocument:
             if self.lines[index].lstrip().startswith("#endif"):
                 self.lines[index:index] = lines
                 return
-        raise ConfigError("В user_config_override.h не найден завершающий #endif")
+        raise ConfigError(tr("В user_config_override.h не найден завершающий #endif"))
 
     def render(self) -> str:
         return "\n".join(self.lines) + ("\n" if self.trailing_newline else "")
@@ -346,9 +497,9 @@ def cpp_string_decode(value: str) -> str:
     try:
         decoded = ast.literal_eval(value)
     except (SyntaxError, ValueError):
-        raise ConfigError("Некорректная строка C++: {}".format(value))
+        raise ConfigError(tr("Некорректная строка C++: {}").format(value))
     if not isinstance(decoded, str):
-        raise ConfigError("Ожидалась строка C++: {}".format(value))
+        raise ConfigError(tr("Ожидалась строка C++: {}").format(value))
     return decoded
 
 
@@ -359,20 +510,21 @@ def cpp_string_encode(value: str) -> str:
 
 
 def validate_value(value: str, kind: str, label: str) -> None:
+    label = tr(label)
     if kind == "text":
         if not value:
-            raise ConfigError("Поле «{}» не должно быть пустым".format(label))
+            raise ConfigError(tr("Поле «{}» не должно быть пустым").format(label))
         if "\n" in value or "\r" in value:
-            raise ConfigError("Поле «{}» должно занимать одну строку".format(label))
+            raise ConfigError(tr("Поле «{}» должно занимать одну строку").format(label))
     elif kind == "number":
         if not NUMERIC_RE.fullmatch(value.strip()):
-            raise ConfigError("В поле «{}» требуется число".format(label))
+            raise ConfigError(tr("В поле «{}» требуется число").format(label))
     elif kind == "onewire":
         if not ONEWIRE_RE.fullmatch(value.strip()):
-            raise ConfigError("В поле «{}» требуется восемь байтов вида 0x12".format(label))
+            raise ConfigError(tr("В поле «{}» требуется восемь байтов вида 0x12").format(label))
     elif kind == "token":
         if value not in ("LOW", "HIGH"):
-            raise ConfigError("В поле «{}» допустимы только LOW или HIGH".format(label))
+            raise ConfigError(tr("В поле «{}» допустимы только LOW или HIGH").format(label))
 
 
 def numeric_value_for_ui(value: str) -> str:
@@ -384,7 +536,7 @@ def numeric_value_for_source(value: str, current: str) -> str:
     value_match = NUMERIC_RE.fullmatch(value.strip())
     current_match = NUMERIC_RE.fullmatch(current.strip())
     if value_match is None or current_match is None:
-        raise ConfigError("Некорректное числовое значение")
+        raise ConfigError(tr("Некорректное числовое значение"))
     return value_match.group("number") + current_match.group("suffix")
 
 
@@ -416,7 +568,7 @@ class SamovarConfig:
         if self.override_path.exists():
             return
         if not self.override_template_path.exists():
-            raise ConfigError("Не найден шаблон user_config_override.example.h")
+            raise ConfigError(tr("Не найден шаблон user_config_override.example.h"))
         shutil.copyfile(str(self.override_template_path), str(self.override_path))
 
     def load(self) -> Dict[str, object]:
@@ -448,6 +600,11 @@ class SamovarConfig:
             numeric_value_for_ui(pump_frequency.value)
             if pump_frequency is not None and pump_frequency.enabled else "15"
         )
+        language = override.find("SAMOVAR_LANG")
+        state["SAMOVAR_LANG"] = (
+            self._valid_language_code(language.value)
+            if language is not None and language.enabled else SOURCE_LANGUAGE
+        )
         for spec in BOOL_SPECS:
             state[spec.macro] = self._required_line(ini, spec.macro).enabled
         for spec in OPTIONAL_SPECS:
@@ -462,12 +619,12 @@ class SamovarConfig:
                 numeric_value_for_ui(line.value) if spec.kind == "number" else line.value
             )
 
-        state["regulator"] = self._read_choice(ini, CHOICE_OPTIONS["Регулятор мощности"])
+        state["regulator"] = self._read_choice(ini, CHOICE_OPTIONS[GROUP_REGULATOR])
         state["atmospheric_sensor"] = self._read_choice(
-            ini, CHOICE_OPTIONS["Датчик атмосферного давления"]
+            ini, CHOICE_OPTIONS[GROUP_ATMOSPHERIC]
         )
         state["column_pressure_sensor"] = self._read_choice(
-            ini, CHOICE_OPTIONS["Датчик давления в колонне"]
+            ini, CHOICE_OPTIONS[GROUP_COLUMN_PRESSURE]
         )
 
         servo_match = re.search(
@@ -476,7 +633,7 @@ class SamovarConfig:
             re.MULTILINE,
         )
         if servo_match is None:
-            raise ConfigError("В Samovar_ini.h не найден массив servoDelta[11]")
+            raise ConfigError(tr("В Samovar_ini.h не найден массив servoDelta[11]"))
         state["servoDelta"] = ", ".join(part.strip() for part in servo_match.group(1).split(","))
 
         state["wifi_ssid"] = self._read_override_string(override, "SAMOVAR_WIFI_SSID")
@@ -493,27 +650,58 @@ class SamovarConfig:
                 state[spec.macro] = cpp_string_decode(line.value)
         return state
 
+    @staticmethod
+    def _valid_language_code(code: str) -> str:
+        if not LANGUAGE_CODE_RE.fullmatch(code):
+            raise ConfigError(tr("Недопустимый код языка прошивки: {}").format(code))
+        return code
+
+    def firmware_languages(self) -> List[Tuple[str, str]]:
+        """Языки прошивки: код из имени lang_<код>.h, название из SAMOVAR_LANG_NAME; русский первым."""
+        found = {}
+        for path in self.project_root.glob("lang_*.h"):
+            code = path.name[len("lang_"):-len(".h")]
+            if not LANGUAGE_CODE_RE.fullmatch(code):
+                continue
+            line = HeaderDocument(path.read_text(encoding="utf-8")).find("SAMOVAR_LANG_NAME")
+            if line is None or not line.enabled:
+                raise ConfigError(tr("В файле {} не найдено имя языка SAMOVAR_LANG_NAME").format(path.name))
+            found[code] = cpp_string_decode(line.value)
+        if SOURCE_LANGUAGE not in found:
+            raise ConfigError(tr("Не найден файл языка прошивки lang_{}.h").format(SOURCE_LANGUAGE))
+        languages = [(SOURCE_LANGUAGE, found.pop(SOURCE_LANGUAGE))]
+        languages.extend(sorted(found.items()))
+        return languages
+
     def descriptions(self) -> Dict[str, str]:
         ini = HeaderDocument(self.ini_path.read_text(encoding="utf-8"))
         descriptions = {}
         for spec in VALUE_SPECS + BOOL_SPECS + OPTIONAL_SPECS + CHOICE_VALUE_SPECS:
             description = ini.description(spec.macro)
             if description:
-                descriptions[spec.macro] = description
-        descriptions["PUMP_PWM_FREQ"] = (
+                descriptions[spec.macro] = macro_description(spec.macro, description)
+        descriptions["PUMP_PWM_FREQ"] = macro_description("PUMP_PWM_FREQ", (
             "Частота ШИМ насоса охлаждения. 15 Гц — стандартное значение; "
-            "другое значение сохраняется только в локальном файле настроек и применяется после прошивки."
-        )
+            "другое значение сохраняется только в локальном файле настроек и применяется после прошивки."  # i18n-keep: русский текст описания, перевод - в macro_descriptions
+        ))
+        descriptions["SAMOVAR_LANG"] = macro_description("SAMOVAR_LANG", (
+            "Язык прошивки и веб-интерфейса. Русский — по умолчанию; другой язык берётся из файла "
+            "lang_<код>.h в папке проекта. Выбор сохраняется в локальном файле настроек "
+            "user_config_override.h и применяется после прошивки и загрузки LittleFS."  # i18n-keep: русский текст описания, перевод - в macro_descriptions
+        ))
 
         for index, line in enumerate(ini.lines):
             if re.match(r"^\s*int8_t\s+servoDelta\s*\[11\]", line):
-                descriptions["servoDelta"] = ini.preceding_description(index)
+                servo_description = ini.preceding_description(index)
+                descriptions["servoDelta"] = (
+                    macro_description("servoDelta", servo_description) if servo_description else ""
+                )
                 break
 
         for key, group in (
-            ("regulator", "Регулятор мощности"),
-            ("atmospheric_sensor", "Датчик атмосферного давления"),
-            ("column_pressure_sensor", "Датчик давления в колонне"),
+            ("regulator", GROUP_REGULATOR),
+            ("atmospheric_sensor", GROUP_ATMOSPHERIC),
+            ("column_pressure_sensor", GROUP_COLUMN_PRESSURE),
         ):
             options = []
             for label, macros in CHOICE_OPTIONS[group].items():
@@ -523,7 +711,7 @@ class SamovarConfig:
                     if description:
                         break
                 if description:
-                    options.append("{}: {}".format(label, description))
+                    options.append("{}: {}".format(tr(label), macro_description(macro, description)))
             if options:
                 descriptions[key] = "\n".join(options)
         return descriptions
@@ -535,7 +723,7 @@ class SamovarConfig:
 
         board = str(state["board"])
         if board not in BOARD_OPTIONS:
-            raise ConfigError("Неизвестная плата: {}".format(board))
+            raise ConfigError(tr("Неизвестная плата: {}").format(board))
         selected_board = BOARD_OPTIONS[board][0]
         for macro_value in ("DEVKIT", "LILYGO", "ESP32S3"):
             line = self._board_line(ini, macro_value)
@@ -556,12 +744,19 @@ class SamovarConfig:
             )
         pump_frequency = str(state["PUMP_PWM_FREQ"]).strip()
         if not re.fullmatch(r"[0-9]+", pump_frequency) or int(pump_frequency) < 1:
-            raise ConfigError("Частота насоса должна быть целым положительным числом")
+            raise ConfigError(tr("Частота насоса должна быть целым положительным числом"))
         pump_frequency = str(int(pump_frequency))
         current_pump_frequency = override.find("PUMP_PWM_FREQ")
         if current_pump_frequency is None:
             override.insert_before_final_endif(["//#define PUMP_PWM_FREQ 15"])
         override.set_macro("PUMP_PWM_FREQ", pump_frequency != "15", pump_frequency)
+        if "SAMOVAR_LANG" in state:
+            language = self._valid_language_code(str(state["SAMOVAR_LANG"]))
+            if language != SOURCE_LANGUAGE and not (self.project_root / ("lang_" + language + ".h")).is_file():
+                raise ConfigError(tr("Нет файла языка прошивки lang_{}.h").format(language))
+            if override.find("SAMOVAR_LANG") is None:
+                override.insert_before_final_endif(["//#define SAMOVAR_LANG en"])
+            override.set_macro("SAMOVAR_LANG", language != SOURCE_LANGUAGE, language)
         for spec in BOOL_SPECS:
             current = self._required_line(ini, spec.macro)
             ini.set_macro(spec.macro, bool(state[spec.macro]), current.value)
@@ -570,7 +765,7 @@ class SamovarConfig:
         current_blynk_server = self._required_line(ini, "BLYNK_SAMOVAR_TOOL")
         use_custom_blynk_server = bool(state["SAMOVAR_USE_BLYNK"]) and bool(blynk_server)
         if use_custom_blynk_server:
-            validate_value(blynk_server, "text", "Сервер Blynk")
+            validate_value(blynk_server, "text", tr("Сервер Blynk"))
         ini.set_macro(
             "BLYNK_SAMOVAR_TOOL",
             use_custom_blynk_server,
@@ -593,18 +788,18 @@ class SamovarConfig:
             )
             ini.set_macro(spec.macro, current.enabled, source_value)
 
-        self._write_choice(ini, "regulator", str(state["regulator"]), "Регулятор мощности")
+        self._write_choice(ini, "regulator", str(state["regulator"]), GROUP_REGULATOR)
         self._write_choice(
             ini,
             "atmospheric_sensor",
             str(state["atmospheric_sensor"]),
-            "Датчик атмосферного давления",
+            GROUP_ATMOSPHERIC,
         )
         self._write_choice(
             ini,
             "column_pressure_sensor",
             str(state["column_pressure_sensor"]),
-            "Датчик давления в колонне",
+            GROUP_COLUMN_PRESSURE,
         )
 
         validate_servo_delta(str(state["servoDelta"]))
@@ -630,13 +825,13 @@ class SamovarConfig:
         mqtt_password = str(state["MQTT_PASSWORD"])
         mqtt_topic = str(state["MQTT_TOPIC"]).strip()
         if use_mqtt:
-            validate_value(mqtt_server, "text", "Сервер MQTT")
-            validate_value(mqtt_topic, "text", "Топик MQTT")
+            validate_value(mqtt_server, "text", tr("Сервер MQTT"))
+            validate_value(mqtt_topic, "text", tr("Топик MQTT"))
             if not mqtt_port.isdigit() or not 1 <= int(mqtt_port) <= 65535:
-                raise ConfigError("Поле «Порт MQTT» должно быть целым числом от 1 до 65535")
-        for label, value in (("Пользователь MQTT", mqtt_user), ("Пароль MQTT", mqtt_password)):
+                raise ConfigError(tr("Поле «Порт MQTT» должно быть целым числом от 1 до 65535"))
+        for label, value in ((tr("Пользователь MQTT"), mqtt_user), (tr("Пароль MQTT"), mqtt_password)):
             if "\n" in value or "\r" in value:
-                raise ConfigError("Поле «{}» должно занимать одну строку".format(label))
+                raise ConfigError(tr("Поле «{}» должно занимать одну строку").format(label))
 
         mqtt_enabled_line = override.find("USE_MQTT")
         if mqtt_enabled_line is None:
@@ -660,7 +855,7 @@ class SamovarConfig:
     def _required_line(document: HeaderDocument, macro: str) -> MacroLine:
         line = document.find(macro)
         if line is None:
-            raise ConfigError("В Samovar_ini.h не найдена настройка {}".format(macro))
+            raise ConfigError(tr("В Samovar_ini.h не найдена настройка {}").format(macro))
         return line
 
     @staticmethod
@@ -670,7 +865,7 @@ class SamovarConfig:
             match = pattern.match(text)
             if match:
                 return MacroLine(index, match.group("disabled") is None, value, "", match.group("indent"))
-        raise ConfigError("В Samovar_ini.h не найден вариант платы {}".format(value))
+        raise ConfigError(tr("В Samovar_ini.h не найден вариант платы {}").format(value))
 
     @staticmethod
     def _set_board_line(document: HeaderDocument, line: MacroLine, enabled: bool) -> None:
@@ -696,7 +891,7 @@ class SamovarConfig:
     def _write_choice(document: HeaderDocument, state_key: str, selected: str, group: str) -> None:
         options = CHOICE_OPTIONS[group]
         if selected not in options:
-            raise ConfigError("Неизвестное значение {}: {}".format(state_key, selected))
+            raise ConfigError(tr("Неизвестное значение {}: {}").format(state_key, selected))
         all_macros = tuple(dict.fromkeys(macro for macros in options.values() for macro in macros))
         document.set_choice(all_macros, options[selected])
 
@@ -718,18 +913,18 @@ class SamovarConfig:
     @staticmethod
     def _validate_wifi(ssid: str, password: str) -> None:
         if len(ssid.encode("utf-8")) > 32:
-            raise ConfigError("SSID Wi-Fi не должен превышать 32 байта")
+            raise ConfigError(tr("SSID Wi-Fi не должен превышать 32 байта"))
         password_length = len(password.encode("utf-8"))
         if password_length not in (0,) and not 8 <= password_length <= 64:
-            raise ConfigError("Пароль Wi-Fi должен содержать от 8 до 64 байт или быть пустым")
+            raise ConfigError(tr("Пароль Wi-Fi должен содержать от 8 до 64 байт или быть пустым"))
         if not ssid and password:
-            raise ConfigError("Нельзя указать пароль Wi-Fi без SSID")
+            raise ConfigError(tr("Нельзя указать пароль Wi-Fi без SSID"))
 
 
 def validate_servo_delta(value: str) -> None:
     values = [part.strip() for part in value.split(",")]
     if len(values) != 11 or any(not re.fullmatch(r"[+-]?\d+", item) for item in values):
-        raise ConfigError("Для servoDelta требуется ровно 11 целых чисел через запятую")
+        raise ConfigError(tr("Для servoDelta требуется ровно 11 целых чисел через запятую"))
 
 
 def is_unc_path(path: Path) -> bool:
@@ -746,13 +941,13 @@ def list_serial_ports(pio_executable: str) -> List[str]:
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
-        raise ConfigError("Не удалось получить список портов: {}".format(detail))
+        raise ConfigError(tr("Не удалось получить список портов: {}").format(detail))
     try:
         devices = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise ConfigError("PlatformIO вернул некорректный список портов") from error
+        raise ConfigError(tr("PlatformIO вернул некорректный список портов")) from error
     if not isinstance(devices, list):
-        raise ConfigError("PlatformIO вернул некорректный список портов")
+        raise ConfigError(tr("PlatformIO вернул некорректный список портов"))
     ports = []
     for device in devices:
         port = device.get("port") if isinstance(device, dict) else None
@@ -766,6 +961,19 @@ NETWORK_PORT_SUFFIX = " — "
 ADDRESS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$")
 
 
+def littlefs_image_command(python_executable: str, project_root: Path, language: str, out_dir: Path) -> List[str]:
+    return [
+        python_executable, str(Path(project_root) / "tools" / "build_web_assets.py"),
+        "--image", language, "--out", str(out_dir),
+    ]
+
+
+def littlefs_environment(base, data_dir: Path) -> Dict[str, str]:
+    environment = dict(base)
+    environment["PLATFORMIO_DATA_DIR"] = str(data_dir)
+    return environment
+
+
 def list_network_devices(pio_executable: str) -> List[str]:
     """Ищет Samovar в локальной сети через mDNS (объявление ArduinoOTA `_arduino._tcp`).
 
@@ -777,15 +985,15 @@ def list_network_devices(pio_executable: str) -> List[str]:
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
-        lines = [line for line in (result.stderr or result.stdout).splitlines() if re.search(r"[A-Za-zА-Яа-я]", line)]
-        detail = lines[-1].strip() if lines else "код {}".format(result.returncode)
-        raise ConfigError("Не удалось найти устройства в сети: {}".format(detail))
+        lines = [line for line in (result.stderr or result.stdout).splitlines() if re.search(r"[A-Za-zА-Яа-я]", line)]  # i18n-keep: класс символов для отбора строк вывода
+        detail = lines[-1].strip() if lines else tr("код {}").format(result.returncode)
+        raise ConfigError(tr("Не удалось найти устройства в сети: {}").format(detail))
     try:
         services = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise ConfigError("PlatformIO вернул некорректный список сетевых устройств") from error
+        raise ConfigError(tr("PlatformIO вернул некорректный список сетевых устройств")) from error
     if not isinstance(services, list):
-        raise ConfigError("PlatformIO вернул некорректный список сетевых устройств")
+        raise ConfigError(tr("PlatformIO вернул некорректный список сетевых устройств"))
     devices = []
     for service in services:
         if not isinstance(service, dict) or "_arduino._tcp" not in str(service.get("type", "")):
@@ -823,7 +1031,7 @@ def is_network_port(port: str) -> bool:
 def _required_port(port: str) -> str:
     port = port_value(port)
     if not port:
-        raise ConfigError("Выберите порт или устройство в сети")
+        raise ConfigError(tr("Выберите порт или устройство в сети"))
     return port
 
 
@@ -831,23 +1039,23 @@ def _required_serial_port(port: str, what: str) -> str:
     port = _required_port(port)
     if is_network_port(port):
         raise ConfigError(
-            "{} возможно только по USB: выберите COM-порт вместо устройства в сети".format(what)
+            tr("{} возможно только по USB: выберите COM-порт вместо устройства в сети").format(what)
         )
     return port
 
 
 def pio_command(pio_executable: str, board: str, action: str, port: str) -> List[str]:
     if board not in BOARD_OPTIONS:
-        raise ConfigError("Неизвестная плата: {}".format(board))
+        raise ConfigError(tr("Неизвестная плата: {}").format(board))
     targets = {
         "upload": "upload",
         "uploadfs": "uploadfs",
         "erase": "erase",
     }
     if action not in targets:
-        raise ConfigError("Неизвестная команда: {}".format(action))
+        raise ConfigError(tr("Неизвестная команда: {}").format(action))
     if action == "erase":
-        port = _required_serial_port(port, "Полная очистка флеша")
+        port = _required_serial_port(port, tr("Полная очистка флеша"))
     elif is_network_port(port):
         port = resolve_device_address(port_value(port))
     else:
@@ -861,14 +1069,14 @@ def pio_command(pio_executable: str, board: str, action: str, port: str) -> List
 def esptool_reboot_command(pio_executable: str, port: str) -> List[str]:
     return [
         pio_executable, "pkg", "exec", "-p", "tool-esptoolpy", "--",
-        "esptool.py", "--port", _required_serial_port(port, "Перезагрузка ESP"), "run",
+        "esptool.py", "--port", _required_serial_port(port, tr("Перезагрузка ESP")), "run",
     ]
 
 
 def serial_monitor_command(python_executable: str, script: Path, port: str) -> List[str]:
     return [
         python_executable, str(script), "--serial-monitor",
-        _required_serial_port(port, "Монитор порта"),
+        _required_serial_port(port, tr("Монитор порта")),
     ]
 
 
@@ -878,15 +1086,15 @@ def pio_python_executable(pio_executable: str) -> str:
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
-        raise ConfigError("Не удалось определить Python PlatformIO: {}".format(
+        raise ConfigError(tr("Не удалось определить Python PlatformIO: {}").format(
             (result.stderr or result.stdout).strip()
         ))
     try:
         value = json.loads(result.stdout)["python_exe"]["value"]
     except (KeyError, TypeError, json.JSONDecodeError) as error:
-        raise ConfigError("PlatformIO не сообщил путь к Python") from error
+        raise ConfigError(tr("PlatformIO не сообщил путь к Python")) from error
     if not isinstance(value, str) or not value.strip():
-        raise ConfigError("PlatformIO не сообщил путь к Python")
+        raise ConfigError(tr("PlatformIO не сообщил путь к Python"))
     return value
 
 
@@ -914,7 +1122,7 @@ def extract_samovar_config(line: str) -> Optional[str]:
 def _device_config_fields_by_name() -> Dict[str, DeviceConfigField]:
     fields = {field.name: field for field in DEVICE_CONFIG_FIELDS}
     if len(fields) != len(DEVICE_CONFIG_FIELDS):
-        raise ConfigError("В схеме настроек устройства повторяется имя поля")
+        raise ConfigError(tr("В схеме настроек устройства повторяется имя поля"))
     return fields
 
 
@@ -926,43 +1134,43 @@ def parse_device_config(payload: str) -> DeviceConfig:
     try:
         response = json.loads(payload)
     except json.JSONDecodeError as error:
-        raise ConfigError("Устройство вернуло некорректный JSON настроек") from error
+        raise ConfigError(tr("Устройство вернуло некорректный JSON настроек")) from error
     if not isinstance(response, dict):
-        raise ConfigError("Ответ настроек должен быть JSON-объектом")
+        raise ConfigError(tr("Ответ настроек должен быть JSON-объектом"))
 
     expected_response_keys = {"type", "schema", "firmwareVersion", "settings"}
     actual_response_keys = set(response)
     if actual_response_keys != expected_response_keys:
         if actual_response_keys - expected_response_keys:
             raise _device_config_error_keys(
-                "Неизвестные ключи ответа настроек", actual_response_keys - expected_response_keys
+                tr("Неизвестные ключи ответа настроек"), actual_response_keys - expected_response_keys
             )
         raise _device_config_error_keys(
-            "В ответе настроек отсутствуют ключи", expected_response_keys - actual_response_keys
+            tr("В ответе настроек отсутствуют ключи"), expected_response_keys - actual_response_keys
         )
     if response["type"] != "samovar_firmware_config":
-        raise ConfigError("Неизвестный тип ответа настроек")
+        raise ConfigError(tr("Неизвестный тип ответа настроек"))
     schema = response["schema"]
     if type(schema) is not int or schema < 1:
-        raise ConfigError("Некорректная версия схемы настроек")
+        raise ConfigError(tr("Некорректная версия схемы настроек"))
     if schema > DEVICE_CONFIG_SCHEMA_VERSION:
-        raise ConfigError("Версия схемы настроек устройства новее конфигуратора")
+        raise ConfigError(tr("Версия схемы настроек устройства новее конфигуратора"))
     firmware_version = response["firmwareVersion"]
     if not isinstance(firmware_version, str) or not firmware_version.strip():
-        raise ConfigError("Устройство не сообщило версию прошивки")
+        raise ConfigError(tr("Устройство не сообщило версию прошивки"))
     settings = response["settings"]
     if not isinstance(settings, dict):
-        raise ConfigError("Поле settings должно быть JSON-объектом")
+        raise ConfigError(tr("Поле settings должно быть JSON-объектом"))
 
     fields = _device_config_fields_by_name()
     required = {name for name, field in fields.items() if field.since <= schema}
     actual = set(settings)
     if actual - required:
         raise _device_config_error_keys(
-            "Неизвестные или несовместимые ключи настроек", actual - required
+            tr("Неизвестные или несовместимые ключи настроек"), actual - required
         )
     if required - actual:
-        raise _device_config_error_keys("В ответе настроек отсутствуют обязательные поля", required - actual)
+        raise _device_config_error_keys(tr("В ответе настроек отсутствуют обязательные поля"), required - actual)
 
     value_specs = {spec.macro: spec for spec in VALUE_SPECS}
     optional_specs = {spec.macro: spec for spec in OPTIONAL_SPECS}
@@ -973,24 +1181,24 @@ def parse_device_config(payload: str) -> DeviceConfig:
         kind = fields[name].kind
         if kind == "bool":
             if type(value) is not bool:
-                raise ConfigError("Поле {} должно быть логическим".format(name))
+                raise ConfigError(tr("Поле {} должно быть логическим").format(name))
             mapped[name] = value
         elif kind == "board":
             if not isinstance(value, str):
-                raise ConfigError("Поле {} должно быть строкой".format(name))
+                raise ConfigError(tr("Поле {} должно быть строкой").format(name))
             if value not in FIRMWARE_BOARD_TOKENS:
-                raise ConfigError("Неизвестная плата устройства: {}".format(value))
+                raise ConfigError(tr("Неизвестная плата устройства: {}").format(value))
             mapped[name] = FIRMWARE_BOARD_TOKENS[value]
         elif kind == "choice":
             if not isinstance(value, str):
-                raise ConfigError("Поле {} должно быть строкой".format(name))
+                raise ConfigError(tr("Поле {} должно быть строкой").format(name))
             choices = FIRMWARE_CHOICE_TOKENS[name]
             if value not in choices:
-                raise ConfigError("Неизвестное значение {}: {}".format(name, value))
+                raise ConfigError(tr("Неизвестное значение {}: {}").format(name, value))
             mapped[name] = choices[value]
         elif kind == "servo":
             if not isinstance(value, list) or len(value) != 11 or any(type(item) is not int for item in value):
-                raise ConfigError("Поле servoDelta должно быть массивом из 11 целых чисел")
+                raise ConfigError(tr("Поле servoDelta должно быть массивом из 11 целых чисел"))
             mapped[name] = ", ".join(str(item) for item in value)
             validate_servo_delta(mapped[name])
         elif kind == "value":
@@ -1000,11 +1208,11 @@ def parse_device_config(payload: str) -> DeviceConfig:
                 continue
             if spec.kind == "text":
                 if not isinstance(value, str):
-                    raise ConfigError("Поле {} должно быть строкой".format(name))
+                    raise ConfigError(tr("Поле {} должно быть строкой").format(name))
                 mapped[name] = value
             else:
                 if type(value) not in (int, float):
-                    raise ConfigError("Поле {} должно быть числом".format(name))
+                    raise ConfigError(tr("Поле {} должно быть числом").format(name))
                 mapped[name] = str(value)
             validate_value(mapped[name], spec.kind, spec.label)
         elif kind == "optional":
@@ -1013,7 +1221,7 @@ def parse_device_config(payload: str) -> DeviceConfig:
                 mapped[name + ".enabled"] = False
             else:
                 if not isinstance(value, str):
-                    raise ConfigError("Поле {} должно быть строкой или null".format(name))
+                    raise ConfigError(tr("Поле {} должно быть строкой или null").format(name))
                 validate_value(value, spec.kind, spec.label)
                 mapped[name] = value
                 mapped[name + ".enabled"] = True
@@ -1021,7 +1229,7 @@ def parse_device_config(payload: str) -> DeviceConfig:
             if value is None:
                 continue
             if not isinstance(value, str):
-                raise ConfigError("Поле {} должно быть строкой или null".format(name))
+                raise ConfigError(tr("Поле {} должно быть строкой или null").format(name))
             spec = choice_value_specs[name]
             validate_value(value, spec.kind, spec.label)
             mapped[name] = value
@@ -1031,7 +1239,7 @@ def parse_device_config(payload: str) -> DeviceConfig:
             elif isinstance(value, str):
                 mapped[name] = value
             else:
-                raise ConfigError("Поле {} должно быть строкой или null".format(name))
+                raise ConfigError(tr("Поле {} должно быть строкой или null").format(name))
 
     SamovarConfig._validate_wifi(mapped["wifi_ssid"], mapped["wifi_password"])
     return DeviceConfig(firmware_version, mapped)
@@ -1044,12 +1252,12 @@ def fetch_device_config(address: str) -> str:
         with urllib.request.urlopen(request, timeout=10) as response:
             return response.read().decode("utf-8")
     except UnicodeDecodeError as error:
-        raise ConfigError("Устройство вернуло настройки не в UTF-8") from error
+        raise ConfigError(tr("Устройство вернуло настройки не в UTF-8")) from error
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace").strip()
-        raise ConfigError("Samovar ответил с ошибкой {}: {}".format(error.code, detail)) from error
+        raise ConfigError(tr("Samovar ответил с ошибкой {}: {}").format(error.code, detail)) from error
     except urllib.error.URLError as error:
-        raise ConfigError("Не удалось подключиться к Samovar: {}".format(error.reason)) from error
+        raise ConfigError(tr("Не удалось подключиться к Samovar: {}").format(error.reason)) from error
 
 
 def keep_control_lines_after_close(fd: int) -> None:
@@ -1088,7 +1296,7 @@ def open_serial_without_reset(serial_module, port: str):
       сторону; после открытия снимаем DTR. Закрытие из «обе сняты» ничего не переключает.
     """
     connection = serial_module.serial_for_url(
-        _required_serial_port(port, "Монитор порта"), 115200, do_not_open=True
+        _required_serial_port(port, tr("Монитор порта")), 115200, do_not_open=True
     )
     if isinstance(connection, serial_module.Serial):
         connection.exclusive = True
@@ -1121,18 +1329,18 @@ def run_serial_monitor(port: str) -> int:
     try:
         import serial
     except ImportError as error:
-        raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
+        raise ConfigError(tr("В Python PlatformIO не найден модуль работы с последовательным портом")) from error
 
     try:
         connection = open_serial_without_reset(serial, port)
     except (OSError, serial.SerialException) as error:
-        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
+        raise ConfigError(tr("Не удалось открыть последовательный порт {}: {}").format(port, error)) from error
     connection.timeout = 0.2
     threading.Thread(
         target=forward_serial_commands, args=(connection, sys.stdin), daemon=True
     ).start()
     try:
-        print("--- Последовательный порт {} | 115200 8-N-1".format(port), flush=True)
+        print(tr("--- Последовательный порт {} | 115200 8-N-1").format(port), flush=True)
         opened_at = time.monotonic()
         while True:
             data = connection.read(256)
@@ -1140,14 +1348,14 @@ def run_serial_monitor(port: str) -> int:
                 print(data.decode("utf-8", errors="replace"), end="", flush=True)
                 if BOOT_BANNER in data and time.monotonic() - opened_at < BOOT_BANNER_WINDOW_S:
                     print(
-                        "\n!!! ESP32 перезагрузилась при открытии порта. Сообщите разработчику: "
-                        "ОС и чип USB-UART платы (CP2102, CH340, ...).",
+                        tr("\n!!! ESP32 перезагрузилась при открытии порта. Сообщите разработчику: "
+                        "ОС и чип USB-UART платы (CP2102, CH340, ...)."),
                         flush=True,
                     )
     except KeyboardInterrupt:
         pass
     except (OSError, serial.SerialException) as error:
-        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
+        raise ConfigError(tr("Не удалось открыть последовательный порт {}: {}").format(port, error)) from error
     finally:
         if connection.is_open:
             connection.close()
@@ -1159,7 +1367,7 @@ def _remote_path(name: str) -> str:
     if not name.startswith("/"):
         name = "/" + name
     if name == "/" or ".." in name or "/" in name[1:] or len(name) >= 32:
-        raise ConfigError("Недопустимое имя файла: {}".format(name))
+        raise ConfigError(tr("Недопустимое имя файла: {}").format(name))
     return name
 
 
@@ -1168,11 +1376,11 @@ def decode_remote_text(path: str, payload: bytes) -> str:
         try:
             payload = gzip.decompress(payload)
         except OSError as error:
-            raise ConfigError("Файл {} повреждён или не является gzip".format(path)) from error
+            raise ConfigError(tr("Файл {} повреждён или не является gzip").format(path)) from error
     try:
         return payload.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise ConfigError("Файл {} не является текстом UTF-8".format(path)) from error
+        raise ConfigError(tr("Файл {} не является текстом UTF-8").format(path)) from error
 
 
 def encode_remote_text(path: str, text: str) -> bytes:
@@ -1341,11 +1549,11 @@ def check_bracket_balance(code: str) -> Optional[Tuple[int, str]]:
             stack.append((character, position))
         elif character in _BRACKET_PAIRS:
             if not stack or stack[-1][0] != _BRACKET_PAIRS[character]:
-                return _line_of(code, position), "лишняя закрывающая скобка «{}»".format(character)
+                return _line_of(code, position), tr("лишняя закрывающая скобка «{}»").format(character)
             stack.pop()
     if stack:
         character, position = stack[-1]
-        return _line_of(code, position), "не закрыта скобка «{}»".format(character)
+        return _line_of(code, position), tr("не закрыта скобка «{}»").format(character)
     return None
 
 
@@ -1361,15 +1569,15 @@ def check_lua_blocks(code: str) -> Optional[Tuple[int, str]]:
             stack.append((word, line))
         elif word == "until":
             if not stack or stack[-1][0] != "repeat":
-                return line, "«until» без «repeat»"
+                return line, tr("«until» без «repeat»")
             stack.pop()
         else:
             if not stack or stack[-1][0] == "repeat":
-                return line, "лишний «end»"
+                return line, tr("лишний «end»")
             stack.pop()
     if stack:
         word, line = stack[-1]
-        return line, "нет «end» для «{}» (строка {})".format(word, line)
+        return line, tr("нет «end» для «{}» (строка {})").format(word, line)
     return None
 
 
@@ -1393,13 +1601,13 @@ def check_syntax(name: str, text: str) -> Optional[Tuple[int, str]]:
                 return problem[0] + _line_of(text, match.start(2)) - 1, problem[1]
         unclosed = re.search(r"<!--(?![\s\S]*?-->)", text)
         if unclosed:
-            return _line_of(text, unclosed.start()), "не закрыт комментарий <!--"
+            return _line_of(text, unclosed.start()), tr("не закрыт комментарий <!--")
         return None
     for tag, start, end in syntax_spans(name, text):
         if tag == "comment" and text[start:end].startswith("/*") and not text[start:end].endswith("*/"):
-            return _line_of(text, start), "не закрыт комментарий /*"
+            return _line_of(text, start), tr("не закрыт комментарий /*")
         if tag == "string" and (end - start < 2 or text[end - 1] != text[start]) and text[start] in "\"'`":
-            return _line_of(text, start), "не закрыта строка"
+            return _line_of(text, start), tr("не закрыта строка")
     problem = check_bracket_balance(code)
     if problem:
         return problem
@@ -1459,18 +1667,18 @@ class SamovarFileClient:
                 return response.read()
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace").strip()
-            raise ConfigError("Samovar ответил с ошибкой {}: {}".format(error.code, detail)) from error
+            raise ConfigError(tr("Samovar ответил с ошибкой {}: {}").format(error.code, detail)) from error
         except urllib.error.URLError as error:
-            raise ConfigError("Не удалось подключиться к Samovar: {}".format(error.reason)) from error
+            raise ConfigError(tr("Не удалось подключиться к Samovar: {}").format(error.reason)) from error
 
     def list_files(self) -> List[Dict[str, object]]:
         payload = self._request(urllib.request.Request(self.url + "/edit?list=/"))
         try:
             files = json.loads(payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ConfigError("Samovar вернул некорректный список файлов") from error
+            raise ConfigError(tr("Samovar вернул некорректный список файлов")) from error
         if not isinstance(files, list):
-            raise ConfigError("Samovar вернул некорректный список файлов")
+            raise ConfigError(tr("Samovar вернул некорректный список файлов"))
         return files
 
     def read_file(self, path: str) -> bytes:
@@ -1500,22 +1708,24 @@ class SamovarFileClient:
 GEOMETRY_RE = re.compile(r"^\d+x\d+(?:[+-]\d+[+-]\d+)?$")
 USER_PREFS_PATH = Path.home() / ".samovar_configurator.json"
 
+WINDOW_TITLE = N_("Настройка и прошивка Samovar")
+
 ACTION_LABELS = {
-    "upload": "Прошивка",
-    "uploadfs": "Загрузка LittleFS",
-    "erase": "Полная очистка флеша",
-    "monitor": "Монитор порта",
-    "reboot": "Перезагрузка ESP",
+    "upload": N_("Прошивка"),
+    "uploadfs": N_("Загрузка LittleFS"),
+    "erase": N_("Полная очистка флеша"),
+    "monitor": N_("Монитор порта"),
+    "reboot": N_("Перезагрузка ESP"),
 }
 
-OTA_FAILURE_HINT = (
+OTA_FAILURE_HINT = N_(
     "Подсказка: обновление по Wi-Fi требует, чтобы компьютер и Samovar были в одной сети, "
     "прошивка на устройстве была собрана с включённым «Разрешить обновление по Wi-Fi», "
     "а брандмауэр разрешал python.exe входящие подключения: устройство само подключается "
     "к компьютеру для передачи образа.\n"
 )
 
-PACKAGE_INSTALL_HINT = (
+PACKAGE_INSTALL_HINT = N_(
     "Скачивание и распаковка пакета: проценты появятся по мере загрузки. Тулчейн для ESP32 "
     "весит сотни мегабайт, при первом запуске это занимает до 10–15 минут (скорость сети и "
     "антивирус). Окно не зависло.\n"
@@ -1544,16 +1754,16 @@ def broken_esptool_package(lines: List[str]) -> Optional[str]:
 def remove_broken_esptool(package_dir: str) -> None:
     path = Path(package_dir)
     if not path.name.startswith("tool-esptoolpy") or not (path / "esptool.py").is_file():
-        raise ConfigError("папка {} не похожа на пакет esptool".format(path))
+        raise ConfigError(tr("папка {} не похожа на пакет esptool").format(path))
     shutil.rmtree(path)
 
 
 def _required_address(address: str) -> str:
     address = address.strip()
     if not address:
-        raise ConfigError("Укажите IP-адрес или имя устройства в сети")
+        raise ConfigError(tr("Укажите IP-адрес или имя устройства в сети"))
     if not ADDRESS_RE.fullmatch(address):
-        raise ConfigError("Некорректный адрес устройства: {}".format(address))
+        raise ConfigError(tr("Некорректный адрес устройства: {}").format(address))
     return address
 
 
@@ -1573,12 +1783,12 @@ def resolve_device_address(address: str) -> str:
     try:
         candidates = socket.getaddrinfo(address, None, socket.AF_INET, socket.SOCK_STREAM)
     except OSError as error:
-        raise ConfigError("Не удалось определить IP-адрес устройства {}: {}".format(address, error)) from error
+        raise ConfigError(tr("Не удалось определить IP-адрес устройства {}: {}").format(address, error)) from error
     for candidate in candidates:
         resolved = candidate[4][0]
         if isinstance(resolved, str) and resolved:
             return resolved
-    raise ConfigError("Не удалось определить IP-адрес устройства {}".format(address))
+    raise ConfigError(tr("Не удалось определить IP-адрес устройства {}").format(address))
 
 
 def terminate_process_tree(process) -> None:
@@ -1611,16 +1821,17 @@ def log_line_tag(line: str) -> Optional[str]:
     if line.startswith("> "):
         return "command"
     lowered = line.lower()
-    if re.search(r"\berror\b|\[failed\]|\bfailed\b|\bfatal\b|ошибк|traceback", lowered):
+    # Регулярки узнают и русские, и английские слова; тег «ok» для наших сообщений ставится явно.
+    if re.search(r"\berror\b|\[failed\]|\bfailed\b|\bfatal\b|ошибк|traceback", lowered):  # i18n-keep: распознаёт русский вывод
         return "error"
-    if re.search(r"\[success\]|\bsuccess\b|успешно|перезагружен|сохранены", lowered):
+    if re.search(r"\[success\]|\bsuccess\b|успешно|перезагружен|сохранены", lowered):  # i18n-keep: распознаёт русский вывод
         return "ok"
-    if re.search(r"\bwarning\b|предупрежд", lowered):
+    if re.search(r"\bwarning\b|предупрежд", lowered):  # i18n-keep: распознаёт русский вывод
         return "warning"
     return None
 
 
-def load_user_prefs(path: Path = USER_PREFS_PATH) -> Dict[str, str]:
+def load_user_prefs(path: Path = USER_PREFS_PATH, i18n_dir: Optional[Path] = None) -> Dict[str, str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -1630,6 +1841,12 @@ def load_user_prefs(path: Path = USER_PREFS_PATH) -> Dict[str, str]:
     prefs = {key: value for key, value in data.items() if isinstance(value, str)}
     if not GEOMETRY_RE.fullmatch(prefs.get("geometry", "")):
         prefs.pop("geometry", None)
+    language = prefs.get("language", SOURCE_LANGUAGE)
+    directory = Path(i18n_dir) if i18n_dir is not None else current_i18n_dir()
+    if language != SOURCE_LANGUAGE and not (
+        LANGUAGE_CODE_RE.fullmatch(language) and (directory / (language + ".json")).is_file()
+    ):
+        prefs.pop("language", None)
     return prefs
 
 
@@ -1686,22 +1903,22 @@ class EditMenu:
         self.menu = tk.Menu(widget, tearoff=0)
         self.editable = kind != "readonly"
         if kind == "text":
-            self.menu.add_command(label="Отменить", accelerator="Ctrl+Z", command=lambda: self.run("undo"))
-            self.menu.add_command(label="Повторить", accelerator="Ctrl+Y", command=lambda: self.run("redo"))
+            self.menu.add_command(label=tr("Отменить"), accelerator="Ctrl+Z", command=lambda: self.run("undo"))
+            self.menu.add_command(label=tr("Повторить"), accelerator="Ctrl+Y", command=lambda: self.run("redo"))
             self.menu.add_separator()
         if self.editable:
-            self.menu.add_command(label="Вырезать", accelerator="Ctrl+X", command=lambda: self.run("cut"))
-        self.menu.add_command(label="Копировать", accelerator="Ctrl+C", command=lambda: self.run("copy"))
+            self.menu.add_command(label=tr("Вырезать"), accelerator="Ctrl+X", command=lambda: self.run("cut"))
+        self.menu.add_command(label=tr("Копировать"), accelerator="Ctrl+C", command=lambda: self.run("copy"))
         if self.editable:
-            self.menu.add_command(label="Вставить", accelerator="Ctrl+V", command=lambda: self.run("paste"))
+            self.menu.add_command(label=tr("Вставить"), accelerator="Ctrl+V", command=lambda: self.run("paste"))
         self.menu.add_separator()
-        self.menu.add_command(label="Выделить всё", accelerator="Ctrl+A", command=lambda: self.run("select_all"))
+        self.menu.add_command(label=tr("Выделить всё"), accelerator="Ctrl+A", command=lambda: self.run("select_all"))
         if on_clear is not None:
             self.menu.add_separator()
-            self.menu.add_command(label="Очистить", command=on_clear)
+            self.menu.add_command(label=tr("Очистить"), command=on_clear)
         if on_save is not None:
             self.menu.add_separator()
-            self.menu.add_command(label="Сохранить", accelerator="Ctrl+S", command=on_save)
+            self.menu.add_command(label=tr("Сохранить"), accelerator="Ctrl+S", command=on_save)
         widget.bind("<Button-3>", self.popup, add="+")
         if sys.platform == "darwin":
             widget.bind("<Button-2>", self.popup, add="+")
@@ -1726,9 +1943,9 @@ class EditMenu:
         self.widget.focus_set()
         selected = self.has_selection()
         for label, enabled in (
-            ("Вырезать", selected and self.editable),
-            ("Копировать", selected),
-            ("Вставить", self.editable and self.has_clipboard()),
+            (tr("Вырезать"), selected and self.editable),
+            (tr("Копировать"), selected),
+            (tr("Вставить"), self.editable and self.has_clipboard()),
         ):
             try:
                 self.menu.entryconfigure(label, state="normal" if enabled else "disabled")
@@ -1768,6 +1985,10 @@ class EditMenu:
             return "break"
         self.widget.event_generate(EDIT_EVENTS[action])
         return "break"
+
+
+def option_variable(variable, group: str) -> ChoiceVariable:
+    return ChoiceVariable(variable, {option: tr(option) for option in CHOICE_OPTIONS[group]})
 
 
 def write_readonly(text_widget, text: str, tag: Optional[str] = None, autoscroll: bool = True) -> None:
@@ -1869,7 +2090,7 @@ class FileEditorWindow:
         self.check_id = None
 
         self.window = tk.Toplevel(parent)
-        self.window.title("Файлы Samovar — {}".format(address))
+        self.window.title(tr("Файлы Samovar — {}").format(address))
         self.window.geometry("1100x700")
         self.window.minsize(760, 480)
         self.window.transient(parent)
@@ -1878,17 +2099,17 @@ class FileEditorWindow:
         toolbar = ttk.Frame(self.window, padding=8)
         toolbar.pack(fill="x")
         for text, command in (
-            ("Обновить список", self.refresh),
-            ("Создать", self.create),
-            ("Удалить", self.delete),
-            ("Загрузить с компьютера", self.upload),
-            ("Скачать на компьютер", self.download),
+            (tr("Обновить список"), self.refresh),
+            (tr("Создать"), self.create),
+            (tr("Удалить"), self.delete),
+            (tr("Загрузить с компьютера"), self.upload),
+            (tr("Скачать на компьютер"), self.download),
         ):
             ttk.Button(toolbar, text=text, command=command).pack(side="left", padx=(0, 8))
-        self.save_button = ttk.Button(toolbar, text="Сохранить (Ctrl+S)", command=self.save)
+        self.save_button = ttk.Button(toolbar, text=tr("Сохранить (Ctrl+S)"), command=self.save)
         self.save_button.pack(side="right")
         self.web_button = ttk.Button(
-            toolbar, text="Веб-редактор (/edit)", command=self.open_in_web_editor, state="disabled"
+            toolbar, text=tr("Веб-редактор (/edit)"), command=self.open_in_web_editor, state="disabled"
         )
         self.web_button.pack(side="right", padx=(0, 8))
 
@@ -1941,7 +2162,7 @@ class FileEditorWindow:
         self.edit_menu = EditMenu(self.editor, "text", on_save=self.save)
         self.window.bind("<Control-KeyPress>", self._window_key)
 
-        self.status = ttk.Label(self.window, text="Выберите файл в списке слева", padding=(8, 2))
+        self.status = ttk.Label(self.window, text=tr("Выберите файл в списке слева"), padding=(8, 2))
         self.status.pack(fill="x")
         self.refresh()
 
@@ -1952,21 +2173,21 @@ class FileEditorWindow:
         return None
 
     def _show_error(self, error: Exception) -> None:
-        self.messagebox.showerror("Ошибка редактора файлов", str(error), parent=self.window)
+        self.messagebox.showerror(tr("Ошибка редактора файлов"), str(error), parent=self.window)
 
     def _set_status(self) -> None:
         if not self.current_path:
-            self.status.configure(text="Файл не открыт", foreground="")
+            self.status.configure(text=tr("Файл не открыт"), foreground="")
             return
-        modified = " — изменён, не сохранён" if self.editor.edit_modified() else ""
+        modified = tr(" — изменён, не сохранён") if self.editor.edit_modified() else ""
         if self.check_result:
             line, message = self.check_result
             self.status.configure(
-                text="{}{} — строка {}: {}".format(self.current_path, modified, line, message),
+                text=tr("{}{} — строка {}: {}").format(self.current_path, modified, line, message),
                 foreground="#b00020",
             )
         elif syntax_language(self.current_path):
-            self.status.configure(text="{}{} — синтаксис в порядке".format(self.current_path, modified), foreground="")
+            self.status.configure(text=tr("{}{} — синтаксис в порядке").format(self.current_path, modified), foreground="")
         else:
             self.status.configure(text="{}{}".format(self.current_path, modified), foreground="")
 
@@ -2041,8 +2262,8 @@ class FileEditorWindow:
         if not self.current_path or not self.editor.edit_modified():
             return True
         return self.messagebox.askyesno(
-            "Несохранённые изменения",
-            "Файл {} изменён. Отбросить изменения?".format(self.current_path),
+            tr("Несохранённые изменения"),
+            tr("Файл {} изменён. Отбросить изменения?").format(self.current_path),
             parent=self.window,
         )
 
@@ -2093,7 +2314,7 @@ class FileEditorWindow:
         if not is_text_remote_file(path):
             self._load_text(None, "")
             self.status.configure(
-                text="{}: двоичный файл, доступны только скачивание и удаление".format(path)
+                text=tr("{}: двоичный файл, доступны только скачивание и удаление").format(path)
             )
             return
         try:
@@ -2105,7 +2326,7 @@ class FileEditorWindow:
 
     def save(self) -> None:
         if not self.current_path:
-            self.messagebox.showerror("Файл не выбран", "Выберите или создайте файл", parent=self.window)
+            self.messagebox.showerror(tr("Файл не выбран"), tr("Выберите или создайте файл"), parent=self.window)
             return
         try:
             payload = encode_remote_text(self.current_path, self.editor.get("1.0", "end-1c"))
@@ -2114,13 +2335,13 @@ class FileEditorWindow:
             self._show_error(error)
             return
         self.editor.edit_modified(False)
-        self.status.configure(text="{} — сохранён на устройстве".format(self.current_path))
+        self.status.configure(text=tr("{} — сохранён на устройстве").format(self.current_path))
         self.refresh()
 
     def create(self) -> None:
         if not self._discard_changes_allowed():
             return
-        name = self.simpledialog.askstring("Новый файл", "Имя файла:", parent=self.window)
+        name = self.simpledialog.askstring(tr("Новый файл"), tr("Имя файла:"), parent=self.window)
         if not name:
             return
         try:
@@ -2136,7 +2357,7 @@ class FileEditorWindow:
         path = self._selected_path()
         if not path:
             return
-        if not self.messagebox.askyesno("Удаление файла", "Удалить {}?".format(path), parent=self.window):
+        if not self.messagebox.askyesno(tr("Удаление файла"), tr("Удалить {}?").format(path), parent=self.window):
             return
         try:
             self.client.delete_file(path)
@@ -2159,7 +2380,7 @@ class FileEditorWindow:
         except (OSError, ConfigError) as error:
             self._show_error(error)
             return
-        self.status.configure(text="{} загружен на устройство".format(target))
+        self.status.configure(text=tr("{} загружен на устройство").format(target))
         self.refresh()
 
     def download(self) -> None:
@@ -2178,7 +2399,7 @@ class FileEditorWindow:
         except (OSError, ConfigError) as error:
             self._show_error(error)
             return
-        self.status.configure(text="{} сохранён в {}".format(path, filename))
+        self.status.configure(text=tr("{} сохранён в {}").format(path, filename))
 
     def close(self) -> None:
         if self._discard_changes_allowed():
@@ -2196,6 +2417,8 @@ class FileEditorWindow:
 
 
 class ConfiguratorWindow:
+    fs_image_dir: Optional[Path] = None
+
     def __init__(self, root, config: SamovarConfig, pio_executable: str):
         import tkinter as tk
         from tkinter import messagebox, ttk
@@ -2238,7 +2461,7 @@ class ConfiguratorWindow:
         self.tick_id = None
         self.prefs = load_user_prefs()
 
-        root.title("Настройка и прошивка Samovar")
+        root.title(tr(WINDOW_TITLE))
         root.geometry(self.prefs.get("geometry") or "1280x780")
         root.minsize(1000, 640)
         root.option_add("*tearOff", False)
@@ -2263,14 +2486,16 @@ class ConfiguratorWindow:
         paned.add(left, weight=0)
         paned.add(right, weight=1)
 
-        settings = ttk.Labelframe(left, text="Настройки прошивки", padding=(8, 4, 8, 8))
+        settings = ttk.Labelframe(left, text=tr("Настройки прошивки"), padding=(8, 4, 8, 8))
         settings.pack(fill="x")
         section_row = ttk.Frame(settings)
         section_row.pack(fill="x", pady=(4, 6))
-        ttk.Label(section_row, text="Раздел").pack(side="left")
-        self.section_var = tk.StringVar(value=SECTIONS[0])
+        ttk.Label(section_row, text=tr("Раздел")).pack(side="left")
+        self.section_var = ChoiceVariable(tk.StringVar(), {section: tr(section) for section in SECTIONS})
+        self.section_var.set(SECTIONS[0])
         self.section_combo = ttk.Combobox(
-            section_row, textvariable=self.section_var, values=SECTIONS, state="readonly", width=22,
+            section_row, textvariable=self.section_var.variable,
+            values=tuple(self.section_var.labels.values()), state="readonly", width=22,
         )
         self.section_combo.pack(side="left", padx=(10, 0))
         self.section_combo.bind("<<ComboboxSelected>>", self._section_selected)
@@ -2288,49 +2513,49 @@ class ConfiguratorWindow:
             section_rows[section] = 0
         self.section_frames = section_frames
 
-        self.board_var = tk.StringVar()
+        self.board_var = ChoiceVariable(tk.StringVar(), {board: board for board in BOARD_OPTIONS})
+        self._add_combo(section_frames, section_rows, SEC_MAIN, tr("Плата"), self.board_var)
+        self.choice_vars["SAMOVAR_LANG"] = ChoiceVariable(
+            tk.StringVar(), dict(self.config.firmware_languages())
+        )
         self._add_combo(
-            section_frames, section_rows, "Основные", "Плата", self.board_var,
-            tuple(BOARD_OPTIONS),
+            section_frames, section_rows, SEC_MAIN, tr("Язык прошивки и веб-интерфейса"),
+            self.choice_vars["SAMOVAR_LANG"], "SAMOVAR_LANG",
         )
         self.servo_var = tk.StringVar()
         self._add_entry(
-            section_frames, section_rows, "Оборудование", "Поправки сервопривода (11 чисел)",
+            section_frames, section_rows, SEC_HARDWARE, tr("Поправки сервопривода (11 чисел)"),
             self.servo_var, "servoDelta",
         )
 
-        self.choice_vars["regulator"] = tk.StringVar()
+        self.choice_vars["regulator"] = option_variable(tk.StringVar(), GROUP_REGULATOR)
         self._add_combo(
-            section_frames, section_rows, "Регулятор", "Тип регулятора",
-            self.choice_vars["regulator"], tuple(CHOICE_OPTIONS["Регулятор мощности"]), "regulator",
+            section_frames, section_rows, SEC_REGULATOR, tr("Тип регулятора"),
+            self.choice_vars["regulator"], "regulator",
         )
-        self.choice_vars["atmospheric_sensor"] = tk.StringVar()
+        self.choice_vars["atmospheric_sensor"] = option_variable(tk.StringVar(), GROUP_ATMOSPHERIC)
         self._add_combo(
-            section_frames, section_rows, "Датчики", "Атмосферное давление",
-            self.choice_vars["atmospheric_sensor"],
-            tuple(CHOICE_OPTIONS["Датчик атмосферного давления"]),
-            "atmospheric_sensor",
+            section_frames, section_rows, SEC_SENSORS, tr("Атмосферное давление"),
+            self.choice_vars["atmospheric_sensor"], "atmospheric_sensor",
         )
-        self.choice_vars["column_pressure_sensor"] = tk.StringVar()
+        self.choice_vars["column_pressure_sensor"] = option_variable(tk.StringVar(), GROUP_COLUMN_PRESSURE)
         self._add_combo(
-            section_frames, section_rows, "Датчики", "Давление в колонне",
-            self.choice_vars["column_pressure_sensor"],
-            tuple(CHOICE_OPTIONS["Датчик давления в колонне"]),
-            "column_pressure_sensor",
+            section_frames, section_rows, SEC_SENSORS, tr("Давление в колонне"),
+            self.choice_vars["column_pressure_sensor"], "column_pressure_sensor",
         )
 
         for spec in VALUE_SPECS + LOCAL_VALUE_SPECS:
             variable = tk.StringVar()
             self.value_vars[spec.macro] = variable
             self._add_entry(
-                section_frames, section_rows, spec.section, spec.label, variable, spec.macro
+                section_frames, section_rows, spec.section, tr(spec.label), variable, spec.macro
             )
         for spec in BOOL_SPECS:
             variable = tk.BooleanVar()
             self.bool_vars[spec.macro] = variable
             row = section_rows[spec.section]
             checkbutton = ttk.Checkbutton(
-                section_frames[spec.section], text=spec.label, variable=variable
+                section_frames[spec.section], text=tr(spec.label), variable=variable
             )
             checkbutton.grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=3
@@ -2344,7 +2569,7 @@ class ConfiguratorWindow:
             self.value_vars[spec.macro] = value
             row = section_rows[spec.section]
             checkbutton = ttk.Checkbutton(
-                section_frames[spec.section], text=spec.label, variable=enabled
+                section_frames[spec.section], text=tr(spec.label), variable=enabled
             )
             checkbutton.grid(
                 row=row, column=0, sticky="w", pady=3
@@ -2360,15 +2585,15 @@ class ConfiguratorWindow:
             variable = tk.StringVar()
             self.value_vars[spec.macro] = variable
             self._add_entry(
-                section_frames, section_rows, spec.section, spec.label, variable, spec.macro
+                section_frames, section_rows, spec.section, tr(spec.label), variable, spec.macro
             )
 
         self.ssid_var = tk.StringVar()
         self.password_var = tk.StringVar()
-        self._add_entry(section_frames, section_rows, "Сеть", "SSID Wi-Fi", self.ssid_var)
-        row = section_rows["Сеть"]
-        ttk.Label(section_frames["Сеть"], text="Пароль Wi-Fi").grid(row=row, column=0, sticky="w", pady=3)
-        password_row = ttk.Frame(section_frames["Сеть"])
+        self._add_entry(section_frames, section_rows, SEC_NETWORK, "SSID Wi-Fi", self.ssid_var)
+        row = section_rows[SEC_NETWORK]
+        ttk.Label(section_frames[SEC_NETWORK], text=tr("Пароль Wi-Fi")).grid(row=row, column=0, sticky="w", pady=3)
+        password_row = ttk.Frame(section_frames[SEC_NETWORK])
         password_row.grid(row=row, column=1, sticky="ew", padx=(10, 0), pady=3)
         password_row.columnconfigure(0, weight=1)
         self.password_entry = ttk.Entry(password_row, textvariable=self.password_var, show="•", width=24)
@@ -2376,48 +2601,48 @@ class ConfiguratorWindow:
         self._install_edit_menu(self.password_entry, "entry")
         self.show_password_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            password_row, text="Показать", variable=self.show_password_var,
+            password_row, text=tr("Показать"), variable=self.show_password_var,
             command=self._toggle_password,
         ).grid(row=0, column=1, padx=(8, 0))
-        section_rows["Сеть"] += 1
+        section_rows[SEC_NETWORK] += 1
 
         self.mqtt_enabled_var = tk.BooleanVar()
         self.bool_vars["USE_MQTT"] = self.mqtt_enabled_var
-        row = section_rows["Сеть"]
+        row = section_rows[SEC_NETWORK]
         ttk.Checkbutton(
-            section_frames["Сеть"], text="Использовать MQTT", variable=self.mqtt_enabled_var
+            section_frames[SEC_NETWORK], text=tr("Использовать MQTT"), variable=self.mqtt_enabled_var
         ).grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
-        section_rows["Сеть"] += 1
+        section_rows[SEC_NETWORK] += 1
         for spec in MQTT_VALUE_SPECS:
             variable = tk.StringVar()
             self.value_vars[spec.macro] = variable
             widgets = self._add_entry(
-                section_frames, section_rows, spec.section, spec.label, variable
+                section_frames, section_rows, spec.section, tr(spec.label), variable
             )
             if spec.macro == "MQTT_PASSWORD":
                 widgets[1].configure(show="•")
             self.mqtt_field_widgets.extend(widgets)
         self.mqtt_enabled_var.trace_add("write", lambda *_: self._update_mqtt_visibility())
 
-        row = section_rows["Оборудование"]
+        row = section_rows[SEC_HARDWARE]
         ttk.Label(
-            section_frames["Оборудование"],
+            section_frames[SEC_HARDWARE],
             text=(
-                "Режим «Сыр»: USE_ADS1115 автоматически переводит pH на AIN0. "
+                tr("Режим «Сыр»: USE_ADS1115 автоматически переводит pH на AIN0. "
                 "Без ADS1115 PH-4502C использует LUA_PIN и конфликтует с MPX5010DP; "
-                "к реле №4 подключается либо клапан слива, либо разгонный ТЭН."
+                "к реле №4 подключается либо клапан слива, либо разгонный ТЭН.")
             ),
             wraplength=430,
             foreground="#555555",
         ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
-        section_rows["Оборудование"] += 1
+        section_rows[SEC_HARDWARE] += 1
         section_frames[SECTIONS[0]].tkraise()
 
         # --- устройство: порт USB или адрес в сети, общие кнопки
-        usb = ttk.Labelframe(left, text="Устройство", padding=(10, 6, 10, 8))
+        usb = ttk.Labelframe(left, text=tr("Устройство"), padding=(10, 6, 10, 8))
         usb.pack(fill="x", pady=(10, 0))
         usb.columnconfigure(1, weight=1)
-        ttk.Label(usb, text="Порт или адрес").grid(row=0, column=0, sticky="w")
+        ttk.Label(usb, text=tr("Порт или адрес")).grid(row=0, column=0, sticky="w")
         self.port_var = tk.StringVar(value=self.prefs.get("port", ""))
         self.port_combo = ttk.Combobox(
             usb, textvariable=self.port_var, values=(), state="normal"
@@ -2426,51 +2651,51 @@ class ConfiguratorWindow:
         self._install_edit_menu(self.port_combo, "entry")
         self.tooltips.append(Tooltip(
             self.port_combo,
-            "COM-порт для прошивки по USB или устройство в сети для обновления по Wi-Fi "
+            tr("COM-порт для прошивки по USB или устройство в сети для обновления по Wi-Fi "
             "(OTA - «по воздуху»). Кнопка «Обновить» ищет и то, и другое; адрес можно "
-            "ввести вручную, например 192.168.1.37 или samovar.local.",
+            "ввести вручную, например 192.168.1.37 или samovar.local."),
         ))
-        self.port_refresh_button = ttk.Button(usb, text="Обновить", command=self.refresh_ports)
+        self.port_refresh_button = ttk.Button(usb, text=tr("Обновить"), command=self.refresh_ports)
         self.port_refresh_button.grid(row=0, column=2, padx=(8, 0))
         usb_buttons = self._button_holder(usb)
-        self.upload_button = ttk.Button(usb_buttons, text="Прошить", command=lambda: self.start_action("upload"))
-        self.fs_button = ttk.Button(usb_buttons, text="Загрузить LittleFS", command=self.start_littlefs)
+        self.upload_button = ttk.Button(usb_buttons, text=tr("Прошить"), command=lambda: self.start_action("upload"))
+        self.fs_button = ttk.Button(usb_buttons, text=tr("Загрузить LittleFS"), command=self.start_littlefs)
         self.erase_button = ttk.Button(
-            usb_buttons, text="Полностью очистить флеш", command=self.start_flash_erase
+            usb_buttons, text=tr("Полностью очистить флеш"), command=self.start_flash_erase
         )
-        self.monitor_button = ttk.Button(usb_buttons, text="Монитор порта", command=self.open_monitor)
-        self.reboot_button = ttk.Button(usb_buttons, text="Перезагрузить ESP", command=self.reboot_esp)
-        self.editor_button = ttk.Button(usb_buttons, text="Редактор файлов", command=self.open_file_editor)
-        self.browser_button = ttk.Button(usb_buttons, text="Открыть в браузере", command=self.open_in_browser)
+        self.monitor_button = ttk.Button(usb_buttons, text=tr("Монитор порта"), command=self.open_monitor)
+        self.reboot_button = ttk.Button(usb_buttons, text=tr("Перезагрузить ESP"), command=self.reboot_esp)
+        self.editor_button = ttk.Button(usb_buttons, text=tr("Редактор файлов"), command=self.open_file_editor)
+        self.browser_button = ttk.Button(usb_buttons, text=tr("Открыть в браузере"), command=self.open_in_browser)
         self._grid_buttons(usb_buttons, (
             self.upload_button, self.fs_button, self.erase_button,
             self.monitor_button, self.reboot_button, self.editor_button, self.browser_button,
         ))
         self.tooltips.append(Tooltip(
             self.upload_button,
-            "Собрать прошивку и записать её на выбранное устройство: по USB через COM-порт "
-            "или по Wi-Fi, если выбран адрес в сети. Настройки сохраняются автоматически.",
+            tr("Собрать прошивку и записать её на выбранное устройство: по USB через COM-порт "
+            "или по Wi-Fi, если выбран адрес в сети. Настройки сохраняются автоматически."),
         ))
         self.tooltips.append(Tooltip(
             self.fs_button,
-            "Собрать образ LittleFS с веб-интерфейсом и записать его по USB или по Wi-Fi. "
-            "Файлы и пользовательские данные на устройстве будут заменены.",
+            tr("Собрать образ LittleFS с веб-интерфейсом и записать его по USB или по Wi-Fi. "
+            "Файлы и пользовательские данные на устройстве будут заменены."),
         ))
-        self.tooltips.append(Tooltip(self.monitor_button, "Показывает вывод устройства (только по USB). Кнопка «Получить IP» в мониторе запрашивает адрес устройства для работы по Wi-Fi."))
-        self.tooltips.append(Tooltip(self.editor_button, "Файлы на устройстве через веб-интерфейс. Нужен адрес устройства в сети: выберите его в списке выше или получите через монитор порта."))
+        self.tooltips.append(Tooltip(self.monitor_button, tr("Показывает вывод устройства (только по USB). Кнопка «Получить IP» в мониторе запрашивает адрес устройства для работы по Wi-Fi.")))
+        self.tooltips.append(Tooltip(self.editor_button, tr("Файлы на устройстве через веб-интерфейс. Нужен адрес устройства в сети: выберите его в списке выше или получите через монитор порта.")))
         self.port_var.trace_add("write", lambda *_: self._port_changed())
         self.port_combo.bind("<<ComboboxSelected>>", self._network_device_selected)
         self.port_combo.bind("<Return>", self._network_address_entered)
 
         # --- журнал
-        log_box = ttk.Labelframe(right, text="Журнал", padding=(8, 4, 8, 8))
+        log_box = ttk.Labelframe(right, text=tr("Журнал"), padding=(8, 4, 8, 8))
         log_box.pack(fill="both", expand=True, padx=(10, 0))
         log_tools = ttk.Frame(log_box)
         log_tools.pack(fill="x", pady=(0, 4))
-        ttk.Button(log_tools, text="Очистить", command=self.clear_log).pack(side="left")
-        ttk.Button(log_tools, text="Копировать всё", command=self.copy_log).pack(side="left", padx=(8, 0))
+        ttk.Button(log_tools, text=tr("Очистить"), command=self.clear_log).pack(side="left")
+        ttk.Button(log_tools, text=tr("Копировать всё"), command=self.copy_log).pack(side="left", padx=(8, 0))
         self.log_autoscroll = tk.BooleanVar(value=True)
-        ttk.Checkbutton(log_tools, text="Прокручивать к концу", variable=self.log_autoscroll).pack(side="right")
+        ttk.Checkbutton(log_tools, text=tr("Прокручивать к концу"), variable=self.log_autoscroll).pack(side="right")
         log_frame = ttk.Frame(log_box)
         log_frame.pack(fill="both", expand=True)
         scrollbar = ttk.Scrollbar(log_frame)
@@ -2487,14 +2712,33 @@ class ConfiguratorWindow:
         # --- нижняя панель: сохранение, остановка, состояние
         bar = ttk.Frame(outer)
         bar.pack(fill="x", pady=(8, 0))
-        self.save_button = ttk.Button(bar, text="Сохранить настройки", command=self.save)
+        self.save_button = ttk.Button(bar, text=tr("Сохранить настройки"), command=self.save)
         self.save_button.pack(side="left")
-        self.stop_button = ttk.Button(bar, text="Остановить", command=self.stop_action, state="disabled")
+        self.stop_button = ttk.Button(bar, text=tr("Остановить"), command=self.stop_action, state="disabled")
         self.stop_button.pack(side="left", padx=(8, 0))
         self.dirty_var = tk.StringVar(value="")
         ttk.Label(bar, textvariable=self.dirty_var, foreground="#8a5a00").pack(side="left", padx=(12, 0))
-        self.status_var = tk.StringVar(value="Готово")
+        self.status_var = tk.StringVar(value=tr("Готово"))
         ttk.Label(bar, textvariable=self.status_var).pack(side="right")
+        self.language_var = ChoiceVariable(
+            tk.StringVar(), dict(available_languages(current_i18n_dir()))
+        )
+        self.language_var.set(current_language())
+        language_combo = ttk.Combobox(
+            bar, textvariable=self.language_var.variable,
+            values=tuple(self.language_var.labels.values()), state="readonly", width=14,
+        )
+        language_combo.pack(side="right", padx=(0, 16))
+        language_combo.bind("<<ComboboxSelected>>", self._language_selected)
+        ttk.Label(bar, text=tr("Язык интерфейса")).pack(side="right", padx=(0, 6))
+
+    def _language_selected(self, _event=None) -> None:
+        prefs = load_user_prefs(i18n_dir=current_i18n_dir())
+        prefs["language"] = self.language_var.get()
+        save_user_prefs(prefs)
+        self.messagebox.showinfo(
+            tr("Язык интерфейса"), tr("Язык будет применён после перезапуска конфигуратора.")
+        )
 
     def _button_holder(self, parent):
         holder = self.ttk.Frame(parent)
@@ -2537,12 +2781,13 @@ class ConfiguratorWindow:
         rows[section] += 1
         return label_widget, entry
 
-    def _add_combo(self, frames, rows, section, label, variable, values, tooltip_key=None) -> None:
+    def _add_combo(self, frames, rows, section, label, variable, tooltip_key=None) -> None:
         row = rows[section]
         label_widget = self.ttk.Label(frames[section], text=label)
         label_widget.grid(row=row, column=0, sticky="w", pady=3)
         combo = self.ttk.Combobox(
-            frames[section], textvariable=variable, values=values, state="readonly"
+            frames[section], textvariable=variable.variable,
+            values=tuple(variable.labels.values()), state="readonly",
         )
         combo.grid(
             row=row, column=1, sticky="ew", padx=(10, 0), pady=3
@@ -2566,10 +2811,9 @@ class ConfiguratorWindow:
         try:
             state = self.config.load()
         except (OSError, ConfigError) as error:
-            self.messagebox.showerror("Ошибка чтения настроек", str(error))
+            self.messagebox.showerror(tr("Ошибка чтения настроек"), str(error))
             self.root.destroy()
             return
-        self.board_var.set(str(state["board"]))
         self.servo_var.set(str(state["servoDelta"]))
         for macro, variable in self.value_vars.items():
             variable.set(str(state[macro]))
@@ -2577,8 +2821,15 @@ class ConfiguratorWindow:
             variable.set(bool(state[macro]))
         for macro, variable in self.optional_enabled_vars.items():
             variable.set(bool(state[macro + ".enabled"]))
-        for key, variable in self.choice_vars.items():
-            variable.set(str(state[key]))
+        for key, variable in {"board": self.board_var, **self.choice_vars}.items():
+            try:
+                variable.set(str(state[key]))
+            except ConfigError as error:
+                self.messagebox.showerror(
+                    tr("Ошибка чтения настроек"), tr("Настройка {}: {}").format(key, error)
+                )
+                self.root.destroy()
+                return
         self.ssid_var.set(str(state["wifi_ssid"]))
         self.password_var.set(str(state["wifi_password"]))
         self._update_mqtt_visibility()
@@ -2609,13 +2860,13 @@ class ConfiguratorWindow:
         try:
             ports = list_serial_ports(self.pio_executable)
         except (OSError, ConfigError) as error:
-            self.messagebox.showerror("Ошибка поиска портов", str(error))
+            self.messagebox.showerror(tr("Ошибка поиска портов"), str(error))
             return
         self._apply_port_list(ports, [])
         if self.busy:
             return
         self.port_refresh_button.configure(state="disabled")
-        self.status_var.set("Поиск устройств в сети…")
+        self.status_var.set(tr("Поиск устройств в сети…"))
 
         def search() -> None:
             try:
@@ -2643,12 +2894,12 @@ class ConfiguratorWindow:
         if not self.busy:
             self.port_refresh_button.configure(state="normal")
         if devices is None:
-            self._append_log("Поиск устройств в сети не удался: {}\n".format(error), "warning")
-            self.status_var.set("Устройства в сети не найдены")
+            self._append_log(tr("Поиск устройств в сети не удался: {}\n").format(error), "warning")
+            self.status_var.set(tr("Устройства в сети не найдены"))
             return
         self._apply_port_list(list(self.port_combo.cget("values")), devices)
         self.status_var.set(
-            "Найдено устройств в сети: {}".format(len(devices)) if devices else "Устройства в сети не найдены"
+            tr("Найдено устройств в сети: {}").format(len(devices)) if devices else tr("Устройства в сети не найдены")
         )
 
     def _state(self) -> Dict[str, object]:
@@ -2677,34 +2928,34 @@ class ConfiguratorWindow:
         if self.saved_state is None:
             return
         dirty = self.is_dirty()
-        self.dirty_var.set("Есть несохранённые изменения" if dirty else "")
-        self.root.title("Настройка и прошивка Samovar" + (" *" if dirty else ""))
+        self.dirty_var.set(tr("Есть несохранённые изменения") if dirty else "")
+        self.root.title(tr(WINDOW_TITLE) + (" *" if dirty else ""))
 
     def save(self, show_success: bool = True) -> bool:
         try:
             self.config.save(self._state())
         except (OSError, ConfigError) as error:
-            self.messagebox.showerror("Настройки не сохранены", str(error))
+            self.messagebox.showerror(tr("Настройки не сохранены"), str(error))
             return False
         self._mark_saved()
-        self._append_log("Настройки сохранены.\n")
+        self._append_log(tr("Настройки сохранены.\n"), "ok")
         if show_success:
-            self.status_var.set("Настройки сохранены")
+            self.status_var.set(tr("Настройки сохранены"))
         return True
 
     # ------------------------------------------------------------------ команды
     def start_littlefs(self) -> None:
         confirmed = self.messagebox.askyesno(
-            "Загрузка LittleFS",
-            "Файловая система и пользовательские данные на устройстве могут быть перезаписаны. Продолжить?",
+            tr("Загрузка LittleFS"),
+            tr("Файловая система и пользовательские данные на устройстве могут быть перезаписаны. Продолжить?"),
         )
         if confirmed:
             self.start_action("uploadfs")
 
     def start_flash_erase(self) -> None:
         confirmed = self.messagebox.askyesno(
-            "Полная очистка флеша",
-            "Будут удалены прошивка, LittleFS и все сохранённые настройки. Продолжить?",
+            tr("Полная очистка флеша"),
+            tr("Будут удалены прошивка, LittleFS и все сохранённые настройки. Продолжить?"),
         )
         if confirmed:
             self.start_action("erase")
@@ -2735,7 +2986,7 @@ class ConfiguratorWindow:
         address = port_value(self.port_var.get())
         self.device_config_request_id += 1
         request_id = self.device_config_request_id
-        self.status_var.set("Получение настроек устройства…")
+        self.status_var.set(tr("Получение настроек устройства…"))
 
         def fetch() -> None:
             try:
@@ -2757,8 +3008,8 @@ class ConfiguratorWindow:
         self._receive_device_config(payload, "Wi-Fi")
 
     def _report_device_config_error(self, source: str, error: str) -> None:
-        self._append_log("Не удалось получить настройки через {}: {}\n".format(source, error), "error")
-        self.status_var.set("Настройки устройства не получены")
+        self._append_log(tr("Не удалось получить настройки через {}: {}\n").format(source, error), "error")
+        self.status_var.set(tr("Настройки устройства не получены"))
 
     def _receive_device_config(self, payload: str, source: str) -> None:
         try:
@@ -2767,16 +3018,16 @@ class ConfiguratorWindow:
             self._report_device_config_error(source, str(error))
             return
         if not self.messagebox.askyesno(
-            "Получить настройки",
-            "Получены настройки прошивки {} через {}. Заменить поля формы?".format(
+            tr("Получить настройки"),
+            tr("Получены настройки прошивки {} через {}. Заменить поля формы?").format(
                 config.firmware_version, source
             ),
         ):
-            self.status_var.set("Получение настроек отменено")
+            self.status_var.set(tr("Получение настроек отменено"))
             return
         self._apply_device_config(config.settings)
-        self._append_log("Настройки устройства {} получены через {}.\n".format(config.firmware_version, source), "ok")
-        self.status_var.set("Настройки устройства получены")
+        self._append_log(tr("Настройки устройства {} получены через {}.\n").format(config.firmware_version, source), "ok")
+        self.status_var.set(tr("Настройки устройства получены"))
 
     def _apply_device_config(self, received: Dict[str, object]) -> None:
         state = self._state()
@@ -2797,7 +3048,7 @@ class ConfiguratorWindow:
 
     def _device_ip_found(self, address: str) -> None:
         if address != self.device_ip:
-            self._append_log("Устройство сообщило адрес {}: можно выбрать его в списке портов.\n".format(address), "ok")
+            self._append_log(tr("Устройство сообщило адрес {}: можно выбрать его в списке портов.\n").format(address), "ok")
         self.device_ip = address
         self._apply_port_list(list(self.port_combo.cget("values")), [])
         self._port_changed()
@@ -2806,7 +3057,7 @@ class ConfiguratorWindow:
         try:
             command = esptool_reboot_command(self.pio_executable, self.port_var.get())
         except ConfigError as error:
-            self.messagebox.showerror("Не удалось перезагрузить ESP", str(error))
+            self.messagebox.showerror(tr("Не удалось перезагрузить ESP"), str(error))
             return
         self._start_process(command, "reboot")
 
@@ -2814,7 +3065,7 @@ class ConfiguratorWindow:
         try:
             address = _required_address(self.device_address())
         except ConfigError as error:
-            self.messagebox.showerror("Редактор файлов", str(error))
+            self.messagebox.showerror(tr("Редактор файлов"), str(error))
             return
         FileEditorWindow(self.root, address)
 
@@ -2822,7 +3073,7 @@ class ConfiguratorWindow:
         try:
             address = _required_address(self.device_address())
         except ConfigError as error:
-            self.messagebox.showerror("Открыть в браузере", str(error))
+            self.messagebox.showerror(tr("Открыть в браузере"), str(error))
             return
         import webbrowser
 
@@ -2830,10 +3081,10 @@ class ConfiguratorWindow:
 
     def open_monitor(self) -> None:
         if self.busy:
-            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            self.messagebox.showerror(tr("Команда уже выполняется"), tr("Дождитесь завершения текущей команды"))
             return
         window = self.tk.Toplevel(self.root)
-        window.title("Монитор порта Samovar")
+        window.title(tr("Монитор порта Samovar"))
         window.geometry("1000x600")
         window.minsize(700, 400)
         window.transient(self.root)
@@ -2853,30 +3104,30 @@ class ConfiguratorWindow:
 
         send_row = self.ttk.Frame(window, padding=(10, 0, 10, 6))
         send_row.pack(fill="x")
-        self.ttk.Label(send_row, text="Команда устройству").pack(side="left")
+        self.ttk.Label(send_row, text=tr("Команда устройству")).pack(side="left")
         self.monitor_input = self.ttk.Entry(send_row)
         self.monitor_input.pack(side="left", fill="x", expand=True, padx=(8, 8))
         self.monitor_input.bind("<Return>", lambda _event: self.send_monitor_command())
         self.monitor_input_menu = EditMenu(self.monitor_input, "entry")
-        self.ttk.Button(send_row, text="Отправить", command=self.send_monitor_command).pack(side="left")
+        self.ttk.Button(send_row, text=tr("Отправить"), command=self.send_monitor_command).pack(side="left")
 
         controls = self.ttk.Frame(window, padding=(10, 0, 10, 10))
         controls.pack(fill="x")
         self.monitor_ip_button = self.ttk.Button(
-            controls, text="Получить IP", command=self.request_monitor_ip
+            controls, text=tr("Получить IP"), command=self.request_monitor_ip
         )
         self.monitor_ip_button.pack(side="left", padx=(0, 8))
         self.monitor_config_button = self.ttk.Button(
-            controls, text="Получить настройки", command=self.request_monitor_config
+            controls, text=tr("Получить настройки"), command=self.request_monitor_config
         )
         self.monitor_config_button.pack(side="left", padx=(0, 8))
-        self.ttk.Button(controls, text="Очистить", command=self.clear_monitor).pack(side="left", padx=(0, 8))
+        self.ttk.Button(controls, text=tr("Очистить"), command=self.clear_monitor).pack(side="left", padx=(0, 8))
         self.monitor_autoscroll = self.tk.BooleanVar(value=True)
         self.ttk.Checkbutton(
-            controls, text="Прокручивать к концу", variable=self.monitor_autoscroll
+            controls, text=tr("Прокручивать к концу"), variable=self.monitor_autoscroll
         ).pack(side="left", padx=(0, 8))
         self.monitor_stop_button = self.ttk.Button(
-            controls, text="Остановить", command=self.toggle_monitor
+            controls, text=tr("Остановить"), command=self.toggle_monitor
         )
         self.monitor_stop_button.pack(side="right")
         self.monitor_window = window
@@ -2899,7 +3150,7 @@ class ConfiguratorWindow:
 
     def _write_monitor_command(self, command: str, error_title: str) -> bool:
         if not self.busy or self.active_action != "monitor" or self.process is None:
-            self.messagebox.showerror(error_title, "Монитор порта не запущен")
+            self.messagebox.showerror(error_title, tr("Монитор порта не запущен"))
             return False
         assert self.process.stdin is not None
         try:
@@ -2911,10 +3162,10 @@ class ConfiguratorWindow:
         return True
 
     def request_monitor_ip(self) -> None:
-        self._write_monitor_command("SAMOVAR:IP?\n", "Не удалось получить IP")
+        self._write_monitor_command("SAMOVAR:IP?\n", tr("Не удалось получить IP"))
 
     def request_monitor_config(self) -> None:
-        self._write_monitor_command("SAMOVAR:CONFIG?\n", "Не удалось получить настройки")
+        self._write_monitor_command("SAMOVAR:CONFIG?\n", tr("Не удалось получить настройки"))
 
     def send_monitor_command(self) -> None:
         if self.monitor_input is None:
@@ -2922,7 +3173,7 @@ class ConfiguratorWindow:
         command = self.monitor_input.get().strip()
         if not command:
             return
-        if self._write_monitor_command(command + "\n", "Не удалось отправить команду"):
+        if self._write_monitor_command(command + "\n", tr("Не удалось отправить команду")):
             self.monitor_input.delete(0, "end")
 
     def clear_monitor(self) -> None:
@@ -2949,14 +3200,14 @@ class ConfiguratorWindow:
 
     def start_action(self, action: str) -> None:
         if self.busy:
-            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            self.messagebox.showerror(tr("Команда уже выполняется"), tr("Дождитесь завершения текущей команды"))
             return
         if action in ("upload", "uploadfs", "erase") and os.name == "nt" and is_unc_path(self.config.project_root):
             self.messagebox.showerror(
-                "Проект находится в общей папке",
-                "Windows не позволяет PlatformIO собирать проект по сетевому пути. "
+                tr("Проект находится в общей папке"),
+                tr("Windows не позволяет PlatformIO собирать проект по сетевому пути. "
                 "Скопируйте всю папку проекта на локальный диск Windows, например "
-                r"C:\Samovar-7.00, и запустите flash_windows.bat из этой папки.",
+                r"C:\Samovar-7.00, и запустите flash_windows.bat из этой папки."),
             )
             return
         try:
@@ -2964,28 +3215,70 @@ class ConfiguratorWindow:
                 command = serial_monitor_command(
                     pio_python_executable(self.pio_executable), Path(__file__).resolve(),
                     self.port_var.get(),
-                )
+                ) + ["--language", current_language(), "--i18n-dir", str(current_i18n_dir())]
             else:
                 command = pio_command(
                     self.pio_executable, self.board_var.get(), action, self.port_var.get()
                 )
         except (OSError, ConfigError) as error:
-            self.messagebox.showerror("Ошибка запуска", str(error))
+            self.messagebox.showerror(tr("Ошибка запуска"), str(error))
             return
         network = is_network_port(self.port_var.get())
         if action == "upload" and network and not self.bool_vars["USE_UPDATE_OTA"].get():
             confirmed = self.messagebox.askyesno(
-                "Обновление по Wi-Fi выключено в настройках",
-                "В разделе «Сеть» снят флажок «Разрешить обновление по Wi-Fi». Новая прошивка "
+                tr("Обновление по Wi-Fi выключено в настройках"),
+                tr("В разделе «Сеть» снят флажок «Разрешить обновление по Wi-Fi». Новая прошивка "
                 "не будет принимать обновления по сети: следующий раз прошивать придётся по USB. "
-                "Продолжить?",
+                "Продолжить?"),
             )
             if not confirmed:
                 return
         if action == "upload" and not self.save(show_success=False):
             return
+        environment = None
+        if action == "uploadfs":
+            environment = self._prepare_littlefs_environment()
+            if environment is None:
+                return
         self.active_port_network = network
-        self._start_process(command, action)
+        self._start_process(command, action, environment)
+
+    def _prepare_littlefs_environment(self) -> Optional[Dict[str, str]]:
+        """Собирает образ LittleFS для выбранного языка прошивки во временную папку.
+
+        Сначала сохраняет настройки (как действие upload), чтобы язык образа совпадал с сохранённым SAMOVAR_LANG.
+        None - сохранение или сборка не удались (об этом уже сказано пользователю): запуск прекращается.
+        """
+        if not self.save(show_success=False):
+            return None
+        language = self.choice_vars["SAMOVAR_LANG"].get()
+        self.fs_image_dir = Path(tempfile.mkdtemp(prefix="samovar_littlefs_"))
+        data_dir = self.fs_image_dir / "data"
+        self._append_log(tr("Сборка образа LittleFS для языка {}…").format(language) + "\n")
+        self.root.update_idletasks()
+        try:
+            result = subprocess.run(
+                littlefs_image_command(sys.executable, self.config.project_root, language, data_dir),
+                cwd=str(self.config.project_root),
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+                **process_start_options(),
+            )
+            detail = "" if result.returncode == 0 else (result.stderr or result.stdout).strip()
+            failed = result.returncode != 0
+        except (OSError, subprocess.TimeoutExpired) as error:
+            detail, failed = str(error), True
+        if failed:
+            self._cleanup_fs_image()
+            self.messagebox.showerror(
+                tr("Не удалось собрать образ LittleFS"), "\n".join(detail.splitlines()[-12:])
+            )
+            return None
+        return littlefs_environment(os.environ, data_dir)
+
+    def _cleanup_fs_image(self) -> None:
+        if self.fs_image_dir is not None:
+            shutil.rmtree(str(self.fs_image_dir), ignore_errors=True)
+            self.fs_image_dir = None
 
     def stop_action(self) -> None:
         if not self.busy or self.process is None:
@@ -2993,9 +3286,9 @@ class ConfiguratorWindow:
         self.stop_requested = True
         terminate_process_tree(self.process)
 
-    def _start_process(self, command: List[str], action: str) -> None:
+    def _start_process(self, command: List[str], action: str, env: Optional[Dict[str, str]] = None) -> None:
         if self.busy:
-            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            self.messagebox.showerror(tr("Команда уже выполняется"), tr("Дождитесь завершения текущей команды"))
             return
         try:
             self.process = subprocess.Popen(
@@ -3008,10 +3301,12 @@ class ConfiguratorWindow:
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
+                env=env,
                 **process_start_options(),
             )
         except OSError as error:
-            self.messagebox.showerror("Не удалось запустить PlatformIO", str(error))
+            self._cleanup_fs_image()
+            self.messagebox.showerror(tr("Не удалось запустить PlatformIO"), str(error))
             return
         self.device_config_request_id += 1
         self.stop_requested = False
@@ -3069,7 +3364,7 @@ class ConfiguratorWindow:
             self._receive_device_config(payload, "USB")
         if "Manager: Installing" in line and not self.install_hint_shown:
             self.install_hint_shown = True
-            self._append_log(PACKAGE_INSTALL_HINT, "warning")
+            self._append_log(tr(PACKAGE_INSTALL_HINT), "warning")
 
     def _tick_status(self) -> None:
         if self.tick_id is not None:
@@ -3079,7 +3374,7 @@ class ConfiguratorWindow:
             return
         elapsed = int(time.monotonic() - self.action_started)
         self.status_var.set("{}… {}:{:02d}".format(
-            ACTION_LABELS.get(self.active_action, self.active_action), elapsed // 60, elapsed % 60
+            tr(ACTION_LABELS.get(self.active_action, self.active_action)), elapsed // 60, elapsed % 60
         ))
         self.tick_id = self.root.after(1000, self._tick_status)
 
@@ -3104,38 +3399,39 @@ class ConfiguratorWindow:
         self.root.after(100, self._drain_output)
 
     def _finish_action(self, code: int) -> None:
+        self._cleanup_fs_image()
         if self.partial_line:
             self._note_output_line(self.partial_line)
             self.partial_line = ""
         stopped = self.stop_requested and code != 0
         completed_action = self.active_action
-        label = ACTION_LABELS.get(completed_action, completed_action)
+        label = tr(ACTION_LABELS.get(completed_action, completed_action))
         elapsed = int(time.monotonic() - self.action_started)
         self.process = None
         self.busy = False
         self._set_busy(False, "")
         if stopped:
-            message = "Монитор порта остановлен.\n" if completed_action == "monitor" else "{}: остановлено пользователем.\n".format(label)
+            message = tr("Монитор порта остановлен.\n") if completed_action == "monitor" else tr("{}: остановлено пользователем.\n").format(label)
             self._append_log(message)
-            self.status_var.set("Остановлено")
+            self.status_var.set(tr("Остановлено"))
         elif code == 0:
             if completed_action == "reboot":
-                self._append_log("ESP перезагружен.\n", "ok")
+                self._append_log(tr("ESP перезагружен.\n"), "ok")
             else:
-                self._append_log("{}: успешно завершено за {}:{:02d}.\n".format(label, elapsed // 60, elapsed % 60), "ok")
-            self.status_var.set("{}: готово".format(label))
+                self._append_log(tr("{}: успешно завершено за {}:{:02d}.\n").format(label, elapsed // 60, elapsed % 60), "ok")
+            self.status_var.set(tr("{}: готово").format(label))
         else:
-            self._append_log("{}: завершилось с ошибкой {}.\n".format(label, code), "error")
+            self._append_log(tr("{}: завершилось с ошибкой {}.\n").format(label, code), "error")
             if self._repair_esptool_and_retry(completed_action, label):
                 return
             if self.active_port_network and completed_action in ("upload", "uploadfs"):
-                self._append_log(OTA_FAILURE_HINT, "warning")
-            self.status_var.set("{}: ошибка".format(label))
+                self._append_log(tr(OTA_FAILURE_HINT), "warning")
+            self.status_var.set(tr("{}: ошибка").format(label))
             tail = "".join(self.recent_lines).strip()
             self.messagebox.showerror(
-                "Ошибка операции",
-                "{} завершилась с ошибкой (код {}).\n\nПоследние строки журнала:\n{}".format(
-                    label, code, tail or "(пусто)"
+                tr("Ошибка операции"),
+                tr("{} завершилась с ошибкой (код {}).\n\nПоследние строки журнала:\n{}").format(
+                    label, code, tail or tr("(пусто)")
                 ),
             )
         self.active_action = ""
@@ -3150,14 +3446,14 @@ class ConfiguratorWindow:
             remove_broken_esptool(package)
         except (OSError, ConfigError) as error:
             self._append_log(
-                "В пакете esptool не хватает библиотек, но удалить его не удалось: {}. "
-                "Удалите папку {} вручную и повторите операцию.\n".format(error, package), "error",
+                tr("В пакете esptool не хватает библиотек, но удалить его не удалось: {}. "
+                "Удалите папку {} вручную и повторите операцию.\n").format(error, package), "error",
             )
             return False
         self.esptool_repaired = package
         self._append_log(
-            "В пакете esptool не хватает библиотек (ошибка импорта). Папка {} удалена, "
-            "PlatformIO установит пакет заново. Повторяю: {}.\n".format(package, label), "warning",
+            tr("В пакете esptool не хватает библиотек (ошибка импорта). Папка {} удалена, "
+            "PlatformIO установит пакет заново. Повторяю: {}.\n").format(package, label), "warning",
         )
         self.active_action = ""
         self.active_port_network = False
@@ -3178,7 +3474,7 @@ class ConfiguratorWindow:
         self._port_changed()
         if self.monitor_stop_button is not None:
             self.monitor_stop_button.configure(
-                text="Остановить" if busy and action == "monitor" else "Закрыть",
+                text=tr("Остановить") if busy and action == "monitor" else tr("Закрыть"),
             )
         if self.monitor_ip_button is not None:
             self.monitor_ip_button.configure(
@@ -3203,12 +3499,12 @@ class ConfiguratorWindow:
         text = self.log.get("1.0", "end-1c")
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
-        self.status_var.set("Журнал скопирован в буфер обмена")
+        self.status_var.set(tr("Журнал скопирован в буфер обмена"))
 
     def close(self) -> None:
         if self.is_dirty():
             answer = self.messagebox.askyesnocancel(
-                "Несохранённые изменения", "Сохранить изменения настроек перед выходом?"
+                tr("Несохранённые изменения"), tr("Сохранить изменения настроек перед выходом?")
             )
             if answer is None:
                 return
@@ -3216,10 +3512,13 @@ class ConfiguratorWindow:
                 return
         if self.process is not None:
             terminate_process_tree(self.process)
-        save_user_prefs({
+        self._cleanup_fs_image()
+        prefs = load_user_prefs(i18n_dir=current_i18n_dir())
+        prefs.update({
             "port": self.port_var.get().strip(),
             "geometry": self.root.geometry(),
         })
+        save_user_prefs(prefs)
         self.root.destroy()
 
 
@@ -3239,11 +3538,21 @@ def parse_arguments(argv: Optional[List[str]] = None):
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--pio", default=shutil.which("pio") or shutil.which("platformio"))
     parser.add_argument("--serial-monitor")
+    parser.add_argument("--language", help="код языка интерфейса (не сохраняется в настройках)")  # i18n-keep: справка командной строки
+    parser.add_argument("--i18n-dir", type=Path, default=DEFAULT_I18N_DIR, help="папка словарей конфигуратора")  # i18n-keep: справка командной строки
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     arguments = parse_arguments(argv)
+    try:
+        set_language(
+            arguments.language or load_user_prefs(i18n_dir=arguments.i18n_dir).get("language", SOURCE_LANGUAGE),
+            arguments.i18n_dir,
+        )
+    except TranslationError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     if arguments.serial_monitor:
         try:
             return run_serial_monitor(arguments.serial_monitor)
@@ -3251,16 +3560,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(str(error), file=sys.stderr)
             return 1
     if not arguments.pio:
-        print("PlatformIO не найден", file=sys.stderr)
+        print(tr("PlatformIO не найден"), file=sys.stderr)
         return 1
     try:
         import tkinter as tk
     except ImportError:
-        print("Tkinter не найден. Переустановите Python с компонентом Tcl/Tk.", file=sys.stderr)
+        print(tr("Tkinter не найден. Переустановите Python с компонентом Tcl/Tk."), file=sys.stderr)
         return 1
     enable_windows_dpi_awareness()
     root = tk.Tk()
-    ConfiguratorWindow(root, SamovarConfig(arguments.project_root.resolve()), arguments.pio)
+    try:
+        ConfiguratorWindow(root, SamovarConfig(arguments.project_root.resolve()), arguments.pio)
+    except (ConfigError, TranslationError) as error:
+        from tkinter import messagebox
+
+        messagebox.showerror(tr("Не удалось открыть окно конфигуратора"), str(error))
+        root.destroy()
+        return 1
     root.mainloop()
     return 0
 

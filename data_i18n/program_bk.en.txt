@@ -1,0 +1,13 @@
+# BC program example. Line format: Type;Threshold;Container;Power;Tvapor
+# Tvapor: 0 = manual dephlegmator water control on this line, 30..100 = keep the vapor
+#   near this temperature (°C) with the stepper regulator. The vapor sensor is placed
+#   ABOVE the dephlegmator, in the vapor zone before the condenser.
+# Power: the first program line with a non-zero voltage must be an
+#   ABSOLUTE value - above 40 V (regulator in volts) or above
+#   400 W (regulator in watts), otherwise heating during heat-up may
+#   switch off unnoticed. 0 in the other lines - keep the current value.
+# The power values in this example are volts; for a regulator in watts the first
+#   non-zero power must be above 400.
+T;78;1;190;70
+T;90;2;0;78
+T;93;2;0;0

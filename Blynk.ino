@@ -104,7 +104,7 @@ BLYNK_WRITE(V12) {
   if (state) {
     SamovarCommands command = mode_start_command(Samovar_Mode);
     if (!queue_samovar_command(command)) {
-      SendMsg("Очередь команд занята: команда Blynk V12 не поставлена", WARNING_MSG);
+      SendMsg(TR(BLYNK_QUEUE_BUSY_V12, "Очередь команд занята: команда Blynk V12 не поставлена"), WARNING_MSG);
     }
   }
 }
@@ -134,7 +134,7 @@ BLYNK_WRITE(V3) {
   if (value && PowerOn) {
     menu_samovar_start();
   } else {
-    if (!queue_samovar_reset_command()) SendMsg("Очередь команд занята: reset из Blynk не поставлен", WARNING_MSG);
+    if (!queue_samovar_reset_command()) SendMsg(TR(BLYNK_QUEUE_BUSY_RESET, "Очередь команд занята: reset из Blynk не поставлен"), WARNING_MSG);
   }
 }
 BLYNK_WRITE(V4) {
@@ -147,7 +147,7 @@ BLYNK_WRITE(V4) {
   }
   SamovarCommands command = state ? SAMOVAR_POWER_ON : SAMOVAR_POWER_OFF;
   if (!queue_samovar_command(command)) {
-    SendMsg("Очередь команд занята: команда Blynk V4 не поставлена", WARNING_MSG);
+    SendMsg(TR(BLYNK_QUEUE_BUSY_V4, "Очередь команд занята: команда Blynk V4 не поставлена"), WARNING_MSG);
   }
 }
 
@@ -650,8 +650,8 @@ static uint32_t s_pendingF1Revision = 0;
 // а не режем её на середине поля.
 void blynk_stage_log_line(const String& line) {
   if ((size_t)line.length() > sizeof(s_pendingV34Line) - 1) {
-    WriteConsoleLog("V34: строка лога (" + String(line.length()) + " байт) не помещается в буфер (" +
-                     String(sizeof(s_pendingV34Line)) + "), не отправлена");
+    WriteConsoleLog(TR(BLYNK_V34_LINE_BEGIN, "V34: строка лога (") + String(line.length()) + TR(BLYNK_V34_BYTES_NO_FIT, " байт) не помещается в буфер (") +
+                     String(sizeof(s_pendingV34Line)) + TR(BLYNK_V34_NOT_SENT, "), не отправлена"));
     return;
   }
   portENTER_CRITICAL(&s_blynkLogLineMux);
@@ -712,8 +712,8 @@ void blynk_stage_session_start(const String& line) {
   // Продолжающий байт UTF-8 - 10xxxxxx (0x80-0xBF); откатываемся, пока не встанем на
   // границу символа (ASCII-байт или начало новой многобайтовой последовательности).
   while (cut > 0 && (static_cast<uint8_t>(src[cut]) & 0xC0) == 0x80) cut--;
-  WriteConsoleLog("V35: описание сессии обрезано с " + String(line.length()) + " до " +
-                   String(cut) + " байт (буфер " + String(sizeof(s_pendingV35Line)) + ")");
+  WriteConsoleLog(TR(BLYNK_V35_TRUNCATED_FROM, "V35: описание сессии обрезано с ") + String(line.length()) + TR(BLYNK_V35_TO, " до ") +
+                   String(cut) + TR(BLYNK_V35_BYTES_BUFFER, " байт (буфер ") + String(sizeof(s_pendingV35Line)) + ")");
   String truncated = line.substring(0, cut);
   portENTER_CRITICAL(&s_blynkSessionMux);
   strlcpy(s_pendingV35Line, truncated.c_str(), sizeof(s_pendingV35Line));
@@ -913,7 +913,7 @@ static void blynk_push_v8() { Blynk.virtualWrite(V8, get_liquid_volume()); }
 // без #if, иначе автопрототип Arduino даёт «declared static but never defined».
 // Текущее напряжение меняется всё время регулирования, поэтому V21 - быстрый пин.
 static void __attribute__((unused)) blynk_push_v21() {
-  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);
+  Blynk.virtualWrite(V21, TR(BLYNK_V21_CURRENT, "Тек:") + (String)current_power_volt + TR(BLYNK_V21_TARGET, " Цель:") + (String)target_power_volt); // приложения берут первое число строки, поэтому в подписях цифр быть не должно (PIN_SPEC.md §2)
 }
 
 // V10, V11, V14 - строки под runtime_state_lock; один захват замка на все три.

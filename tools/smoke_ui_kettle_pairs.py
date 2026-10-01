@@ -23,6 +23,7 @@ def run_suvid_pair_edges(block: str, expected_success: bool) -> bool:
     harness = f'''\
 #include <cstdint>
 #include <cmath>
+#include "{ROOT.as_posix()}/i18n.h"
 #define SUVID_HOLD_BAND_C 2.0f
 enum {{ WARNING_MSG = 1, NOTIFY_MSG = 2 }};
 enum UiWaitReason {{ UI_WAIT_SUVID_HOLD_OUTSIDE_BAND = 17 }};
@@ -62,6 +63,7 @@ def run_beer_hold_edges(block: str, expected_success: bool) -> bool:
     """Исполняет извлечённый q15-gate: invalid sensor не меняет пару или metadata."""
     harness = r'''
 #include <cstdio>
+#include "@ROOT@/i18n.h"
 enum { WARNING_MSG = 1, NOTIFY_MSG = 2, RUNTIME_PAIR_RESUMED = 0, UI_WAIT_BEER_HOLD_CLOCK_FREEZE = 15 };
 #define HOLD_CLOCK_STOP_DEFICIT 3.0f
 typedef char ProgramType;
@@ -94,7 +96,7 @@ int main() {
   sensor = {68, true}; tick();
   return check(begins == 1 && !beerHoldClockFrozen, "P 2 C below target only slows the hold clock, q15 must not BEGIN") ? 0 : 4;
 }
-'''.replace("@BODY@", block)
+'''.replace("@ROOT@", ROOT.as_posix()).replace("@BODY@", block)
     with tempfile.TemporaryDirectory(prefix="samovar-beer-hold-pair-") as temp:
         root = Path(temp)
         cpp, binary = root / "pair.cpp", root / "pair"
@@ -148,7 +150,7 @@ def main() -> int:
     ], errors)
     require("Beer q15 cold hold edges", beer_tick, [
         "if (!sensor_valid(*controlSensor))",
-        "process_sensor_failed(\"Пиво\", controlSensorName);",
+        "process_sensor_failed(TR(BEER_MODE_NAME, \"Пиво\"), controlSensorName);",
         "return;",
         "currentType == 'P' && begintime > 0",
         "program[ProgramNum].Temp - temp >= HOLD_CLOCK_STOP_DEFICIT",
@@ -236,7 +238,7 @@ def main() -> int:
         errors.append("Suvid q17: extracted runtime branch did not preserve pair edges")
     suvid_mutant = suvid_hold_block.replace(
         'runtime_pair_begin(UI_WAIT_SUVID_HOLD_OUTSIDE_BAND,\n'
-        '                           "Выдержка приостановлена: температура вне полосы", WARNING_MSG);',
+        '                           TR(SUVID_HOLD_PAUSED_OUT_OF_BAND, "Выдержка приостановлена: температура вне полосы"), WARNING_MSG);',
         "(void)0;", 1)
     if suvid_mutant == suvid_hold_block or not run_suvid_pair_edges(suvid_mutant, False):
         errors.append("Suvid q17: accepted-entry mutation survived the stateful harness")
@@ -244,8 +246,8 @@ def main() -> int:
     if not run_beer_hold_edges(beer_hold_block, True):
         errors.append("Beer q15: extracted valid/invalid sensor edges did not preserve pair state")
     beer_hold_mutant = beer_hold_block.replace(
-        'process_sensor_failed("Пиво", controlSensorName);\n    return;',
-        'process_sensor_failed("Пиво", controlSensorName);', 1)
+        'process_sensor_failed(TR(BEER_MODE_NAME, "Пиво"), controlSensorName);\n    return;',
+        'process_sensor_failed(TR(BEER_MODE_NAME, "Пиво"), controlSensorName);', 1)
     if beer_hold_mutant == beer_hold_block or not run_beer_hold_edges(beer_hold_mutant, False):
         errors.append("Beer q15: invalid-sensor early-return mutation survived the stateful harness")
 

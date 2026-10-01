@@ -36,6 +36,7 @@ COOL_TIMEOUT_TOKEN = "if (beer_stage_elapsed_ms(millis()) >= BEER_COOL_TIMEOUT_M
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 using ProgramType = char;
@@ -200,7 +201,7 @@ def main() -> int:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    harness = HARNESS_TEMPLATE.replace("@GATE@", gate_statement).replace(
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@GATE@", gate_statement).replace(
         "@BOIL_DETECT@", boil_detect
     )
     code, output = compile_and_run(harness)

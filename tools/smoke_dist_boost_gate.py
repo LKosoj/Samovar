@@ -29,14 +29,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 SIGNATURE = "void run_dist_program(uint8_t num)"
 BOIL_FRONT_TOKEN = "if (boil_started && !distBoilStartedPrev)"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -137,7 +137,7 @@ int main() {
 }
 '''
 
-BOIL_FRONT_HARNESS_TEMPLATE = r'''
+BOIL_FRONT_HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <iostream>
 
 struct Sensor { float avgTemp = 0; float StartProgTemp = 0; };

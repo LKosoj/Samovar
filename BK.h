@@ -43,7 +43,7 @@ static void bk_apply_work_power() {
   runtime_pair_end(
       UI_WAIT_BK_WORK_POWER,
       RUNTIME_PAIR_RESUMED,
-      "Рабочая мощность БК применена.",
+      TR(BK_WORK_POWER_APPLIED, "Рабочая мощность БК применена."),
       NOTIFY_MSG);
   distAlcoholEstimateWarningSent = false;
   // [9b] Тот же момент, что distiller_proc() отмечает вызовом run_dist_program(0)
@@ -79,7 +79,7 @@ void run_bk_program(uint8_t num) {
   if (num >= ProgramLen || program_type_empty(program[num].WType)) {
     if (ProgramNum < ProgramLen) {
       ProgramNum = ProgramLen;
-      SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
+      SendMsg(TR(BK_PROGRAMS_DONE_CONTINUE, "Выполнение программ закончилось, продолжение отбора"), NOTIFY_MSG);
     }
     return;
   }
@@ -87,18 +87,18 @@ void run_bk_program(uint8_t num) {
   ProgramNum = num;
 #ifdef USE_LUA
   if (program[num].WType == 'L' && !lua_sequence_stage_begin(num, millis())) {
-    SendMsg("Ошибка Lua: скрипт строки не запущен", ALARM_MSG);
+    SendMsg(TR(BK_LUA_LINE_SCRIPT_NOT_STARTED, "Ошибка Lua: скрипт строки не запущен"), ALARM_MSG);
     bk_finish();
     return;
   }
 #else
   if (program[num].WType == 'L') {
-    SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
+    SendMsg(TR(BK_PROGRAM_L_NEEDS_LUA, "Ошибка программы: тип L требует USE_LUA"), ALARM_MSG);
     bk_finish();
     return;
   }
 #endif
-  SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+  SendMsg(TR(BK_GOTO_PROGRAM_LINE, "Переход к строке программы №") + (String)(num + 1), NOTIFY_MSG);
 #ifdef USE_WATER_PUMP
   // [9b] Обнуление таймера ожидания при КАЖДОМ включении авторежима (а не
   // только через кнопку "Автомат") держит инвариант "первая правка ШИМ не
@@ -121,7 +121,7 @@ void set_water_temp(float duty) {
   // оператор только что выставил вручную.
   if (bk_water_auto) {
     bk_water_auto = false;
-    SendMsg("Вода дефлегматора: ручное управление", NOTIFY_MSG);
+    SendMsg(TR(BK_DEPHLEGMATOR_WATER_MANUAL, "Вода дефлегматора: ручное управление"), NOTIFY_MSG);
   }
   bk_pwm = duty;
   // Пока идёт плавный пуск насоса (wp_count < 10, pumppwm.h), check_alarm_bk
@@ -133,7 +133,7 @@ void set_water_temp(float duty) {
     water_pump_speed = bk_pwm;
   }
 #else
-  SendMsg(("Управление насосом не поддерживается вашим оборудованием"), NOTIFY_MSG);
+  SendMsg((TR(BK_PUMP_CONTROL_UNSUPPORTED, "Управление насосом не поддерживается вашим оборудованием")), NOTIFY_MSG);
 #endif
 }
 
@@ -165,9 +165,9 @@ void bk_proc() {
   // не перехватываем, даём дойти до mode_run_heating_start, который откажет
   // штатным сообщением про защёлку.
   if (PowerOn) {
-    if (!sensor_valid(TankSensor) && process_sensor_failed("БК", "куба")) return;
+    if (!sensor_valid(TankSensor) && process_sensor_failed(TR(BK_MODE_NAME, "БК"), TR(BK_SENSOR_BOILER, "куба"))) return;
   } else if (!sensor_valid(TankSensor) && !heater_safety_latched()) {
-    mode_cancel_process_start("БК не запущена: датчик куба не назначен или не отвечает");
+    mode_cancel_process_start(TR(BK_START_NO_TANK_SENSOR, "БК не запущена: датчик куба не назначен или не отвечает"));
     return;
   }
 
@@ -183,7 +183,7 @@ void bk_proc() {
   // auto ловит process_sensor_failed("БК","пара") в check_alarm_bk).
   if (!PowerOn && !heater_safety_latched() && !sensor_valid(SteamSensor) &&
       bk_program_requires_steam_sensor()) {
-    mode_cancel_process_start("БК не запущена: программа требует датчик пара");
+    mode_cancel_process_start(TR(BK_START_NEEDS_STEAM_SENSOR, "БК не запущена: программа требует датчик пара"));
     return;
   }
 #endif
@@ -191,13 +191,13 @@ void bk_proc() {
   if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_BK)) {
     if (mode_run_heating_start(
           SAMOVAR_STATUS_BK,
-          "Ошибка создания файла лога. Старт БК отменён.",
-          "Описание сессии занято. Старт БК отменён.",
-          "Включен нагрев бражной колонны") != MODE_HEATING_START_SUCCEEDED) return;
+          TR(BK_START_LOG_FILE_ERROR, "Ошибка создания файла лога. Старт БК отменён."),
+          TR(BK_START_SESSION_BUSY, "Описание сессии занято. Старт БК отменён."),
+          TR(BK_HEATING_ON, "Включен нагрев бражной колонны")) != MODE_HEATING_START_SUCCEEDED) return;
     bk_work_power_pending = true;
     runtime_pair_begin(
         UI_WAIT_BK_WORK_POWER,
-        "Ожидание рабочей мощности БК.",
+        TR(BK_WAIT_WORK_POWER, "Ожидание рабочей мощности БК."),
         NOTIFY_MSG);
   }
 
@@ -228,10 +228,10 @@ void bk_proc() {
         millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
     if (luaResult == LUA_SEQUENCE_STAGE_ADVANCE) run_bk_program(nextProgram);
     else if (luaResult == LUA_SEQUENCE_STAGE_TIMEOUT) {
-      SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
+      SendMsg(TR(BK_LUA_TIMEOUT, "Lua не завершила операцию до тайм-аута"), ALARM_MSG);
       bk_finish();
     } else if (luaResult == LUA_SEQUENCE_STAGE_FAILED) {
-      SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
+      SendMsg(TR(BK_LUA_FAILED, "Lua завершилась с ошибкой"), ALARM_MSG);
       bk_finish();
     }
 #endif
@@ -251,7 +251,7 @@ void check_alarm_bk() {
   //сбросим паузу события безопасности
   mode_clear_alarm_pause_if_expired();
 
-  if (PowerOn && !mode_check_powered_cooling_sensors("БК")) return;
+  if (PowerOn && !mode_check_powered_cooling_sensors(TR(BK_MODE_NAME, "БК"))) return;
 
 #ifdef SAMOVAR_USE_POWER
   check_power_error();
@@ -333,7 +333,7 @@ void check_alarm_bk() {
       // [Решение владельца] Пропавший датчик пара во время авторежима - авария,
       // а не откат в ручной режим: process_sensor_failed синхронно останавливает
       // нагрев с защёлкой, как при отказе датчика куба.
-      process_sensor_failed("БК", "пара");
+      process_sensor_failed(TR(BK_MODE_NAME, "БК"), TR(BK_SENSOR_VAPOR, "пара"));
     } else if (valve_status && wp_count >= 10) {
       const bool waterRisingFast = mode_water_rising_fast();
       if ((uint32_t)(millis() - bk_water_last_adjust_ms) >= BK_WATER_ADJUST_PERIOD_MS) {
@@ -359,12 +359,12 @@ void bk_finish() {
   runtime_pair_close_mode(
       SAMOVAR_BK_MODE,
       RUNTIME_PAIR_PROCESS_END,
-      "Работа БК завершена.",
+      TR(BK_RUN_FINISHED_DOT, "Работа БК завершена."),
       NOTIFY_MSG);
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
   bk_work_power_pending = false;
-  stop_process("Работа бражной колонны завершена");
+  stop_process(TR(BK_RUN_FINISHED, "Работа бражной колонны завершена"));
 }
 
 #ifdef USE_WATER_PUMP

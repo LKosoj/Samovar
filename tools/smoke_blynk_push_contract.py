@@ -263,7 +263,7 @@ if blynk and "BLYNK_READ_SIMPLE" in blynk:
 fast_pushes = {
     "blynk_push_v2": "Blynk.virtualWrite(V2, WthdrwlProgress);",
     "blynk_push_v8": "Blynk.virtualWrite(V8, get_liquid_volume());",
-    "blynk_push_v21": 'Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);',
+    "blynk_push_v21": 'Blynk.virtualWrite(V21, TR(BLYNK_V21_CURRENT, "Тек:") + (String)current_power_volt + TR(BLYNK_V21_TARGET, " Цель:") + (String)target_power_volt);',
     "blynk_push_v27": "Blynk.virtualWrite(V27, json);",
 }
 removed_fast_pushes = ["blynk_push_v0", "blynk_push_v1", "blynk_push_v6", "blynk_push_v7",

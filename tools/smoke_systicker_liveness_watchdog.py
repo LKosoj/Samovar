@@ -20,7 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -131,7 +131,7 @@ int main() {
 def build_harness() -> str:
     source = strip_cpp_comments((ROOT / "Samovar.ino").read_text(encoding="utf-8", errors="ignore"))
     body = extract_function_body(source, "static void tick_check_systicker_liveness() {")
-    return HARNESS_TEMPLATE.replace("@BODY@", body)
+    return (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@BODY@", body)
 
 
 def main() -> int:

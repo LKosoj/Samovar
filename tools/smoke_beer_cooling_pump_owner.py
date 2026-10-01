@@ -18,6 +18,7 @@ ELAPSED_SIGNATURE = "inline float beer_stage_elapsed_ms(unsigned long nowMs)"
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 
 #define USE_WATER_PUMP
 
@@ -364,7 +365,7 @@ def main() -> int:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    harness = HARNESS_TEMPLATE.replace(
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace(
         "@COOLING_PUMP@", f"{COOLING_PUMP_SIGNATURE} {{\n{helper}\n}}"
     ).replace(
         "@COOLING_DEMAND@", f"{COOLING_DEMAND_SIGNATURE} {{\n{demand_helper}\n}}"

@@ -48,14 +48,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 COLUMN_WETTING_SIGNATURE = "bool column_wetting() {"
 APPLY_POWER_ROW_SIGNATURE = "inline void apply_program_power_row(float power) {"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <iostream>
 #include <string>
 

@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "crash_handler.ino"
@@ -197,7 +197,7 @@ def run(source: str) -> tuple[int, str]:
         "void save_stacktrace_to_file(const char* info)",
         "void init_crash_handler()",
     )
-    code = PREFIX + classifier + "\n" + "\n".join(
+    code = I18N_INCLUDE + PREFIX + classifier + "\n" + "\n".join(
         sig + " {" + extract_function_body(source, sig) + "}" for sig in methods
     ) + CASES
     with tempfile.TemporaryDirectory(prefix="samovar-core-dump-") as tmp:
@@ -229,9 +229,9 @@ def main() -> None:
         ("wrong snapshot attribution", "Saved snapshot may predate this reset.", "Snapshot of this reset."),
         ("wrong boot-state label", "CURRENT BOOT DIAGNOSTICS (NOT CRASH-TIME STATE)", "CRASH-TIME STATE"),
         ("missing report integration", "append_core_dump_to_report(crash_log);", "(void)&append_core_dump_to_report;"),
-        ("missing crash notification", 'SendMsg("Аварийная перезагрузка", ALARM_MSG);', '(void)&SendMsg;'),
-        ("wrong crash notification text", 'SendMsg("Аварийная перезагрузка", ALARM_MSG);', 'SendMsg("Перезагрузка", ALARM_MSG);'),
-        ("wrong crash notification severity", 'SendMsg("Аварийная перезагрузка", ALARM_MSG);', 'SendMsg("Аварийная перезагрузка", NOTIFY_MSG);'),
+        ("missing crash notification", 'SendMsg(TR(CRASH_EMERGENCY_REBOOT, "Аварийная перезагрузка"), ALARM_MSG);', '(void)&SendMsg;'),
+        ("wrong crash notification text", 'SendMsg(TR(CRASH_EMERGENCY_REBOOT, "Аварийная перезагрузка"), ALARM_MSG);', 'SendMsg(TR(CRASH_EMERGENCY_REBOOT, "Перезагрузка"), ALARM_MSG);'),
+        ("wrong crash notification severity", 'SendMsg(TR(CRASH_EMERGENCY_REBOOT, "Аварийная перезагрузка"), ALARM_MSG);', 'SendMsg(TR(CRASH_EMERGENCY_REBOOT, "Аварийная перезагрузка"), NOTIFY_MSG);'),
         ("normal boot misclassified", "if (was_crash)", "if (was_crash || true)"),
     )
     for name, old, new in mutations:

@@ -295,7 +295,7 @@ inline void safety_owner_generation_release(uint64_t generation) {
 inline void finish_power_off_transition(bool enqueueResetCommand) {
   if (enqueueResetCommand && mode_switch_in_progress()) return;
   if (enqueueResetCommand && !queue_samovar_reset_command()) {
-    SendMsg("Очередь команд занята: reset после выключения нагрева не поставлен", WARNING_MSG);
+    SendMsg(TR(PWR_QUEUE_BUSY_RESET_AFTER_OFF, "Очередь команд занята: reset после выключения нагрева не поставлен"), WARNING_MSG);
   }
 }
 
@@ -402,12 +402,12 @@ inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
       // раньше тоже была неотслеживаемой (PowerOn уже false, а фаза
       // ON_*_WAIT ещё не сброшена тиком перехода — например, гонка с
       // параллельным выключением) - теперь получает своё сообщение.
-      if (!workerReady) SendMsg("Нагрев отклонён: задача регулятора не запущена", ALARM_MSG);
-      else if (blockedEmergency) SendMsg("Нагрев заблокирован аварийной защитой, требуется перезагрузка", ALARM_MSG);
-      else if (blockedOffTransition) SendMsg("Нагрев отклонён: выполняется выключение нагрева, повторите позже", WARNING_MSG);
-      else if (blockedExclusiveOwner) SendMsg("Нагрев отклонён: активна эксклюзивная операция (самотест/калибровка)", WARNING_MSG);
-      else if (blockedModeSwitch) SendMsg("Нагрев отклонён: идёт переключение режима", WARNING_MSG);
-      else if (blockedOnStartPending) SendMsg("Нагрев отклонён: команда включения уже выполняется, повторите позже", WARNING_MSG);
+      if (!workerReady) SendMsg(TR(PWR_HEAT_REJECTED_TASK_NOT_STARTED, "Нагрев отклонён: задача регулятора не запущена"), ALARM_MSG);
+      else if (blockedEmergency) SendMsg(TR(PWR_HEAT_BLOCKED_EMERGENCY, "Нагрев заблокирован аварийной защитой, требуется перезагрузка"), ALARM_MSG);
+      else if (blockedOffTransition) SendMsg(TR(PWR_HEAT_REJECTED_OFF_IN_PROGRESS, "Нагрев отклонён: выполняется выключение нагрева, повторите позже"), WARNING_MSG);
+      else if (blockedExclusiveOwner) SendMsg(TR(PWR_HEAT_REJECTED_EXCLUSIVE_OP, "Нагрев отклонён: активна эксклюзивная операция (самотест/калибровка)"), WARNING_MSG);
+      else if (blockedModeSwitch) SendMsg(TR(PWR_HEAT_REJECTED_MODE_SWITCH, "Нагрев отклонён: идёт переключение режима"), WARNING_MSG);
+      else if (blockedOnStartPending) SendMsg(TR(PWR_HEAT_REJECTED_START_PENDING, "Нагрев отклонён: команда включения уже выполняется, повторите позже"), WARNING_MSG);
       return ACTUATOR_COMMAND_FAILED;
     }
 #ifndef SAMOVAR_USE_POWER
@@ -507,7 +507,7 @@ inline void tick_power_transition() {
     }
     portEXIT_CRITICAL(&emergencyStopMux);
     if (notifyWorker) notify_power_worker();
-    if (reportTimeout) SendMsg("Таймаут команды регулятора; нагрев отключён", ALARM_MSG);
+    if (reportTimeout) SendMsg(TR(PWR_CMD_TIMEOUT_HEAT_OFF, "Таймаут команды регулятора; нагрев отключён"), ALARM_MSG);
     return;
   }
 
@@ -518,7 +518,7 @@ inline void tick_power_transition() {
     } else if (powerTransition.regulatorGeneration == 0) {
       if (!safety_transition_due(powerTransition.transition, now)) {
         portEXIT_CRITICAL(&emergencyStopMux);
-        if (reportTimeout) SendMsg("Таймаут команды регулятора; нагрев отключён", ALARM_MSG);
+        if (reportTimeout) SendMsg(TR(PWR_CMD_TIMEOUT_HEAT_OFF, "Таймаут команды регулятора; нагрев отключён"), ALARM_MSG);
         return;
       }
 #ifdef SAMOVAR_USE_POWER
@@ -578,13 +578,13 @@ inline void tick_power_transition() {
     }
     portEXIT_CRITICAL(&emergencyStopMux);
     if (notifyWorker) notify_power_worker();
-    if (reportApplyFailure) SendMsg("Команда запуска регулятора завершилась ошибкой", ALARM_MSG);
-    if (reportTimeout) SendMsg("Таймаут команды запуска регулятора; нагрев отключён", ALARM_MSG);
-    if (reportSuperseded) SendMsg("Команда запуска регулятора была явно отменена новой командой", ALARM_MSG);
+    if (reportApplyFailure) SendMsg(TR(PWR_START_CMD_FAILED, "Команда запуска регулятора завершилась ошибкой"), ALARM_MSG);
+    if (reportTimeout) SendMsg(TR(PWR_START_CMD_TIMEOUT_HEAT_OFF, "Таймаут команды запуска регулятора; нагрев отключён"), ALARM_MSG);
+    if (reportSuperseded) SendMsg(TR(PWR_START_CMD_SUPERSEDED, "Команда запуска регулятора была явно отменена новой командой"), ALARM_MSG);
     // [P7 п.3b] См. аналогичный блок в ветке POWER_TRANSITION_OFF_REGULATOR_WAIT ниже.
     if (ownerReset && !nbk_transition_reports_interruption()) {
       mode_warn_log_close_failed();
-      SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+      SendMsg(TR(PWR_SESSION_ABORTED_REGULATOR_FAILURE, "Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск."), ALARM_MSG);
     }
     return;
   }
@@ -593,7 +593,7 @@ inline void tick_power_transition() {
     if (powerTransition.regulatorGeneration == 0) {
       if (!safety_transition_due(powerTransition.transition, now)) {
         portEXIT_CRITICAL(&emergencyStopMux);
-        if (reportTimeout) SendMsg("Таймаут команды регулятора при выключении нагрева", ALARM_MSG);
+        if (reportTimeout) SendMsg(TR(PWR_CMD_TIMEOUT_AT_HEAT_OFF, "Таймаут команды регулятора при выключении нагрева"), ALARM_MSG);
         return;
       }
 #ifdef SAMOVAR_USE_POWER
@@ -633,9 +633,9 @@ inline void tick_power_transition() {
     }
     portEXIT_CRITICAL(&emergencyStopMux);
     if (notifyWorker) notify_power_worker();
-    if (reportApplyFailure) SendMsg("Команда выключения регулятора завершилась ошибкой", ALARM_MSG);
-    if (reportTimeout) SendMsg("Таймаут команды выключения регулятора", ALARM_MSG);
-    if (reportSuperseded) SendMsg("Команда выключения регулятора была явно отменена новой командой", ALARM_MSG);
+    if (reportApplyFailure) SendMsg(TR(PWR_OFF_CMD_FAILED, "Команда выключения регулятора завершилась ошибкой"), ALARM_MSG);
+    if (reportTimeout) SendMsg(TR(PWR_OFF_CMD_TIMEOUT, "Таймаут команды выключения регулятора"), ALARM_MSG);
+    if (reportSuperseded) SendMsg(TR(PWR_OFF_CMD_SUPERSEDED, "Команда выключения регулятора была явно отменена новой командой"), ALARM_MSG);
     // [P7 п.3b] Отказ регулятора сбросил сессию владельца ленивого старта (distiller/BK/NBK) -
     // явно сообщаем, иначе она молча переподнимется без пользователя. nbk_transition_reports_
     // interruption() не дублирует сообщение только там, где уже есть собственный NBK-надзор за
@@ -643,7 +643,7 @@ inline void tick_power_transition() {
     // общий отчёт остаётся включённым (см. [P7 F4] в nbk.h).
     if (ownerReset && !nbk_transition_reports_interruption()) {
       mode_warn_log_close_failed();
-      SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+      SendMsg(TR(PWR_SESSION_ABORTED_REGULATOR_FAILURE, "Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск."), ALARM_MSG);
     }
     return;
   }
@@ -660,7 +660,7 @@ inline void tick_power_transition() {
   }
   portEXIT_CRITICAL(&emergencyStopMux);
   if (notifyWorker) notify_power_worker();
-  if (reportTimeout) SendMsg("Таймаут команды регулятора при снятых локальных реле", ALARM_MSG);
+  if (reportTimeout) SendMsg(TR(PWR_CMD_TIMEOUT_RELAYS_OFF, "Таймаут команды регулятора при снятых локальных реле"), ALARM_MSG);
   if (finishOff) finish_power_off_transition(finishEnqueueReset);
 }
 
@@ -748,10 +748,10 @@ void check_power_error() {
     if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL && !current_power_mode_is(POWER_SLEEP_MODE)) {
       power_err_cnt++;
       if (power_err_cnt == 2) {
-        SendMsg(("Нет связи с регулятором!"), ALARM_MSG);
+        SendMsg((TR(PWR_NO_REGULATOR_LINK, "Нет связи с регулятором!")), ALARM_MSG);
       }
       if (power_err_cnt > 6) {
-        request_emergency_stop("Аварийное отключение! Нет связи с регулятором нагрева.");
+        request_emergency_stop(TR(PWR_EMERGENCY_NO_REGULATOR_LINK, "Аварийное отключение! Нет связи с регулятором нагрева."));
       }
       return;
     }
@@ -764,7 +764,7 @@ void check_power_error() {
       //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
       if (power_err_cnt > 6) set_current_power(target_power_volt);
       if (power_err_cnt > 12) {
-        request_emergency_stop("Аварийное отключение! Ошибка управления нагревателем.");
+        request_emergency_stop(TR(PWR_EMERGENCY_HEATER_CONTROL, "Аварийное отключение! Ошибка управления нагревателем."));
       }
       return;
     }
@@ -900,7 +900,7 @@ inline void apply_program_power_row(float power) {
 inline void set_power_mode(String Mode) {
   SafetyRegulatorMode regulatorMode;
   if (!regulator_mode_from_string(Mode, regulatorMode)) {
-    SendMsg("Неизвестный режим регулятора: " + Mode, ALARM_MSG);
+    SendMsg(TR(PWR_UNKNOWN_REGULATOR_MODE, "Неизвестный режим регулятора: ") + Mode, ALARM_MSG);
     return;
   }
   portENTER_CRITICAL(&emergencyStopMux);
@@ -924,7 +924,7 @@ inline void set_power_mode(String Mode) {
   portEXIT_CRITICAL(&emergencyStopMux);
   if (generation != 0) notify_power_worker();
   if (generation == 0) {
-    SendMsg("Команда включения регулятора отклонена safety-barrier", ALARM_MSG);
+    SendMsg(TR(PWR_START_REJECTED_SAFETY_BARRIER, "Команда включения регулятора отклонена safety-barrier"), ALARM_MSG);
   }
 }
 
@@ -975,11 +975,11 @@ inline void process_pending_power_request() {
   }
   portEXIT_CRITICAL(&emergencyStopMux);
   if (notifyWorker) notify_power_worker();
-  if (reportTimeout) SendMsg("Таймаут команды регулятора; локальные реле сняты", ALARM_MSG);
+  if (reportTimeout) SendMsg(TR(PWR_CMD_TIMEOUT_RELAYS_RELEASED, "Таймаут команды регулятора; локальные реле сняты"), ALARM_MSG);
   // [P7 п.3b] Ранний return (нет заявки после таймаута) - отчёт о сбросе сессии нужен уже здесь.
   if (ownerReset && !nbk_transition_reports_interruption()) {
     mode_warn_log_close_failed();
-    SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+    SendMsg(TR(PWR_SESSION_ABORTED_REGULATOR_FAILURE, "Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск."), ALARM_MSG);
   }
   if (!hasRequest) return;
 
@@ -1018,12 +1018,12 @@ inline void process_pending_power_request() {
   portEXIT_CRITICAL(&emergencyStopMux);
 
   if (notifyWorker) notify_power_worker();
-  if (reportTimeout) SendMsg("Таймаут фонового применения команды регулятора", ALARM_MSG);
-  if (reportFailure) SendMsg("Фоновое применение команды регулятора завершилось ошибкой", ALARM_MSG);
+  if (reportTimeout) SendMsg(TR(PWR_BG_APPLY_TIMEOUT, "Таймаут фонового применения команды регулятора"), ALARM_MSG);
+  if (reportFailure) SendMsg(TR(PWR_BG_APPLY_FAILED, "Фоновое применение команды регулятора завершилось ошибкой"), ALARM_MSG);
   // [P7 п.3b] См. аналогичный блок выше (после таймаута claim'а воркера).
   if (ownerReset && !nbk_transition_reports_interruption()) {
     mode_warn_log_close_failed();
-    SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+    SendMsg(TR(PWR_SESSION_ABORTED_REGULATOR_FAILURE, "Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск."), ALARM_MSG);
   }
 }
 

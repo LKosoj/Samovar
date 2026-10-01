@@ -78,6 +78,7 @@ HARNESS = r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 #define USE_LUA
 
@@ -170,7 +171,7 @@ int main() {
 
 
 def compile_and_run(reset: str, expect_success: bool) -> bool:
-    source = HARNESS.replace("@PENDING_BODY@", pending_body).replace("@RESET_BODY@", reset)
+    source = HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@PENDING_BODY@", pending_body).replace("@RESET_BODY@", reset)
     with tempfile.TemporaryDirectory(prefix="samovar-cheese-reset-") as temp_dir:
         path = Path(temp_dir)
         cpp = path / "test.cpp"

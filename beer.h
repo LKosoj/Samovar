@@ -122,7 +122,7 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
   if (active) {
     if (!valve_status &&
         open_valve(true, false) != ACTUATOR_COMMAND_APPLIED) {
-      request_emergency_stop("Аварийное отключение! Не удалось открыть охлаждение");
+      request_emergency_stop(TR(BEER_ESTOP_COOLING_OPEN, "Аварийное отключение! Не удалось открыть охлаждение"));
       return ACTUATOR_COMMAND_FAILED;
     }
     if (beer_set_cooling_pump(true) == ACTUATOR_COMMAND_APPLIED) {
@@ -130,15 +130,15 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
     }
     if (valve_status &&
         open_valve(false, false) != ACTUATOR_COMMAND_APPLIED) {
-      request_emergency_stop("Аварийное отключение! Не удалось вернуть охлаждение в безопасное состояние");
+      request_emergency_stop(TR(BEER_ESTOP_COOLING_SAFE, "Аварийное отключение! Не удалось вернуть охлаждение в безопасное состояние"));
     } else {
-      request_emergency_stop("Аварийное отключение! Не удалось включить насос охлаждения");
+      request_emergency_stop(TR(BEER_ESTOP_COOL_PUMP_ON, "Аварийное отключение! Не удалось включить насос охлаждения"));
     }
     return ACTUATOR_COMMAND_FAILED;
   }
 
   if (beer_set_cooling_pump(false) != ACTUATOR_COMMAND_APPLIED) {
-    request_emergency_stop("Аварийное отключение! Не удалось выключить насос охлаждения");
+    request_emergency_stop(TR(BEER_ESTOP_COOL_PUMP_OFF, "Аварийное отключение! Не удалось выключить насос охлаждения"));
     return ACTUATOR_COMMAND_FAILED;
   }
   if (!valve_status ||
@@ -146,9 +146,9 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
     return ACTUATOR_COMMAND_APPLIED;
   }
   if (beer_set_cooling_pump(true) != ACTUATOR_COMMAND_APPLIED) {
-    request_emergency_stop("Аварийное отключение! Не удалось вернуть охлаждение в рабочее состояние");
+    request_emergency_stop(TR(BEER_ESTOP_COOLING_RESTORE, "Аварийное отключение! Не удалось вернуть охлаждение в рабочее состояние"));
   } else {
-    request_emergency_stop("Аварийное отключение! Не удалось закрыть охлаждение");
+    request_emergency_stop(TR(BEER_ESTOP_COOLING_CLOSE, "Аварийное отключение! Не удалось закрыть охлаждение"));
   }
   return ACTUATOR_COMMAND_FAILED;
 }
@@ -334,23 +334,23 @@ inline bool beer_control_sensor(uint8_t sensorId, const DSSensor*& sensor, const
   switch (sensorId) {
     case 0:
       sensor = &TankSensor;
-      sensorName = "куба";
+      sensorName = TR(BEER_SENSOR_TANK, "куба");
       return true;
     case 1:
       sensor = &WaterSensor;
-      sensorName = "воды";
+      sensorName = TR(BEER_SENSOR_WATER, "воды");
       return true;
     case 2:
       sensor = &PipeSensor;
-      sensorName = "царги";
+      sensorName = TR(BEER_SENSOR_PIPE, "царги");
       return true;
     case 3:
       sensor = &SteamSensor;
-      sensorName = "пара";
+      sensorName = TR(BEER_SENSOR_STEAM, "пара");
       return true;
     case 4:
       sensor = &ACPSensor;
-      sensorName = "ТСА";
+      sensorName = TR(BEER_SENSOR_ACP, "ТСА");
       return true;
     default:
       sensor = nullptr;
@@ -367,13 +367,13 @@ inline bool beer_control_sensor(uint8_t sensorId, const DSSensor*& sensor, const
  */
 inline bool beer_validate_program(String& errorMessage) {
   if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
-    errorMessage = "Ошибка программы Пиво: строка не задана";
+    errorMessage = TR(BEER_ERR_ROW_NOT_SET, "Ошибка программы Пиво: строка не задана");
     return false;
   }
   for (uint8_t i = 0; i < ProgramLen && i < PROGRAM_END; i++) {
     if (program_type_empty(program[i].WType)) break;
     if (!program_type_one_of(program[i].WType, beer_program_parse_spec().allowedTypes)) {
-      errorMessage = "Ошибка программы: неверный тип этапа в строке " + String(i + 1);
+      errorMessage = TR(BEER_ERR_BAD_STAGE_TYPE, "Ошибка программы: неверный тип этапа в строке ") + String(i + 1);
       return false;
     }
     const char* semanticError = nullptr;
@@ -383,32 +383,32 @@ inline bool beer_validate_program(String& errorMessage) {
             static_cast<long>(program[i].Param), program[i].Volume,
             program[i].Power, program[i].TempSensor,
             semanticError)) {
-      errorMessage = (semanticError ? String("Ошибка программы: ") + semanticError
-                                     : String("Ошибка программы")) +
-                     " в строке " + String(i + 1);
+      errorMessage = (semanticError ? String(TR(BEER_ERR_PROGRAM_PREFIX, "Ошибка программы: ")) + semanticError
+                                     : String(TR(BEER_ERR_PROGRAM, "Ошибка программы"))) +
+                     TR(BEER_IN_LINE, " в строке ") + String(i + 1);
       return false;
     }
     const DSSensor* rowSensor = nullptr;
     const char* rowSensorName = "";
     if (!beer_control_sensor(program[i].TempSensor, rowSensor, rowSensorName)) {
-      errorMessage = "Ошибка программы: неверный датчик температуры в строке " + String(i + 1);
+      errorMessage = TR(BEER_ERR_BAD_TEMP_SENSOR, "Ошибка программы: неверный датчик температуры в строке ") + String(i + 1);
       return false;
     }
     if (BitIsSet(program[i].capacity_num, 1) && program[i].Param > 0 &&
         !i2c_stepper_pump_present()) {
-      errorMessage = "I2C-насос недоступен в строке " + String(i + 1);
+      errorMessage = TR(BEER_ERR_I2C_PUMP_LINE, "I2C-насос недоступен в строке ") + String(i + 1);
       return false;
     }
 #ifndef USE_WATER_PUMP
     if (BitIsSet(program[i].capacity_num, 1) && program[i].Param == 0 &&
         !select_relay_capable_device()) {
-      errorMessage = "I2C-реле насоса недоступно в строке " + String(i + 1);
+      errorMessage = TR(BEER_ERR_I2C_PUMP_RELAY_LINE, "I2C-реле насоса недоступно в строке ") + String(i + 1);
       return false;
     }
 #endif
     if (BitIsSet(program[i].capacity_num, 0) && program[i].Speed != 0 &&
         !i2c_stepper_mixer_present()) {
-      errorMessage = "I2C-мешалка недоступна в строке " + String(i + 1);
+      errorMessage = TR(BEER_ERR_I2C_MIXER_LINE, "I2C-мешалка недоступна в строке ") + String(i + 1);
       return false;
     }
   }
@@ -443,12 +443,12 @@ void beer_proc() {
     const DSSensor* controlSensor = nullptr;
     const char* controlSensorName = "";
     beer_control_sensor(program[0].TempSensor, controlSensor, controlSensorName);
-    if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
+    if (!sensor_valid(*controlSensor) && process_sensor_failed(TR(BEER_MODE_NAME, "Пиво"), controlSensorName)) return;
 
     // [PKG-B п.4] Пока не завершён OFF-переход нагрева, set_power(true) молча откажет,
     // а create_data() каждый тик зря перезапишет SPIFFS-лог. Отменяем старт.
     if (power_transition_active()) {
-      mode_cancel_process_start("Выключение нагрева ещё не завершено. Старт затирания отменён.");
+      mode_cancel_process_start(TR(BEER_START_HEAT_OFF_PENDING, "Выключение нагрева ещё не завершено. Старт затирания отменён."));
       return;
     }
 
@@ -456,26 +456,26 @@ void beer_proc() {
     // молча провалится (see set_power/heater_safety_latched), но create_data()
     // и сессия уже успеют создаться. Отменяем старт раньше.
     if (heater_safety_latched()) {
-      mode_cancel_process_start("Защёлка безопасности нагрева активна. Старт затирания отменён.");
+      mode_cancel_process_start(TR(BEER_START_SAFETY_LATCH, "Защёлка безопасности нагрева активна. Старт затирания отменён."));
       return;
     }
 
     // Сброс детектора кипения при запуске процесса
     resetBoilingDetector();
     if (!create_data()) {
-      mode_cancel_process_start("Ошибка создания файла лога. Старт затирания отменён.");
+      mode_cancel_process_start(TR(BEER_START_LOG_FILE, "Ошибка создания файла лога. Старт затирания отменён."));
       return;
     }
     String sessionDescription;
     if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
-      mode_cancel_process_start("Описание сессии занято. Старт затирания отменён.");
+      mode_cancel_process_start(TR(BEER_START_SESSION_BUSY, "Описание сессии занято. Старт затирания отменён."));
       mode_warn_log_close_failed();
       return;
     }
     session_begin(sessionDescription);
     set_power(true);
     if (!PowerOn) {
-      mode_cancel_process_start("Не удалось включить питание нагрева. Старт затирания отменён.");
+      mode_cancel_process_start(TR(BEER_START_POWER_ON_FAILED, "Не удалось включить питание нагрева. Старт затирания отменён."));
       mode_warn_log_close_failed();
       return;
     }
@@ -510,8 +510,8 @@ void run_beer_program(uint8_t num) {
         beerSkipConfirmProgramNum = ProgramNum;
         beerSkipConfirmDeadlineMs = nowMsConfirm + BEER_SKIP_CONFIRM_WINDOW_MS;
         runtime_pair_begin(UI_WAIT_BEER_SKIP_COOL_CONFIRM,
-                           "Ожидание подтверждения пропуска охлаждения", WARNING_MSG);
-        SendMsg("Сусло ещё не остыло до цели. Повторите переход в течение 10 секунд для подтверждения.", WARNING_MSG);
+                           TR(BEER_WAIT_SKIP_COOL_CONFIRM, "Ожидание подтверждения пропуска охлаждения"), WARNING_MSG);
+        SendMsg(TR(BEER_WORT_NOT_COOLED, "Сусло ещё не остыло до цели. Повторите переход в течение 10 секунд для подтверждения."), WARNING_MSG);
         return;
       }
     }
@@ -525,7 +525,7 @@ void run_beer_program(uint8_t num) {
 
   if (program[ProgramNum].WType == 'L' && beerLuaStage.phase != BEER_LUA_STAGE_IDLE) {
     if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
-      beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед переходом");
+      beer_abort_config_error(TR(BEER_LUA_MIXER_OFF_BEFORE_NEXT, "Ошибка Lua: не удалось выключить мешалку перед переходом"));
       return;
     }
 #ifdef USE_LUA
@@ -542,18 +542,18 @@ void run_beer_program(uint8_t num) {
       // строки 'L' request_beer_lua_stop() повторно не зовёт (см. ветку ниже по
       // phase == RUNNING - там опрашивается только beer_lua_job_result()).
       if (stopResult == ACTUATOR_COMMAND_PENDING) {
-        SendMsg("Не удалось сразу остановить job Lua - блокировка занята. Повторите переход через секунду.", WARNING_MSG);
+        SendMsg(TR(BEER_LUA_STOP_LOCK_BUSY, "Не удалось сразу остановить job Lua - блокировка занята. Повторите переход через секунду."), WARNING_MSG);
         return;
       }
       if (stopResult != ACTUATOR_COMMAND_APPLIED) {
-        beer_abort_config_error("Ошибка Lua: не удалось запросить остановку job");
+        beer_abort_config_error(TR(BEER_LUA_STOP_REQUEST_FAILED, "Ошибка Lua: не удалось запросить остановку job"));
         return;
       }
       beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;
       beerLuaStage.nextProgram = targetProgram;
     }
 #else
-    beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
+    beer_abort_config_error(TR(BEER_ERR_L_NEEDS_USE_LUA, "Ошибка программы: тип L требует USE_LUA"));
 #endif
     return;
   }
@@ -594,13 +594,13 @@ void run_beer_program(uint8_t num) {
   if (program[ProgramNum].WType == 'L') {
     begintime = millis();
     if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
-      beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед запуском");
+      beer_abort_config_error(TR(BEER_LUA_MIXER_OFF_BEFORE_START, "Ошибка Lua: не удалось выключить мешалку перед запуском"));
       return;
     }
 #ifdef USE_LUA
     uint32_t ticket = 0;
     if (!request_program_lua_job(targetProgram, ticket)) {
-      beer_abort_config_error("Ошибка Lua: job не принят к запуску");
+      beer_abort_config_error(TR(BEER_LUA_JOB_NOT_ACCEPTED, "Ошибка Lua: job не принят к запуску"));
       return;
     }
     beerLuaStage.phase = BEER_LUA_STAGE_ENTER_QUEUED;
@@ -608,24 +608,24 @@ void run_beer_program(uint8_t num) {
     beerLuaStage.nextProgram = PROGRAM_END;
     beerLuaJobAccepted = true;
 #else
-    beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
+    beer_abort_config_error(TR(BEER_ERR_L_NEEDS_USE_LUA, "Ошибка программы: тип L требует USE_LUA"));
     return;
 #endif
   }
 
-  String msg = "Переход к строке программы №" + String((ProgramNum + 1));
+  String msg = TR(BEER_MOVE_TO_LINE, "Переход к строке программы №") + String((ProgramNum + 1));
   if (program[ProgramNum].WType == 'M') {
-    msg += "; Нагрев до температуры засыпи солода: " + String(program[ProgramNum].Temp) + "°";
+    msg += TR(BEER_MSG_HEAT_MALT, "; Нагрев до температуры засыпи солода: ") + String(program[ProgramNum].Temp) + "°";
   } else if (program[ProgramNum].WType == 'P') {
-    msg += "; Температурная пауза: " + String(program[ProgramNum].Temp) + "°, время: " + String(program[ProgramNum].Time) + " мин";
+    msg += TR(BEER_MSG_TEMP_PAUSE, "; Температурная пауза: ") + String(program[ProgramNum].Temp) + TR(BEER_MSG_DEG_TIME, "°, время: ") + String(program[ProgramNum].Time) + TR(BEER_MIN, " мин");
   } else if (program[ProgramNum].WType == 'B') {
-    msg += "; Кипячение, время: " + String(program[ProgramNum].Time) + " мин";
+    msg += TR(BEER_MSG_BOIL_TIME, "; Кипячение, время: ") + String(program[ProgramNum].Time) + TR(BEER_MIN, " мин");
   } else if (program[ProgramNum].WType == 'C') {
-    msg += "; Охлаждение до температуры: " + String(program[ProgramNum].Temp) + "°";
+    msg += TR(BEER_MSG_COOL_TO, "; Охлаждение до температуры: ") + String(program[ProgramNum].Temp) + "°";
   } else if (program[ProgramNum].WType == 'F') {
-    msg += "; Ферментация, поддержание температуры: " + String(program[ProgramNum].Temp) + "°";
+    msg += TR(BEER_MSG_FERMENT_HOLD, "; Ферментация, поддержание температуры: ") + String(program[ProgramNum].Temp) + "°";
   } else if (program[ProgramNum].WType == 'W') {
-    msg += "; Режим ожидания";
+    msg += TR(BEER_MSG_WAIT_MODE, "; Режим ожидания");
   }
 
   if (SamSetup.ChangeProgramBuzzer) {
@@ -652,9 +652,9 @@ void run_beer_program(uint8_t num) {
   beerStageIdleSinceMs = 0;
   beerHoldClockFrozen = false;
   runtime_pair_close_mode(SAMOVAR_BEER_MODE, RUNTIME_PAIR_ROW_CHANGE,
-                          "Переход к следующей строке", NOTIFY_MSG);
+                          TR(BEER_NEXT_LINE, "Переход к следующей строке"), NOTIFY_MSG);
   if (beerLuaJobAccepted) {
-    runtime_pair_begin(UI_WAIT_LUA_KNOWN, "Lua-задача принята", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_LUA_KNOWN, TR(BEER_LUA_JOB_ACCEPTED_MSG, "Lua-задача принята"), NOTIFY_MSG);
   }
 }
 
@@ -669,7 +669,7 @@ void beer_finish() {
   beerFinishPending = false;
   if (beerLuaStage.phase != BEER_LUA_STAGE_IDLE) {
     if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
-      SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
+      SendMsg(TR(BEER_FINISH_ACTUATOR_FAILED, "Ошибка завершения варки: не удалось отключить исполнитель"), ALARM_MSG);
       return;
     }
 #ifdef USE_LUA
@@ -689,7 +689,7 @@ void beer_finish() {
         return;
       }
       if (stopResult != ACTUATOR_COMMAND_APPLIED) {
-        SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);
+        SendMsg(TR(BEER_LUA_STOP_REQUEST_FAILED, "Ошибка Lua: не удалось запросить остановку job"), ALARM_MSG);
         return;
       }
       beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;
@@ -697,18 +697,18 @@ void beer_finish() {
     }
     if (!beer_lua_job_idle(beerLuaStage.ticket)) return;
 #else
-    SendMsg("Ошибка Lua: job активен без USE_LUA", ALARM_MSG);
+    SendMsg(TR(BEER_LUA_JOB_WITHOUT_USE_LUA, "Ошибка Lua: job активен без USE_LUA"), ALARM_MSG);
     return;
 #endif
   }
   beer_reset_lua_stage();
   if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
-    SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
+    SendMsg(TR(BEER_FINISH_ACTUATOR_FAILED, "Ошибка завершения варки: не удалось отключить исполнитель"), ALARM_MSG);
     return;
   }
   runtime_pair_close_mode(SAMOVAR_BEER_MODE,
                           beerPairErrorPending ? RUNTIME_PAIR_ERROR : RUNTIME_PAIR_PROCESS_END,
-                          beerPairErrorPending ? "Варка остановлена из-за ошибки" : "Варка завершена",
+                          beerPairErrorPending ? TR(BEER_BREW_STOPPED_ERROR, "Варка остановлена из-за ошибки") : TR(BEER_BREW_DONE, "Варка завершена"),
                           beerPairErrorPending ? ALARM_MSG : NOTIFY_MSG);
   // Детектор кипения, накопитель таймаута разгона [П13], ручная пауза и накопители
   // простоя строки [P2 п.5+6], метка простоя мешалки и ожидание подтверждения
@@ -722,7 +722,7 @@ void beer_finish() {
   begintime = 0;
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
-  stop_process("Программа затирания завершена");
+  stop_process(TR(BEER_MASH_PROGRAM_DONE, "Программа затирания завершена"));
 }
 
 /**
@@ -756,7 +756,7 @@ inline void beer_check_cooling_limits() {
 inline void beer_check_wort_overheat_limit() {
   if (!PowerOn) return;
   if (sensor_temp_at_least(TankSensor, BOILING_TEMP + 5)) {
-    request_emergency_stop("Аварийное отключение! Превышена максимальная температура сусла");
+    request_emergency_stop(TR(BEER_ESTOP_WORT_OVERTEMP, "Аварийное отключение! Превышена максимальная температура сусла"));
   }
 }
 
@@ -860,11 +860,11 @@ void beer_stage_tick() {
   const DSSensor* controlSensor = nullptr;
   const char* controlSensorName = "";
   if (!beer_control_sensor(program[ProgramNum].TempSensor, controlSensor, controlSensorName)) {
-    beer_abort_config_error("Ошибка программы: неверный датчик температуры в строке " + String(ProgramNum + 1));
+    beer_abort_config_error(TR(BEER_ERR_BAD_TEMP_SENSOR, "Ошибка программы: неверный датчик температуры в строке ") + String(ProgramNum + 1));
     return;
   }
   if (!sensor_valid(*controlSensor)) {
-    process_sensor_failed("Пиво", controlSensorName);
+    process_sensor_failed(TR(BEER_MODE_NAME, "Пиво"), controlSensorName);
     return;
   }
   temp = controlSensor->avgTemp;
@@ -876,10 +876,10 @@ void beer_stage_tick() {
       program[ProgramNum].Temp - temp >= HOLD_CLOCK_STOP_DEFICIT;
   if (holdClockFrozen && !beerHoldClockFrozen) {
     runtime_pair_begin(UI_WAIT_BEER_HOLD_CLOCK_FREEZE,
-                       "Пауза выдержки: температура ниже цели", WARNING_MSG);
+                       TR(BEER_HOLD_PAUSE_BELOW_TARGET, "Пауза выдержки: температура ниже цели"), WARNING_MSG);
   } else if (!holdClockFrozen && beerHoldClockFrozen) {
     runtime_pair_end(UI_WAIT_BEER_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED,
-                     "Выдержка продолжена", NOTIFY_MSG);
+                     TR(BEER_HOLD_RESUMED, "Выдержка продолжена"), NOTIFY_MSG);
   }
   beerHoldClockFrozen = holdClockFrozen;
 
@@ -900,7 +900,7 @@ void beer_stage_tick() {
     // выходе из паузы, см. beerMixerPauseSinceMs и check_mixer_state().
     if (beerMixerPauseSinceMs == 0) beerMixerPauseSinceMs = nowMs;
     if (!beer_pause_fermentation_outputs()) {
-      beer_abort_config_error("Ошибка ручной паузы: не удалось выключить исполнитель");
+      beer_abort_config_error(TR(BEER_MANUAL_PAUSE_ACTUATOR_FAILED, "Ошибка ручной паузы: не удалось выключить исполнитель"));
     }
     return;
   }
@@ -918,7 +918,7 @@ void beer_stage_tick() {
       currentType != 'A' && currentType != 'M' &&
       currentType != 'P' && currentType != 'F' &&
       currentType != 'C' && currentType != 'B') {
-    beer_abort_config_error("Ошибка программы: неизвестный тип этапа в строке " + String(ProgramNum + 1));
+    beer_abort_config_error(TR(BEER_ERR_UNKNOWN_STAGE_TYPE, "Ошибка программы: неизвестный тип этапа в строке ") + String(ProgramNum + 1));
     return;
   }
 
@@ -927,12 +927,12 @@ void beer_stage_tick() {
 #ifdef USE_LUA
     if (static_cast<uint32_t>(millis() - begintime) >=
         static_cast<uint32_t>(program[ProgramNum].Time) * 1000UL) {
-      beer_abort_config_error("Lua не завершила операцию до тайм-аута");
+      beer_abort_config_error(TR(BEER_LUA_TIMEOUT, "Lua не завершила операцию до тайм-аута"));
       return;
     }
     if (beerLuaStage.phase == BEER_LUA_STAGE_EXIT_QUEUED) {
       if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
-        beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку при остановке job");
+        beer_abort_config_error(TR(BEER_LUA_MIXER_OFF_ON_STOP, "Ошибка Lua: не удалось выключить мешалку при остановке job"));
         return;
       }
       if (!beer_lua_job_idle(beerLuaStage.ticket)) return;
@@ -947,21 +947,21 @@ void beer_stage_tick() {
     if (result == LUA_BEER_JOB_LOCK_BUSY || result == LUA_BEER_JOB_QUEUED ||
         result == LUA_BEER_JOB_RUNNING) {
       if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
-        beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед подтверждением job");
+        beer_abort_config_error(TR(BEER_LUA_MIXER_OFF_BEFORE_CONFIRM, "Ошибка Lua: не удалось выключить мешалку перед подтверждением job"));
       }
       return;
     }
     if (result == LUA_BEER_JOB_SUCCEEDED) {
       beerLuaStage.phase = BEER_LUA_STAGE_RUNNING;
       runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_RESUMED,
-                       "Lua-задача подтверждена", NOTIFY_MSG);
+                       TR(BEER_LUA_JOB_CONFIRMED, "Lua-задача подтверждена"), NOTIFY_MSG);
       return;
     }
     beer_abort_config_error(result == LUA_BEER_JOB_FAILED_INIT
-        ? "Ошибка Lua: job не подтвердил запуск"
-        : "Ошибка Lua: job завершился с ошибкой");
+        ? TR(BEER_LUA_JOB_NO_START_CONFIRM, "Ошибка Lua: job не подтвердил запуск")
+        : TR(BEER_LUA_JOB_FAILED, "Ошибка Lua: job завершился с ошибкой"));
 #else
-    beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
+    beer_abort_config_error(TR(BEER_ERR_L_NEEDS_USE_LUA, "Ошибка программы: тип L требует USE_LUA"));
 #endif
     return;
   }
@@ -973,7 +973,7 @@ void beer_stage_tick() {
       if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       begintime = millis();
       runtime_pair_begin(UI_WAIT_BEER_OPERATOR_WAIT,
-                         "Ожидание действия оператора", NOTIFY_MSG);
+                         TR(BEER_WAIT_OPERATOR, "Ожидание действия оператора"), NOTIFY_MSG);
     }
     check_mixer_state(); // Управление мешалкой и насосом по параметрам программы
     return;
@@ -986,7 +986,7 @@ void beer_stage_tick() {
     } else if (!queue_samovar_command(SAMOVAR_BEER_NEXT)) {
       // [P2 п.7] Очередь команд временно занята — не аварийный останов всего
       // процесса, а просто повтор на следующем такте (1 Гц).
-      SendMsg("Очередь команд занята: завершение автотюнинга пива будет повторено", WARNING_MSG);
+      SendMsg(TR(BEER_AUTOTUNE_QUEUE_BUSY, "Очередь команд занята: завершение автотюнинга пива будет повторено"), WARNING_MSG);
     }
     return;
   }
@@ -1032,17 +1032,17 @@ void beer_stage_tick() {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == SAMOVAR_STARTVAL_BEER_HEATING) {
       set_buzzer(true);
-      SendMsg(("Достигнута температура засыпи солода!"), NOTIFY_MSG);
+      SendMsg((TR(BEER_MALT_TEMP_REACHED, "Достигнута температура засыпи солода!")), NOTIFY_MSG);
     }
     startval = SAMOVAR_STARTVAL_BEER_WAIT_MALT;
-    runtime_pair_begin(UI_WAIT_BEER_MALT, "Ожидание засыпи солода", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_BEER_MALT, TR(BEER_WAIT_MALT, "Ожидание засыпи солода"), NOTIFY_MSG);
   }
 
   if (currentType == 'P' && temp >= program[ProgramNum].Temp - tempDelta) {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
-      SendMsg("Достигнута температурная пауза " + String(program[ProgramNum].Temp) + "°. Ждем " + String(program[ProgramNum].Time) + " минут.", NOTIFY_MSG);
+      SendMsg(TR(BEER_TEMP_PAUSE_REACHED, "Достигнута температурная пауза ") + String(program[ProgramNum].Temp) + TR(BEER_DEG_WAITING, "°. Ждем ") + String(program[ProgramNum].Time) + TR(BEER_MINUTES_DOT, " минут."), NOTIFY_MSG);
     }
   }
 
@@ -1072,7 +1072,7 @@ void beer_stage_tick() {
       // при текущих условиях. else-ветка от достижения цели (как в 'B') -
       // если температура упала до цели ровно на тике истечения таймаута,
       // это успех, а не авария.
-      beer_abort_config_error("Не удалось охладить куб до целевой температуры за 24 часа. Проверьте датчик куба, подачу охлаждающей воды и клапан охлаждения.");
+      beer_abort_config_error(TR(BEER_COOL_TIMEOUT_24H, "Не удалось охладить куб до целевой температуры за 24 часа. Проверьте датчик куба, подачу охлаждающей воды и клапан охлаждения."));
       return;
     }
   }
@@ -1088,7 +1088,7 @@ void beer_stage_tick() {
       if (isBoilingStarted(temp)) {
         msgfl = true;
         begintime = millis();
-        SendMsg(("Начался режим кипячения"), NOTIFY_MSG);
+        SendMsg((TR(BEER_BOIL_STARTED, "Начался режим кипячения")), NOTIFY_MSG);
       } else {
         // [П13] Таймаут разгона до кипения: тик сюда попадает, только если
         // строка не на ручной паузе (см. единую точку входа выше), поэтому
@@ -1098,7 +1098,7 @@ void beer_stage_tick() {
         // порог кипения (MIN_BOILING_TEMP) недостижим из-за низкого давления.
         beerBoilActiveAccumMs += 1000;
         if (beerBoilActiveAccumMs >= BEER_BOIL_TIMEOUT_MS) {
-          beer_abort_config_error("Не удалось зафиксировать начало кипения за 120 минут. Проверьте датчик куба, объём жидкости, крышку и достижимость порога кипения (низкое давление).");
+          beer_abort_config_error(TR(BEER_BOIL_NOT_DETECTED_120, "Не удалось зафиксировать начало кипения за 120 минут. Проверьте датчик куба, объём жидкости, крышку и достижимость порога кипения (низкое давление)."));
           return;
         }
       }
@@ -1135,9 +1135,10 @@ void beer_stage_tick() {
     if (begintime > 0 && msgfl && (beer_stage_elapsed_ms(millis()) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
       set_buzzer(true);
       msgfl = false;
-      SendMsg(("Засыпьте хмель!"), NOTIFY_MSG);
+      // Метка @H1: журнал сайта отмечает внесение хмеля по ней, а не по тексту (PIN_SPEC.md §6).
+      SendMsg(String("@H1|") + TR(BEER_ADD_HOPS, "Засыпьте хмель!"), NOTIFY_MSG);
 #ifdef __SAMOVAR_DEBUG
-      Serial.println("Засыпьте хмель!");
+      Serial.println(TR(BEER_ADD_HOPS, "Засыпьте хмель!"));
 #endif
       HopStepperStep();
     }
@@ -1301,7 +1302,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
 	        if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
 	        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	        if (rollbackFailed) {
-          request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
+          request_emergency_stop(TR(BEER_ESTOP_MIXER_RESTORE, "Аварийное отключение! Не удалось вернуть состояние мешалки"));
         }
 	        return ACTUATOR_COMMAND_FAILED;
       }
@@ -1313,7 +1314,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
           if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
           if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 	          if (rollbackFailed) {
-            request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
+            request_emergency_stop(TR(BEER_ESTOP_MIXER_RESTORE, "Аварийное отключение! Не удалось вернуть состояние мешалки"));
           }
           return ACTUATOR_COMMAND_FAILED;
         }
@@ -1328,7 +1329,7 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir) {
         if (i2cPumpStarted && !stop_second_i2c_pump()) rollbackFailed = true;
         if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
         if (rollbackFailed) {
-          request_emergency_stop("Аварийное отключение! Не удалось вернуть состояние мешалки");
+          request_emergency_stop(TR(BEER_ESTOP_MIXER_RESTORE, "Аварийное отключение! Не удалось вернуть состояние мешалки"));
         }
         return ACTUATOR_COMMAND_FAILED;
       }
@@ -1598,7 +1599,7 @@ void StartAutoTune() {
   }
   aTune = new (std::nothrow) PID_ATune(&Input, &Output);
   if (aTune == nullptr) {
-    SendMsg("Автонастройка ПИД не запущена: не хватает памяти", WARNING_MSG);
+    SendMsg(TR(BEER_PID_AUTOTUNE_NO_MEM, "Автонастройка ПИД не запущена: не хватает памяти"), WARNING_MSG);
     return;
   }
 
@@ -1644,7 +1645,7 @@ void FinishAutoTune() {
     WriteConsoleLog("Ki = " + (String)SamSetup.Ki);
     WriteConsoleLog("Kd = " + (String)SamSetup.Kd);
   } else {
-    String message = "PID autotune не сохранён: ";
+    String message = TR(BEER_PID_AUTOTUNE_NOT_SAVED, "PID autotune не сохранён: ");
     message += persist_result_code(persistResult);
     SendMsg(message, ALARM_MSG);
   }

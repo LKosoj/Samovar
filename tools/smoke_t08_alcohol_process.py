@@ -5,14 +5,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def harness(source: str) -> str:
     threshold = extract_function_body(source, "inline bool program_threshold_row_done")
-    return f'''#include <cmath>
+    return f'''{I18N_INCLUDE}
+#include <cmath>
 #include <iostream>
 typedef char ProgramType;
 static constexpr ProgramType PROGRAM_TYPE_NONE = 0;
@@ -82,7 +83,8 @@ def run(code: str) -> tuple[int, str]:
 
 def predictor_harness(source: str) -> str:
     predictor = extract_function_body(source, "void updateTimePredictor")
-    return f'''#include <cmath>
+    return f'''{I18N_INCLUDE}
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 typedef char ProgramType;
@@ -131,7 +133,8 @@ int main() {{
 
 def boiling_harness(source: str) -> str:
     boiling = extract_function_body(source, "void set_boiling")
-    return f'''#include <iostream>
+    return f'''{I18N_INCLUDE}
+#include <iostream>
 struct Sensor {{ float avgTemp; }} TankSensor;
 static bool boil_started = false;
 static float boil_temp = -1, alcohol_s = -1;

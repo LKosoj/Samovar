@@ -41,7 +41,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -540,7 +540,7 @@ def build_harness(source: str) -> str:
         # и поведение это не влияет, комментарии тут не мешают проверке.
         body = extract_function_body(source, signature, strip_comments=False)
         definitions.append(f"{signature} {{\n{body}\n}}")
-    return HARNESS_TEMPLATE.replace("@FUNCTIONS@", "\n\n".join(definitions))
+    return (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@FUNCTIONS@", "\n\n".join(definitions))
 
 
 def compile_and_run(harness: str, label: str, show_output: bool = True) -> tuple[int, str]:

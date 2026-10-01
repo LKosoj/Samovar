@@ -123,13 +123,13 @@ void process_pending_data_log_ops() {
 FsInitResult FS_init(void) {
   bool formatted = false;
   if (!SPIFFS.begin(false)) {
-    Serial.println(F("Не удалось подключиться к файловой системе, форматируем..."));
+    Serial.println(F(TR(FS_MOUNT_FAILED_FORMATTING, "Не удалось подключиться к файловой системе, форматируем...")));
     if (!SPIFFS.format()) {
-      Serial.println(F("Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino"));
+      Serial.println(F(TR(FS_FORMAT_FAILED, "Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino")));
       return FS_INIT_MOUNT_FAILED;
     }
     if (!SPIFFS.begin(false)) {
-      Serial.println(F("Ошибка файловой системы! Загрузите через Arduino"));
+      Serial.println(F(TR(FS_ERROR_UPLOAD, "Ошибка файловой системы! Загрузите через Arduino")));
       return FS_INIT_MOUNT_FAILED;
     }
     formatted = true;
@@ -565,7 +565,7 @@ static void enforce_data_log_free_space_budget() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
   if (total_byte - used_byte < 50) {
     if (!memory_warning_sent) {
-      SendMsg("Заканчивается память! Всего: " + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
+      SendMsg(TR(FS_LOW_MEMORY_TOTAL, "Заканчивается память! Всего: ") + String(total_byte) + TR(FS_USED, ", использовано: ") + String(used_byte), ALARM_MSG);
       memory_warning_sent = true;
     }
   } else {

@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,10 +35,10 @@ INIT_SAFE_WAIT_ANCHOR = "nbk_enter_safe_wait("
 # лимита итераций - у неё другой хвост, поэтому этот якорь уникален).
 POWER_LIMIT_MUTATION_ANCHOR = (
     '        if (nbk_opt_found) {\n'
-    '          SendMsg("Достигнута предельная мощность.'
+    '          SendMsg(TR(NBK_POWER_LIMIT_REACHED, "Достигнута предельная мощность.'
 )
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

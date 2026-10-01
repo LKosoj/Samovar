@@ -53,6 +53,7 @@ FUNCTIONS = [
 HARNESS_TEMPLATE = r'''
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 enum SamovarModeEnum { SAMOVAR_RECTIFICATION_MODE = 0, SAMOVAR_BEER_MODE = 1 };
@@ -221,7 +222,7 @@ def build_harness(source: str) -> str:
     for signature in FUNCTIONS:
         body = extract_function_body(code, signature)
         bodies.append(f"{signature} {{{body}}}")
-    return HARNESS_TEMPLATE.replace("@FUNCTIONS@", "\n\n".join(bodies))
+    return HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@FUNCTIONS@", "\n\n".join(bodies))
 
 
 def compile_and_run(harness: str) -> int:

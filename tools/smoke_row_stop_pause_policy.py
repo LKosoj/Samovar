@@ -42,6 +42,7 @@ HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 using std::round;
 
@@ -209,7 +210,7 @@ def build_harness() -> str:
             files_cache[filename] = (ROOT / filename).read_text(encoding="utf-8")
         bodies[key] = extract_function_body(files_cache[filename], signature)
 
-    harness = HARNESS_TEMPLATE
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix())
     harness = harness.replace("@LIMIT@", str(PROGRAM_ROW_STOP_PAUSE_LIMIT))
     harness = harness.replace("@CUT_PCT@", str(PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT))
     harness = harness.replace(

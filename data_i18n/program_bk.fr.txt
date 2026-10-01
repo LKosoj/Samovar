@@ -1,0 +1,13 @@
+# Exemple de programme CM. Format de ligne : Type;Seuil;Récipient;Puissance;Tvapeur
+# Tvapeur : 0 = eau du déflegmateur manuelle sur cette ligne, 30..100 = maintenir la vapeur
+#   autour de cette température (°C) avec le régulateur pas à pas. Le capteur de vapeur se place
+#   AU-DESSUS du déflegmateur, dans la zone de vapeur avant le condenseur.
+# Puissance : la première ligne du programme avec une tension non nulle doit être une
+#   valeur ABSOLUE - supérieure à 40 V (régulateur en volts) ou supérieure à
+#   400 W (régulateur en watts), sinon la chauffe pendant la montée en température peut
+#   s’éteindre sans qu’on le remarque. 0 dans les autres lignes - ne pas changer la valeur actuelle.
+# Les valeurs de puissance de cet exemple sont en volts ; pour un régulateur en watts, la première
+#   puissance non nulle doit être supérieure à 400.
+T;78;1;190;70
+T;90;2;0;78
+T;93;2;0;0

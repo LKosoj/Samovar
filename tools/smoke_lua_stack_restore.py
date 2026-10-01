@@ -17,6 +17,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from smoke_helpers import I18N_INCLUDE
+
 ROOT = Path(__file__).resolve().parents[1]
 LUA_DIR = ROOT / "libraries/ESP-Arduino-Lua/src/lua"
 
@@ -133,7 +136,7 @@ def main() -> int:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    harness = HARNESS_TEMPLATE.replace("@EXEC_LOCKED_BLOCK@", exec_locked_block)
+    harness = (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@EXEC_LOCKED_BLOCK@", exec_locked_block)
 
     sources = sorted(p for p in LUA_DIR.glob("*.c") if p.name not in {"lua.c", "luac.c"})
     with tempfile.TemporaryDirectory(prefix="samovar-lua-stack-") as temp_dir:

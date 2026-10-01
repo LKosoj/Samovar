@@ -40,7 +40,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, split_top_level_commas, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "mode_registry.h"
@@ -93,7 +93,7 @@ def check_table_rows(source: str, errors: list[str]) -> None:
         if rest is None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
-        fields = [f.strip() for f in rest.split(",")]
+        fields = split_top_level_commas(rest)
         if len(fields) < 4:
             errors.append(f"mode_registry table: row for {mode} has too few fields: {rest}")
             continue
@@ -107,7 +107,7 @@ def check_table_rows(source: str, errors: list[str]) -> None:
 
 
 # --- (c)/(d) харнесс А: mode_dispatch_loop() ------------------------------------------------
-TICK_HARNESS_TEMPLATE = r'''
+TICK_HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <iostream>
 
 enum SAMOVAR_MODE { MODE_ALPHA, MODE_BETA };
@@ -253,7 +253,7 @@ int main() {
 '''
 
 # --- харнесс Б: stop_active_process_for_mode() -----------------------------------------------
-STOP_HARNESS_TEMPLATE = r'''
+STOP_HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <iostream>
 
 enum SAMOVAR_MODE { MODE_ALPHA };

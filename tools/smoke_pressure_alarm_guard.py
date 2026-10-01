@@ -30,7 +30,7 @@ if samovar_text:
             "bool pressure_alarm_sent = false;",
             "SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue",
             "if (!pressure_alarm_sent)",
-            "request_emergency_stop(\"Превышено предельное давление!\")",
+            "request_emergency_stop(TR(MAIN_PRESSURE_LIMIT_EXCEEDED, \"Превышено предельное давление!\"))",
             "pressure_alarm_sent = true;",
             "float pressure_hysteresis = SamSetup.MaxPressureValue * 0.05f;",
             "if (pressure_hysteresis < 5.0f) pressure_hysteresis = 5.0f;",
@@ -47,7 +47,7 @@ if samovar_text:
                 "bool pressure_alarm_sent = false;",
                 "SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue",
                 "if (!pressure_alarm_sent)",
-                "request_emergency_stop(\"Превышено предельное давление!\")",
+                "request_emergency_stop(TR(MAIN_PRESSURE_LIMIT_EXCEEDED, \"Превышено предельное давление!\"))",
                 "pressure_alarm_sent = true;",
                 "} else if (pressure_alarm_sent) {",
                 "float pressure_hysteresis = SamSetup.MaxPressureValue * 0.05f;",
@@ -58,7 +58,7 @@ if samovar_text:
             errors,
         )
 
-        pressure_request = "request_emergency_stop(\"Превышено предельное давление!\")"
+        pressure_request = "request_emergency_stop(TR(MAIN_PRESSURE_LIMIT_EXCEEDED, \"Превышено предельное давление!\"))"
         if ticker_body.count(pressure_request) != 1:
             errors.append("pressure emergency request must appear exactly once in triggerSysTicker")
         if "!pressure_alarm_sent || !alarm_event" in ticker_body:
@@ -71,7 +71,7 @@ if samovar_text:
             guard_body, _ = extract_braced_block_after(pressure_body, "if (!pressure_alarm_sent)")
             reset_body, _ = extract_braced_block_after(ticker_body, "else if (pressure_alarm_sent)", pressure_end)
             for token in [
-                "request_emergency_stop(\"Превышено предельное давление!\")",
+                "request_emergency_stop(TR(MAIN_PRESSURE_LIMIT_EXCEEDED, \"Превышено предельное давление!\"))",
                 "pressure_alarm_sent = true;",
             ]:
                 if token not in guard_body:

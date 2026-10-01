@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 WEBSERVER = ROOT / "WebServer.ino"
@@ -331,7 +331,7 @@ def run_cpp(errors):
         errors.append(f"string_utils.h: не найдено тело toJsonString(): {exc}")
         return
 
-    program = CPP_HARNESS.replace(
+    program = (I18N_INCLUDE + "\n" + CPP_HARNESS).replace(
         "__JSON_WRITE_ESCAPED__",
         "static bool json_write_escaped(Print& out, const char* text, size_t length) {\n"
         + json_write_escaped_body + "\n}",

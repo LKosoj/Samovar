@@ -81,8 +81,8 @@ inline bool rect_second_i2c_pump_enabled() {
 
 inline void rect_fail_second_i2c_pump(const String& action) {
   rectProgramCommandFailed = true;
-  request_emergency_stop("I2C-насос над ЦП: команда «" + action +
-                         "» не подтверждена после 10 отправок.");
+  request_emergency_stop(TR(LOGIC_I2C_PUMP_CMD_HEAD, "I2C-насос над ЦП: команда «") + action +
+                         TR(LOGIC_I2C_PUMP_CMD_TAIL, "» не подтверждена после 10 отправок."));
 }
 
 inline bool rect_stop_second_i2c_pump_if_running() {
@@ -211,18 +211,18 @@ void withdrawal(void) {
         millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
     if (result == LUA_SEQUENCE_STAGE_ADVANCE) {
       runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_ROW_CHANGE,
-                       "Lua-операция завершена", NOTIFY_MSG);
+                       TR(LOGIC_LUA_OP_DONE, "Lua-операция завершена"), NOTIFY_MSG);
       run_program(nextProgram);
     }
     else if (result == LUA_SEQUENCE_STAGE_TIMEOUT) {
       runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_ERROR,
-                       "Lua-операция не завершена", ALARM_MSG);
-      SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
+                       TR(LOGIC_LUA_OP_NOT_DONE, "Lua-операция не завершена"), ALARM_MSG);
+      SendMsg(TR(LOGIC_LUA_TIMEOUT, "Lua не завершила операцию до тайм-аута"), ALARM_MSG);
       run_program(PROGRAM_END);
     } else if (result == LUA_SEQUENCE_STAGE_FAILED) {
       runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_ERROR,
-                       "Lua-операция завершилась с ошибкой", ALARM_MSG);
-      SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
+                       TR(LOGIC_LUA_OP_FAILED, "Lua-операция завершилась с ошибкой"), ALARM_MSG);
+      SendMsg(TR(LOGIC_LUA_ERROR, "Lua завершилась с ошибкой"), ALARM_MSG);
       run_program(PROGRAM_END);
     }
     return;
@@ -259,7 +259,7 @@ void withdrawal(void) {
 
   ProgramWaitType currentWaitType = PROGRAM_WAIT_NONE;
   if (program_Wait && !copy_program_wait_type(currentWaitType)) {
-    SendMsg("Тип автоматической паузы занят. Проверка отбора пропущена.", WARNING_MSG);
+    SendMsg(TR(LOGIC_AUTOPAUSE_BUSY_SKIP, "Тип автоматической паузы занят. Проверка отбора пропущена."), WARNING_MSG);
     return;
   }
 
@@ -318,7 +318,7 @@ void withdrawal(void) {
         //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
         if (!PauseOn && !program_Wait) {
           if (!set_program_wait_type(waitType, pdMS_TO_TICKS(500))) {
-            SendMsg(String("Не удалось установить паузу по ") + sensorLabel + ": тип паузы занят.", WARNING_MSG);
+            SendMsg(String(TR(LOGIC_PAUSE_SET_FAIL_HEAD, "Не удалось установить паузу по ")) + sensorLabel + TR(LOGIC_PAUSE_TYPE_BUSY_TAIL, ": тип паузы занят."), WARNING_MSG);
             return false;
           }
           program_Wait = true;
@@ -327,10 +327,10 @@ void withdrawal(void) {
           pause_withdrawal(true);
           if (PauseOn) runtime_pair_begin(
               waitType == PROGRAM_WAIT_STEAM ? UI_WAIT_RECT_STEAM : UI_WAIT_RECT_PIPE,
-              "Автоматическая пауза отбора", WARNING_MSG);
+              TR(LOGIC_AUTOPAUSE_TAIL, "Автоматическая пауза отбора"), WARNING_MSG);
           t_min = millis() + sensor.Delay * 1000;
           set_buzzer(true);
-          SendMsg(String("Пауза по ") + sensorLabel, WARNING_MSG);
+          SendMsg(String(TR(LOGIC_PAUSE_BY, "Пауза по ")) + sensorLabel, WARNING_MSG);
           RowStopPauseCount++;
           apply_row_stop_pause_policy();
         }
@@ -347,13 +347,13 @@ void withdrawal(void) {
     // [Ф1] SetTemp <= 0 (контроль выключили во время паузы) - пауза этого типа снимается по таймеру.
     } else if (program_type_one_of(currentType, "BC") && (sensor.SetTemp <= 0 || sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA) && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
       //продолжаем отбор
-      SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
+      SendMsg((TR(LOGIC_RESUME_AFTER_AUTOPAUSE, "Продолжаем отбор после автоматической паузы")), NOTIFY_MSG);
       t_min = 0;
       program_Wait = false;
       pause_withdrawal(false);
       if (!PauseOn) runtime_pair_end(
           waitType == PROGRAM_WAIT_STEAM ? UI_WAIT_RECT_STEAM : UI_WAIT_RECT_PIPE,
-          RUNTIME_PAIR_RESUMED, "Отбор возобновлён", NOTIFY_MSG);
+          RUNTIME_PAIR_RESUMED, TR(LOGIC_TAKEOFF_RESUMED, "Отбор возобновлён"), NOTIFY_MSG);
       // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
       // [П3-1] Базой становится CurrentBaseSpeedRate (через set_pump_speed с updateBase=true),
       // program[].Speed больше не перезаписываем - строка программы не портится.
@@ -366,8 +366,8 @@ void withdrawal(void) {
     return true;
   };
 
-  if (!handlePauseBySensor(SteamSensor, PROGRAM_WAIT_STEAM, "Т пара")) return;
-  if (!handlePauseBySensor(PipeSensor, PROGRAM_WAIT_PIPE, "Т царги")) return;
+  if (!handlePauseBySensor(SteamSensor, PROGRAM_WAIT_STEAM, TR(LOGIC_LABEL_T_STEAM, "Т пара"))) return;
+  if (!handlePauseBySensor(PipeSensor, PROGRAM_WAIT_PIPE, TR(LOGIC_LABEL_T_PIPE, "Т царги"))) return;
 
   // Пауза детектора: после истечения таймера И устоявшегося тренда возобновляем отбор
   // [L-1/M-31] Эта ветка уже проверяла program_Wait_Type == "(Детектор)" — это корректно.
@@ -375,12 +375,12 @@ void withdrawal(void) {
   // [П3-4] detector_trend_settled() — тренд, обновлявшийся все время паузы (см. process_impurity_detector),
   // должен опуститься ниже порога восстановления, иначе резюме отбора вернёт колонну сразу в критику.
   if (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && detector_trend_settled()) {
-    SendMsg(("Детектор: Продолжаем отбор после паузы"), NOTIFY_MSG);
+    SendMsg((TR(LOGIC_DETECTOR_RESUME, "Детектор: Продолжаем отбор после паузы")), NOTIFY_MSG);
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
     if (!PauseOn) runtime_pair_end(UI_WAIT_RECT_DETECTOR, RUNTIME_PAIR_RESUMED,
-                                   "Отбор возобновлён", NOTIFY_MSG);
+                                   TR(LOGIC_TAKEOFF_RESUMED, "Отбор возобновлён"), NOTIFY_MSG);
     detector_on_auto_resume();
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -400,7 +400,7 @@ PumpCalibrationResult pump_calibrate(int stpspeed) {
     stopService();
     stepper_safe_stop();
     if (stepsPerMl == 0 || stepsPerMl > UINT16_MAX) {
-      SendMsg("Ошибка калибровки помпы: неверное количество шагов", ALARM_MSG);
+      SendMsg(TR(LOGIC_PUMP_CAL_BAD_STEPS, "Ошибка калибровки помпы: неверное количество шагов"), ALARM_MSG);
       return PUMP_CALIBRATION_INVALID_RESULT;
     }
     SetupEEPROM profileCandidate{};
@@ -414,9 +414,9 @@ PumpCalibrationResult pump_calibrate(int stpspeed) {
       SamSetup = profileCandidate;
       portEXIT_CRITICAL(&configMux);
     } else {
-      String message = "Калибровка помпы не сохранена: ";
+      String message = TR(LOGIC_PUMP_CAL_NOT_SAVED_HEAD, "Калибровка помпы не сохранена: ");
       message += persist_result_code(persistResult);
-      message += ". Результат потерян, повторите калибровку.";
+      message += TR(LOGIC_PUMP_CAL_NOT_SAVED_TAIL, ". Результат потерян, повторите калибровку.");
       SendMsg(message, ALARM_MSG);
       return PUMP_CALIBRATION_PROFILE_PERSIST_FAILED;
     }
@@ -447,15 +447,15 @@ void pause_withdrawal(bool Pause) {
     stopService();
     stepper_safe_stop();
     if (!rect_pause_second_i2c_pump()) {
-      rect_fail_second_i2c_pump("пауза");
+      rect_fail_second_i2c_pump(TR(LOGIC_ACTION_PAUSE, "пауза"));
     }
   } else {
     if (!rect_resume_second_i2c_pump()) {
-      rect_fail_second_i2c_pump("продолжение");
+      rect_fail_second_i2c_pump(TR(LOGIC_ACTION_RESUME, "продолжение"));
       return;
     }
     runtime_pair_end(UI_WAIT_MANUAL_RECT, RUNTIME_PAIR_RESUMED,
-                     "Отбор возобновлён", NOTIFY_MSG);
+                     TR(LOGIC_TAKEOFF_RESUMED, "Отбор возобновлён"), NOTIFY_MSG);
     rectManualPauseActive = false;
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
     stepper_safe_set_current(CurrrentStepps);
@@ -474,17 +474,17 @@ void enter_manual_pause() {
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && PauseOn &&
       !program_Wait && !program_Pause) {
     rectManualPauseActive = true;
-    runtime_pair_begin(UI_WAIT_MANUAL_RECT, "Ручная пауза отбора", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_MANUAL_RECT, TR(LOGIC_MANUAL_PAUSE_TAKEOFF, "Ручная пауза отбора"), NOTIFY_MSG);
   }
   if (Samovar_Mode == SAMOVAR_BEER_MODE && startval > SAMOVAR_STARTVAL_BEER_START) {
     if (!beerManualPause) {
       beerManualPause = true;
-      runtime_pair_begin(UI_WAIT_MANUAL_BEER, "Ручная пауза затирания", NOTIFY_MSG);
+      runtime_pair_begin(UI_WAIT_MANUAL_BEER, TR(LOGIC_MANUAL_PAUSE_MASH, "Ручная пауза затирания"), NOTIFY_MSG);
       const char type = current_program_type();
       if (type == 'A' || type == 'L') {
-        SendMsg("Пауза будет применена на ближайшем шаге затирания.", NOTIFY_MSG);
+        SendMsg(TR(LOGIC_MASH_PAUSE_NEXT_STEP, "Пауза будет применена на ближайшем шаге затирания."), NOTIFY_MSG);
       } else {
-        SendMsg("Затирание поставлено на паузу.", NOTIFY_MSG);
+        SendMsg(TR(LOGIC_MASH_PAUSED, "Затирание поставлено на паузу."), NOTIFY_MSG);
       }
     }
   }
@@ -500,14 +500,14 @@ void resume_from_pause() {
   t_min = 0;
   program_Wait = false;
   if (!set_program_wait_type(PROGRAM_WAIT_NONE, pdMS_TO_TICKS(500))) {
-    SendMsg("Не удалось сбросить тип автоматической паузы.", WARNING_MSG);
+    SendMsg(TR(LOGIC_AUTOPAUSE_RESET_FAIL, "Не удалось сбросить тип автоматической паузы."), WARNING_MSG);
   }
   detector_on_manual_resume();
   if (Samovar_Mode == SAMOVAR_BEER_MODE && beerManualPause) {
     beerManualPause = false;
     runtime_pair_end(UI_WAIT_MANUAL_BEER, RUNTIME_PAIR_RESUMED,
-                     "Затирание продолжено", NOTIFY_MSG);
-    SendMsg("Затирание продолжено.", NOTIFY_MSG);
+                     TR(LOGIC_MASH_RESUMED_TAIL, "Затирание продолжено"), NOTIFY_MSG);
+    SendMsg(TR(LOGIC_MASH_RESUMED_MSG, "Затирание продолжено."), NOTIFY_MSG);
   }
 }
 
@@ -561,46 +561,46 @@ float getBeerCurrentTemp() {
 String get_distiller_status_text() {
   String local;
   if (ProgramNum < ProgramLen) {
-    local = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
+    local = TR(LOGIC_PRG_NUM, "Прг №") + String(ProgramNum + 1) + TR(LOGIC_DIST_MODE_SEP, "; Режим дистилляции");
   } else {
-    local = "Программы выполнены, отбор до T куба " + String(SamSetup.DistTemp, 1) + "°; Режим дистилляции";
+    local = TR(LOGIC_DIST_PROGRAMS_DONE, "Программы выполнены, отбор до T куба ") + String(SamSetup.DistTemp, 1) + TR(LOGIC_DIST_MODE_DEG, "°; Режим дистилляции");
   }
   if (PowerOn) {
     if (dist_row_prediction_available()) {
-      local += "; Строка: осталось " + String(get_dist_remaining_time(), 1) +
-          " из ~" + String(get_dist_row_predicted_total_time(), 1) + " мин";
+      local += TR(LOGIC_DIST_ROW_LEFT, "; Строка: осталось ") + String(get_dist_remaining_time(), 1) +
+          TR(LOGIC_OF_APPROX, " из ~") + String(get_dist_row_predicted_total_time(), 1) + TR(LOGIC_UNIT_MIN, " мин");
     } else {
-      local += "; Прогноз строки: ожидание данных";
+      local += TR(LOGIC_DIST_ROW_FORECAST_WAIT, "; Прогноз строки: ожидание данных");
     }
     if (dist_process_prediction_available()) {
-      local += "; Процесс до DistTemp, осталось:" +
-          String(get_dist_process_remaining_time(), 1) + " мин";
-      local += "; Всего:" +
-          String(get_dist_predicted_total_time(), 1) + " мин";
+      local += TR(LOGIC_DIST_PROCESS_LEFT, "; Процесс до DistTemp, осталось:") +
+          String(get_dist_process_remaining_time(), 1) + TR(LOGIC_UNIT_MIN, " мин");
+      local += TR(LOGIC_DIST_TOTAL, "; Всего:") +
+          String(get_dist_predicted_total_time(), 1) + TR(LOGIC_UNIT_MIN, " мин");
     } else {
-      local += "; Прогноз процесса: ожидание кипения/данных";
+      local += TR(LOGIC_DIST_PROCESS_FORECAST_WAIT, "; Прогноз процесса: ожидание кипения/данных");
     }
   }
   return local;
 }
 
 String get_bk_status_text() {
-  return F("Режим бражной колонны");
+  return F(TR(LOGIC_BK_MODE, "Режим бражной колонны"));
 }
 
 String get_nbk_status_text() {
   String local;
   if (startval == SAMOVAR_STARTVAL_NBK_RUNNING) {
-    local = "Прг №" + String(ProgramNum + 1) + "; ";
+    local = TR(LOGIC_PRG_NUM, "Прг №") + String(ProgramNum + 1) + "; ";
     ProgramType nbkProgramType = current_program_type();
     if (nbkProgramType == 'H') {
-      local = local + "Прогрев";
+      local = local + TR(LOGIC_NBK_STAGE_H, "Прогрев");
     } else if (nbkProgramType == 'S') {
-      local = local + "Настройка";
+      local = local + TR(LOGIC_NBK_STAGE_S, "Настройка");
     } else if (nbkProgramType == 'O') {
-      local = local + "Оптимизация";
+      local = local + TR(LOGIC_NBK_STAGE_O, "Оптимизация");
     } else if (nbkProgramType == 'W') {
-      local = local + "Работа";
+      local = local + TR(LOGIC_NBK_STAGE_W, "Работа");
     }
   }
   return local;
@@ -608,69 +608,69 @@ String get_nbk_status_text() {
 
 String get_beer_status_text() {
 #ifdef SAM_BEER_PRG
-  String local = "Прг №" + String(ProgramNum + 1) + "; ";
+  String local = TR(LOGIC_PRG_NUM, "Прг №") + String(ProgramNum + 1) + "; ";
 #else
   String local = "";
 #endif
   // [P2 п.6] Индикатор ручной паузы затирания.
-  if (beerManualPause) local += "На паузе; ";
+  if (beerManualPause) local += TR(LOGIC_BEER_ON_PAUSE, "На паузе; ");
   // [P2 п.9] Индикатор ожидания подтверждения пропуска охлаждения на горячем сусле.
   // extern: beer.h (где определена переменная) подключается позже logic.h в Samovar.ino.
   extern uint8_t beerSkipConfirmProgramNum;
-  if (beerSkipConfirmProgramNum == ProgramNum) local += "Ожидание подтверждения пропуска охлаждения; ";
+  if (beerSkipConfirmProgramNum == ProgramNum) local += TR(LOGIC_BEER_WAIT_SKIP_COOL, "Ожидание подтверждения пропуска охлаждения; ");
   ProgramType currentType = current_program_type();
   if (startval == SAMOVAR_STARTVAL_BEER_HEATING && currentType == 'M') {
     float currentTemp = getBeerCurrentTemp();
-    local = local + "Разогрев до температуры засыпи солода";
+    local = local + TR(LOGIC_BEER_HEAT_TO_MALT, "Разогрев до температуры засыпи солода");
     if (currentTemp < program[ProgramNum].Temp - 0.5) {
-      local += "; Текущая Т: " + String(currentTemp) + "°";
+      local += TR(LOGIC_CUR_T, "; Текущая Т: ") + String(currentTemp) + "°";
     }
   } else if (startval == SAMOVAR_STARTVAL_BEER_WAIT_MALT && currentType == 'M') {
-    local = local + "Ожидание засыпи солода";
+    local = local + TR(LOGIC_BEER_WAIT_MALT, "Ожидание засыпи солода");
   } else if (currentType == 'P') {
     if (begintime == 0) {
       float currentTemp = getBeerCurrentTemp();
-      local = local + "Пауза " + String(program[ProgramNum].Temp) + "°; Разогрев";
+      local = local + TR(LOGIC_BEER_PAUSE, "Пауза ") + String(program[ProgramNum].Temp) + TR(LOGIC_BEER_DEG_HEATING, "°; Разогрев");
       if (currentTemp < program[ProgramNum].Temp - 0.5) {
-        local += "; Текущая Т: " + String(currentTemp) + "°";
+        local += TR(LOGIC_CUR_T, "; Текущая Т: ") + String(currentTemp) + "°";
       }
     } else {
-      local = local + "Пауза " + String(program[ProgramNum].Temp) + "°";
+      local = local + TR(LOGIC_BEER_PAUSE, "Пауза ") + String(program[ProgramNum].Temp) + "°";
     }
   } else if (currentType == 'C') {
     float currentTemp = getBeerCurrentTemp();
-    local = local + "Охлаждение до " + String(program[ProgramNum].Temp);
+    local = local + TR(LOGIC_BEER_COOL_TO, "Охлаждение до ") + String(program[ProgramNum].Temp);
     if (currentTemp > program[ProgramNum].Temp + 0.5) {
-      local += "; Текущая Т: " + String(currentTemp) + "°";
+      local += TR(LOGIC_CUR_T, "; Текущая Т: ") + String(currentTemp) + "°";
     }
   } else if (currentType == 'W') {
-    local = local + "Ожидание. Нажмите 'Следующая программа'; ";
+    local = local + TR(LOGIC_BEER_WAIT_PRESS_NEXT, "Ожидание. Нажмите 'Следующая программа'; ");
   } else if (currentType == 'A') {
     // [Пиво 02.09 A7] Питание выключится только если строка последняя - иначе программа продолжится дальше.
     const bool isLastProgramLine = (ProgramNum + 1 >= ProgramLen) || program_type_empty(program_type_at(ProgramNum + 1));
-    local = local + "Автокалибровка. После завершения " +
-            (isLastProgramLine ? "питание будет выключено" : "переход к следующей строке");
+    local = local + TR(LOGIC_BEER_AUTOCAL, "Автокалибровка. После завершения ") +
+            (isLastProgramLine ? TR(LOGIC_BEER_AUTOCAL_POWER_OFF, "питание будет выключено") : TR(LOGIC_BEER_AUTOCAL_NEXT_LINE, "переход к следующей строке"));
   } else if (currentType == 'B') {
     if (begintime == 0) {
-      local = local + "Кипячение - нагрев";
+      local = local + TR(LOGIC_BEER_BOIL_HEATING, "Кипячение - нагрев");
     } else {
-      local = local + "Кипячение " + String(program[ProgramNum].Time) + " мин";
+      local = local + TR(LOGIC_BEER_BOIL, "Кипячение ") + String(program[ProgramNum].Time) + TR(LOGIC_UNIT_MIN, " мин");
     }
   } else if (currentType == 'F') {
     if (PowerOn) {
       float currentTemp = getBeerCurrentTemp();
-      local = local + "Ферментация; Поддерж. Т=" + String(program[ProgramNum].Temp) + "°";
-      local += "; Тек: " + String(currentTemp) + "°";
+      local = local + TR(LOGIC_BEER_FERM_HOLD, "Ферментация; Поддерж. Т=") + String(program[ProgramNum].Temp) + "°";
+      local += TR(LOGIC_CUR_SHORT, "; Тек: ") + String(currentTemp) + "°";
       if (heater_state) {
-        local += " (Нагрев)";
+        local += TR(LOGIC_PAREN_HEATING, " (Нагрев)");
       } else {
-        local += " (Термостатирование)";
+        local += TR(LOGIC_PAREN_THERMOSTAT, " (Термостатирование)");
       }
     } else {
-      local = local + "Ферментация (остановлена)";
+      local = local + TR(LOGIC_BEER_FERM_STOPPED, "Ферментация (остановлена)");
     }
   } else if (currentType == 'L') {
-    local = local + "Выполнение Lua скрипта";
+    local = local + TR(LOGIC_RUNNING_LUA_SCRIPT, "Выполнение Lua скрипта");
   }
 
   if (PowerOn && program_type_one_of(currentType, "PBF") && begintime > 0) {
@@ -681,7 +681,7 @@ String get_beer_status_text() {
     float progress = (elapsedMs / (program[ProgramNum].Time * 60 * 1000)) * 100;
     if (progress > 100) progress = 100;
     if (progress < 0) progress = 0;
-    local += "; Прогресс: " + String(progress, 1) + "%";
+    local += TR(LOGIC_PROGRESS, "; Прогресс: ") + String(progress, 1) + "%";
   }
   return local;
 }
@@ -745,9 +745,9 @@ String format_status_fsm_text(bool stepperState, bool nbkTransitionActive) {
   String local;
   // Если питание выключено и нет активного режима - показываем "Выключено"
   if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_IDLE) {
-    local = F("Выключено");
+    local = F(TR(LOGIC_STATUS_OFF, "Выключено"));
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
-    local = "Прг №" + String(ProgramNum + 1);
+    local = TR(LOGIC_PRG_NUM, "Прг №") + String(ProgramNum + 1);
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && program_Wait) {
     int s = 0;
     // [C-13] overflow-safe: t_min ещё в будущем если (int32_t)(t_min - millis()) > 10.
@@ -759,41 +759,41 @@ String format_status_fsm_text(bool stepperState, bool nbkTransitionActive) {
     }
     String waitTypeText;
     if (!copy_program_wait_type_text(waitTypeText)) {
-      waitTypeText = F("(ошибка)");
-      SendMsg("Не удалось прочитать тип автоматической паузы.", WARNING_MSG);
+      waitTypeText = F(TR(LOGIC_PAREN_ERROR, "(ошибка)"));
+      SendMsg(TR(LOGIC_AUTOPAUSE_READ_FAIL, "Не удалось прочитать тип автоматической паузы."), WARNING_MSG);
     }
-    local = "Прг №" + String(ProgramNum + 1) + " пауза " + waitTypeText + ". Продолжение через " + (String)s + " сек.";
+    local = TR(LOGIC_PRG_NUM, "Прг №") + String(ProgramNum + 1) + TR(LOGIC_PAUSE_SP, " пауза ") + waitTypeText + TR(LOGIC_RESUME_IN, ". Продолжение через ") + (String)s + TR(LOGIC_UNIT_SEC, " сек.");
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_DONE) {
-    local = F("Выполнение программы завершено");
+    local = F(TR(LOGIC_PROGRAM_DONE_STATUS, "Выполнение программы завершено"));
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_CALIBRATION) {
-    local = F("Калибровка");
+    local = F(TR(LOGIC_STATUS_CALIBRATION, "Калибровка"));
   } else if (PauseOn) {
-    local = F("Пауза");
+    local = F(TR(LOGIC_STATUS_PAUSE, "Пауза"));
   } else if (PowerOn && Samovar_Mode == SAMOVAR_SUVID_MODE) {
     // Сувид — термостат без колонны и шаговика: ветка «Разгон колонны» ниже к нему неприменима.
-    local = "Сувид; Поддерж. Т=" + String(suvid_target_temp()) + "°; Тек: " + String(TankSensor.avgTemp) + "°";
+    local = TR(LOGIC_SUVID_HOLD, "Сувид; Поддерж. Т=") + String(suvid_target_temp()) + TR(LOGIC_DEG_CUR, "°; Тек: ") + String(TankSensor.avgTemp) + "°";
     if (heater_state) {
-      local += " (Нагрев)";
+      local += TR(LOGIC_PAREN_HEATING, " (Нагрев)");
     } else {
-      local += " (Термостатирование)";
+      local += TR(LOGIC_PAREN_THERMOSTAT, " (Термостатирование)");
     }
     int32_t suvidRemainSec = suvid_hold_remaining_sec();
-    if (suvidRemainSec >= 0) local += "; Выдержка: " + format_uptime((unsigned long)suvidRemainSec);
+    if (suvidRemainSec >= 0) local += TR(LOGIC_SUVID_HOLD_TIME, "; Выдержка: ") + format_uptime((unsigned long)suvidRemainSec);
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_IDLE && !stepperState) {
     // [PKG-B п.2] При активном nbk-переходе (в т.ч. мягком финише FINISH_WAIT: нагрев ещё
     // включён, startval=0) НЕ захватываем статус 50 — иначе finishOwnerValid (требует
     // SamovarStatusInt==0) ложнеет и мягкий финиш срывается в аварийное отключение нагрева.
     // nbk_transition_active() истинна только в режиме НБК, ректификацию это не затрагивает.
     if (SamovarStatusInt != SAMOVAR_STATUS_RECT_STABILIZING && SamovarStatusInt != SAMOVAR_STATUS_RECT_STABLE && !nbkTransitionActive && Samovar_Mode != SAMOVAR_LUA_MODE) {
-      local = F("Разгон колонны");
+      local = F(TR(LOGIC_COLUMN_HEATUP, "Разгон колонны"));
     } else if (Samovar_Mode == SAMOVAR_LUA_MODE) {
       // LUA исключён из «Разгона колонны» выше: сценарий колонны ему неприменим,
       // но текст статуса всё равно нужен - иначе local останется пустым.
-      local = F("Выполнение Lua скрипта");
+      local = F(TR(LOGIC_RUNNING_LUA_SCRIPT, "Выполнение Lua скрипта"));
     } else if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABILIZING) {
-      local = F("Разгон завершен. Стабилизация/Работа на себя");
+      local = F(TR(LOGIC_HEATUP_DONE_STAB, "Разгон завершен. Стабилизация/Работа на себя"));
     } else if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABLE) {
-      local = F("Стабилизация завершена/Работа на себя");
+      local = F(TR(LOGIC_STAB_DONE, "Стабилизация завершена/Работа на себя"));
     }
   } else {
     mode_status_by_status(SamovarStatusInt, local);
@@ -829,10 +829,10 @@ String tick_status_fsm() {
         runtime_state_unlock(true);
       }
     }
-    local += "; Осталось:" + localWtS + "|" + localWtAllS;
+    local += TR(LOGIC_LEFT, "; Осталось:") + localWtS + "|" + localWtAllS;
   }
   if (SteamSensor.BodyTemp > 0) {
-    local += ";Т тела пар:" + format_float(SteamSensor.BodyTemp, 3) + ";Т тела царга:" + format_float(PipeSensor.BodyTemp, 3);
+    local += TR(LOGIC_BODY_T_STEAM, ";Т тела пар:") + format_float(SteamSensor.BodyTemp, 3) + TR(LOGIC_BODY_T_PIPE, ";Т тела царга:") + format_float(PipeSensor.BodyTemp, 3);
   }
 
   // [C-2] Под замком обновляем кэш SamovarStatus; веб/Blynk читают его отдельно.
@@ -882,7 +882,7 @@ static void reset_rect_program_pause_state(bool resumeStepper = true) {
   PauseOn = false;
   rectManualPauseActive = false;
   if (!set_program_wait_type(PROGRAM_WAIT_NONE, pdMS_TO_TICKS(500))) {
-    SendMsg("Не удалось сбросить тип автоматической паузы.", WARNING_MSG);
+    SendMsg(TR(LOGIC_AUTOPAUSE_RESET_FAIL, "Не удалось сбросить тип автоматической паузы."), WARNING_MSG);
   }
   if (resumeStepper) pause_withdrawal(false);
   RowStopPauseCount = 0;  // [П3-2] сброс счетчика стоп-пауз при смене строки/старте
@@ -906,11 +906,11 @@ inline bool validate_rect_program_startable(String& errorMessage) {
     if (program_type_one_of(program[i].WType, "HBCT")) needsWithdrawalPump = true;
   }
   if (needsWithdrawalPump && SamSetup.StepperStepMl == 0) {
-    errorMessage = "Насос не откалиброван (шагов на мл = 0). Старт ректификации невозможен.";
+    errorMessage = TR(LOGIC_PUMP_NOT_CALIBRATED, "Насос не откалиброван (шагов на мл = 0). Старт ректификации невозможен.");
     return false;
   }
   if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
-    errorMessage = "Ошибка программы ректификации: строка не задана";
+    errorMessage = TR(LOGIC_RECT_PROG_LINE_UNSET, "Ошибка программы ректификации: строка не задана");
     return false;
   }
 #ifdef SAMOVAR_USE_POWER
@@ -918,7 +918,7 @@ inline bool validate_rect_program_startable(String& errorMessage) {
   // SPIFFS от старой прошивки, редактирование program[0] через меню энкодера) -
   // та же проверка, что в prepare_program_for_mode().
   if (program[0].WType != 'L' && !(program[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
-    errorMessage = "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение. Старт ректификации невозможен.";
+    errorMessage = TR(LOGIC_RECT_PROG_FIRST_LINE, "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение. Старт ректификации невозможен.");
     return false;
   }
 #endif
@@ -926,11 +926,19 @@ inline bool validate_rect_program_startable(String& errorMessage) {
     ProgramType t = program[i].WType;
     if (program_type_empty(t)) break;
     if (program_type_one_of(t, "HBCT") && program[i].Volume == 0 && program[i].Temp == 0) {
-      errorMessage = "Ошибка программы: строка " + String(i + 1) + " никогда не завершится (не заданы объём и температура)";
+      errorMessage = TR(LOGIC_PROG_ERR_LINE, "Ошибка программы: строка ") + String(i + 1) + TR(LOGIC_PROG_LINE_NEVER_ENDS, " никогда не завершится (не заданы объём и температура)");
       return false;
     }
   }
   return true;
+}
+
+// Метка @L1 сообщения о старте строки: номер строки и ёмкость журнал сайта читает из неё,
+// а не из переводимого текста (PIN_SPEC.md §6).
+inline String program_line_start_tag(uint8_t num) {
+  String tag = "@L1;n=";
+  append_fixed_hex(tag, num + 1, 2);
+  return tag;
 }
 
 // Запустить программу
@@ -944,12 +952,12 @@ void run_program(uint8_t num) {
 #endif
   if (num >= PROGRAM_MAX) {
     if (!rect_stop_second_i2c_pump_if_running()) {
-      rect_fail_second_i2c_pump("завершение программы");
+      rect_fail_second_i2c_pump(TR(LOGIC_ACTION_PROGRAM_END, "завершение программы"));
       return;
     }
     // PROGRAM_END — sentinel завершения; его нельзя публиковать в ProgramNum.
     runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_PROCESS_END,
-                            "Программа завершена", NOTIFY_MSG);
+                            TR(LOGIC_PROGRAM_FINISHED, "Программа завершена"), NOTIFY_MSG);
     reset_rect_program_pause_state();
     ProgramNum = 0;
     startval = SAMOVAR_STARTVAL_IDLE;
@@ -958,8 +966,8 @@ void run_program(uint8_t num) {
     rectSecondPumpHeadsRow = false;
     rectSecondPumpPaused = false;
     set_capacity(0);
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    stop_process("Выполнение программы завершено.");
+    if (!request_data_log_close()) SendMsg(TR(LOGIC_LOG_BUSY_CLOSE_SKIPPED, "Файл лога занят: закрытие пропущено"), WARNING_MSG);
+    stop_process(TR(LOGIC_PROGRAM_DONE_MSG, "Выполнение программы завершено."));
     TargetStepps = stepper_safe_get_target();
     return;
   }
@@ -1001,16 +1009,16 @@ void run_program(uint8_t num) {
     stepper_safe_stop_reset();
 #ifdef USE_LUA
     if (!lua_sequence_stage_begin(num, millis())) {
-      SendMsg("Ошибка Lua: скрипт строки не запущен", ALARM_MSG);
+      SendMsg(TR(LOGIC_LUA_LINE_SCRIPT_NOT_STARTED, "Ошибка Lua: скрипт строки не запущен"), ALARM_MSG);
       run_program(PROGRAM_END);
       return;
     }
     runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_ROW_CHANGE,
-                            "Переход к следующей строке", NOTIFY_MSG);
-    runtime_pair_begin(UI_WAIT_LUA_KNOWN, "Lua-операция начата", NOTIFY_MSG);
-    SendMsg("Программа: старт строки №" + String(num + 1) + ", Lua", NOTIFY_MSG);
+                            TR(LOGIC_NEXT_LINE, "Переход к следующей строке"), NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_LUA_KNOWN, TR(LOGIC_LUA_OP_STARTED, "Lua-операция начата"), NOTIFY_MSG);
+    SendMsg(program_line_start_tag(num) + "|" + TR(LOGIC_PROG_LINE_START_LUA, "Программа: старт строки №") + String(num + 1) + ", Lua", NOTIFY_MSG);
 #else
-    SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
+    SendMsg(TR(LOGIC_PROG_TYPE_L_NEEDS_LUA, "Ошибка программы: тип L требует USE_LUA"), ALARM_MSG);
     run_program(PROGRAM_END);
 #endif
     return;
@@ -1023,6 +1031,7 @@ void run_program(uint8_t num) {
   TankSensor.StartProgTemp = TankSensor.avgTemp;
 
   String p_s;
+  String p_tag = program_line_start_tag(num);
   // [Ф3][Ф4] Новая строка - новая опора автоподъёма Т тела и никакого ожидающего захвата.
   body_temp_row_base = 0;
   body_temp_capture_deadline = 0;
@@ -1056,13 +1065,13 @@ void run_program(uint8_t num) {
     prev_target_power_volt = 0;
   }
 #endif
-  p_s = "Программа: старт строки  №" + (String)(num + 1);
+  p_s = TR(LOGIC_PROG_LINE_START, "Программа: старт строки  №") + (String)(num + 1);
   if (!rect_apply_second_pump_for_row(program[num])) {
-    rect_fail_second_i2c_pump("старт строки " + String(num + 1));
+    rect_fail_second_i2c_pump(TR(LOGIC_ACTION_LINE_START, "старт строки ") + String(num + 1));
     return;
   }
   runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_ROW_CHANGE,
-                          "Переход к следующей строке", NOTIFY_MSG);
+                          TR(LOGIC_NEXT_LINE, "Переход к следующей строке"), NOTIFY_MSG);
   if (program_type_one_of(program[num].WType, "HBTC")) {
     if (program_type_one_of(program[num].WType, "HT")) {
       SteamSensor.BodyTemp = 0;
@@ -1070,7 +1079,9 @@ void run_program(uint8_t num) {
       WaterSensor.BodyTemp = 0;
       TankSensor.BodyTemp = 0;
     }
-    p_s += ", отбор в ёмкость " + (String)program[num].capacity_num;
+    p_s += TR(LOGIC_TAKEOFF_TO_CONTAINER, ", отбор в ёмкость ") + (String)program[num].capacity_num;
+    p_tag += ";v=";
+    append_fixed_hex(p_tag, program[num].capacity_num, 2);
     //устанавливаем параметры для текущей программы отбора
     set_capacity(program[num].capacity_num);
     CurrrentStepperSpeed = rectSecondPumpHeadsRow
@@ -1081,8 +1092,8 @@ void run_program(uint8_t num) {
     // (номер строки программы), поэтому предупреждаем оператора явно - иначе на
     // экране останется введённое им число, а насос поедет на пределе.
     if (CurrrentStepperSpeed >= 65535) {
-      SendMsg("Программа: скорость строки №" + (String)(num + 1) + " (" + (String)program[num].Speed +
-                  " л/ч) превышает предел насоса, ограничена до " + (String)get_liquid_rate_by_step(CurrrentStepperSpeed) + " л/ч.",
+      SendMsg(TR(LOGIC_PROG_LINE_SPEED, "Программа: скорость строки №") + (String)(num + 1) + " (" + (String)program[num].Speed +
+                  TR(LOGIC_SPEED_OVER_PUMP_LIMIT, " л/ч) превышает предел насоса, ограничена до ") + (String)get_liquid_rate_by_step(CurrrentStepperSpeed) + TR(LOGIC_UNIT_LPH_DOT, " л/ч."),
               WARNING_MSG);
     }
     // Детектор управляет локальным отбором B/C, поэтому его базой служит достижимая
@@ -1155,16 +1166,17 @@ void run_program(uint8_t num) {
     TankSensor.BodyTemp = 0;
 
     //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
-    p_s += ", пауза " + (String)program[num].Volume + " сек.";
+    p_s += TR(LOGIC_COMMA_PAUSE, ", пауза ") + (String)program[num].Volume + TR(LOGIC_UNIT_SEC, " сек.");
     t_min = millis() + program[num].Volume * 1000;
     program_Pause = true;
-    runtime_pair_begin(UI_WAIT_RECT_PROGRAM_PAUSE, "Программная пауза", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_RECT_PROGRAM_PAUSE, TR(LOGIC_PROGRAM_PAUSE, "Программная пауза"), NOTIFY_MSG);
     stopService();
     stepper_safe_set_max_speed(0);
     CurrrentStepperSpeed = 0;
     stepper_safe_stop_reset();
   }
 
+  p_s = p_tag + "|" + p_s;
   if (SamSetup.ChangeProgramBuzzer) {
     set_buzzer(true);
     SendMsg(p_s, ALARM_MSG);
@@ -1187,9 +1199,9 @@ void set_body_temp() {
     TankSensor.BodyTemp = TankSensor.avgTemp;
     // [Ф4] Первый захват в строке - опора предела автоподъёма BODY_TEMP_AUTOSET_MAX_RISE.
     if (body_temp_row_base <= 0.0f) body_temp_row_base = SteamSensor.BodyTemp;
-    SendMsg("Новые Т тела: пар = " + String(SteamSensor.BodyTemp) + ", царга = " + String(PipeSensor.BodyTemp), WARNING_MSG);
+    SendMsg(TR(LOGIC_NEW_BODY_T_STEAM, "Новые Т тела: пар = ") + String(SteamSensor.BodyTemp) + TR(LOGIC_COMMA_PIPE_EQ, ", царга = ") + String(PipeSensor.BodyTemp), WARNING_MSG);
   } else {
-    SendMsg(("Не возможно установить Т тела."), WARNING_MSG);
+    SendMsg((TR(LOGIC_BODY_T_SET_FAIL, "Не возможно установить Т тела.")), WARNING_MSG);
   }
 }
 
@@ -1385,9 +1397,9 @@ bool check_boiling() {
     set_boiling();
     if (boil_started) {
       if (has_tank_sensor && alcohol_estimate_valid(alcohol_s)) {
-        SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+        SendMsg(TR(LOGIC_BOILING_STARTED_ABV, "Началось кипение в кубе! Спиртуозность ") + format_float(alcohol_s, 1), WARNING_MSG);
       } else {
-        SendMsg("Началось кипение в кубе!", WARNING_MSG);
+        SendMsg(TR(LOGIC_BOILING_STARTED, "Началось кипение в кубе!"), WARNING_MSG);
       }
     }
   }
@@ -1435,7 +1447,7 @@ bool column_wetting() {
     }
     // Инициализация процесса смачивания
     if (!wetting_started) {
-      SendMsg(("Начало смачивания насадки колонны. Следите за уровнем флегмы!"), WARNING_MSG);
+      SendMsg((TR(LOGIC_WETTING_START, "Начало смачивания насадки колонны. Следите за уровнем флегмы!")), WARNING_MSG);
       
       wetting_start_time = millis();
       last_voltage_decrease_time = 0;
@@ -1472,7 +1484,7 @@ bool column_wetting() {
     
     // 1. Датчик сработал - смачивание успешно завершено
     if (head_level_sensor_holded()) {
-      SendMsg(("Насадка колонны успешно смочена!"), NOTIFY_MSG);
+      SendMsg((TR(LOGIC_WETTING_OK, "Насадка колонны успешно смочена!")), NOTIFY_MSG);
       // Возвращаем базовую мощность до сброса состояния, чтобы alarm.h считал
       // apply_program_power_row от исходной уставки, а не от сниженных 80%.
       if (voltage_decrease_started && initial_voltage >= POWER_WORK_MODE_THRESHOLD) {
@@ -1492,7 +1504,7 @@ bool column_wetting() {
     // не завершено. Вызывающий код при false НЕ переходит к стабилизации и НЕ
     // автостартует головы. wetting_failed удерживает false до ручного сброса процесса.
     if (millis() - total_wetting_time >= max_total_time) {
-      SendMsg(("Превышено максимальное время смачивания. Смачивание не удалось — остановите процесс вручную."), ALARM_MSG);
+      SendMsg((TR(LOGIC_WETTING_TIMEOUT, "Превышено максимальное время смачивания. Смачивание не удалось — остановите процесс вручную.")), ALARM_MSG);
       reset_wetting_state();
       wetting_failed = true;  // устанавливаем ПОСЛЕ reset (reset очищает флаг)
       return false;
@@ -1502,7 +1514,7 @@ bool column_wetting() {
     if (millis() - wetting_start_time >= max_wetting_time) {
       // Если время вышло и мы еще не начали снижать напряжение
       if (!voltage_decrease_started) {
-        SendMsg(("Начинаем постепенное снижение напряжения"), WARNING_MSG);
+        SendMsg((TR(LOGIC_WETTING_VOLT_RAMP_START, "Начинаем постепенное снижение напряжения")), WARNING_MSG);
         voltage_decrease_started = true;
         last_voltage_decrease_time = millis();
       }
@@ -1515,19 +1527,19 @@ bool column_wetting() {
         // Проверяем, не опустились ли мы ниже минимального значения
         if (new_voltage >= min_voltage) {
           set_current_power(new_voltage);
-          SendMsg(("Снижение напряжения до " + String(new_voltage)), WARNING_MSG);
+          SendMsg((TR(LOGIC_WETTING_VOLT_TO, "Снижение напряжения до ") + String(new_voltage)), WARNING_MSG);
           last_voltage_decrease_time = millis();
         } else {
           // Если достигли минимального напряжения
           if (min_voltage_time == 0) {
             min_voltage_time = millis();
-            SendMsg(("Достигнуто минимальное напряжение: " + String(min_voltage) + ". Ожидаем срабатывания датчика."), WARNING_MSG);
+            SendMsg((TR(LOGIC_WETTING_MIN_VOLT, "Достигнуто минимальное напряжение: ") + String(min_voltage) + TR(LOGIC_WETTING_WAIT_SENSOR, ". Ожидаем срабатывания датчика.")), WARNING_MSG);
           }
           
           // 3. Ждем определенное время на минимальном напряжении и завершаем процесс
           // [L-36] Аналогично: возвращаем false — смачивание не было успешным.
           if (millis() - min_voltage_time >= min_voltage_wait_time) {
-            SendMsg(("Превышено время ожидания на минимальном напряжении. Смачивание не удалось — остановите процесс вручную."), ALARM_MSG);
+            SendMsg((TR(LOGIC_WETTING_MIN_VOLT_TIMEOUT, "Превышено время ожидания на минимальном напряжении. Смачивание не удалось — остановите процесс вручную.")), ALARM_MSG);
             reset_wetting_state();
             wetting_failed = true;  // устанавливаем ПОСЛЕ reset (reset очищает флаг)
             return false;
@@ -1542,7 +1554,7 @@ bool column_wetting() {
   #endif
 
   // Если датчик не установлен
-  SendMsg(("Датчик уровня флегмы не установлен, смачивание насадки невозможно"), WARNING_MSG);
+  SendMsg((TR(LOGIC_WETTING_NO_SENSOR, "Датчик уровня флегмы не установлен, смачивание насадки невозможно")), WARNING_MSG);
   reset_wetting_state();
   return true;  // Немедленно завершаем
 }

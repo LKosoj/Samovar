@@ -345,7 +345,7 @@ void setup_go_back() {
     apply_config_runtime();
   } else {
     menuSetupCandidate.load_from(SamSetup);
-    String message = "Настройки меню не сохранены: ";
+    String message = TR(MENU_SETTINGS_NOT_SAVED, "Настройки меню не сохранены: ");
     message += persist_result_code(persistResult);
     SendMsg(message, ALARM_MSG);
   }
@@ -465,7 +465,7 @@ void menu_get_power() {
   if (!PowerOn) {
     set_menu_screen(2);
     if (!queue_samovar_command(mode_power_on_command(Samovar_Mode))) {
-      SendMsg("Очередь команд занята: старт из меню не поставлен", WARNING_MSG);
+      SendMsg(TR(MENU_QUEUE_BUSY_START, "Очередь команд занята: старт из меню не поставлен"), WARNING_MSG);
     }
   } else {
     set_menu_screen(3);
@@ -534,12 +534,12 @@ void menu_samovar_start() {
       return;
     }
     if (!create_data()) {
-      mode_cancel_process_start("Ошибка создания файла лога. Старт ректификации отменён.");
+      mode_cancel_process_start(TR(MENU_LOG_CREATE_FAILED, "Ошибка создания файла лога. Старт ректификации отменён."));
       return;
     }
     String sessionDescription;
     if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
-      mode_cancel_process_start("Описание сессии занято. Старт ректификации отменён.");
+      mode_cancel_process_start(TR(MENU_DESCR_BUSY, "Описание сессии занято. Старт ректификации отменён."));
       mode_warn_log_close_failed();
       return;
     }
@@ -564,7 +564,7 @@ void menu_samovar_start() {
       // Полное завершение — по таймауту (withdrawal()) или повторным Стартом
       // (ветка startval==STOPPING ниже сработает при СЛЕДУЮЩЕМ вызове).
       if (!rect_stop_second_i2c_pump_if_running()) {
-        rect_fail_second_i2c_pump("завершение последней строки");
+        rect_fail_second_i2c_pump(TR(MENU_LAST_LINE_FINISH, "завершение последней строки"));
         return;
       }
       reset_rect_program_pause_state(false);
@@ -573,12 +573,12 @@ void menu_samovar_start() {
       set_capacity(0);
       program_done_hold_since = millis();
       set_buzzer(true);
-      SendMsg("Выполнение программы завершено. Работа на себя (" + String(PROGRAM_DONE_AUTO_POWEROFF_MIN) + " мин до автоотключения).", ALARM_MSG);
+      SendMsg(TR(MENU_PROGRAM_DONE_SELF_RUN, "Выполнение программы завершено. Работа на себя (") + String(PROGRAM_DONE_AUTO_POWEROFF_MIN) + TR(MENU_MIN_TO_AUTO_OFF, " мин до автоотключения)."), ALARM_MSG);
     }
   } else {
     Str = "Stoped";
     runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_USER_STOP,
-                            "Остановлено пользователем", NOTIFY_MSG);
+                            TR(MENU_STOPPED_BY_USER, "Остановлено пользователем"), NOTIFY_MSG);
     run_program(PROGRAM_END);
     reset_sensor_counter();
   }
@@ -615,7 +615,7 @@ void samovar_reset() {
   // (beer_safe_lua_outputs() стоит до всех ранних выходов beer_finish()), хвост
   // состояния доводит beer_reset_stage_state() из reset_process_state() ниже, а
   // уведомление - проверка сразу за этим блоком.
-  if (!request_lua_mode_stop()) SendMsg("Не удалось остановить Lua: runtime lock занят.", WARNING_MSG);
+  if (!request_lua_mode_stop()) SendMsg(TR(MENU_LUA_STOP_FAILED, "Не удалось остановить Lua: runtime lock занят."), WARNING_MSG);
 #endif
   // Штатное завершение могло выйти раньше своего уведомления: у варки job Lua
   // подтверждает остановку лишь на следующем тике, и beer_finish() возвращается,
@@ -628,7 +628,7 @@ void samovar_reset() {
   // (setup(), смена профиля) stop_active_process_for_mode() ставит IDLE сам - и
   // сообщения тоже не будет.
   if (SamovarStatusInt != SAMOVAR_STATUS_IDLE || startval != SAMOVAR_STARTVAL_IDLE) {
-    SendMsg("Процесс остановлен сбросом: завершение не подтвердилось", WARNING_MSG);
+    SendMsg(TR(MENU_RESET_STOP_UNCONFIRMED, "Процесс остановлен сбросом: завершение не подтвердилось"), WARNING_MSG);
   }
   reset_sensor_counter();
 }

@@ -2943,6 +2943,8 @@ pid_harness = (
         #include <string>
         #include <vector>
 
+        #include "i18n.h"
+
         // [T29] FinishAutoTune() теперь пишет SamSetup под спинлоком configMux.
         using portMUX_TYPE = int;
         static portMUX_TYPE configMux = 0;

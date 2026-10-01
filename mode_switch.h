@@ -184,23 +184,23 @@ static bool mode_actuators_idle() {
 static const char* mode_actuator_cleanup_warning(OperationError error) {
   switch (error) {
     case OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED:
-      return "I2C-мешалка не подтвердила остановку";
+      return TR(MSW_I2C_MIXER_STOP, "I2C-мешалка не подтвердила остановку");
     case OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED:
-      return "I2C-насос не подтвердил остановку";
+      return TR(MSW_I2C_PUMP_STOP, "I2C-насос не подтвердил остановку");
     case OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED:
-      return "шаговый двигатель не остановился";
+      return TR(MSW_STEPPER_STOP, "шаговый двигатель не остановился");
     case OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED:
-      return "клапан не закрылся";
+      return TR(MSW_VALVE_CLOSE, "клапан не закрылся");
     case OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED:
-      return "мешалка не остановилась";
+      return TR(MSW_MIXER_STOP, "мешалка не остановилась");
     case OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED:
-      return "насос охлаждения не остановился";
+      return TR(MSW_COOLING_PUMP_STOP, "насос охлаждения не остановился");
     case OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED:
-      return "не завершилась калибровка насоса";
+      return TR(MSW_PUMP_CAL_NOT_DONE, "не завершилась калибровка насоса");
     case OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED:
-      return "не подтвердился нагрев";
+      return TR(MSW_HEATING_NOT_CONFIRMED, "не подтвердился нагрев");
     default:
-      return "не подтвердился привод";
+      return TR(MSW_ACTUATOR_NOT_CONFIRMED, "не подтвердился привод");
   }
 }
 
@@ -276,7 +276,7 @@ static ModeSwitchResult force_complete_mode_switch_failed(
   portEXIT_CRITICAL(&emergencyStopMux);
   notify_power_worker();
   modeActuatorCleanup = {};
-  String message = "Смена режима завершена принудительно: ";
+  String message = TR(MSW_FORCE_COMPLETED, "Смена режима завершена принудительно: ");
   message += warning;
   SendMsg(message, WARNING_MSG);
   return MODE_SWITCH_FAILED;
@@ -309,13 +309,13 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
                 ? OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED
                 : OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
             !stopRequested
-                ? "не подтвердился Lua"
-                : "не подтвердился очередь");
+                ? TR(MSW_LUA_NOT_CONFIRMED, "не подтвердился Lua")
+                : TR(MSW_QUEUE_NOT_CONFIRMED, "не подтвердился очередь"));
       }
       return MODE_SWITCH_PENDING;
     }
     if (!queueWasIdle || pendingCancelled) {
-      SendMsg("Отложенные управляющие команды отменены сменой режима", WARNING_MSG);
+      SendMsg(TR(MSW_PENDING_CMDS_CANCELLED, "Отложенные управляющие команды отменены сменой режима"), WARNING_MSG);
     }
     safety_mode_switch_wait_cleanup(modeSwitchState);
     return MODE_SWITCH_PENDING;
@@ -351,38 +351,38 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
       );
 
   if (safety_deadline_expired(millis(), modeActuatorCleanup.deadline) && !cleanupReady) {
-    const char* warning = "не подтвердилась готовность";
+    const char* warning = TR(MSW_READINESS_NOT_CONFIRMED, "не подтвердилась готовность");
     OperationError error = OPERATION_ERROR_MODE_SWITCH_FAILED;
     if (!modeSwitchState.logCloseRequested || logClosePending) {
-      warning = "не подтвердился лог";
+      warning = TR(MSW_LOG_NOT_CONFIRMED, "не подтвердился лог");
       error = OPERATION_ERROR_MODE_SWITCH_LOG_FAILED;
     } else if (!luaIdle) {
-      warning = "не подтвердился Lua";
+      warning = TR(MSW_LUA_NOT_CONFIRMED, "не подтвердился Lua");
       error = OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED;
     } else if (!queuesIdle) {
-      warning = "не подтвердился очередь";
+      warning = TR(MSW_QUEUE_NOT_CONFIRMED, "не подтвердился очередь");
       error = OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED;
     } else if (!actuatorsIdle) {
       const OperationError actuatorError = mode_actuator_cleanup_error();
       warning = mode_actuator_cleanup_warning(actuatorError);
       error = actuatorError;
     } else if (heaterPowerOn) {
-      warning = "не подтвердился нагрев";
+      warning = TR(MSW_HEATING_NOT_CONFIRMED, "не подтвердился нагрев");
       error = OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED;
     } else if (powerTransitionActive) {
-      warning = "не подтвердился переход мощности";
+      warning = TR(MSW_POWER_TRANSITION_NOT_CONFIRMED, "не подтвердился переход мощности");
       error = OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED;
     } else if (nbkTransitionActive) {
-      warning = "не подтвердился переход НБК";
+      warning = TR(MSW_NBK_TRANSITION_NOT_CONFIRMED, "не подтвердился переход НБК");
       error = OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED;
     } else if (modeHeatingActive) {
-      warning = "не подтвердился старт нагрева";
+      warning = TR(MSW_HEATING_START_NOT_CONFIRMED, "не подтвердился старт нагрева");
       error = OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED;
     } else if (selfTestActive) {
-      warning = "не подтвердился самотест";
+      warning = TR(MSW_SELF_TEST_NOT_CONFIRMED, "не подтвердился самотест");
       error = OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED;
     } else if (!ownerIdle) {
-      warning = "не подтвердился владелец режима";
+      warning = TR(MSW_OWNER_NOT_CONFIRMED, "не подтвердился владелец режима");
       error = OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED;
     }
     return force_complete_mode_switch_failed(error, warning);
@@ -415,7 +415,7 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
     if (++modeSwitchState.luaReloadAttempts >= 10) {
       return force_complete_mode_switch_failed(
           OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED,
-          "скрипт Lua не перечитан");
+          TR(MSW_LUA_NOT_RELOADED, "скрипт Lua не перечитан"));
     }
     return MODE_SWITCH_PENDING;
   }
@@ -423,7 +423,7 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
   if (active_profile_operation.terminalError != OPERATION_ERROR_NONE) {
     return force_complete_mode_switch_failed(
         active_profile_operation.terminalError,
-        "профиль не сохранён");
+        TR(MSW_PROFILE_NOT_SAVED, "профиль не сохранён"));
   }
   portENTER_CRITICAL(&emergencyStopMux);
   safety_mode_switch_complete(modeSwitchState);

@@ -77,7 +77,7 @@ inline bool dist_plateau_finish_due() {
     return false;
   }
   if ((millis() - d_s_time_min) > SamSetup.DistTimeF * 60 * 1000) {
-    SendMsg(("В кубе не осталось спирта"), NOTIFY_MSG);
+    SendMsg((TR(DIST_NO_ALCOHOL_LEFT, "В кубе не осталось спирта")), NOTIFY_MSG);
     return true;
   }
   return false;
@@ -119,7 +119,7 @@ inline bool program_threshold_row_done(const WProgram& row) {
 
 alcohol_unavailable:
   if (!distAlcoholEstimateWarningSent) {
-    SendMsg("Спиртуозность недоступна: процентная строка продолжается", WARNING_MSG);
+    SendMsg(TR(DIST_ABV_UNAVAILABLE, "Спиртуозность недоступна: процентная строка продолжается"), WARNING_MSG);
     distAlcoholEstimateWarningSent = true;
   }
   return false;
@@ -151,20 +151,20 @@ void distiller_proc() {
   // mode_begin_heating_session ниже, который штатно откажет с сообщением про
   // защёлку (см. mode_common.h, ветки heater_safety_latched()).
   if (PowerOn) {
-    if (!sensor_valid(TankSensor) && process_sensor_failed("Дистилляция", "куба")) return;
+    if (!sensor_valid(TankSensor) && process_sensor_failed(TR(DIST_MODE_NAME, "Дистилляция"), TR(DIST_SENSOR_BOILER, "куба"))) return;
   } else if (!sensor_valid(TankSensor) && !heater_safety_latched()) {
     mode_cancel_process_start(
-        "Дистилляция не запущена: датчик куба не назначен или не отвечает. "
-        "Откройте настройки и проверьте привязку датчика куба.");
+        TR(DIST_START_NO_TANK_SENSOR, "Дистилляция не запущена: датчик куба не назначен или не отвечает. "
+        "Откройте настройки и проверьте привязку датчика куба."));
     return;
   }
 
   if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_DISTILLATION)) {
     if (mode_run_heating_start(
           SAMOVAR_STATUS_DISTILLATION,
-          "Ошибка создания файла лога. Старт дистилляции отменён.",
-          "Описание сессии занято. Старт дистилляции отменён.",
-          "Включен нагрев дистиллятора") != MODE_HEATING_START_SUCCEEDED) return;
+          TR(DIST_START_LOG_FILE_ERROR, "Ошибка создания файла лога. Старт дистилляции отменён."),
+          TR(DIST_START_SESSION_BUSY, "Описание сессии занято. Старт дистилляции отменён."),
+          TR(DIST_HEATING_ON, "Включен нагрев дистиллятора")) != MODE_HEATING_START_SUCCEEDED) return;
     run_dist_program(0);
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
@@ -207,10 +207,10 @@ void distiller_proc() {
         millis(), static_cast<uint16_t>(program[ProgramNum].Time), nextProgram);
     if (luaResult == LUA_SEQUENCE_STAGE_ADVANCE) run_dist_program(nextProgram);
     else if (luaResult == LUA_SEQUENCE_STAGE_TIMEOUT) {
-      SendMsg("Lua не завершила операцию до тайм-аута", ALARM_MSG);
+      SendMsg(TR(DIST_LUA_TIMEOUT, "Lua не завершила операцию до тайм-аута"), ALARM_MSG);
       distiller_finish();
     } else if (luaResult == LUA_SEQUENCE_STAGE_FAILED) {
-      SendMsg("Lua завершилась с ошибкой", ALARM_MSG);
+      SendMsg(TR(DIST_LUA_FAILED, "Lua завершилась с ошибкой"), ALARM_MSG);
       distiller_finish();
     }
     return;
@@ -242,10 +242,10 @@ void distiller_proc() {
 void distiller_finish() {
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
-  String timeMsg = "Дистилляция завершена.";
+  String timeMsg = TR(DIST_FINISHED, "Дистилляция завершена.");
   if (sessionTimerValid) {
-    timeMsg += " Общее время: " +
-        String(int((millis() - sessionStartTime) / 60000)) + " мин.";
+    timeMsg += TR(DIST_TOTAL_TIME, " Общее время: ") +
+        String(int((millis() - sessionStartTime) / 60000)) + TR(DIST_UNIT_MIN, " мин.");
   }
   sessionTimerValid = false;
   sessionStartTime = 0;
@@ -258,7 +258,7 @@ void check_alarm_distiller() {
   //сбросим паузу события безопасности
   mode_clear_alarm_pause_if_expired();
 
-  if (PowerOn && !mode_check_powered_cooling_sensors("Дистилляция")) return;
+  if (PowerOn && !mode_check_powered_cooling_sensors(TR(DIST_MODE_NAME, "Дистилляция"))) return;
 
 #ifdef SAMOVAR_USE_POWER
   check_power_error();
@@ -328,7 +328,7 @@ void run_dist_program(uint8_t num) {
     // Программы закончились - устанавливаем ProgramNum = ProgramLen, чтобы условие ProgramNum < ProgramLen стало ложным
     if (ProgramNum < ProgramLen) {
       ProgramNum = ProgramLen;
-      SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
+      SendMsg(TR(DIST_PROGRAMS_DONE_CONTINUE, "Выполнение программ закончилось, продолжение отбора"), NOTIFY_MSG);
     }
     return;
   }
@@ -338,18 +338,18 @@ void run_dist_program(uint8_t num) {
   if (program[num].WType == 'L') {
 #ifdef USE_LUA
     if (!lua_sequence_stage_begin(num, millis())) {
-      SendMsg("Ошибка Lua: скрипт строки не запущен", ALARM_MSG);
+      SendMsg(TR(DIST_LUA_LINE_SCRIPT_NOT_STARTED, "Ошибка Lua: скрипт строки не запущен"), ALARM_MSG);
       distiller_finish();
       return;
     }
 #else
-    SendMsg("Ошибка программы: тип L требует USE_LUA", ALARM_MSG);
+    SendMsg(TR(DIST_PROGRAM_L_NEEDS_LUA, "Ошибка программы: тип L требует USE_LUA"), ALARM_MSG);
     distiller_finish();
     return;
 #endif
   }
 
-  SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+  SendMsg(TR(DIST_GOTO_PROGRAM_LINE, "Переход к строке программы №") + (String)(num + 1), NOTIFY_MSG);
   // Переход строки сбрасывает только строковый baseline. Процессный baseline,
   // захваченный по фактическому фронту кипения, сохраняется до конца сессии.
   timePredictor.startTime = millis();

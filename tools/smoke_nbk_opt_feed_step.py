@@ -17,7 +17,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +29,7 @@ FORMULA_ANCHOR = (
     "при 15-20 л/ч 10% = 1.5-2 л/ч, в 3-4 раза больше dП\n"
 )
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

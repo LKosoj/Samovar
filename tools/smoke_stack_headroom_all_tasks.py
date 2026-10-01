@@ -19,7 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -250,7 +250,7 @@ def build_harness() -> str:
     table_end = source.index(body_signature)
     table_decl = source[table_start:table_end].rstrip() + "\n"
     body = extract_function_body(source, body_signature)
-    return HARNESS_TEMPLATE.replace("@TABLE_DECL@", table_decl).replace("@BODY@", body)
+    return (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@TABLE_DECL@", table_decl).replace("@BODY@", body)
 
 
 def main() -> int:

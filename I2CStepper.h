@@ -260,7 +260,7 @@ inline void i2c_stepper_note_refresh_failure(I2CStepperDevice& device) {
   const bool selected = device.address == i2cStepperSessionMixerAddress ||
                         device.address == i2cStepperSessionPumpAddress;
   if (device.present && selected) {
-    SendMsg(String(F("Потеря связи с I2C степпером, адрес ")) + device.address,
+    SendMsg(String(F(TR(I2C_LINK_LOST, "Потеря связи с I2C степпером, адрес "))) + device.address,
             ALARM_MSG);
   }
   device.present = false;
@@ -296,7 +296,7 @@ inline bool i2c_stepper_refresh(I2CStepperDevice& device, bool force = false,
   device.everPresent = true;
   if (localStop) {
     device.lastStopEventSeq = status.stopEventSeq;
-    SendMsg(String(F("Локальный останов I2C степпера, адрес ")) + device.address,
+    SendMsg(String(F(TR(I2C_LOCAL_STOP, "Локальный останов I2C степпера, адрес "))) + device.address,
             ALARM_MSG);
     i2c_stepper_note_manual_control(device.address);
   }

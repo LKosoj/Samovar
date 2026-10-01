@@ -25,13 +25,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
 ANCHOR = "if (safety_deadline_expired(millis(), nbk_work_next_time))  {"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

@@ -19,7 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ANCHOR = "if (overflow()) { // [T1] повторный"
 RESET_STMT = "nbk_pause_overflow_repeat_latched = false;"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

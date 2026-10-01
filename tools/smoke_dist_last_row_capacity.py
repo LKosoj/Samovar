@@ -39,14 +39,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 SIGNATURE = "void run_dist_program(uint8_t num)"
 COMMIT_SIGNATURE = "void program_commit(const ProgramDraft& draft)"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <cstring>
 #include <iostream>

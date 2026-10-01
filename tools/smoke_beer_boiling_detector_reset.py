@@ -32,6 +32,7 @@ PROGRAM_TYPE_AT_SIGNATURE = "inline ProgramType program_type_at(uint8_t index)"
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 class String {
@@ -529,7 +530,7 @@ def build_harness(beer_header_path: Path, runtime_helpers_path: Path) -> str:
 
     run_beer_program_fn = "void run_beer_program(uint8_t num) {" + run_beer_program_body + "}"
 
-    harness = HARNESS_TEMPLATE.replace("@RUN_BEER_PROGRAM_BODY@", run_beer_program_fn)
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@RUN_BEER_PROGRAM_BODY@", run_beer_program_fn)
     harness = harness.replace("@RESET_BOILING_DETECTOR_BODY@", reset_boiling_detector_body)
     harness = harness.replace("@COOLING_PUMP_BODY@", cooling_pump_body)
     harness = harness.replace("@COOLING_OUTPUTS_BODY@", cooling_outputs_body)

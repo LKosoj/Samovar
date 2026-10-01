@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<link rel="stylesheet" href="style.css?v=7.00u9">
+<title>Samovar</title>
+
+  <script src="app.js"></script>
+  <script>
+    function sendbutton (command) {
+      // SamovarApp.sendCommand уже показывает ошибку через showRequestError -
+      // отдельный alert() тут был бы вторым, конкурирующим способом её показать.
+      return SamovarApp.sendCommand(command);
+    };
+
+    function confirmLeaveIfDirty () {
+      var setupForm = document.getElementById('setupform');
+      if (setupForm && setupForm.dataset.dirty === 'true') {
+        return confirm('Hay cambios sin guardar en los ajustes. Salir de la página sin guardar?');
+      }
+      return true;
+    }
+
+    function confirmSelfTest () {
+      var message = 'Autotest: se activará el suministro de agua (bomba o se abrirá la válvula), ' +
+        'se pondrá en marcha la bomba peristáltica de extracción, el servo recorrerá en orden ' +
+        '5 las posiciones de los recipientes. Continuar?';
+      if (confirm(message)) sendbutton('startst');
+    }
+
+    async function set_program () {
+      try {
+        var result = await SamovarApp.postProgram(document.forms.setupform);
+        if (!result.ok) {
+          alert(result.err || 'Programa no aceptado.');
+          return;
+        }
+        alert('Programa guardado.');
+      } catch (e) {
+        alert('Error de red: ' + e);
+      }
+    };
+
+    HTMLElement.prototype.serialize = function() {
+      var obj = {};
+      var elements = this.querySelectorAll("input[type='text'], input[type='color'], input[type='checkbox'], input[type='range'], select");
+      for (var i = 0; i < elements.length; ++i) {
+        var element = elements[i];
+        var name = element.name;
+        var value = element.value;
+        if (element.type == 'checkbox') value = element.checked;
+
+        if (name) {
+          obj[name] = value;
+        }
+      }
+      return JSON.stringify(obj);
+    }
+
+    function loadFile (e) {
+      var file = e;
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        var data;
+        try {
+          data = JSON.parse(reader.result);
+        } catch (err) {
+          SamovarApp.showRequestError('El archivo de ajustes está dañado o no tiene el formato JSON: ' + err.message);
+          return;
+        }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          SamovarApp.showRequestError('El archivo no tiene el formato de ajustes del Samovar (se esperaba un objeto JSON).');
+          return;
+        }
+        var errors = mapJson(data);
+        if (errors.length > 0) {
+          SamovarApp.showRequestError('Ajustes cargados en el formulario, pero hay errores: ' + errors.join('; '));
+        } else {
+          SamovarApp.showRequestError('Ajustes cargados en el formulario, pulse «Guardar» para aplicarlos.', 2);
+        }
+      };
+      reader.onerror = function() {
+        SamovarApp.showRequestError('No se pudo leer el archivo de ajustes.');
+      };
+      reader.readAsText(file, "UTF-8");
+    }
+
+    function mapJson (data) {
+      var inputs = Array.prototype.slice.call(document.querySelectorAll('form input, form select'));
+
+      for( var i = 0; i < inputs.length; i++){
+        if ( inputs[i].name === "StepperStepMl") {
+            inputs.splice(i, 1);
+        }
+      }
+      var appliedAny = false;
+      Object.keys(data).map(function(dataItem) {
+        inputs.map(function(inputItem) {
+          if (inputItem.name === dataItem && inputItem.type == 'checkbox') {inputItem.checked = data[dataItem]; appliedAny = true; return true;}
+          if (inputItem.name === dataItem) { inputItem.value = data[dataItem]; appliedAny = true; return true; }
+          return false;
+        });
+      });
+      // Прямое присваивание .value/.checked не порождает событий 'input'/'change',
+      // поэтому форма сама по себе не помечается изменённой - делаем это явно,
+      // только если реально подставили хотя бы одно поле (см. markSetupDirty()).
+      if (appliedAny && typeof window.markSetupDirty === 'function') window.markSetupDirty();
+      // Поля с числовой схемой (setupNumericSchema) проверяем на диапазон/тип, чтобы
+      // сообщить пользователю о конкретной некорректной строке файла, а не молчать.
+      var errors = [];
+      setupNumericSchema.forEach(function (rule) {
+        if (!Object.prototype.hasOwnProperty.call(data, rule.name)) return;
+        var result = SamovarApp.validateNumericInput(rule.name, rule);
+        if (!result.ok) errors.push(result.error);
+      });
+      return errors;
+    }
+
+    function SaveFormToFile (form) {
+      var filename, text;
+      filename = 'samovarbackup.txt';
+      //  text = getJson(document.getElementById('setupform'));
+      text = document.querySelector("form").serialize();
+
+      var pom = document.createElement('a');
+      pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+      pom.setAttribute('download', filename);
+
+      pom.style.display = 'none';
+      document.body.appendChild(pom);
+
+      pom.click();
+
+      document.body.removeChild(pom);
+    }
+
+    function rescanSensors () {
+      sendbutton('rescands').then(function (ok) {
+        if (ok) setTimeout(function () { location.reload(); }, 1000);
+      });
+    }
+
+    const setupNumericSchema = [
+      { name: 'mode', integer: true, min: 0, max: 7 },
+      { name: 'DistTemp', min: 30, max: 150 },
+      { name: 'DistTimeF', integer: true, min: 0, max: 255 },
+      { name: 'ColDiam', min: 0.1, max: 10 },
+      { name: 'ColHeight', min: 0.01, max: 10 },
+      { name: 'PackDens', integer: true, min: 0, max: 100 },
+      { name: 'autospeed', integer: true, min: 0, max: 20 },
+      { name: 'MaxPressureValue', min: 0, max: 10000 },
+      { name: 'MpxZeroAdc', min: 0, max: 4095 },
+      { name: 'MpxCountsPerMmHg', min: 0.001, max: 4095 },
+      { name: 'DeltaSteamTemp', min: -1000, max: 1000 },
+      { name: 'SetSteamTemp', min: 0, max: 150 },
+      { name: 'SteamDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaPipeTemp', min: -1000, max: 1000 },
+      { name: 'SetPipeTemp', min: 0, max: 150 },
+      { name: 'PipeDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaWaterTemp', min: -1000, max: 1000 },
+      { name: 'SetWaterTemp', min: 0, max: 150 },
+      { name: 'WaterDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaTankTemp', min: -1000, max: 1000 },
+      { name: 'SetTankTemp', min: 0, max: 150 },
+      { name: 'TankDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaACPTemp', min: -1000, max: 1000 },
+      { name: 'SetACPTemp', min: 0, max: 150 },
+      { name: 'ACPDelay', integer: true, min: 0, max: 65535 },
+      { name: 'SteamAddr', integer: true, min: -1, max: 255 },
+      { name: 'PipeAddr', integer: true, min: -1, max: 255 },
+      { name: 'WaterAddr', integer: true, min: -1, max: 255 },
+      { name: 'TankAddr', integer: true, min: -1, max: 255 },
+      { name: 'ACPAddr', integer: true, min: -1, max: 255 },
+      { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
+      { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
+      { name: 'Kp', min: 0, max: 100000 },
+      { name: 'Ki', min: 0, max: 100000 },
+      { name: 'Kd', min: 0, max: 100000 },
+      { name: 'StbVoltage', min: 0, max: 10000 },
+      { name: 'BVolt', min: 0, max: 10000 },
+      { name: 'BKPower', min: Number('%BKPowerFloor%'), max: 10000 },
+      { name: 'NbkIn', min: 0, max: 100000 },
+      { name: 'NbkDelta', min: 0, max: 100000 },
+      { name: 'NbkDM', min: 0, max: 100000 },
+      { name: 'NbkDP', min: 0, max: 100000 },
+      { name: 'NbkSteamT', min: 0, max: 150 },
+      { name: 'NbkOwPress', min: 0, max: 100000 },
+      { name: 'NbkTn', min: 0, max: 150 },
+      { name: 'TimeZone', integer: true, min: 0, max: 23 },
+      { name: 'HeaterR', min: 2, max: 65 },
+      { name: 'MainsVoltage', min: 0, max: 1000 },
+      { name: 'rele1', integer: true, min: 0, max: 1 },
+      { name: 'rele2', integer: true, min: 0, max: 1 },
+      { name: 'rele3', integer: true, min: 0, max: 1 },
+      { name: 'rele4', integer: true, min: 0, max: 1 }
+    ];
+
+    // [T35 п.4] Сервер /save отвечает на ошибку диапазона конвертом
+    // {error, field, message, fields} - field/message для обратной совместимости
+    // (первое плохое поле), fields - имена ВСЕХ полей вне диапазона (см.
+    // WebServer.ino: build_save_range_errors_envelope). Структурные ошибки вида "прибор
+    // занят" (конфликт смены режима, занятая очередь сохранения) отвечают text/plain, а
+    // не JSON - body здесь останется null, и обработка уходит в ветку responseErrorText().
+    // А вот "режим недоступен в этой сборке" - тоже JSON-конверт, но с field == "mode"
+    // (WebServer.ino: mode_available_in_build) - он намеренно идёт по полевой ветке ниже
+    // и показывает "Проверьте поля: Режим работы", это менять не нужно.
+    async function showSetupSaveError(form, response) {
+      let body = null;
+      try {
+        const probe = response.clone();
+        if ((probe.headers.get('Content-Type') || '').indexOf('application/json') !== -1) {
+          body = await probe.json();
+        }
+      } catch (err) {
+        body = null;
+      }
+      if (!body || !body.field) {
+        SamovarApp.showRequestError(await SamovarApp.responseErrorText(response, 'Ajustes no guardados'));
+        return;
+      }
+      const names = Array.isArray(body.fields) && body.fields.length ? body.fields : [body.field];
+      const labels = names.map(function (name) {
+        return SamovarApp.fieldLabelFromDom(name) || name;
+      });
+      const input = form.elements[body.field];
+      const tab = input && typeof input.closest === 'function' ? input.closest('.tabcontent') : null;
+      if (tab && tab.id) SamovarApp.openTab(null, tab.id);
+      if (input) {
+        if (typeof input.scrollIntoView === 'function') input.scrollIntoView({ block: 'center' });
+        if (typeof input.focus === 'function') input.focus();
+      }
+      SamovarApp.showRequestError('Ajustes no guardados. Revise los campos: ' + labels.join(', ') + '.');
+    }
+
+    async function submitSetupForm(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (form.dataset.submitting === 'true') return false;
+      if (!SamovarApp.validateNumericFields(form, setupNumericSchema)) return false;
+      const button = document.getElementById('save');
+      const submittedRevision = form.dataset.editRevision;
+      form.dataset.dirty = 'true';
+      form.dataset.submitting = 'true';
+      button.disabled = true;
+      try {
+        const response = await fetch('/save', { method: 'POST', body: new FormData(form) });
+        if (!response.ok) {
+          await showSetupSaveError(form, response);
+          return false;
+        }
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        if (form.dataset.editRevision !== submittedRevision) {
+          SamovarApp.showRequestError('Ajustes guardados, pero los nuevos cambios del formulario aún no se han guardado.');
+          return true;
+        }
+        form.dataset.dirty = 'false';
+        SamovarApp.clearRequestError();
+        window.location.assign('/');
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError('Ajustes no guardados: ' + error);
+        return false;
+      } finally {
+        form.dataset.submitting = 'false';
+        button.disabled = false;
+      }
+    }
+
+    let setupI2cAddress = 1;
+    let setupI2cDevices = [];
+    let setupI2cSelected = null;
+    let setupI2cScanning = false;
+    // Бит optionFlags «плавный разгон и торможение» (I2CSTEPPER_FLAG_SMOOTH_START в прошивке Nano).
+    const SETUP_I2C_OPTION_SMOOTH = 2;
+    // Бит capabilities «умеет наполнение» (I2CSTEPPER_V3_CAP_FILLING): есть только у платы-насоса.
+    const SETUP_I2C_CAP_FILLING = 4;
+
+    function setupI2cValue(id) {
+      return document.getElementById('i2c-' + id);
+    }
+
+    function setupI2cUrl(command) {
+      const params = new URLSearchParams({address: String(setupI2cAddress)});
+      if (command) params.set('cmd', command);
+      return '/i2cstepper?' + params;
+    }
+
+    function renderSetupI2c() {
+      const panel = setupI2cValue('panel');
+      const missing = setupI2cValue('missing');
+      const scan = setupI2cValue('scan');
+      const present = setupI2cDevices.filter(function (device) { return device.present; });
+      scan.disabled = setupI2cScanning;
+      scan.textContent = setupI2cScanning ? 'Buscando…' : 'Volver a buscar dispositivos I2C';
+      const selectorRow = setupI2cValue('selectorRow');
+      const selector = setupI2cValue('selector');
+      selectorRow.hidden = present.length < 2;
+      selector.replaceChildren();
+      present.forEach(function (device) {
+        const option = document.createElement('option');
+        option.value = device.address;
+        option.textContent = (device.address & 1 ? 'Agitador' : 'Bomba') + ', dirección ' + device.address;
+        option.selected = device.address === setupI2cAddress;
+        selector.append(option);
+      });
+      if (!setupI2cSelected || !setupI2cSelected.present) {
+        panel.hidden = true;
+        missing.hidden = false;
+        missing.textContent = setupI2cScanning
+          ? 'Buscando I2CStepper en las direcciones 1–10.'
+          : present.length
+            ? 'El I2CStepper elegido no está disponible. No se eligió otro dispositivo automáticamente.'
+            : 'I2CStepper no encontrado.';
+        return;
+      }
+      missing.hidden = true;
+      panel.hidden = false;
+      const config = setupI2cSelected.config;
+      const address = setupI2cValue('newAddress');
+      address.replaceChildren();
+      for (let value = 1; value <= 10; value++) {
+        const existing = setupI2cDevices.find(function (device) { return device.address === value; });
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value + (value & 1 ? ' — agitador' : ' — bomba');
+        option.disabled = Boolean(existing && existing.present && value !== setupI2cAddress);
+        address.append(option);
+      }
+      address.value = String(config.address);
+      ['mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
+       'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+        setupI2cValue(name).value = config[name];
+      });
+      setupI2cValue('smoothStart').checked = Boolean(config.optionFlags & SETUP_I2C_OPTION_SMOOTH);
+      updateSetupI2cFields();
+    }
+
+    // Показываем только поля выбранного типа. Тип платы задаёт адрес: нечётный - мешалка, чётный - насос.
+    function updateSetupI2cFields() {
+      const mixer = Boolean(Number(setupI2cValue('newAddress').value) & 1);
+      const mode = setupI2cValue('mode');
+      // В списке только занятия насоса. У платы, которая была мешалкой, сохранённого занятия насоса нет.
+      if (!mode.value) mode.value = '2';
+      setupI2cValue('modeRow').hidden = mixer;
+      setupI2cValue('mixerGroup').hidden = !mixer;
+      setupI2cValue('pumpGroup').hidden = mixer || mode.value !== '2';
+      setupI2cValue('fillingGroup').hidden = mixer || mode.value !== '3';
+      setupI2cValue('calibrationGroup').hidden = mixer;
+      // Калибруется сама плата по её нынешнему адресу: мешалку, которой только выбрали адрес насоса, калибровать нельзя.
+      const canCalibrate = !(setupI2cAddress & 1) && Boolean(setupI2cSelected.capabilities & SETUP_I2C_CAP_FILLING);
+      setupI2cValue('calibrateRow').hidden = !canCalibrate;
+      setupI2cValue('calibrateHint').hidden = !canCalibrate;
+    }
+
+    async function refreshSetupI2c() {
+      if (!setupI2cAddress) return;
+      try {
+        const response = await fetch(setupI2cUrl(), {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'I2CStepper no disponible'));
+        const payload = await response.json();
+        setupI2cDevices = Array.isArray(payload.devices) ? payload.devices : [];
+        setupI2cSelected = payload.selected || null;
+        setupI2cScanning = payload.scanning === 1;
+        renderSetupI2c();
+        SamovarApp.clearRequestError();
+        return true;
+      } catch (error) {
+        setupI2cSelected = null;
+        renderSetupI2c();
+        SamovarApp.showRequestError(String(error));
+        return false;
+      }
+    }
+
+    function chooseSetupI2c() {
+      setupI2cAddress = Number(setupI2cValue('selector').value);
+      refreshSetupI2c();
+    }
+
+    async function rescanSetupI2c() {
+      const button = setupI2cValue('scan');
+      const hadSelectedDevice = Boolean(setupI2cSelected && setupI2cSelected.present);
+      const expectedAddress = hadSelectedDevice ? Number(setupI2cSelected.config.address) : 0;
+      button.disabled = true;
+      try {
+        const response = await fetch(setupI2cUrl('scan'), {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'La búsqueda de I2CStepper no se inició'));
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        const deadline = Date.now() + 5000;
+        do {
+          await new Promise(function (resolve) { setTimeout(resolve, 200); });
+          if (!await refreshSetupI2c()) throw new Error('No se pudo obtener el resultado de la búsqueda de I2CStepper');
+        } while (setupI2cScanning && Date.now() < deadline);
+        if (setupI2cScanning) throw new Error('La búsqueda de I2CStepper no terminó en 5 segundos');
+        const expected = expectedAddress !== setupI2cAddress && setupI2cDevices.find(function (device) {
+          return device.present && device.address === expectedAddress;
+        });
+        const first = !hadSelectedDevice && setupI2cDevices.find(function (device) { return device.present; });
+        const next = expected || first;
+        if (next) {
+          setupI2cAddress = next.address;
+          await refreshSetupI2c();
+        }
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError(String(error));
+        return false;
+      } finally {
+        button.disabled = setupI2cScanning;
+      }
+    }
+
+    async function saveSetupI2c() {
+      if (!setupI2cSelected || !setupI2cSelected.present) return false;
+      const addressChanged = Number(setupI2cValue('newAddress').value) !== setupI2cAddress;
+      const params = new URLSearchParams({address: String(setupI2cAddress), cmd: 'save'});
+      ['newAddress', 'mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
+       'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+        params.set(name, setupI2cValue(name).value);
+      });
+      // У мешалки режим один, и в списке «Что делает насос» его нет.
+      if (Number(setupI2cValue('newAddress').value) & 1) params.set('mode', '1');
+      // Меняем только свой бит: остальные биты optionFlags (направление, реверс после паузы) не трогаем.
+      const optionFlags = setupI2cSelected.config.optionFlags;
+      params.set('optionFlags', String(setupI2cValue('smoothStart').checked
+        ? optionFlags | SETUP_I2C_OPTION_SMOOTH : optionFlags & ~SETUP_I2C_OPTION_SMOOTH));
+      // Поколение настроек, с которым заполнена форма: Самовар откажет, если их уже поменяли на Nano.
+      params.set('generation', String(setupI2cSelected.status.generation));
+      const button = setupI2cValue('save');
+      button.disabled = true;
+      try {
+        const response = await fetch('/i2cstepper?' + params, {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'Ajustes de Nano no aceptados'));
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        await refreshSetupI2c();
+        SamovarApp.showRequestError(addressChanged
+          ? 'Ajustes guardados en Nano. Reinicie la Nano y luego pulse una vez «Volver a buscar dispositivos I2C»».'
+          : 'Ajustes guardados en Nano.');
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError(String(error));
+        return false;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    window.onload = function() {
+      var setupForm = document.getElementById('setupform');
+      setupForm.dataset.dirty = 'false';
+      setupForm.dataset.editRevision = '0';
+      setupForm.addEventListener('submit', submitSetupForm);
+      function markSetupDirty(event) {
+        // Сам выбор файла в <input type="file" id="fileToLoad"> тоже порождает
+        // 'change' на форме, но это ещё не правка настроек - реальные поля
+        // проставляет mapJson() (см. ниже) и сама решает, когда помечать форму
+        // изменённой. Иначе показ (даже неудачного) диалога выбора файла уже
+        // без причины взводил бы предупреждение "есть несохранённые изменения".
+        if (event && event.target && event.target.id === 'fileToLoad') return;
+        setupForm.dataset.editRevision = String(Number(setupForm.dataset.editRevision) + 1);
+        setupForm.dataset.dirty = 'true';
+      }
+      window.markSetupDirty = markSetupDirty;
+      setupForm.addEventListener('input', markSetupDirty);
+      setupForm.addEventListener('change', markSetupDirty);
+
+      // П52: браузерное предупреждение при уходе со страницы (закрытие вкладки,
+      // обновление, переход по адресу, кнопка "назад") - работает для НЕсохранённых
+      // изменений формы. Для переходов по внутренним ссылкам (кнопки ниже) это же
+      // событие не гарантированно показывает диалог во всех браузерах (особенно
+      // мобильных), поэтому они дополнительно защищены confirmLeaveIfDirty().
+      window.addEventListener('beforeunload', function (event) {
+        if (setupForm.dataset.dirty === 'true') {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      });
+
+      // Обновление отображения плотности насадки при изменении слайдера
+      var packDensSlider = document.getElementById('PackDens');
+      var packDensDisplay = document.getElementById('PackDensDisplay');
+      if (packDensSlider && packDensDisplay) {
+        packDensSlider.addEventListener('input', function() {
+          packDensDisplay.value = this.value;
+        });
+      }
+      // Подчинённые настройки детектора видны только при включённом детекторе
+      var useDetectorBox = document.getElementById('useDetector');
+      var detectorSpeedOptions = document.getElementById('detectorSpeedOptions');
+      if (useDetectorBox && detectorSpeedOptions) {
+        var syncDetectorOptions = function() {
+          detectorSpeedOptions.style.display = useDetectorBox.checked ? '' : 'none';
+        };
+        useDetectorBox.addEventListener('change', syncDetectorOptions);
+        syncDetectorOptions();
+      }
+      SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
+      SamovarApp.enhanceTooltips();
+      SamovarApp.loadUiBootstrap(function (bootstrap) {
+        SamovarApp.applyModeNavigation(bootstrap.mode);
+        if (bootstrap && Array.isArray(bootstrap.i2cSteppers)) {
+          setupI2cDevices = bootstrap.i2cSteppers;
+          var first = setupI2cDevices.find(function (device) { return device.present; });
+          setupI2cAddress = first ? first.address : 1;
+          refreshSetupI2c();
+        }
+      }).catch(function () {});
+    };
+
+    // ==================== THEME TOGGLE =================================================================
+    SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
+  </script>
+</head>
+
+<body>
+  <header class="top">
+    <a class="brand" href="/" title="Página principal" onclick="return SamovarApp.confirmLeave()">
+      <svg viewBox="0 0 108 108" aria-hidden="true"><path fill="#E08A3C" d="M43 40h22a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H43a5 5 0 0 1-5-5V45a5 5 0 0 1 5-5z"/><path fill="#8A4A16" d="M40 71h27l3 5H37zM48 66h12v6H48zM42 40h24l-4-4H46z"/><circle cx="76" cy="66" r="2.5" fill="#FF6B4A"/><path fill="none" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round" d="M52 30c-3-3 3-6 0-9M57 30c3-3-3-6 0-9"/></svg>
+      Samovar
+    </a>
+    <nav class="page-nav" aria-label="Secciones">
+      <a class="nav-link" href="/" onclick="return SamovarApp.confirmLeave()">Modo</a>
+      <a class="nav-link" href="/chart.htm" onclick="return SamovarApp.confirmLeave()">Gráfico</a>
+      <a class="nav-link" data-mode-navigation-slot hidden onclick="return SamovarApp.confirmLeave()"></a>
+      <a class="nav-link" href="/setup.htm" onclick="return SamovarApp.confirmLeave()">Ajustes</a>
+    </nav>
+    <div class="spacer"></div>
+
+    <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Cambiar tema">☾</button>
+  </header>
+  <form action='/save' method="post" name="setupform" id="setupform">
+    <input type="hidden" name="fullsetup" value="1">
+    <h1>Ajustes</h1>
+    <div class="tab">
+      <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Principales" aria-pressed="true">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Temp');" value="Temperatura" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Pump');" value="Bomba" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Beer');" value="Cerveza" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Cheese');" value="Queso" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'NBK');" value="CMC" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Otros" aria-pressed="false">
+      <input id='i2cStepperSetupTab' type='button' class="tablinks" value="I2CStepper"
+             onclick="SamovarApp.openTab(event, 'I2CStepper')" aria-pressed="false">
+    </div>
+    <div id="I2CStepper" class="tabcontent" aria-hidden="true">
+      <h2>Ajustes Nano I2CStepper</h2>
+      <p><button id="i2c-scan" type="button" class="button" onclick="rescanSetupI2c()">Volver a buscar dispositivos I2C</button></p>
+      <p id="i2c-missing" hidden></p>
+      <p id="i2c-selectorRow" hidden><label>Dispositivo <select id="i2c-selector" onchange="chooseSetupI2c()"></select></label></p>
+      <section id="i2c-panel" hidden>
+        <fieldset class="i2c-group">
+          <legend>Conexión</legend>
+          <div class="i2c-row"><label for="i2c-newAddress">Dirección en el bus I2C</label> <select id="i2c-newAddress" onchange="updateSetupI2cFields()"></select></div>
+          <div class="hint">El tipo de placa fija la dirección: impar es agitador, par es bomba. La nueva dirección funcionará tras reiniciar Nano.</div>
+          <div class="i2c-row" id="i2c-modeRow"><label for="i2c-mode">Qué hace la bomba</label> <select id="i2c-mode" onchange="updateSetupI2cFields()"><option value="2">Caudal constante</option><option value="3">Llenado de volumen</option></select></div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-mixerGroup">
+          <legend>Agitador</legend>
+          <div class="i2c-row"><label for="i2c-mixerRpm">Velocidad, rpm</label> <input id="i2c-mixerRpm" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-mixerRunSec">Trabajo, s</label> <input id="i2c-mixerRunSec" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-mixerPauseSec">Pausa, s</label> <input id="i2c-mixerPauseSec" type="number" min="0"></div>
+          <div class="hint">El agitador gira «Trabajo» segundos, luego se detiene «Pausa» segundos, y así en ciclo. Trabajo&nbsp;0: gira sin parar.</div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-pumpGroup">
+          <legend>Caudal constante</legend>
+          <div class="i2c-row"><label for="i2c-pumpMlHour">Caudal de alimentación, ml/h</label> <input id="i2c-pumpMlHour" type="number" min="0"></div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-fillingGroup">
+          <legend>Llenado de volumen</legend>
+          <div class="i2c-row"><label for="i2c-fillingMl">Volumen, ml</label> <input id="i2c-fillingMl" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-fillingMlHour">Caudal, ml/h</label> <input id="i2c-fillingMlHour" type="number" min="0"></div>
+          <div class="hint">La bomba dosifica el volumen indicado y se detiene sola.</div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-calibrationGroup">
+          <legend>Calibración de la bomba</legend>
+          <div class="i2c-row"><label for="i2c-stepsPerMl">Pasos del motor por 1&nbsp;ml</label> <input id="i2c-stepsPerMl" type="number" min="1"></div>
+          <div class="hint">Con este número los ml/h se convierten en velocidad del motor. Si la bomba dosifica más de lo indicado, aumente el número; si menos, redúzcalo.</div>
+          <p id="i2c-calibrateRow"><button id="i2c-calibrate" type="button" class="button" onclick="if (confirmLeaveIfDirty()) location.assign('/calibrate.htm?address=' + setupI2cAddress)">Calibración de la bomba I2CStepper</button></p>
+          <div class="hint" id="i2c-calibrateHint">En la página de calibración la bomba dosifica 100&nbsp;ml en un recipiente graduado y los pasos por 1&nbsp;ml se calculan solos.</div>
+        </fieldset>
+        <fieldset class="i2c-group">
+          <legend>Motor</legend>
+          <div><input id="i2c-smoothStart" type="checkbox"> <label for="i2c-smoothStart">Aceleración y frenado suaves</label></div>
+          <div class="hint">La aceleración dura unos 10 segundos. Al trabajar por volumen o tiempo indicados el motor también frena suavemente; la rotación continua se detiene de inmediato.</div>
+        </fieldset>
+        <p><button id="i2c-save" type="button" class="button" onclick="saveSetupI2c()">Guardar en Nano</button></p>
+        <p class="hint">Estos ajustes se guardan en la propia placa Nano y se escriben solo con este botón. El botón «Guardar» al final de la página no se aplica a ellos.</p>
+      </section>
+    </div>
+    <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>
+          <div>
+            <label for="mode">Modo de trabajo</label>
+            <select id="mode" name="mode">
+              <option value="0" %RECT%>Rectificación</option>
+              <option value="1" %DIST%>Destilación</option>
+              <option value="2" %BEER%>Cerveza</option>
+              <option value="3" %BK%>Columna de mosto</option>
+              <option value="4" %NBK%>Columna de mosto continua</option>
+              <option value="7" %CHEESE%>Elaboración de queso</option>
+            </select>
+          </div>
+        </h2>
+        <h2 class="tooltip"><label for="DistTemp">Rectificación, destilación y CM hasta la temperatura del calderín:</label> <input id="DistTemp" name='DistTemp' type='text' inputmode='decimal' value='%DistTemp%'>&#176;C<span class="tooltiptext">Si «Usar corrección de presión» está desactivada y el tiempo de control de finalización (abajo) es 0, en altitud el umbral fijado (por defecto 99.9&#176;C) puede ser inalcanzable: el proceso no se detendrá solo.</span></h2>
+        <h2 class="tooltip"><label for="DistTimeF">Tiempo para el control de finalización del proceso de destilación:</label> <input id="DistTimeF" name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> min<span class="tooltiptext">Tiempo en minutos para detener la destilación y el trabajo del CM, siempre que el valor del sensor del calderín no cambie. No más de 255 minutos. 0: no tener en cuenta. Por defecto: 60 minutos; con poca potencia de calentamiento puede terminar con un 1-3&#37; de alcohol restante en el calderín.</span></h2>
+        <h2>
+          <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
+          <label for='usepressure'>Usar corrección de presión</label>
+        </h2>
+        <h2>
+          <input id='useflevel' type='checkbox' name='useflevel' value='useflevel' %FLChecked%>
+          <label for='useflevel' %IgnFL% >Usar el sensor de nivel de flema en la rectificación</label>
+        </h2>
+        <h2>
+          <input id="HideProcessScheme" type="checkbox" name="HideProcessScheme" value="HideProcessScheme" %HideProcessSchemeChecked%>
+          <label for="HideProcessScheme">No mostrar el esquema del proceso</label>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em;">
+        <h2 style="color: var(--accent-text);">⚙️ Parámetros del equipo (columna)</h2>
+        <h2>
+          <label for="ColDiam">Diámetro:</label>
+          <select name="ColDiam" id="ColDiam">
+            <option value="1.5" %ColDiam_1.5%>1.5</option>
+            <option value="2.0" %ColDiam_2.0%>2.0</option>
+            <option value="3.0" %ColDiam_3.0%>3.0</option>
+          </select> pulgadas
+        </h2>
+        <h2>
+          <label for="ColHeight">Altura del relleno:</label>
+          <select name="ColHeight" id="ColHeight">
+            <option value="0.50" %ColHeight_0.50%>0.50</option>
+            <option value="0.75" %ColHeight_0.75%>0.75</option>
+            <option value="1.00" %ColHeight_1.00%>1.00</option>
+            <option value="1.25" %ColHeight_1.25%>1.25</option>
+            <option value="1.50" %ColHeight_1.50%>1.50</option>
+            <option value="1.75" %ColHeight_1.75%>1.75</option>
+            <option value="2.00" %ColHeight_2.00%>2.00</option>
+            <option value="2.25" %ColHeight_2.25%>2.25</option>
+            <option value="2.50" %ColHeight_2.50%>2.50</option>
+          </select> metros
+        </h2>
+        <h2>
+          <label for="PackDens">Densidad del relleno:</label>
+          <input name="PackDens" id="PackDens" type="range" min="0" max="100" step="5" value="%PackDens%" style="width: 200px; vertical-align: middle;">
+          <output id="PackDensDisplay" name="PackDensDisplay" for="PackDens">%PackDens%</output>&nbsp;&#37; <span class="nowrap">(0-100)</span>
+        </h2>
+      </div>
+      <div>
+
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2>Detector de fuga de impurezas (rectificación)</h2>
+          <h2>
+            <input id='useDetector' type='checkbox' name='useDetector' value='useDetector' %UASDetectorChecked%>
+            <label for='useDetector' class="tooltip">Usar detector<span class="tooltiptext">interruptor general: sin él el detector no funciona en absoluto. Vigila la tendencia de temperatura en todas las líneas del programa (en cabezas solo observa), ante una subida crítica pone la extracción en pausa y la reanuda por sí mismo</span></label>
+          </h2>
+          <div id='detectorSpeedOptions' style="padding-left: 2em;">
+            <h2>
+              <input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
+              <label for='useautospeed' class="tooltip">Reducir el caudal de extracción al subir la temperatura<span class="tooltiptext">actúa solo junto con el detector: cuando la tendencia supera el umbral, el detector reduce suavemente la velocidad de la bomba y la devuelve cuando la tendencia se calma</span></label>
+            </h2>
+            <h2><label for="autospeed">Paso de reducción de velocidad:</label> <input id="autospeed" name='autospeed' type='text' inputmode='numeric' value='%autospeed%'> &#37; (0 = por defecto 5, máximo 20)</h2>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2><label for="MaxPressureValue" class="tooltip">Presión a la que se activa la emergencia:<span class="tooltiptext">Al alcanzar esta presión el Samovar pasará al modo de emergencia</span></label><input id="MaxPressureValue" name='MaxPressureValue' type='text' inputmode='decimal' value='%MaxPressureValue%'>mmHg.</h2>
+          <div style="display: %MpxSettingsDisplay%;">
+            <h2><label for="MpxZeroAdc" class="tooltip">Punto cero MPX:<span class="tooltiptext">Lectura del ADC con presión relativa cero. Se resta de cada medición.</span></label> <input id="MpxZeroAdc" name='MpxZeroAdc' type='text' inputmode='decimal' value='%MpxZeroAdc%'></h2>
+            <h2><label for="MpxCountsPerMmHg" class="tooltip">Cuentas MPX por 1 mmHg.:<span class="tooltiptext">Escala del sensor: la diferencia entre la lectura actual del ADC y el punto cero se divide por este número. Valor de fábrica — 12.</span></label> <input id="MpxCountsPerMmHg" name='MpxCountsPerMmHg' type='text' inputmode='decimal' value='%MpxCountsPerMmHg%'></h2>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2>Ajustes del zumbador</h2>
+          <h2>
+            <input id='UseBuzzer' type='checkbox' name='UseBuzzer' value='UseBuzzer' %CUBuzz%>
+            <label for='UseBuzzer' class="tooltip">Usar el zumbador para notificaciones<span class="tooltiptext">con el parámetro desactivado el zumbador se apaga por completo</span></label>
+          </h2>
+          <h2>
+            <input id='UseBBuzzer' type='checkbox' name='UseBBuzzer' value='UseBBuzzer' %CUBBuzz%>
+            <label for='UseBBuzzer' class="tooltip">Usar el zumbador del navegador para notificaciones<span class="tooltiptext">con el parámetro desactivado no se usa el zumbador del navegador</span></label>
+          </h2>
+          <h2>
+            <input id='ChangeProgramBuzzer' type='checkbox' name='ChangeProgramBuzzer' value='ChangeProgramBuzzer' %CPBuzz%>
+            <label for='ChangeProgramBuzzer' class="tooltip">Activar el zumbador al cambiar de programa<span class="tooltiptext">para notificación </span></label>
+          </h2>
+        </div>
+      </div>
+      <div
+        style="border: 1px dashed #bbb; display: flex; flex-direction: column; margin-bottom: 1em;  margin-top: 1em; padding: 1em; align-items: center;"
+        >
+        <input id='selftest' type='button' name='selftest' value='Autotest' onclick='confirmSelfTest()' class="button"
+          title="Se encenderá la bomba de agua (o se abrirá la válvula), se pondrá en marcha la bomba peristáltica de extracción, el servo recorrerá 5 posiciones."
+        >
+        <p style="margin: 0.5em 0 0; font-size: 0.85em; color: var(--text-main); text-align: center;">
+          Atención: se activará el suministro de agua (bomba o válvula), se pondrá en marcha la bomba peristáltica de extracción, el servo recorrerá las 5 posiciones de los recipientes.
+        </p>
+      </div>
+    </div>
+
+    <div id="Temp" class="tabcontent" aria-hidden="true">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %SteamColor%; text-decoration-line: underline; text-decoration-color: %SteamColor%;">
+          <h2>
+            <div>
+              <label for="SteamAddr">Dirección del sensor de vapor antes del deflegmador</label>
+              <select id="SteamAddr" name="SteamAddr">
+                %SteamAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaSteamTemp">Corrección del sensor de vapor antes del deflegmador:</label> <input id="DeltaSteamTemp" name='DeltaSteamTemp' type='text' inputmode='decimal' value='%DeltaSteamTemp%'>&#176;C</h2>
+          <h2><label for="SetSteamTemp">Desviación de la consigna del sensor de vapor antes del deflegmador:</label> <input id="SetSteamTemp" name='SetSteamTemp' type='text' inputmode='decimal' value='%SetSteamTemp%'>&#176;C</h2>
+          <h2><label for="SteamDelay">Retardo de la extracción cuando la T del vapor supera la consigna:</label> <input id="SteamDelay" name='SteamDelay' type='text' inputmode='decimal' value='%SteamDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %PipeColor%; text-decoration-line: underline; text-decoration-color: %PipeColor%;">
+          <h2>
+            <div>
+              <label for="PipeAddr">Dirección del sensor de la columna</label>
+              <select id="PipeAddr" name="PipeAddr">
+                %PipeAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaPipeTemp">Corrección del sensor de la columna a 2/3 de la columna:</label> <input id="DeltaPipeTemp" name='DeltaPipeTemp' type='text' inputmode='decimal' value='%DeltaPipeTemp%'>&#176;C</h2>
+          <h2><label for="SetPipeTemp">Desviación de la consigna del sensor de la columna a 2/3 de la columna:</label> <input id="SetPipeTemp" name='SetPipeTemp' type='text' inputmode='decimal' value='%SetPipeTemp%'>&#176;C</h2>
+          <h2><label for="PipeDelay">Retardo de la extracción cuando la T de la columna supera la consigna:</label> <input id="PipeDelay" name='PipeDelay' type='text' inputmode='decimal' value='%PipeDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %WaterColor%; text-decoration-line: underline; text-decoration-color: %WaterColor%;">
+          <h2>
+            <div>
+              <label for="WaterAddr">Dirección del sensor de agua</label>
+              <select id="WaterAddr" name="WaterAddr">
+                %WaterAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaWaterTemp">Corrección del sensor de agua:</label> <input id="DeltaWaterTemp" name='DeltaWaterTemp' type='text' inputmode='decimal' value='%DeltaWaterTemp%'>&#176;C</h2>
+          <h2><label for="SetWaterTemp" class="tooltip">Consigna del sensor de agua:<span class="tooltiptext">En los modos de destilación, la temperatura que mantiene la refrigeración. En los modos Cerveza y Queso este mismo número es la tolerancia en torno a la temperatura fijada de la línea: de 0,3 a 3&#176;C.</span></label> <input id="SetWaterTemp" name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2><label for="WaterDelay">Retardo de actuación cuando la T del agua supera la consigna:</label> <input id="WaterDelay" name='WaterDelay' type='text' inputmode='decimal' value='%WaterDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %TankColor%; text-decoration-line: underline; text-decoration-color: %TankColor%;">
+          <h2>
+            <div>
+              <label for="TankAddr">Dirección del sensor del calderín</label>
+              <select id="TankAddr" name="TankAddr">
+                %TankAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaTankTemp">Corrección del sensor del calderín:</label> <input id="DeltaTankTemp" name='DeltaTankTemp' type='text' inputmode='decimal' value='%DeltaTankTemp%'>&#176;C</h2>
+          <h2><label for="SetTankTemp">Desviación de la consigna del sensor del calderín:</label> <input id="SetTankTemp" name='SetTankTemp' type='text' inputmode='decimal' value='%SetTankTemp%'>&#176;C</h2>
+          <h2><label for="TankDelay">Retardo de actuación cuando la T del calderín supera la consigna:</label> <input id="TankDelay" name='TankDelay' type='text' inputmode='decimal' value='%TankDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %ACPColor%; text-decoration-line: underline; text-decoration-color: %ACPColor%;">
+          <h2>
+            <div>
+              <label for="ACPAddr">Dirección del sensor de la TCA</label>
+              <select id="ACPAddr" name="ACPAddr">
+                %ACPAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaACPTemp">Corrección del sensor de la TCA</label> <input id="DeltaACPTemp" name='DeltaACPTemp' type='text' inputmode='decimal' value='%DeltaACPTemp%'>&#176;C</h2>
+          <h2><label for="SetACPTemp" class="tooltip">Consigna del sensor de la TCA:<span class="tooltiptext">En los modos de destilación, la temperatura que mantiene la refrigeración. En los modos Cerveza y Queso este mismo número es la tolerancia en torno a la temperatura fijada de la línea: de 0,3 a 3&#176;C.</span></label> <input id="SetACPTemp" name='SetACPTemp' type='text' inputmode='decimal' value='%SetACPTemp%'>&#176;C</h2>
+          <h2><label for="ACPDelay">Retardo de actuación cuando la T de la TCA supera la consigna:</label> <input id="ACPDelay" name='ACPDelay' type='text' inputmode='decimal' value='%ACPDelay%'> s</h2>
+        </div>
+      </div>
+      <div 
+        style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
+        >
+        <input id='scanSensorsButton' type='button' name='selftest' value='Buscar sensores' onclick='rescanSensors();' class="button"
+          title="Leer las direcciones de los sensores de temperatura conectados"
+        >
+      </div>
+    </div>
+
+    <div id="Pump" class="tabcontent" aria-hidden="true">
+      <h2><label for="StepperStepMl">Número de pasos del motor paso a paso:</label> <input id="StepperStepMl" name='StepperStepMl' type='text' inputmode='decimal' value='%StepperStepMl%' style="width: 6em;"> /ml.</h2>
+      <div style="display: %I2CPumpTab%;">
+        <h2>
+          <input id='UseSecondI2CPump' type='checkbox' name='UseSecondI2CPump' value='UseSecondI2CPump' %SecondI2CPumpChecked%>
+          <label for='UseSecondI2CPump' class="tooltip">Usar bomba I2C sobre PC<span class="tooltiptext">La bomba participa en la rectificación solo si se detectó al iniciar el Samovar. Para las cabezas pasa a ser la bomba principal; para el corazón y la preinundación trabaja a la vez que la bomba local.</span></label>
+        </h2>
+        <h2><label for="SecondI2CPumpRate" class="tooltip">Caudal de extracción sobre PC:<span class="tooltiptext">Velocidad constante de la bomba I2C en las líneas de corazón B y de preinundación C. En la línea de cabezas H se toma la velocidad de la propia línea del programa.</span></label> <input id="SecondI2CPumpRate" name='SecondI2CPumpRate' type='text' inputmode='decimal' value='%SecondI2CPumpRate%'> l/h</h2>
+      </div>
+      <div class="btn-cell" style="margin: 0 auto;">
+        <input id='setstvolume' type='button' name='return' value='Calibración de la bomba' onclick='if (confirmLeaveIfDirty()) location.href="calibrate.htm"' class="button">
+      </div>
+    </div>
+
+    <div id="Beer" class="tabcontent" aria-hidden="true">
+      <h2>
+        <label for="BeerBrewOrder" class="tooltip">Esquema de elaboración<span class="tooltiptext">Esquema de la cervecería, no una receta. All-in-one calienta el macerado en el calderín. HERMS: PID por el sensor de agua (caldera) y bomba continua. RIMS: PID por el sensor de la columna (retorno) y bomba continua. El método de maceración (infusión/decocción) se toma del TYPE del paso BeerXML.</span></label>
+        <select id="BeerBrewOrder" name="BeerBrewOrder">
+          <option value="0" %BeerBrewOrder_0%>All-in-one / BIAB</option>
+          <option value="1" %BeerBrewOrder_1%>HERMS</option>
+          <option value="2" %BeerBrewOrder_2%>RIMS</option>
+        </select>
+      </h2>
+      <h2>Coeficientes del PID del regulador de calentamiento:</h2>
+      <h2><label for="Kp">Kp:</label> <input id="Kp" name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
+      <h2><label for="Ki">Ki:</label> <input id="Ki" name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>
+      <h2><label for="Kd">Kd:</label> <input id="Kd" name='Kd' type='text' inputmode='decimal' value='%Kd%'></h2>
+      <div id='VoltH2' style=''>
+        <h2><label for="StbVoltage">Tens./potencia del regulador en modo de mantenimiento de temp.:</label> <input name='StbVoltage' id='StbVoltage' type='text' inputmode='decimal' value='%StbVoltage%'> V</h2>
+      </div>
+      <div id='VoltBoil' style=''>
+        <h2><label for="BVolt">Tens./potencia del regulador en modo de calentamiento y hervido:</label> <input name='BVolt' id='BVolt' type='text' inputmode='decimal' value='%BVolt%'> V</h2>
+      </div>
+      <div id='VoltBK' style=''>
+        <h2><label for="BKPower">Potencia del CM tras empezar a hervir:</label> <input name='BKPower' id='BKPower' type='text' inputmode='decimal' value='%BKPower%'> V</h2>
+      </div>
+        <h2>
+          <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
+          <label for='UseST' class="tooltip">Usar la resistencia de aceleración durante el hervido<span class="tooltiptext">Si se usa una resistencia de aceleración, se puede usar también en el modo de hervido. En destilación: si esta casilla está desactivada, la resistencia de aceleración se apaga al instante al empezar a hervir.</span></label>
+        </h2>
+    </div>
+
+    <div id="Cheese" class="tabcontent" aria-hidden="true">
+      <h2>Ajustes de elaboración de queso:</h2>
+      <p><strong>Conexión para el modo «Queso»»:</strong> si está definido <code>USE_ADS1115</code>, el sensor de pH se lee automáticamente de AIN0 del ADS1115 en la dirección indicada, y <code>LUA_PIN</code> no se usa para el pH. Si no se encuentra el ADS1115, la elaboración de queso y la calibración de pH quedan bloqueadas, los demás modos siguen funcionando. Sin <code>USE_ADS1115</code> PH-4502C ocupa <code>LUA_PIN</code> y entra en conflicto con el MPX5010DP. La válvula de vaciado ocupa el relé 4 en lugar de la resistencia de aceleración.</p>
+      <div class="btn-cell" style="margin: 0 auto;">
+        <input type="button" value="Calibración pH" onclick="if (confirmLeaveIfDirty()) location.href='calibrate_ph.htm'" class="button">
+      </div>
+    </div>
+
+    <div id="NBK" class="tabcontent" aria-hidden="true">
+      <h2>Ajustes del CMC:</h2>
+      <h2><label for="NbkIn" class="tooltip">Inercia:<span class="tooltiptext">Tiempo (s) en que la columna alcanza un nuevo estado estable tras un cambio de potencia o de alimentación. Por defecto 180. Para mostos de grano espesos y columnas con precalentamiento suele ser 300-600: según la experiencia de los foros, la respuesta a un escalón tarda 5-15 minutos.</span></label> <input id="NbkIn" name='NbkIn' type='text' inputmode='decimal' value='%NbkIn%'></h2>
+      <h2><label for="NbkDelta" class="tooltip">Delta:<span class="tooltiptext">Desviación admisible de la temperatura de la vinaza respecto a la Tn de referencia, dentro de la cual no cambian la potencia ni la alimentación.</span></label> <input id="NbkDelta" name='NbkDelta' type='text' inputmode='decimal' value='%NbkDelta%'></h2>
+      <h2><label for="NbkDM" class="tooltip">Paso de potencia:<span class="tooltiptext">Cuántos vatios cambia el automatismo la potencia en cada corrección.</span></label> <input id="NbkDM" name='NbkDM' type='text' inputmode='decimal' value='%NbkDM%'></h2>
+      <h2><label for="NbkDP" class="tooltip">Paso de alimentación:<span class="tooltiptext">Cuántos litros por hora cambia el automatismo la alimentación de mosto en cada corrección.</span></label> <input id="NbkDP" name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
+      <h2><label for="NbkSteamT" class="tooltip">T vapor:<span class="tooltiptext">Límite de trabajo superior de la temperatura del vapor. Al acercarse a él el automatismo reduce la alimentación.</span></label> <input id="NbkSteamT" name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
+      <h2><label for="NbkOwPress" class="tooltip">Presión de inundación:<span class="tooltiptext">Umbral del sensor de presión al que se registra la inundación. El techo de presión de trabajo es la mitad de este valor (por ejemplo, para 40 mm son 20 mm, como en el manual de HD): por encima el automatismo reduce la alimentación.</span></label> <input id="NbkOwPress" name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
+      <h2><label for="NbkTn" class="tooltip">T de finalización (vinaza):<span class="tooltiptext">Temperatura de referencia de la vinaza prensada. En la primera iteración de Optimización se afina automáticamente al alza según la lectura del sensor (hasta 102&#176;C).</span></label> <input id="NbkTn" name='NbkTn' type='text' inputmode='decimal' value='%NbkTn%'>&#176;C</h2>
+      <h2>
+        <input id='NbkUseStreamServo' type='checkbox' name='NbkUseStreamServo' value='NbkUseStreamServo' %NbkStreamServoChecked%>
+        <label for='NbkUseStreamServo' class="tooltip">Conmutar el flujo con el servo en caso de inundación<span class="tooltiptext">En caso de inundación se elige la posición 1: flujo sucio. La posición 0, flujo limpio, se restablece solo tras una pausa de recuperación completa o al terminar el CMC.</span></label>
+      </h2>
+    </div>
+
+    <div id="Other" class="tabcontent" aria-hidden="true">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2><label for="blynkauth">Token Blynk:</label> <input id="blynkauth" name='blynkauth' type='text' size="32" class="setup-long-input" style="width: 22em;" value='%blynkauth%'></h2>
+        <h2><label for="videourl">URL del vídeo de la cámara:</label> <input id="videourl" name='videourl' type='text' size="32" class="setup-long-input" style="width: 30em;" value='%videourl%'></h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2><label for="TimeZone">Zona horaria:</label> <input id="TimeZone" name='TimeZone' type='text' inputmode='decimal' value='%TimeZone%'></h2>
+        <h2>
+          <input id='CheckPower' type='checkbox' name='CheckPower' value='CheckPower' %ChckPwr%>
+          <label for='CheckPower' class="tooltip">Usar la comprobación de conexión del regulador<span class="tooltiptext">Si se usa un regulador, al perder la comunicación con él el Samovar apaga la alimentación</span></label>
+        </h2>
+        <h2><label for="HeaterR">Resistencia de la resistencia para el cálculo de potencia:</label> <input id="HeaterR" name='HeaterR' type='text' inputmode='decimal' value='%HeaterR%'> Ohm</h2>
+        <h2><label for="MainsVoltage">Tensión de red:</label> <input id="MainsVoltage" name='MainsVoltage' type='text' inputmode='decimal' value='%MainsVoltage%'> V</h2>
+        <h2>
+          <input id='UseWS' type='checkbox' name='UseWS' value='UseWS' %UseWS%>
+          <label for='UseWS' class="tooltip">Usar control de caudal de agua<span class="tooltiptext">Si hay un sensor de caudal de agua conectado, con la opción desactivada se pueden ignorar sus lecturas</span></label>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>
+          <p>Colores de temperaturas:</p>
+          <div>
+            <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
+            <label for="SteamColor">Temperatura del vapor</label>
+          </div>
+          <div>
+            <input type="color" id="PipeColor" name="PipeColor" value="%PipeColor%">
+            <label for="PipeColor">Temperatura del sensor en la columna</label>
+          </div>
+          <div>
+            <input type="color" id="WaterColor" name="WaterColor" value="%WaterColor%">
+            <label for="WaterColor">Temperatura del agua</label>
+          </div>
+          <div>
+            <input type="color" id="TankColor" name="TankColor" value="%TankColor%">
+            <label for="TankColor">Temperatura del sensor en el calderín</label>
+          </div>
+          <div>
+            <input type="color" id="ACPColor" name="ACPColor" value="%ACPColor%">
+            <label for="ACPColor">Temperatura del sensor en la TCA</label>
+          </div>
+        </h2>
+        <p><a href="https://www.w3schools.com/colors/colors_picker.asp" target="blank">los colores se pueden elegir aquí</a></p>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>Ajustes de niveles de los relés
+          <div>
+            <label for="rele1">Relé 1</label>
+            <select id="rele1" name="rele1">
+              <option value="0" %RAL%>LOW</option>
+              <option value="1" %RAH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            <label for="rele2">Relé 2</label>
+            <select id="rele2" name="rele2">
+              <option value="0" %RBL%>LOW</option>
+              <option value="1" %RBH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            <label for="rele3">Relé 3</label>
+            <select id="rele3" name="rele3">
+              <option value="0" %RCL%>LOW</option>
+              <option value="1" %RCH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            <label for="rele4">Relé 4</label>
+            <select id="rele4" name="rele4">
+              <option value="0" %RDL%>LOW</option>
+              <option value="1" %RDH%>HIGH</option>
+            </select>
+          </div>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em 2em 1em 2em; justify-content: space-between;">
+  <div class="container_column" style="margin-bottom: 1em;">
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <div>
+            <input id='saveform' type='button' name='saveform' value='Descargar archivo de ajustes' onclick='SaveFormToFile(this);' class="button">
+          </div>
+          <div>
+            <input id='resetwifi' type='button' name='resetwifi' value='Restablecer ajustes WiFI' onclick='if (confirm("Restablecer ajustes WiFi?")) sendbutton("resetwifi=1");' class="button">
+          </div>
+    </div>
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <div class="file-upload-control">
+            <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
+              <i class="fa fa-cloud-upload"></i> Cargar archivo de ajustes
+            </label>
+            <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" />
+          </div>
+          <div>
+            <input id='reboot' type='button' name='reboot' value='Reiniciar Samovar' onclick='if (confirm("Reiniciar Samovar?")) sendbutton("reboot");' class="button">
+          </div>
+    </div>
+        </div>
+      </div>
+    </div>
+    <div class="setup-actions">
+      <input id='save' type='submit' name='save' value='Guardar' class="button">
+      <input id='return' type='button' name='return' value='Inicio' onclick='if (confirmLeaveIfDirty()) location.href="index.htm"' class="button">
+      <input id='edit' type='button' name='edit' value='Editor' onclick='if (confirmLeaveIfDirty()) location.href="/edit"' class="button">
+    </div>
+  </form>
+</body>
+
+</html>

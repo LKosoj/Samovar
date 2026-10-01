@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +13,7 @@ SOURCE = (ROOT / "mode_common.h").read_text()
 DUE = extract_function_body(SOURCE, "inline bool mode_water_pre_alarm_due")
 WARN = extract_function_body(SOURCE, "inline void mode_warn_water_hot")
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>

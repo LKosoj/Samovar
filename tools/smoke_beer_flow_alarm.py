@@ -53,6 +53,7 @@ int main() {
 # порог и guard по PowerOn остались бы без покрытия.
 WORT_HARNESS = r"""
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 #define BOILING_TEMP 98.9f
@@ -172,7 +173,7 @@ def main() -> int:
     beer_source = (ROOT / "beer.h").read_text(encoding="utf-8")
     wort_body = extract_function_body(beer_source, "inline void beer_check_wort_overheat_limit()")
     wort_function = "void beer_check_wort_overheat_limit() {" + wort_body + "}"
-    return compile_and_run(WORT_HARNESS.replace("@BEER_CHECK_WORT_OVERHEAT@", wort_function))
+    return compile_and_run(WORT_HARNESS.replace("@ROOT@", ROOT.as_posix()).replace("@BEER_CHECK_WORT_OVERHEAT@", wort_function))
 
 
 if __name__ == "__main__":

@@ -21,8 +21,8 @@ inline void mode_set_alarm_pause_ms(uint32_t delayMs) {
 }
 
 inline bool mode_check_powered_cooling_sensors(const char* modeName) {
-  if (!sensor_valid(WaterSensor) && process_sensor_failed(modeName, "воды")) return false;
-  if (optional_sensor_failed(ACPSensor) && process_sensor_failed(modeName, "ТСА")) return false;
+  if (!sensor_valid(WaterSensor) && process_sensor_failed(modeName, TR(MCOM_SENSOR_WATER, "воды"))) return false;
+  if (optional_sensor_failed(ACPSensor) && process_sensor_failed(modeName, TR(MCOM_SENSOR_ACP, "ТСА"))) return false;
   return true;
 }
 
@@ -132,7 +132,7 @@ inline void mode_request_water_flow_emergency_if_needed() {
 #ifdef USE_WATERSENSOR
   if (mode_water_flow_demanded() && WFAlarmCount > WF_ALARM_COUNT) {
     set_buzzer(true);
-    request_emergency_stop("Аварийное отключение! Прекращена подача воды.");
+    request_emergency_stop(TR(MCOM_WATER_SUPPLY_STOPPED, "Аварийное отключение! Прекращена подача воды."));
   }
 #endif
 }
@@ -146,10 +146,10 @@ inline void mode_request_overheat_emergency_if_needed() {
   if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && (PowerOn || lua_heater_channel_raised())) {
     String s = "";
     if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
-      s = s + " Воды";
+      s = s + TR(MCOM_OVERTEMP_WATER, " Воды");
     if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
-      s = s + " ТСА";
-    request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
+      s = s + TR(MCOM_OVERTEMP_ACP, " ТСА");
+    request_emergency_stop(TR(MCOM_MAX_TEMP_EXCEEDED, "Аварийное отключение! Превышена максимальная температура") + s);
   }
 }
 
@@ -159,8 +159,8 @@ inline bool mode_water_pre_alarm_due() {
 
 inline void mode_warn_water_hot() {
   set_buzzer(true);
-  SendMsg("Высокая температура воды: " + format_float(WaterSensor.avgTemp, 1) +
-      "°C (порог предупреждения " + String(ALARM_WATER_TEMP - 5) + "°C). Проверьте охлаждение.", WARNING_MSG);
+  SendMsg(TR(MCOM_WATER_HIGH_HEAD, "Высокая температура воды: ") + format_float(WaterSensor.avgTemp, 1) +
+      TR(MCOM_WATER_WARN_THRESHOLD, "°C (порог предупреждения ") + String(ALARM_WATER_TEMP - 5) + TR(MCOM_CHECK_COOLING_DOT, "°C). Проверьте охлаждение."), WARNING_MSG);
 }
 
 // Превышение уставки ТСА для предупреждения и усиления охлаждения.
@@ -183,7 +183,7 @@ inline void mode_warn_acp_hot_once(bool acpHot, float acpBoostThreshold) {
   if (warned) return;
   warned = true;
   set_buzzer(true);
-  SendMsg("Высокая температура ТСА: " + format_float(ACPSensor.avgTemp, 1) + "°C (порог " + format_float(acpBoostThreshold, 1) + "°C)! Проверьте охлаждение.", WARNING_MSG);
+  SendMsg(TR(MCOM_ACP_HIGH_HEAD, "Высокая температура ТСА: ") + format_float(ACPSensor.avgTemp, 1) + TR(MCOM_ACP_THRESHOLD, "°C (порог ") + format_float(acpBoostThreshold, 1) + TR(MCOM_CHECK_COOLING_BANG, "°C)! Проверьте охлаждение."), WARNING_MSG);
 }
 
 #ifdef USE_WATER_PUMP
@@ -264,7 +264,7 @@ inline void mode_handle_water_pre_alarm_if_due() {
     mode_warn_water_hot();
 #ifdef SAMOVAR_USE_POWER
     //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
-    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)mode_water_alarm_power_base(), 5);
+    mode_reduce_power_for_water_alarm_by_volts(TR(MCOM_WATER_CRIT_REDUCING, "Критическая температура воды! Понижаем ") + (String)PWR_MSG + TR(MCOM_FROM, " с ") + (String)mode_water_alarm_power_base(), 5);
 #endif
     mode_set_alarm_pause_ms(30000);
   }
@@ -294,7 +294,7 @@ inline void mode_cancel_process_start(const String& message) {
  * @brief Закрывает файл лога с диагностикой занятости (WARNING вместо тихой потери).
  */
 inline void mode_warn_log_close_failed() {
-  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+  if (!request_data_log_close()) SendMsg(TR(MCOM_LOG_BUSY_CLOSE_SKIPPED, "Файл лога занят: закрытие пропущено"), WARNING_MSG);
 }
 
 // [P7 п.3a] Одноразовый флаг явного пользовательского запроса старта нагрева. Взводится
@@ -418,12 +418,12 @@ inline ModeHeatingStartResult mode_begin_heating_session(
   // Явно уведомляем оператора и гасим владение статусом — иначе старт будет молча
   // проваливаться каждый тик, а UI ничего не объяснит.
   if (heater_safety_latched() && SamovarStatusInt == activeStatus) {
-    mode_cancel_process_start("Нагрев заблокирован аварийной защитой, требуется перезагрузка");
+    mode_cancel_process_start(TR(MCOM_HEATING_LATCHED, "Нагрев заблокирован аварийной защитой, требуется перезагрузка"));
     return MODE_HEATING_START_FAILED;
   }
   if (PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()) return MODE_HEATING_START_FAILED;
   if (power_transition_active()) {
-    mode_cancel_process_start("Выключение нагрева ещё не завершено. Старт отменён.");
+    mode_cancel_process_start(TR(MCOM_HEATING_OFF_PENDING, "Выключение нагрева ещё не завершено. Старт отменён."));
     return MODE_HEATING_START_FAILED;
   }
 
@@ -431,7 +431,7 @@ inline ModeHeatingStartResult mode_begin_heating_session(
   // отказ регулятора, молча сбросивший статус в IDLE и тут же снова выставленный где-то
   // выше по стеку, привёл бы к авто-рестарту нагрева без нового действия пользователя.
   if (!mode_consume_heating_start_request(activeStatus)) {
-    mode_cancel_process_start("Нагрев не возобновлён автоматически. Требуется повторная команда старта.");
+    mode_cancel_process_start(TR(MCOM_HEATING_NOT_RESUMED, "Нагрев не возобновлён автоматически. Требуется повторная команда старта."));
     return MODE_HEATING_START_FAILED;
   }
 

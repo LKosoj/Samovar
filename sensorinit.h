@@ -90,7 +90,7 @@ ProgramParseResult prepare_default_program_for_mode(
       return program_parse_result(
           PROGRAM_PARSE_UNSUPPORTED_MODE,
           0,
-          "неподдерживаемый режим default-программы");
+          TR(SENS_UNSUPPORTED_DEFAULT_MODE, "неподдерживаемый режим default-программы"));
   }
   return prepare_program_for_mode(mode, String(defaultProgram), draft);
 }
@@ -729,7 +729,7 @@ void reset_process_state(void) {
 #endif
 
 #ifdef USE_LUA
-  if (!set_lua_status_value("")) SendMsg("Не удалось сбросить Lua_status: runtime lock занят.", WARNING_MSG);
+  if (!set_lua_status_value("")) SendMsg(TR(SENS_LUA_STATUS_RESET_FAILED, "Не удалось сбросить Lua_status: runtime lock занят."), WARNING_MSG);
 #endif
 }
 
@@ -737,7 +737,7 @@ void reset_process_state(void) {
 void reset_sensor_counter(void) {
   reset_process_state();
 
-  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+  if (!request_data_log_close()) SendMsg(TR(SENS_LOG_BUSY_CLOSE_SKIPPED, "Файл лога занят: закрытие пропущено"), WARNING_MSG);
 
   if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;

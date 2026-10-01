@@ -97,7 +97,7 @@ _STUB_INCLUDE_NAMES = (
 # Реальные соседние заголовки, которые Samovar.h подключает ДО конца блока
 # xLuaSemaphore и которые сами по себе не участвуют в трансляции USE_LUA -
 # берутся с диска как есть, мутировать их незачем.
-_SUPPORT_HEADER_NAMES = ("Samovar_pin.h", "program_types.h")
+_SUPPORT_HEADER_NAMES = ("Samovar_pin.h", "program_types.h", "i18n.h", "lang_ru.h")
 
 _CONDITIONAL_OPEN_RE = re.compile(r"#\s*(if|ifdef|ifndef)\b")
 _CONDITIONAL_CLOSE_RE = re.compile(r"#\s*endif\b")

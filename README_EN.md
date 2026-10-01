@@ -202,6 +202,41 @@ Homebrew is required to install Python and Tkinter automatically on macOS. On Li
 4. For the first web-interface installation, run `pio run -e <environment> -t uploadfs` for the
    same environment.
 
+## Languages
+
+The firmware and web-interface language is chosen when flashing; it cannot be switched on a
+running device. Available now: Russian, English (`en`), German (`de`), French (`fr`), Spanish
+(`es`), and Chinese (`zh`). The beer and cheese recipe catalog from the site exists only in
+Russian and English, so in every language except Russian it opens in English.
+
+- **Configurator.** In the "Main" section, choose "Firmware and web interface language", then
+  "Flash" and "Upload LittleFS": the configurator builds the web-interface image in the chosen
+  language by itself. The language of the configurator window is chosen at the bottom of the
+  window and takes effect after a restart.
+- **Manually.** Add `#define SAMOVAR_LANG en` to `user_config_override.h`. The English
+  web-interface image is built with
+  `python3 tools/build_web_assets.py --image en --out <directory outside the project>` (the
+  directory must not exist or must be empty); upload
+  that directory to LittleFS instead of `data/` (with PlatformIO, through the
+  `PLATFORMIO_DATA_DIR=<directory>` environment variable).
+- **Web-interface updates over the network.** The device downloads the files of its own
+  language from the server (`index.en.htm.gz` and so on) and saves them under the usual names.
+  Your `.lua` and `program_*.txt` files are not overwritten: after a language change they stay
+  as they were until you delete them or upload LittleFS again.
+
+Russian text stays in the code: firmware strings are written as `TR(KEY, "Russian text")`, and
+the translation lives in `lang_<code>.h`. If a string has no translation, the build fails with
+an error; Russian text is never substituted for a missing translation. The web interface is
+translated by `tools/build_web_assets.py` at build time using the `i18n/web/<code>.json`
+dictionary, and the configurator uses `i18n/configurator/<code>.json`.
+
+To add a language, put `lang_<code>.h` into the project root (use `lang_en.h` as a template), as
+well as `i18n/web/<code>.json` and `i18n/configurator/<code>.json`. The configurator finds the
+new language by itself. Translation completeness is checked by `tools/smoke_i18n_firmware.py`,
+`tools/smoke_i18n_web.py`, and `tools/smoke_i18n_configurator.py`. After editing only
+`lang_<code>.h`, do a clean build (`pio run -e <environment> -t clean`): PlatformIO does not see
+this file as a dependency, because the name of the included file is computed by a macro.
+
 ## Project Structure
 
 - `Samovar.ino` — main project file
@@ -296,9 +331,9 @@ CSV export alongside the control page.
 
 ## Documentation
 
-Full documentation is available at https://www.samovar-tool.ru/
+Full documentation is available at https://www.samovar-tool.ru/en/
 
-[Technical documentation](/doc/tutorial.md)
+[Technical documentation](/doc/en/tutorial.md)
 
 ## Support
 

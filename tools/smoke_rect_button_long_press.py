@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from smoke_helpers import (
+    I18N_INCLUDE,
     extract_braced_block_after,
     extract_function_body,
     require_ordered_tokens,
@@ -120,7 +121,7 @@ def validate_source(source: str) -> list[str]:
     return errors
 
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 

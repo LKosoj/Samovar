@@ -17,6 +17,7 @@ COOLING_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_outpu
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
+#include "@ROOT@/i18n.h"
 
 #define USE_WATER_PUMP
 
@@ -122,7 +123,7 @@ def build_harness(source: str) -> str:
     safe_outputs = extract_function_body(source, SAFE_OUTPUTS_SIGNATURE)
     cooling_pump = extract_function_body(source, COOLING_PUMP_SIGNATURE)
     cooling_outputs = extract_function_body(source, COOLING_OUTPUTS_SIGNATURE)
-    harness = HARNESS_TEMPLATE.replace(
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace(
         "@SAFE_OUTPUTS@",
         f"{COOLING_PUMP_SIGNATURE} {{\n{cooling_pump}\n}}\n\n"
         f"{COOLING_OUTPUTS_SIGNATURE} {{\n{cooling_outputs}\n}}\n\n"

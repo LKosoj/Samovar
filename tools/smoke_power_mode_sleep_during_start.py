@@ -19,7 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -153,7 +153,7 @@ def build_harness() -> str:
     source = (ROOT / "power_regulator.h").read_text(encoding="utf-8")
     parse_body = extract_function_body(source, PARSE_SIGNATURE)
     mode_body = extract_function_body(source, MODE_SIGNATURE)
-    return HARNESS_TEMPLATE.replace(
+    return (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace(
         "@PARSE@",
         "bool regulator_mode_from_string(const String& modeText, SafetyRegulatorMode& mode) "
         f"{{{parse_body}}}",

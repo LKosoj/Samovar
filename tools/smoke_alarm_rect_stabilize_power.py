@@ -23,13 +23,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
 ANCHOR = "if (column_wetting_result) {"
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <iostream>
 
 enum { NOTIFY_MSG = 2 };

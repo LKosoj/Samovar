@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_function_body, strip_cpp_comments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -334,7 +334,7 @@ int main() {
         + "\n}"
     )
     return (
-        template.replace("@JSON_WRITE_ESCAPED@", json_write_escaped)
+        (I18N_INCLUDE + "\n" + template).replace("@JSON_WRITE_ESCAPED@", json_write_escaped)
         .replace("@JSON_UTILS@", json_utils)
         .replace("@ERROR_ENVELOPE@", envelope)
         .replace("@HANDLER_BODY@", handler)

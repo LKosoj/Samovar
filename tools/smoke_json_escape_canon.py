@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -217,7 +217,7 @@ def build_cpp_source() -> str:
         + extract_function_body(spiffs_editor, WRAPPERS["spiffsEditorJsonEscape"][1]) + "\n}",
     ]
 
-    source = HARNESS_TEMPLATE.replace("@DEFINITIONS@", "\n\n".join(definitions))
+    source = (I18N_INCLUDE + "\n" + HARNESS_TEMPLATE).replace("@DEFINITIONS@", "\n\n".join(definitions))
     source = source.replace("@VALUE_A@", cpp_byte_string_literal(VALUE_A))
     source = source.replace("@VALUE_B@", cpp_byte_string_literal(VALUE_B))
     return source

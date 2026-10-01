@@ -27,7 +27,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,7 +39,7 @@ RESUME_SIGNATURE = "inline void nbk_resume_work_after_safe_wait() {"
 # повторно в ветку nbk_work_pause_stage==1 (не шлёт повторную команду/сообщение).
 PAUSE_ANCHOR = "if (nbk_work_in_pause) {"
 
-GATE_HARNESS_TEMPLATE = r'''
+GATE_HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -113,7 +113,7 @@ int main() {
 }
 '''
 
-RESUME_HARNESS_TEMPLATE = r'''
+RESUME_HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -339,7 +339,7 @@ int main() {
 '''
 
 
-PAUSE_HARNESS_TEMPLATE = r'''
+PAUSE_HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

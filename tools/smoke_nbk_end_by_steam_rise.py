@@ -48,7 +48,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -104,7 +104,7 @@ def extract_steam_rise_block(nbk_source: str) -> str:
     return body[start:end]
 
 
-HEADER = r'''
+HEADER = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <cstdio>
 #include <iostream>

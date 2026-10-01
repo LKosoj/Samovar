@@ -116,9 +116,9 @@ inline void check_alarm_suvid() {
   // авария только если датчик заявлен и невалиден. Куб (TankSensor) обязателен:
   // без него термостату не по чему регулировать нагрев.
   if (PowerOn) {
-    if (optional_sensor_failed(WaterSensor) && process_sensor_failed("Сувид", "воды")) return;
-    if (optional_sensor_failed(ACPSensor) && process_sensor_failed("Сувид", "ТСА")) return;
-    if (!sensor_valid(TankSensor) && process_sensor_failed("Сувид", "куба")) return;
+    if (optional_sensor_failed(WaterSensor) && process_sensor_failed(TR(SUVID_MODE_NAME, "Сувид"), TR(SUVID_SENSOR_WATER, "воды"))) return;
+    if (optional_sensor_failed(ACPSensor) && process_sensor_failed(TR(SUVID_MODE_NAME, "Сувид"), TR(SUVID_SENSOR_ACP, "ТСА"))) return;
+    if (!sensor_valid(TankSensor) && process_sensor_failed(TR(SUVID_MODE_NAME, "Сувид"), TR(SUVID_SENSOR_TANK, "куба"))) return;
   }
 
 #ifdef SAMOVAR_USE_POWER
@@ -133,7 +133,7 @@ inline void check_alarm_suvid() {
         ? RUNTIME_PAIR_ERROR
         : (suvidHold.fired ? RUNTIME_PAIR_PROCESS_END : RUNTIME_PAIR_USER_STOP);
     runtime_pair_close_mode(SAMOVAR_SUVID_MODE, outcome,
-                            "Сувид завершён", NOTIFY_MSG);
+                            TR(SUVID_FINISHED, "Сувид завершён"), NOTIFY_MSG);
     suvidHeaterOn = false;  // холодный старт следующей сессии: не наследовать состояние реле
     set_heater_state_flag(false);
     suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};
@@ -183,17 +183,17 @@ inline void check_alarm_suvid() {
         suvidDeviation.active = true;
         suvidDeviation.sinceMs = now;
         runtime_pair_begin(UI_WAIT_SUVID_HOLD_OUTSIDE_BAND,
-                           "Выдержка приостановлена: температура вне полосы", WARNING_MSG);
+                           TR(SUVID_HOLD_PAUSED_OUT_OF_BAND, "Выдержка приостановлена: температура вне полосы"), WARNING_MSG);
       }
       if (!suvidDeviation.warningSent &&
           (uint32_t)(now - suvidDeviation.sinceMs) >= 60000UL) {
-        SendMsg("Сувид: температура отклоняется от уставки более чем на 2° уже 60 сек.", WARNING_MSG);
+        SendMsg(TR(SUVID_DEVIATION_WARNING, "Сувид: температура отклоняется от уставки более чем на 2° уже 60 сек."), WARNING_MSG);
         suvidDeviation.warningSent = true;
       }
     } else {
       if (suvidDeviation.active) {
         runtime_pair_end(UI_WAIT_SUVID_HOLD_OUTSIDE_BAND, RUNTIME_PAIR_RESUMED,
-                         "Выдержка продолжена", NOTIFY_MSG);
+                         TR(SUVID_HOLD_RESUMED, "Выдержка продолжена"), NOTIFY_MSG);
       }
       suvidDeviation = {false, false, 0};
     }
@@ -207,7 +207,7 @@ inline void check_alarm_suvid() {
     // аварийная защёлка потребовала бы ручного сброса (см. beer_abort_config_error
     // в beer.h, тот же класс ситуации).
     if (!suvidHold.reachTimeoutMsgSent) {
-      SendMsg("Сувид: не вышли на рабочую температуру за 120 минут, нагрев выключается. Проверьте ТЭН, датчик куба и объём загрузки.", ALARM_MSG);
+      SendMsg(TR(SUVID_REACH_TIMEOUT, "Сувид: не вышли на рабочую температуру за 120 минут, нагрев выключается. Проверьте ТЭН, датчик куба и объём загрузки."), ALARM_MSG);
       set_buzzer(true);
       suvidHold.reachTimeoutMsgSent = true;
     }
@@ -226,10 +226,10 @@ inline void check_alarm_suvid() {
   if (holdMs > 0 && !suvidHold.fired && suvidHold.active && suvidHold.accumulatedMs >= holdMs) {
     set_buzzer(true);
     if (queue_samovar_command(SAMOVAR_POWER_OFF)) {
-      SendMsg("Сувид: выдержка завершена, нагрев выключен.", NOTIFY_MSG);
+      SendMsg(TR(SUVID_HOLD_DONE, "Сувид: выдержка завершена, нагрев выключен."), NOTIFY_MSG);
       suvidHold.fired = true;
     } else if (!suvidHold.completionWarningSent) {
-      SendMsg("Сувид: выдержка завершена, но штатное выключение не поставлено: очередь команд занята.", WARNING_MSG);
+      SendMsg(TR(SUVID_HOLD_DONE_QUEUE_BUSY, "Сувид: выдержка завершена, но штатное выключение не поставлено: очередь команд занята."), WARNING_MSG);
       suvidHold.completionWarningSent = true;
     }
   }

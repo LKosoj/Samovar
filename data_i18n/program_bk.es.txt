@@ -1,0 +1,13 @@
+# Ejemplo de programa CM. Formato de línea: Tipo;Umbral;Recipiente;Potencia;Tvapor
+# Tvapor: 0 = agua del deflegmador manual en esta línea, 30..100 = mantener el vapor
+#   cerca de esta temperatura (°C) con el regulador paso a paso. El sensor de vapor se coloca
+#   ENCIMA del deflegmador, en la zona de vapor antes del condensador.
+# Potencia: la primera línea del programa con tensión distinta de cero debe ser un
+#   valor ABSOLUTO - más de 40 V (regulador en voltios) o más de
+#   400 W (regulador en vatios), de lo contrario el calentamiento durante el arranque puede
+#   apagarse sin avisar. 0 en el resto de líneas - no cambiar el valor actual.
+# Los valores de potencia de este ejemplo son voltios; para un regulador en vatios la primera
+#   potencia distinta de cero debe ser mayor de 400.
+T;78;1;190;70
+T;90;2;0;78
+T;93;2;0;0

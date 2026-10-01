@@ -199,9 +199,9 @@ inline void log_file_unlock(bool locked) {
 
 inline const char* program_wait_type_text(ProgramWaitType waitType) {
   switch (waitType) {
-    case PROGRAM_WAIT_STEAM: return "(пар)";
-    case PROGRAM_WAIT_PIPE: return "(царга)";
-    case PROGRAM_WAIT_DETECTOR: return "(Детектор)";
+    case PROGRAM_WAIT_STEAM: return TR(RT_WAIT_STEAM, "(пар)");
+    case PROGRAM_WAIT_PIPE: return TR(RT_WAIT_PIPE, "(царга)");
+    case PROGRAM_WAIT_DETECTOR: return TR(RT_WAIT_DETECTOR, "(Детектор)");
     case PROGRAM_WAIT_NONE:
     default: return "";
   }
@@ -469,7 +469,7 @@ inline RuntimeEventPublishResult append_runtime_event(
   // реинита при устойчивой порче — не чаще раза в 5с (первый раз — всегда), overflow-safe.
   if (result == RUNTIME_EVENT_APPEND_CORRUPT) {
     static const char kRingRecoveryMarker[] =
-        "Журнал событий переинициализирован после повреждения";
+        TR(RT_EVENT_RING_REINIT, "Журнал событий переинициализирован после повреждения");
     constexpr uint32_t RUNTIME_EVENT_RESET_MIN_INTERVAL_MS = 5000U;
     static uint32_t lastRingResetMs = 0;
     static bool ringResetSeen = false;

@@ -26,7 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,7 +58,7 @@ SIGNATURES = {
     "detector_trend_settled": ("inline bool detector_trend_settled()", "impurity_detector.h"),
 }
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cmath>
 #include <cstdint>
 #include <iostream>

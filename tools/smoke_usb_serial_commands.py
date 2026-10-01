@@ -174,6 +174,10 @@ class String {
   bool concat(char value) {
     return append(&value, 1);
   }
+  String& operator+=(char value) {
+    concat(value);
+    return *this;
+  }
   bool concat(const char* value, size_t size) {
     return append(value, size);
   }

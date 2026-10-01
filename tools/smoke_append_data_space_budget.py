@@ -41,7 +41,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -330,7 +330,7 @@ def build_harness(fs_ino_path: Path) -> str:
             "пересчитать"
         )
 
-    harness = HARNESS_TEMPLATE
+    harness = I18N_INCLUDE + "\n" + HARNESS_TEMPLATE
     harness = harness.replace("@THRESHOLD_DECL@", threshold_decl)
     harness = harness.replace("@BUDGET_BODY@", budget_body)
     harness = harness.replace("@APPEND_BODY@", append_body)

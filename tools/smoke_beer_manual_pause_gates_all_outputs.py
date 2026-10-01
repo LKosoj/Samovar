@@ -34,6 +34,7 @@ COOLING_PUMP_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_pump(boo
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
+#include "@ROOT@/i18n.h"
 #include <string>
 
 #define USE_WATER_PUMP
@@ -218,7 +219,7 @@ def main() -> int:
         return 1
 
     harness = (
-        HARNESS_TEMPLATE.replace("@COOLING_PUMP@", f"{COOLING_PUMP_SIGNATURE} {{\n{cooling_pump}\n}}")
+        HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace("@COOLING_PUMP@", f"{COOLING_PUMP_SIGNATURE} {{\n{cooling_pump}\n}}")
         .replace("@COOLING_OUTPUTS@", f"{COOLING_OUTPUTS_SIGNATURE} {{\n{cooling_outputs}\n}}")
         .replace("@SAFE_OUTPUTS@", f"{SAFE_OUTPUTS_SIGNATURE} {{\n{safe_outputs}\n}}")
         .replace("@PAUSE_OUTPUTS@", f"{PAUSE_OUTPUTS_SIGNATURE} {{\n{pause_outputs}\n}}")

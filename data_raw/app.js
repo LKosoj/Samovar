@@ -33,6 +33,9 @@
   const MAX_MESSAGE_SEQUENCE = 0xFFFFFFFF;
   const RUNTIME_EVENT_BATCH_LIMIT = 32;
   const RUNTIME_PAIR_PATTERN = /^(?:(?:Тревога|Предупреждение)! )?@P1;s=([0-9A-F]{8});b=([0-9A-F]{8});p=([0-9A-F]{8});e=([BE]);m=([0-7]);r=([0-9A-F]{2});q=([0-9A-F]{2});o=([0-9A-F]{2});t=([0-9A-F]{16})(?:;u=([0-9A-F]{8}))?\|(.+)$/;
+  // Служебная метка сообщения (@H1, @L1, @W1…, PIN_SPEC.md §6) нужна журналу сайта, пользователю - текст
+  // после «|». У @P1 и @F1 своя строгая проверка: испорченная запись показывается как есть.
+  const MESSAGE_TAG_PATTERN = /^@(?!P1;|F1;)[A-Z][0-9]+(?:;[a-z]+=[0-9A-F]+)*\|/;
   const MESSAGE_REBOOT_WARNING = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
   const TELEMETRY_OPTION_KEYS = [
@@ -1585,7 +1588,7 @@
               const prefix = event.text.indexOf('Тревога! ') === 0
                 ? 'Тревога! '
                 : (event.text.indexOf('Предупреждение! ') === 0 ? 'Предупреждение! ' : '');
-              activeSinks.message(pair ? prefix + pair.text : event.text, event.level);
+              activeSinks.message(pair ? prefix + pair.text : event.text.replace(MESSAGE_TAG_PATTERN, ''), event.level);
               if (pair) notifyRuntimePairListeners(pair, null);
             } else {
               activeSinks.log(

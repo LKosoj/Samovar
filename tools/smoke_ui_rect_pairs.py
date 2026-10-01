@@ -10,12 +10,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -180,7 +180,8 @@ int main(){ impurityDetector={7,3,9}; tick('H'); if(!check(impurityDetector.dete
         emergency = extract_function_body((ROOT / "alarm.h").read_text(encoding="utf-8"), "inline void perform_emergency_stop()")
     except ValueError as error:
         print(f"FAIL: emergency extraction: {error}", file=sys.stderr); return 1
-    emergency_cpp = r'''#include <cstdio>
+    emergency_cpp = I18N_INCLUDE + r'''
+#include <cstdio>
 #include <cstring>
 struct String { String(const char*) {} };
 #define USE_WATER_PUMP
@@ -229,7 +230,8 @@ return 0;}'''.replace("@BODY@", emergency)
         program_end = block(logic, "if (num >= PROGRAM_MAX)")
     except ValueError as error:
         print(f"FAIL: run_program hook extraction: {error}", file=sys.stderr); return 1
-    program_cpp = r'''#include <cstdio>
+    program_cpp = I18N_INCLUDE + r'''
+#include <cstdio>
 #include <cstdint>
 enum { SAMOVAR_RECTIFICATION_MODE=0, RUNTIME_PAIR_PROCESS_END=3, RUNTIME_PAIR_ROW_CHANGE=1, RUNTIME_PAIR_ERROR=4, NOTIFY_MSG=2, WARNING_MSG=1, PROGRAM_MAX=10, SAMOVAR_STARTVAL_IDLE=0 };
 static uint8_t ProgramNum=4; static int startval=9; static bool rectSecondPumpHeadsRow=true,rectSecondPumpPaused=true; static unsigned TargetStepps=5; static int closeOutcome=-1,closeCalls=0;
@@ -254,7 +256,8 @@ int main(){end_hook(PROGRAM_MAX);return check(closeCalls==1&&closeOutcome==RUNTI
         pause_row = block(logic, "else if (program[num].WType == 'P')")
     except ValueError as error:
         print(f"FAIL: P-row extraction: {error}", file=sys.stderr); return 1
-    pause_cpp = r'''#include <cstdio>
+    pause_cpp = I18N_INCLUDE + r'''
+#include <cstdio>
 #include <cstdint>
 struct String { String(){} String(const char*){} String(unsigned){} String& operator+=(const String&){return *this;} }; String operator+(String a,const String&){return a;}
 enum { UI_WAIT_RECT_PROGRAM_PAUSE=6, NOTIFY_MSG=2 }; struct Row { unsigned Volume; }; static Row program[1]={{17}}; static unsigned num=0; struct Sensor{float BodyTemp;}; static Sensor SteamSensor,PipeSensor,WaterSensor,TankSensor;
@@ -275,19 +278,20 @@ void p_hook(){ @BODY@ } bool check(bool x,const char*m){if(!x)std::fprintf(stder
         lua_row = block(logic, "if (program[num].WType == 'L')")
     except ValueError as error:
         print(f"FAIL: Lua-row extraction: {error}", file=sys.stderr); return 1
-    lua_cpp = r'''#include <cstdio>
+    lua_cpp = I18N_INCLUDE + r'''
+#include <cstdio>
 #include <cstdint>
 #define USE_LUA
 struct String { String(){} String(const char*){} String(unsigned){} String& operator+=(const String&){return *this;} }; String operator+(String a,const String&){return a;}
 enum { PROGRAM_END=255, UI_WAIT_LUA_KNOWN=23, SAMOVAR_RECTIFICATION_MODE=0, RUNTIME_PAIR_ROW_CHANGE=1, NOTIFY_MSG=2, ALARM_MSG=0 }; static bool accepted=true; static int pairBegin=0,lastReason=-1,stops=0,endCalls=0,closeCalls=0;
-static unsigned long millis(){return 50;} static void stopService(){stops++;} static void stepper_safe_stop_reset(){} static bool lua_sequence_stage_begin(unsigned,unsigned long){return accepted;} static void runtime_pair_begin(int reason,const char*,int){pairBegin++;lastReason=reason;} static void runtime_pair_close_mode(int,int,const char*,int){closeCalls++;} static void SendMsg(const String&,int){} static void run_program(uint8_t);
+static unsigned long millis(){return 50;} static void stopService(){stops++;} static void stepper_safe_stop_reset(){} static bool lua_sequence_stage_begin(unsigned,unsigned long){return accepted;} static void runtime_pair_begin(int reason,const char*,int){pairBegin++;lastReason=reason;} static void runtime_pair_close_mode(int,int,const char*,int){closeCalls++;} static void SendMsg(const String&,int){} static String program_line_start_tag(uint8_t){return String();} static void run_program(uint8_t);
 void lua_hook(uint8_t num){ @BODY@ } static void run_program(uint8_t n){endCalls++;if(n==PROGRAM_END)return;} bool check(bool x,const char*m){if(!x)std::fprintf(stderr,"FAIL: %s\\n",m);return x;} int main(){lua_hook(0);if(!check(accepted&&pairBegin==1&&lastReason==UI_WAIT_LUA_KNOWN&&closeCalls==1&&stops==1&&endCalls==0,"accepted Lua row must close old pair then begin q23"))return 1;accepted=false;pairBegin=closeCalls=endCalls=0;lua_hook(0);return check(pairBegin==0&&closeCalls==0&&endCalls==1,"rejected Lua row must not close old pair or begin q23")?0:1;}'''.replace("@BODY@", lua_row)
     code, output = compile_run(lua_cpp)
     if code:
         print("FAIL: Lua-row hook harness:\n" + output, file=sys.stderr); return 1
     mutant = lua_cpp.replace(
         'runtime_pair_close_mode(SAMOVAR_RECTIFICATION_MODE, RUNTIME_PAIR_ROW_CHANGE,\n'
-        '                            "Переход к следующей строке", NOTIFY_MSG);',
+        '                            TR(LOGIC_NEXT_LINE, "Переход к следующей строке"), NOTIFY_MSG);',
         '(void)0;', 1)
     code, output = compile_run(mutant, quiet=True)
     expected = "accepted Lua row must close old pair then begin q23"
@@ -299,7 +303,8 @@ void lua_hook(uint8_t num){ @BODY@ } static void run_program(uint8_t n){endCalls
         lua_result = block(logic, "if (program_type_at(ProgramNum) == 'L')")
     except ValueError as error:
         print(f"FAIL: Lua-result extraction: {error}", file=sys.stderr); return 1
-    lua_result_cpp = r'''#include <cstdio>
+    lua_result_cpp = I18N_INCLUDE + r'''
+#include <cstdio>
 #include <cstdint>
 #define USE_LUA
 enum { PROGRAM_END=255, UI_WAIT_LUA_KNOWN=23, RUNTIME_PAIR_ROW_CHANGE=1, RUNTIME_PAIR_ERROR=4, NOTIFY_MSG=2, ALARM_MSG=0 };

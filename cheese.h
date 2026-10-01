@@ -176,7 +176,7 @@ inline bool cheese_temperature_confirmed(uint32_t nowMs, bool inBand) {
     cheeseRuntime.temperatureConfirmSinceMs = nowMs;
     cheeseRuntime.temperatureConfirmActive = true;
     runtime_pair_begin(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
-                       "Подтверждение температуры начато", NOTIFY_MSG);
+                       TR(CHEESE_TEMP_CONFIRM_STARTED, "Подтверждение температуры начато"), NOTIFY_MSG);
     return false;
   }
   return nowMs - cheeseRuntime.temperatureConfirmSinceMs >=
@@ -415,7 +415,7 @@ inline bool cheese_ph_target_confirmed(uint32_t nowMs, bool reached) {
     cheeseRuntime.phReachedSinceMs = nowMs;
     cheeseRuntime.phReachedActive = true;
     runtime_pair_begin(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
-                       "Подтверждение pH начато", NOTIFY_MSG);
+                       TR(CHEESE_PH_CONFIRM_STARTED, "Подтверждение pH начато"), NOTIFY_MSG);
     return false;
   }
   return nowMs - cheeseRuntime.phReachedSinceMs >= CHEESE_PH_CONFIRM_MS;
@@ -473,7 +473,7 @@ inline bool cheese_apply_safe_outputs(bool closeDrain) {
   if (applied) cheeseRuntime.i2cDoserStarted = false;
   if (closeDrain) cheese_set_drain(false);
   if (!applied) {
-    request_emergency_stop("Аварийное отключение! Не удалось выключить оборудование сыроварения");
+    request_emergency_stop(TR(CHEESE_ESTOP_EQUIPMENT_OFF, "Аварийное отключение! Не удалось выключить оборудование сыроварения"));
   }
   return applied;
 }
@@ -532,17 +532,17 @@ inline bool cheese_finish_lua_exit() {
 
 inline const char* cheese_stage_name(ProgramType type) {
   switch (type) {
-    case 'H': return "Нагрев";
-    case 'P': return "Выдержка";
-    case 'C': return "Охлаждение";
-    case 'M': return "Перемешивание";
-    case 'D': return "Дозирование";
-    case 'N': return "Ожидание pH";
-    case 'W': return "Ручное действие";
-    case 'S': return "Слив";
-    case 'F': return "Флокуляция";
+    case 'H': return TR(CHEESE_STAGE_HEAT, "Нагрев");
+    case 'P': return TR(CHEESE_STAGE_HOLD, "Выдержка");
+    case 'C': return TR(CHEESE_STAGE_COOL, "Охлаждение");
+    case 'M': return TR(CHEESE_STAGE_MIX, "Перемешивание");
+    case 'D': return TR(CHEESE_STAGE_DOSE, "Дозирование");
+    case 'N': return TR(CHEESE_STAGE_PH, "Ожидание pH");
+    case 'W': return TR(CHEESE_STAGE_MANUAL, "Ручное действие");
+    case 'S': return TR(CHEESE_STAGE_DRAIN, "Слив");
+    case 'F': return TR(CHEESE_STAGE_FLOC, "Флокуляция");
     case 'L': return "Lua";
-    default: return "Неизвестная операция";
+    default: return TR(CHEESE_STAGE_UNKNOWN, "Неизвестная операция");
   }
 }
 
@@ -551,7 +551,7 @@ void run_cheese_program(uint8_t num);
 
 inline void cheese_abort(const String& reason) {
   cheesePairErrorPending = true;
-  SendMsg("Строка " + String(ProgramNum + 1) + ": " + reason, ALARM_MSG);
+  SendMsg(TR(CHEESE_ROW, "Строка ") + String(ProgramNum + 1) + ": " + reason, ALARM_MSG);
   cheese_finish();
 }
 
@@ -590,7 +590,7 @@ inline bool cheese_i2c_doser_motion(const WProgram& row,
 
 inline bool cheese_validate_program(String& error) {
   if (ProgramLen == 0 || ProgramLen > PROGRAM_END) {
-    error = "Ошибка программы Сыр: строка не задана";
+    error = TR(CHEESE_ERR_ROW_NOT_SET, "Ошибка программы Сыр: строка не задана");
     return false;
   }
   for (uint8_t i = 0; i < ProgramLen; i++) {
@@ -605,28 +605,28 @@ inline bool cheese_validate_program(String& error) {
             row.WType == 'F' ? program_load_cheese_f_multiplier(row) / 1000.0 :
             row.WType == 'D' && row.TempSensor == 3 ? 0.0 : row.Param,
             semanticError)) {
-      error = (semanticError ? String("Ошибка программы: ") + semanticError
-                             : String("Ошибка программы")) +
-          " в строке " + String(i + 1);
+      error = (semanticError ? String(TR(CHEESE_ERR_PROGRAM_PREFIX, "Ошибка программы: ")) + semanticError
+                             : String(TR(CHEESE_ERR_PROGRAM, "Ошибка программы"))) +
+          TR(CHEESE_IN_LINE, " в строке ") + String(i + 1);
       return false;
     }
     if (cheese_row_needs_sensor(kind)) {
       const DSSensor* sensor = nullptr;
       const char* sensorName = "";
       if (!beer_control_sensor(row.TempSensor, sensor, sensorName)) {
-        error = "Ошибка датчика температуры в строке " + String(i + 1);
+        error = TR(CHEESE_ERR_TEMP_SENSOR_LINE, "Ошибка датчика температуры в строке ") + String(i + 1);
         return false;
       }
     }
     if (cheese_mixer_is_i2c(row.capacity_num) && !i2c_stepper_mixer_present()) {
-      error = "I2C-мешалка недоступна в строке " + String(i + 1);
+      error = TR(CHEESE_ERR_I2C_MIXER_LINE, "I2C-мешалка недоступна в строке ") + String(i + 1);
       return false;
     }
     if (kind == CHEESE_STAGE_DOSE && (row.TempSensor == 2 || row.TempSensor == 3)) {
       uint32_t targetSteps = 0;
       float speed = 0.0f;
       if (!cheese_local_doser_motion(row, targetSteps, speed)) {
-        error = "Локальный дозатор недоступен в строке " + String(i + 1);
+        error = TR(CHEESE_ERR_LOCAL_DOSER_LINE, "Локальный дозатор недоступен в строке ") + String(i + 1);
         return false;
       }
     }
@@ -634,28 +634,28 @@ inline bool cheese_validate_program(String& error) {
       uint32_t targetSteps = 0;
       float rate = 0.0f;
       if (!cheese_i2c_doser_motion(row, targetSteps, rate)) {
-        error = "I2C-насос недоступен в строке " + String(i + 1);
+        error = TR(CHEESE_ERR_I2C_PUMP_LINE, "I2C-насос недоступен в строке ") + String(i + 1);
         return false;
       }
     }
     if (kind == CHEESE_STAGE_COOL) {
 #if !defined(USE_WATER_PUMP) && !defined(USE_WATER_VALVE)
-      error = "Охлаждение недоступно в этой сборке";
+      error = TR(CHEESE_ERR_COOLING_NOT_IN_BUILD, "Охлаждение недоступно в этой сборке");
       return false;
 #endif
     }
     if (kind == CHEESE_STAGE_PH &&
         (!isfinite(SamSetup.CheesePhSlope) || !isfinite(SamSetup.CheesePhOffset))) {
-      error = "Калибровка pH недопустима в строке " + String(i + 1);
+      error = TR(CHEESE_ERR_PH_CAL_LINE, "Калибровка pH недопустима в строке ") + String(i + 1);
       return false;
     }
     if (kind == CHEESE_STAGE_LUA) {
 #ifndef USE_LUA
-      error = "Lua недоступна в этой сборке";
+      error = TR(CHEESE_ERR_LUA_NOT_IN_BUILD, "Lua недоступна в этой сборке");
       return false;
 #else
       if (!exists("/cheese.lua")) {
-        error = "Lua-файл /cheese.lua не найден в строке " + String(i + 1);
+        error = TR(CHEESE_ERR_LUA_FILE_LINE, "Lua-файл /cheese.lua не найден в строке ") + String(i + 1);
         return false;
       }
 #endif
@@ -724,7 +724,7 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
     cheeseLuaStage.phase = CHEESE_LUA_STAGE_ENTER_QUEUED;
     cheeseLuaStage.ticket = ticket;
     cheeseLuaStage.nextProgram = PROGRAM_END;
-    runtime_pair_begin(UI_WAIT_LUA_KNOWN, "Lua-задача принята", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_LUA_KNOWN, TR(CHEESE_LUA_JOB_ACCEPTED, "Lua-задача принята"), NOTIFY_MSG);
 #else
     return false;
 #endif
@@ -740,13 +740,13 @@ inline bool cheese_prepare_stage(uint8_t targetProgram) {
   cheeseRuntime.heatStartSetpoint = NAN;
   startval = SAMOVAR_STARTVAL_CHEESE_START + 1;
   runtime_pair_close_mode(SAMOVAR_CHEESE_MODE, RUNTIME_PAIR_ROW_CHANGE,
-                          "Переход к следующей строке", NOTIFY_MSG);
+                          TR(CHEESE_NEXT_LINE, "Переход к следующей строке"), NOTIFY_MSG);
   if (row.WType == 'W') {
-    runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR, "Ожидание действия оператора", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_CHEESE_OPERATOR, TR(CHEESE_WAIT_OPERATOR, "Ожидание действия оператора"), NOTIFY_MSG);
   } else if (row.WType == 'D' && row.TempSensor != 1) {
-    runtime_pair_begin(UI_WAIT_CHEESE_DOSE, "Дозатор запущен", NOTIFY_MSG);
+    runtime_pair_begin(UI_WAIT_CHEESE_DOSE, TR(CHEESE_DOSER_STARTED, "Дозатор запущен"), NOTIFY_MSG);
   }
-  SendMsg("Строка " + String(ProgramNum + 1) + "; " +
+  SendMsg(TR(CHEESE_ROW, "Строка ") + String(ProgramNum + 1) + "; " +
           cheese_stage_name(row.WType), NOTIFY_MSG);
   return true;
 }
@@ -757,7 +757,7 @@ inline void cheese_run_program_direct(uint8_t num) {
       ? num : PROGRAM_END;
   if (cheeseLuaStage.phase != CHEESE_LUA_STAGE_IDLE) {
     if (!cheese_request_lua_exit(targetProgram)) {
-      cheese_abort("Ошибка Lua: не удалось выключить выходы");
+      cheese_abort(TR(CHEESE_LUA_OUTPUTS_OFF_FAILED, "Ошибка Lua: не удалось выключить выходы"));
     }
     return;
   }
@@ -766,7 +766,7 @@ inline void cheese_run_program_direct(uint8_t num) {
     return;
   }
   if (!cheese_prepare_stage(targetProgram)) {
-    cheese_abort("Ошибка перехода к строке сырной программы");
+    cheese_abort(TR(CHEESE_ERR_ROW_TRANSITION, "Ошибка перехода к строке сырной программы"));
   }
 }
 
@@ -816,31 +816,24 @@ inline bool cheese_f_cut_seconds(uint32_t actualSeconds, uint32_t multiplierMill
   return true;
 }
 
-inline void cheese_f_append_hex(String& out, uint32_t value, uint8_t width) {
-  static const char digits[] = "0123456789ABCDEF";
-  for (int8_t shift = static_cast<int8_t>((width - 1) * 4); shift >= 0; shift -= 4) {
-    out += digits[(value >> shift) & 0x0F];
-  }
-}
-
 inline String cheese_f_event_payload(uint32_t sessionId, uint8_t row,
                                      uint32_t actualSeconds, uint32_t multiplierMilli,
                                      uint32_t cutSeconds, uint32_t timeoutSeconds) {
   String payload;
   payload.reserve(128);
   payload += "@F1;s=";
-  cheese_f_append_hex(payload, sessionId, 8);
+  append_fixed_hex(payload, sessionId, 8);
   payload += ";r=";
-  cheese_f_append_hex(payload, row, 2);
+  append_fixed_hex(payload, row, 2);
   payload += ";a=";
-  cheese_f_append_hex(payload, actualSeconds, 8);
+  append_fixed_hex(payload, actualSeconds, 8);
   payload += ";m=";
-  cheese_f_append_hex(payload, multiplierMilli, 8);
+  append_fixed_hex(payload, multiplierMilli, 8);
   payload += ";c=";
-  cheese_f_append_hex(payload, cutSeconds, 8);
+  append_fixed_hex(payload, cutSeconds, 8);
   payload += ";x=";
-  cheese_f_append_hex(payload, timeoutSeconds, 8);
-  payload += "|Флок зафиксирован: " + String(actualSeconds) + " с";
+  append_fixed_hex(payload, timeoutSeconds, 8);
+  payload += TR(CHEESE_FLOC_RECORDED, "|Флок зафиксирован: ") + String(actualSeconds) + TR(CHEESE_SEC_UNIT, " с");
   return payload;
 }
 
@@ -861,18 +854,18 @@ inline void cheese_handle_next() {
   const uint32_t timeoutSeconds = cheese_f_timeout_seconds(row);
   if (actualSeconds == 0) return;
   if (actualSeconds >= timeoutSeconds) {
-    cheese_abort("Тайм-аут флокуляции");
+    cheese_abort(TR(CHEESE_FLOC_TIMEOUT, "Тайм-аут флокуляции"));
     return;
   }
   const uint32_t multiplierMilli = program_load_cheese_f_multiplier(row);
   uint32_t cutSeconds = 0;
   if (!cheese_f_cut_seconds(actualSeconds, multiplierMilli, cutSeconds) ||
       cutSeconds > timeoutSeconds) {
-    cheese_abort("Расчётный момент резки позже тайм-аута флокуляции");
+    cheese_abort(TR(CHEESE_CUT_AFTER_TIMEOUT, "Расчётный момент резки позже тайм-аута флокуляции"));
     return;
   }
   if (currentSessionId == 0) {
-    cheese_abort("Сессия флокуляции не создана");
+    cheese_abort(TR(CHEESE_FLOC_NO_SESSION, "Сессия флокуляции не создана"));
     return;
   }
 
@@ -900,7 +893,7 @@ inline bool cheese_lua_stage_tick(uint32_t nowMs, const WProgram& row) {
 #ifdef USE_LUA
   if (static_cast<uint32_t>(nowMs - cheeseRuntime.enteredMs) >=
       static_cast<uint32_t>(row.Time) * 1000UL) {
-    cheese_abort("Lua не завершила операцию до тайм-аута");
+    cheese_abort(TR(CHEESE_LUA_TIMEOUT, "Lua не завершила операцию до тайм-аута"));
     return true;
   }
   if (cheeseLuaStage.phase == CHEESE_LUA_STAGE_EXIT_REQUESTED ||
@@ -908,21 +901,21 @@ inline bool cheese_lua_stage_tick(uint32_t nowMs, const WProgram& row) {
     const uint8_t nextProgram = cheeseLuaStage.nextProgram;
     if (!cheese_finish_lua_exit()) return true;
     runtime_pair_end(UI_WAIT_LUA_KNOWN, RUNTIME_PAIR_RESUMED,
-                     "Lua-задача завершена", NOTIFY_MSG);
+                     TR(CHEESE_LUA_JOB_DONE, "Lua-задача завершена"), NOTIFY_MSG);
     if (nextProgram == PROGRAM_END) cheese_finish();
-    else if (!cheese_prepare_stage(nextProgram)) cheese_abort("Ошибка перехода после Lua");
+    else if (!cheese_prepare_stage(nextProgram)) cheese_abort(TR(CHEESE_ERR_AFTER_LUA, "Ошибка перехода после Lua"));
     return true;
   }
   const LuaBeerJobResult result = beer_lua_job_result(cheeseLuaStage.ticket);
   if (result == LUA_BEER_JOB_LOCK_BUSY || result == LUA_BEER_JOB_QUEUED ||
       result == LUA_BEER_JOB_RUNNING) return true;
   cheese_abort(result == LUA_BEER_JOB_SUCCEEDED
-      ? "Lua завершилась без перехода к следующей строке"
-      : "Lua завершилась с ошибкой");
+      ? TR(CHEESE_LUA_NO_NEXT_LINE, "Lua завершилась без перехода к следующей строке")
+      : TR(CHEESE_LUA_FAILED, "Lua завершилась с ошибкой"));
 #else
   (void)nowMs;
   (void)row;
-  cheese_abort("Lua недоступна в этой сборке");
+  cheese_abort(TR(CHEESE_ERR_LUA_NOT_IN_BUILD, "Lua недоступна в этой сборке"));
 #endif
   return true;
 }
@@ -937,7 +930,7 @@ void cheese_stage_tick() {
   const WProgram& row = program[ProgramNum];
   const CheeseStageKind kind = cheese_stage_kind(row.WType);
   if (kind == CHEESE_STAGE_INVALID) {
-    cheese_abort("Ошибка программы: неизвестная операция");
+    cheese_abort(TR(CHEESE_ERR_UNKNOWN_OPERATION, "Ошибка программы: неизвестная операция"));
     return;
   }
   if (kind == CHEESE_STAGE_LUA) { cheese_lua_stage_tick(nowMs, row); return; }
@@ -947,19 +940,19 @@ void cheese_stage_tick() {
   const DSSensor* sensor = nullptr;
   const char* sensorName = "";
   if (sensorRequired && (!beer_control_sensor(row.TempSensor, sensor, sensorName) ||
-      (!sensor_valid(*sensor) && process_sensor_failed("Сыр", sensorName)))) {
-    cheese_abort("Ошибка датчика температуры");
+      (!sensor_valid(*sensor) && process_sensor_failed(TR(CHEESE_MODE_NAME, "Сыр"), sensorName)))) {
+    cheese_abort(TR(CHEESE_ERR_TEMP_SENSOR, "Ошибка датчика температуры"));
     return;
   }
   if (!cheese_mixer_tick(row, nowMs)) {
-    cheese_abort("Ошибка мешалки");
+    cheese_abort(TR(CHEESE_ERR_MIXER, "Ошибка мешалки"));
     return;
   }
   if (cheese_time_elapsed(nowMs, cheeseRuntime.enteredMs,
       cheese_stage_timeout_minutes(row)) &&
       kind != CHEESE_STAGE_HOLD && kind != CHEESE_STAGE_MIX &&
       kind != CHEESE_STAGE_FLOC) {
-    cheese_abort("Тайм-аут операции сырной программы");
+    cheese_abort(TR(CHEESE_OPERATION_TIMEOUT, "Тайм-аут операции сырной программы"));
     return;
   }
   switch (kind) {
@@ -973,7 +966,7 @@ void cheese_stage_tick() {
       if (cheese_temperature_confirmed(nowMs,
           cheese_in_temperature_band(sensor->avgTemp, row.Temp))) {
         runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
-                         RUNTIME_PAIR_RESUMED, "Температура подтверждена", NOTIFY_MSG);
+                         RUNTIME_PAIR_RESUMED, TR(CHEESE_TEMP_CONFIRMED, "Температура подтверждена"), NOTIFY_MSG);
         run_cheese_program(ProgramNum + 1);
       }
       return;
@@ -986,16 +979,16 @@ void cheese_stage_tick() {
       if (weight > 0.0f) {
         cheeseRuntime.holdAccumulatedMs += static_cast<uint32_t>(elapsed * weight);
         runtime_pair_end(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE, RUNTIME_PAIR_RESUMED,
-                         "Выдержка продолжена", NOTIFY_MSG);
+                         TR(CHEESE_HOLD_RESUMED, "Выдержка продолжена"), NOTIFY_MSG);
       } else {
         runtime_pair_begin(UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE,
-                           "Выдержка приостановлена: температура вне полосы", WARNING_MSG);
+                           TR(CHEESE_HOLD_PAUSED_OUT_OF_BAND, "Выдержка приостановлена: температура вне полосы"), WARNING_MSG);
       }
       if (static_cast<float>(cheeseRuntime.holdAccumulatedMs) >= row.Time * 60000.0f) {
         run_cheese_program(ProgramNum + 1);
       } else if (cheese_time_elapsed(nowMs, cheeseRuntime.enteredMs,
           cheese_stage_timeout_minutes(row))) {
-        cheese_abort("Тайм-аут выдержки");
+        cheese_abort(TR(CHEESE_HOLD_TIMEOUT, "Тайм-аут выдержки"));
       }
       return;
     }
@@ -1004,15 +997,15 @@ void cheese_stage_tick() {
       const bool coolNeeded = sensor->avgTemp > row.Temp;
       const bool highFlow = sensor->avgTemp > row.Temp + 1.0f;
       if (!cheese_set_cooling_outputs(coolNeeded, highFlow)) {
-        cheese_abort("Ошибка охлаждения");
+        cheese_abort(TR(CHEESE_ERR_COOLING, "Ошибка охлаждения"));
         return;
       }
       if (cheese_temperature_confirmed(nowMs,
           cheese_in_temperature_band(sensor->avgTemp, row.Temp))) {
-        if (!cheese_set_cooling_outputs(false, false)) cheese_abort("Не удалось выключить охлаждение");
+        if (!cheese_set_cooling_outputs(false, false)) cheese_abort(TR(CHEESE_COOLING_OFF_FAILED, "Не удалось выключить охлаждение"));
         else {
           runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
-                           RUNTIME_PAIR_RESUMED, "Температура подтверждена", NOTIFY_MSG);
+                           RUNTIME_PAIR_RESUMED, TR(CHEESE_TEMP_CONFIRMED, "Температура подтверждена"), NOTIFY_MSG);
           run_cheese_program(ProgramNum + 1);
         }
       }
@@ -1027,17 +1020,17 @@ void cheese_stage_tick() {
         stepper_safe_stop();
         cheeseRuntime.doserCompleted = true;
         runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED,
-                         "Дозирование завершено", NOTIFY_MSG);
+                         TR(CHEESE_DOSING_DONE, "Дозирование завершено"), NOTIFY_MSG);
         run_cheese_program(ProgramNum + 1);
       } else if (row.TempSensor == 4) {
         const I2CStepperDoseState dose = second_i2c_pump_dose_state();
         if (dose == I2C_STEPPER_DOSE_FAILED) {
-          cheese_abort("Дозирование I2C-насосом прервано");
+          cheese_abort(TR(CHEESE_I2C_DOSING_ABORTED, "Дозирование I2C-насосом прервано"));
         } else if (dose == I2C_STEPPER_DOSE_DONE) {
           cheeseRuntime.i2cDoserStarted = false;
           cheeseRuntime.doserCompleted = true;
           runtime_pair_end(UI_WAIT_CHEESE_DOSE, RUNTIME_PAIR_RESUMED,
-                           "Дозирование завершено", NOTIFY_MSG);
+                           TR(CHEESE_DOSING_DONE, "Дозирование завершено"), NOTIFY_MSG);
           run_cheese_program(ProgramNum + 1);
         }
       }
@@ -1048,14 +1041,14 @@ void cheese_stage_tick() {
       if (!cheese_ph_valid()) {
         cheese_ph_target_confirmed(nowMs, false);
         if (cheese_ph_invalid_too_long(nowMs, false)) {
-          cheese_abort("pH недостоверен 10 секунд");
+          cheese_abort(TR(CHEESE_PH_INVALID_10S, "pH недостоверен 10 секунд"));
         }
         return;
       }
       cheese_ph_invalid_too_long(nowMs, true);
       if (cheese_ph_target_confirmed(nowMs, cheesePhValue <= row.Param)) {
         runtime_pair_end(UI_WAIT_CHEESE_TEMPERATURE_OR_PH_CONFIRM,
-                         RUNTIME_PAIR_RESUMED, "pH подтверждён", NOTIFY_MSG);
+                         RUNTIME_PAIR_RESUMED, TR(CHEESE_PH_CONFIRMED, "pH подтверждён"), NOTIFY_MSG);
         run_cheese_program(ProgramNum + 1);
       }
       return;
@@ -1067,7 +1060,7 @@ void cheese_stage_tick() {
           run_cheese_program(ProgramNum + 1);
         }
       } else if (elapsedSeconds >= cheese_f_timeout_seconds(row)) {
-        cheese_abort("Тайм-аут флокуляции");
+        cheese_abort(TR(CHEESE_FLOC_TIMEOUT, "Тайм-аут флокуляции"));
       }
       return;
     }
@@ -1084,28 +1077,28 @@ void cheese_stage_tick() {
 void cheese_finish() {
   cheeseFinishPending = true;
   if (!cheese_apply_safe_outputs(true)) {
-    SendMsg("Ошибка завершения сыроварения: выходы не выключены", ALARM_MSG);
+    SendMsg(TR(CHEESE_FINISH_OUTPUTS_NOT_OFF, "Ошибка завершения сыроварения: выходы не выключены"), ALARM_MSG);
     return;
   }
   if (!cheese_finish_lua_exit()) return;
   runtime_pair_close_mode(SAMOVAR_CHEESE_MODE,
                           cheesePairErrorPending ? RUNTIME_PAIR_ERROR : RUNTIME_PAIR_PROCESS_END,
-                          cheesePairErrorPending ? "Сыроварение остановлено из-за ошибки"
-                                                : "Сыроварение завершено",
+                          cheesePairErrorPending ? TR(CHEESE_STOPPED_ERROR, "Сыроварение остановлено из-за ошибки")
+                                                : TR(CHEESE_DONE, "Сыроварение завершено"),
                           cheesePairErrorPending ? ALARM_MSG : NOTIFY_MSG);
   cheese_reset_stage_state();
   begintime = 0;
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
   set_heater_state_flag(false);
-  stop_process("Программа сыроварения завершена");
+  stop_process(TR(CHEESE_PROGRAM_DONE, "Программа сыроварения завершена"));
 }
 
 void cheese_proc() {
   if (SamovarStatusInt != SAMOVAR_STATUS_CHEESE ||
       startval != SAMOVAR_STARTVAL_CHEESE_START || PowerOn) return;
   if (!cheese_ph_prepare()) {
-    mode_cancel_process_start("ADS1115 не найден. Старт сыроварения отменён.");
+    mode_cancel_process_start(TR(CHEESE_START_NO_ADS1115, "ADS1115 не найден. Старт сыроварения отменён."));
     return;
   }
   String programError;
@@ -1115,16 +1108,16 @@ void cheese_proc() {
     return;
   }
   if (power_transition_active() || heater_safety_latched()) {
-    mode_cancel_process_start("Нагрев недоступен. Старт сыроварения отменён.");
+    mode_cancel_process_start(TR(CHEESE_START_HEAT_UNAVAILABLE, "Нагрев недоступен. Старт сыроварения отменён."));
     return;
   }
   if (!create_data()) {
-    mode_cancel_process_start("Ошибка создания файла лога. Старт сыроварения отменён.");
+    mode_cancel_process_start(TR(CHEESE_START_LOG_FILE, "Ошибка создания файла лога. Старт сыроварения отменён."));
     return;
   }
   String sessionDescription;
   if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
-    mode_cancel_process_start("Описание сессии занято. Старт сыроварения отменён.");
+    mode_cancel_process_start(TR(CHEESE_START_SESSION_BUSY, "Описание сессии занято. Старт сыроварения отменён."));
     mode_warn_log_close_failed();
     return;
   }
@@ -1136,7 +1129,7 @@ void cheese_proc() {
   session_begin(sessionDescription);
   set_power(true);
   if (!PowerOn) {
-    mode_cancel_process_start("Не удалось включить питание нагрева. Старт сыроварения отменён.");
+    mode_cancel_process_start(TR(CHEESE_START_POWER_ON_FAILED, "Не удалось включить питание нагрева. Старт сыроварения отменён."));
     mode_warn_log_close_failed();
     return;
   }
@@ -1153,9 +1146,9 @@ inline bool cheese_cooling_pump_demanded() { return beer_cooling_pump_demanded()
 String get_cheese_program() { return serialize_program_for_mode(SAMOVAR_CHEESE_MODE); }
 
 String get_cheese_status_text() {
-  if (!PowerOn || ProgramNum >= ProgramLen) return "Ожидание";
+  if (!PowerOn || ProgramNum >= ProgramLen) return TR(CHEESE_STATUS_WAITING, "Ожидание");
   String status = cheese_stage_name(program[ProgramNum].WType);
-  status += "; строка ";
+  status += TR(CHEESE_STATUS_LINE, "; строка ");
   status += String(ProgramNum + 1);
   if (program[ProgramNum].WType == 'N' && cheese_ph_valid()) {
     status += "; pH ";

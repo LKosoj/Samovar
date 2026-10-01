@@ -31,6 +31,7 @@ HARNESS_TEMPLATE = r'''
 #include <string>
 
 #include "numeric_parse.h"
+#include "i18n.h"
 
 using ProgramType = char;
 constexpr ProgramType PROGRAM_TYPE_NONE = '\0';

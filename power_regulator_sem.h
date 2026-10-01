@@ -8,7 +8,7 @@ void clear_serial_in_buff() { // Быстрая очистка буфера (м�
   }
 }
 
-static constexpr const char* SEM_AVR_SAMOVAR_AT_PREFIX = "\xD0\x90\xD0\xA2";
+static constexpr const char* SEM_AVR_SAMOVAR_AT_PREFIX = "\xD0\x90\xD0\xA2"; // i18n-keep: байты кириллических А и Т - протокольный префикс команд SEM_AVR (отличает их от РМВ-К)
 
 static inline void sem_avr_print_samovar_command(const char* suffix) {
   // SEM_AVR distinguishes Samovar power commands from RMVK voltage commands by

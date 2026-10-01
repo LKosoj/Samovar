@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body, strip_cpp_comments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -221,6 +221,7 @@ int main() {
 
 
 PRODUCTION_BLOCK_HARNESS = r'''
+@I18N_INCLUDE@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -778,8 +779,9 @@ def check_source_contract(source: str | None = None) -> list[str]:
         "setup Blynk invalid-token state",
         errors,
     )
-    require("String pushMsg = String(msgLevel == '0' ? \"Тревога! \"" in clock_body,
-            "Blynk/V26 alarm prefix changed (apps detect alarms by it)", errors)
+    require("String pushMsg = String(msgLevel == '0' ? TR(MAIN_V26_ALARM_HEADER, \"Тревога! \")" in clock_body
+            and "(msgLevel == '1' ? TR(MAIN_V26_WARNING_HEADER, \"Предупреждение! \")" in clock_body,
+            "Blynk/V26 level header changed (server and apps detect alarms by it)", errors)
     require("#ifdef USE_MQTT" not in send_body and "MqttSendMsg(" not in send_body,
             "MQTT удалён в T3, но в теле SendMsg() остался след MqttSendMsg/USE_MQTT", errors)
     require("#ifdef SAMOVAR_USE_BLYNK" in clock_body,
@@ -818,6 +820,7 @@ def build_production_block_harness(source: str | None = None) -> str:
     defer_signature = "static bool defer_typed_pair_until_v35(const char* message)"
     defer_function = "bool pendingV35 = false;\nbool blynk_session_start_pending() { return pendingV35; }\n" + defer_signature + " {" + extract_function_body(source, defer_signature) + "}\n"
     return (PRODUCTION_BLOCK_HARNESS
+            .replace("@I18N_INCLUDE@", I18N_INCLUDE)
             .replace("void runConsumerBlock() {", defer_function + "void runConsumerBlock() {")
             .replace("@PRODUCER_BLOCK@", producer_block)
             .replace("@CONSUMER_BLOCK@", consumer_block))

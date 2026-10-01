@@ -32,6 +32,7 @@ HARNESS = r'''
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include "@ROOT@/i18n.h"
 using std::isfinite;
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
@@ -412,7 +413,7 @@ def main() -> int:
         "sample": "inline void cheese_sample_ph(uint32_t nowMs) {\n" + bodies["sample"] + "\n}",
         "reset": "inline void cheese_reset_stage_state() {\n" + bodies["reset"] + "\n}",
     }
-    harness = HARNESS
+    harness = HARNESS.replace("@ROOT@", ROOT.as_posix())
     harness = harness.replace("@CONSTANTS@", constants)
     harness = harness.replace("@FILTER_STATE@", filter_state)
     for name, definition in definitions.items():

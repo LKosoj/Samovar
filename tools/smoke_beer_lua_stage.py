@@ -22,6 +22,7 @@ HARNESS_TEMPLATE = r'''
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include "@ROOT@/i18n.h"
 
 #define USE_LUA
 #define USE_WATER_PUMP
@@ -547,7 +548,7 @@ def build_harness(beer_source: str, runtime_source: str) -> str:
     stage_body = extract_function_body(beer_source, BEER_STAGE_TICK_SIGNATURE)
     l_branch, _ = extract_braced_block_after(stage_body, "if (currentType == 'L') {")
 
-    harness = HARNESS_TEMPLATE.replace(
+    harness = HARNESS_TEMPLATE.replace("@ROOT@", ROOT.as_posix()).replace(
         "@RUN_BEER_PROGRAM_BODY@", "void run_beer_program(uint8_t num) {" + run_body + "}"
     )
     harness = harness.replace("@BEER_SAFE_LUA_OUTPUTS_BODY@", safe_body)
@@ -649,7 +650,7 @@ def main() -> int:
             "if (stopResult == ACTUATOR_COMMAND_PENDING) {",
             "beerFinishPending = true;",
             "if (stopResult != ACTUATOR_COMMAND_APPLIED) {",
-            'SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);',
+            'SendMsg(TR(BEER_LUA_STOP_REQUEST_FAILED, "Ошибка Lua: не удалось запросить остановку job"), ALARM_MSG);',
             "beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;",
         ],
         finish_errors,
@@ -679,7 +680,7 @@ def main() -> int:
             "if (stopResult == ACTUATOR_COMMAND_PENDING) {",
             "beerFinishPending = true;",
             "if (stopResult != ACTUATOR_COMMAND_APPLIED) {",
-            'SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);',
+            'SendMsg(TR(BEER_LUA_STOP_REQUEST_FAILED, "Ошибка Lua: не удалось запросить остановку job"), ALARM_MSG);',
             "beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;",
         ],
         mutation_errors,
@@ -716,9 +717,9 @@ def main() -> int:
         ),
         (
             'beer_abort_config_error(result == LUA_BEER_JOB_FAILED_INIT\n'
-            '        ? "Ошибка Lua: job не подтвердил запуск"\n'
-            '        : "Ошибка Lua: job завершился с ошибкой");',
-            'beer_abort_config_error("Ошибка Lua: job завершился с ошибкой");',
+            '        ? TR(BEER_LUA_JOB_NO_START_CONFIRM, "Ошибка Lua: job не подтвердил запуск")\n'
+            '        : TR(BEER_LUA_JOB_FAILED, "Ошибка Lua: job завершился с ошибкой"));',
+            'beer_abort_config_error(TR(BEER_LUA_JOB_FAILED, "Ошибка Lua: job завершился с ошибкой"));',
             "FAILED_INIT distinct error text",
             "FAILED_INIT must report the 'job never confirmed start' text",
         ),
@@ -735,7 +736,7 @@ def main() -> int:
         # с фигурными скобками встречается в тексте харнесса только один раз.
         (
             'if (stopResult == ACTUATOR_COMMAND_PENDING) {\n'
-            '        SendMsg("Не удалось сразу остановить job Lua - блокировка занята. Повторите переход через секунду.", WARNING_MSG);\n'
+            '        SendMsg(TR(BEER_LUA_STOP_LOCK_BUSY, "Не удалось сразу остановить job Lua - блокировка занята. Повторите переход через секунду."), WARNING_MSG);\n'
             '        return;\n'
             '      }',
             "if (false) return;",

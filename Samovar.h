@@ -55,6 +55,8 @@
 #include "user_config_override.h"
 #endif
 
+#include "i18n.h"
+
 #ifdef USE_MQTT
 #ifndef MQTT_SERVER
 #error USE_MQTT requires MQTT_SERVER
@@ -277,9 +279,11 @@ uint8_t temprature_sens_read();
 #ifdef SAMOVAR_USE_SEM_AVR
 #undef PWR_FACTOR
 #define PWR_FACTOR 20
-#define PWR_MSG F("Мощность")
+static const char PWR_MSG_TEXT[] = TR(SAMH_PWR_MSG_POWER, "Мощность");
+#define PWR_MSG PWR_MSG_TEXT
 #define PWR_TYPE F("P")
-#define PWR_SIGN F("Вт")
+static const char PWR_SIGN_TEXT[] = TR(SAMH_PWR_SIGN_W, "Вт");
+#define PWR_SIGN PWR_SIGN_TEXT
 
 SemaphoreHandle_t xSemaphoreAVR = NULL;
 StaticSemaphore_t xSemaphoreBufferAVR;
@@ -293,9 +297,11 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 
 #else
 #ifdef SAMOVAR_USE_POWER
-#define PWR_MSG F("Напряжение")
+static const char PWR_MSG_TEXT[] = TR(SAMH_PWR_MSG_VOLTAGE, "Напряжение");
+#define PWR_MSG PWR_MSG_TEXT
 #define PWR_TYPE F("V")
-#define PWR_SIGN F("В")
+static const char PWR_SIGN_TEXT[] = TR(SAMH_PWR_SIGN_V, "В");
+#define PWR_SIGN PWR_SIGN_TEXT
 #else
 #define PWR_MSG ""
 #define PWR_TYPE ""
@@ -677,7 +683,7 @@ struct WProgram {
 // Порядок полей подобран под выравнивание (float/union по 4 байта первыми,
 // затем uint16_t, затем однобайтовые) - экономит 8 байт на каждую запись:
 // 30 строк в program[], слот операции профиля и черновик на стеке.
-static_assert(sizeof(WProgram) == 28, "WProgram: неожиданный размер структуры - проверь порядок полей и выравнивание");
+static_assert(sizeof(WProgram) == 28, TR(SAMH_ASSERT_WPROGRAM_SIZE, "WProgram: неожиданный размер структуры - проверь порядок полей и выравнивание"));
 
 enum ProgramWaitType : uint8_t {
   PROGRAM_WAIT_NONE = 0,

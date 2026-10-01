@@ -1,0 +1,17 @@
+# Columna 5 = voltios, fuente de verdad para el regulador de potencia.
+# Columna 6 = vatios para la resistencia de referencia de 3480 W/230 V (R=15.2 Ohm), vía de reserva cuando la resistencia no está indicada en los Ajustes.
+0;0.07;30;H;135;1199
+0;0.1;20;H;0;0
+1;0.2;20;H;0;0
+2;0.3;20;H;0;0
+3;0.4;10;H;155;1581
+0;200;0;P;173;1969
+0;300;0;P;170;1901
+4;1.1;10;C;3;68
+4;1.1;35;C;0;0
+5;1.1;35;C;0;0
+5;0.8;10;C;0;0
+6;0.6;5;C;0;0
+7;0.4;3;C;0;0
+8;0.3;2;B;140;1289
+9;0.3;10;T;120;947

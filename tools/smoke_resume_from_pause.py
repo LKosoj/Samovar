@@ -46,7 +46,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens, strip_cpp_comments
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,7 +54,7 @@ FUNCTIONS = [
     "void resume_from_pause()",
 ]
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 #include <string>

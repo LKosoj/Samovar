@@ -12,13 +12,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 SIGNATURE = "inline bool validate_rect_program_startable(String& errorMessage)"
 
-ARDUINO_STUB = r'''
+ARDUINO_STUB = I18N_INCLUDE + r'''
 #pragma once
 #include <cstdint>
 #include <string>

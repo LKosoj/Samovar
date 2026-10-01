@@ -331,6 +331,30 @@ async function scenarioTypedPairDisplaysHumanTextOnly() {
     "malformed @P1 text must remain unchanged instead of being truncated");
 }
 
+async function scenarioSiteEventTagIsHidden() {
+  const hops = "@H1|Засыпьте хмель!";
+  const line = "@L1;n=03;v=02|Программа: старт строки  №3, отбор в ёмкость 2";
+  const fetchImpl = makeFetch([
+    { heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 },
+    {
+      events: [
+        { messageSequence: 1, Msg: hops, msglvl: 2 },
+        { messageSequence: 2, Msg: line, msglvl: 2 }
+      ],
+      heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 2
+    }
+  ]);
+  const { app, elements } = loadApp(fetchImpl);
+  await app.pollAjax(noopRender);
+  await app.pollAjax(noopRender);
+  check(elements.messages.innerHTML.indexOf("Засыпьте хмель!") !== -1 &&
+        elements.messages.innerHTML.indexOf("@H1|") === -1,
+    "@H1 tag must be hidden, hop text shown");
+  check(elements.messages.innerHTML.indexOf("Программа: старт строки  №3, отбор в ёмкость 2") !== -1 &&
+        elements.messages.innerHTML.indexOf("@L1;") === -1,
+    "@L1 tag with fields must be hidden, line text shown");
+}
+
 async function scenarioEspRebootDoesNotWarnSequenceGap() {
   const fetchImpl = makeFetch([
     {
@@ -392,6 +416,7 @@ async function main() {
   await scenarioDismissingToastKeepsSirenWhileLatched();
   await scenarioBatchDeliversConsecutiveEventsWithoutGap();
   await scenarioTypedPairDisplaysHumanTextOnly();
+  await scenarioSiteEventTagIsHidden();
   await scenarioEspRebootDoesNotWarnSequenceGap();
   await scenarioConnectionLossSoundsSiren();
 
@@ -399,7 +424,7 @@ async function main() {
     for (const message of failures) console.error("FAIL: " + message);
     process.exit(1);
   }
-  console.log("web alarm cursor bootstrap smoke passed (11 scenarios)");
+  console.log("web alarm cursor bootstrap smoke passed (12 scenarios)");
 }
 
 main().catch(function (err) {

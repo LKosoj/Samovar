@@ -4,13 +4,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def run_nbk_tick(body: str) -> tuple[int, str]:
-    source = r'''
+    source = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <cstdio>
 #define SAMOVAR_USE_POWER
@@ -104,7 +104,7 @@ def require_order(body: str, tokens: list[str], label: str) -> bool:
 
 
 def run_nbk_collector(block: str) -> tuple[int, str]:
-    source = r'''
+    source = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <cstdio>
 enum { SAMOVAR_NBK_MODE = 4, UI_WAIT_NBK_TRANSITION = 11, UI_WAIT_NBK_SAFE = 12,

@@ -73,10 +73,10 @@ if mode_common_text:
             [
                 "String s = \"\";",
                 "if (WaterSensor.avgTemp >= MAX_WATER_TEMP)",
-                "s = s + \" Воды\";",
+                "s = s + TR(MCOM_OVERTEMP_WATER, \" Воды\");",
                 "if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))",
-                "s = s + \" ТСА\";",
-                "request_emergency_stop(\"Аварийное отключение! Превышена максимальная температура\" + s);",
+                "s = s + TR(MCOM_OVERTEMP_ACP, \" ТСА\");",
+                "request_emergency_stop(TR(MCOM_MAX_TEMP_EXCEEDED, \"Аварийное отключение! Превышена максимальная температура\") + s);",
             ],
             errors,
         )
@@ -445,7 +445,7 @@ if logic_text:
             "String(SamSetup.DistTemp, 1)",
         )
 
-        prg_token = "\"Прг №\" + String(ProgramNum + 1)"
+        prg_token = "TR(LOGIC_PRG_NUM, \"Прг №\") + String(ProgramNum + 1)"
         occurrences = status_body.count(prg_token)
         if occurrences != 1:
             errors.append(f"get_distiller_status_text \"Прг №\" token count mismatch: expected 1, got {occurrences}")

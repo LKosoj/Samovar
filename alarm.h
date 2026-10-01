@@ -71,7 +71,7 @@ inline bool rectification_ds_sensors_assigned() {
 
 inline void notify_rectification_sensors_unassigned() {
   SendMsg(
-      "Датчики не назначены. Откройте настройки и привяжите датчики пара, воды и куба.",
+      TR(ALARM_SENSORS_UNASSIGNED, "Датчики не назначены. Откройте настройки и привяжите датчики пара, воды и куба."),
       WARNING_MSG);
 }
 
@@ -98,8 +98,8 @@ inline void request_emergency_stop(const String& reason) {
     // Причина живёт столько же, сколько защёлка (до перезагрузки). SendMsg в кольцо
     // событий может вытеснить Lua/логом; оператор всё равно должен видеть, почему
     // нагрев заблокирован.
-    const char* text = "Аварийное отключение!";
-    size_t length = sizeof("Аварийное отключение!") - 1U;
+    const char* text = TR(ALARM_EMERGENCY_STOP, "Аварийное отключение!");
+    size_t length = sizeof(TR(ALARM_EMERGENCY_STOP, "Аварийное отключение!")) - 1U;
     if (reason.length() > 0) {
       text = reason.c_str();
       length = reason.length();
@@ -167,7 +167,7 @@ inline void perform_emergency_stop() {
   // воды нет или режим другой - закрываем сразу, как раньше.
   const bool coolingHeld = mode_arm_emergency_cooling_hold();
   if (coolingHeld) {
-    SendMsg("Охлаждение проработает ещё 3 минуты и закроется.", WARNING_MSG);
+    SendMsg(TR(ALARM_COOLING_HOLD_3MIN, "Охлаждение проработает ещё 3 минуты и закроется."), WARNING_MSG);
   } else {
     open_valve(false, true);
   }
@@ -186,20 +186,20 @@ inline void perform_emergency_stop() {
   mixer_status = false;
 
   runtime_pair_close_mode(Samovar_Mode, RUNTIME_PAIR_ERROR,
-                          "Аварийное отключение", ALARM_MSG);
+                          TR(ALARM_EMERGENCY_STOP_TAIL, "Аварийное отключение"), ALARM_MSG);
 
   reset_process_state();
   cancel_pending_emergency_actions();
 }
 
 bool process_sensor_failed(const char* modeName, const char* sensorName) {
-  request_emergency_stop(String("Аварийное отключение! ") + modeName + ": нет данных датчика " + sensorName);
+  request_emergency_stop(String(TR(ALARM_EMERGENCY_STOP_SP, "Аварийное отключение! ")) + modeName + TR(ALARM_NO_SENSOR_DATA, ": нет данных датчика ") + sensorName);
   return true;
 }
 
 // Установить сигнализацию
 void set_alarm() {
-  request_emergency_stop("Аварийное отключение!");
+  request_emergency_stop(TR(ALARM_EMERGENCY_STOP, "Аварийное отключение!"));
 }
 
 void check_alarm() {
@@ -217,15 +217,15 @@ void check_alarm() {
     if (!unassignedSensorsHandled) {
       notify_rectification_sensors_unassigned();
       if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
-        request_emergency_stop("Аварийное отключение! Ректификация: датчики не назначены");
+        request_emergency_stop(TR(ALARM_RECT_SENSORS_UNASSIGNED, "Аварийное отключение! Ректификация: датчики не назначены"));
       }
       unassignedSensorsHandled = true;
     }
     return;
   } else {
-    if (optional_sensor_failed(SteamSensor) && process_sensor_failed("Ректификация", "пара")) return;
-    if (!mode_check_powered_cooling_sensors("Ректификация")) return;
-    if (optional_sensor_failed(TankSensor) && process_sensor_failed("Ректификация", "куба")) return;
+    if (optional_sensor_failed(SteamSensor) && process_sensor_failed(TR(ALARM_MODE_RECT, "Ректификация"), TR(ALARM_SENSOR_STEAM, "пара"))) return;
+    if (!mode_check_powered_cooling_sensors(TR(ALARM_MODE_RECT, "Ректификация"))) return;
+    if (optional_sensor_failed(TankSensor) && process_sensor_failed(TR(ALARM_MODE_RECT, "Ректификация"), TR(ALARM_SENSOR_TANK, "куба"))) return;
   }
 
 #ifdef SAMOVAR_USE_POWER
@@ -254,7 +254,7 @@ void check_alarm() {
     if (head_level_sensor_holded() && alarm_h_min == 0) {
       if (currentType != 'C') {
         set_buzzer(true);
-        SendMsg(("Сработал датчик захлёба!"), ALARM_MSG);
+        SendMsg((TR(ALARM_FLOOD_SENSOR, "Сработал датчик захлёба!")), ALARM_MSG);
 #ifdef SAMOVAR_USE_POWER
         alarm_c_min = 0;
         alarm_c_low_min = 0;
@@ -270,7 +270,7 @@ void check_alarm() {
 #endif
       }
 #ifdef SAMOVAR_USE_POWER
-      SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
+      SendMsg((String)PWR_MSG + TR(ALARM_REDUCING_FROM, " снижаем с ") + (String)target_power_volt, NOTIFY_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
       // [T14 п.1] Нижняя граница - без неё уход ниже порога SLEEP бесшумно гасит нагрев.
       set_current_power(max(target_power_volt - target_power_volt / 100 * 3, power_work_mode_threshold()));
@@ -303,7 +303,7 @@ void check_alarm() {
 #else
         set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
 #endif
-        SendMsg((String)PWR_MSG + " повышаем до " + (String)target_power_volt, NOTIFY_MSG);
+        SendMsg((String)PWR_MSG + TR(ALARM_RAISING_TO, " повышаем до ") + (String)target_power_volt, NOTIFY_MSG);
         prev_target_power_volt = 0;
         //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
         alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
@@ -368,25 +368,25 @@ void check_alarm() {
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     String s = "";
-    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Пара";
+    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + TR(ALARM_OVERTEMP_STEAM, " Пара");
     else if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
-      s = s + " Воды";
+      s = s + TR(ALARM_OVERTEMP_WATER, " Воды");
     else if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
-      s = s + " ТСА";
+      s = s + TR(ALARM_OVERTEMP_ACP, " ТСА");
 
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
-      SendMsg(("Лимит максимальной температуры куба. Программа завершена."), NOTIFY_MSG);
+      SendMsg((TR(ALARM_TANK_LIMIT_FINISHED, "Лимит максимальной температуры куба. Программа завершена.")), NOTIFY_MSG);
       if (!queue_samovar_command(SAMOVAR_POWER)) {
         //Штатное завершение не поставлено: очередь занята или не создалась при старте.
         //Ждать следующего цикла нельзя - условие TankSensor.avgTemp >= DistTemp удерживает
         //нас в этой ветке, else с аварийным стопом уже недостижим, и нагрев остался бы
         //включённым до выкипания. Глушим напрямую: хуже по UX, но единственное безопасное
         //направление отказа.
-        request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу по температуре куба");
+        request_emergency_stop(TR(ALARM_TANK_LIMIT_FINISH_FAIL, "Аварийное отключение! Не удалось штатно завершить программу по температуре куба"));
       }
     } else
-      request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
+      request_emergency_stop(TR(ALARM_MAX_TEMP_EXCEEDED, "Аварийное отключение! Превышена максимальная температура") + s);
   }
 
   //Проверим, что вода подается
@@ -398,13 +398,13 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_SEM_AVR
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)mode_water_alarm_power_base(), ALARM_MSG);
+      SendMsg(TR(ALARM_WATER_CRIT_SUPPLY_ERR, "Критическая температура воды! Ошибка подачи воды. ") + (String)PWR_MSG + TR(ALARM_REDUCING_FROM, " снижаем с ") + (String)mode_water_alarm_power_base(), ALARM_MSG);
       // [T14 п.1] Нижняя граница - см. симметричный клэмп в reduce_power_by_volts().
       set_current_power(max(mode_water_alarm_power_base() - mode_water_alarm_power_base() / 100 * 8, power_work_mode_threshold()));
     }
 #else
     //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
-    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)mode_water_alarm_power_base(), 5);
+    mode_reduce_power_for_water_alarm_by_volts(TR(ALARM_WATER_CRIT_SUPPLY_ERR, "Критическая температура воды! Ошибка подачи воды. ") + (String)PWR_MSG + TR(ALARM_REDUCING_FROM, " снижаем с ") + (String)mode_water_alarm_power_base(), 5);
 #endif
 #endif
     mode_set_alarm_pause_ms(30000);
@@ -435,7 +435,7 @@ void check_alarm() {
         wetting_autostart = (startval == SAMOVAR_STARTVAL_IDLE);
 #endif
 
-        SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
+        SendMsg(TR(ALARM_HEATUP_DONE_STAB, "Разгон завершён. Стабилизация/работа на себя."), NOTIFY_MSG);
         set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
         apply_program_power_row(program[0].Power);
@@ -463,7 +463,7 @@ void check_alarm() {
     set_boiling();
     if (boil_started) {
       if (alcohol_estimate_valid(alcohol_s)) {
-        SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+        SendMsg(TR(ALARM_ABV, "Спиртуозность ") + format_float(alcohol_s, 1), WARNING_MSG);
       }
     }
   }
@@ -483,7 +483,7 @@ void check_alarm() {
         acceleration_temp = 0;  // Сбрасываем счетчик после установки статуса стабилизации
         prev_stable_temp = 0;  // Сбрасываем предыдущую температуру
         set_buzzer(true);
-        SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
+        SendMsg((TR(ALARM_STAB_DONE_STABLE, "Стабилизация завершена, колонна работает стабильно.")), NOTIFY_MSG);
 #ifdef COLUMN_WETTING
         if (wetting_autostart && startval == SAMOVAR_STARTVAL_IDLE) {
           wetting_autostart = false;

@@ -6,11 +6,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
-HARNESS = r'''
+HARNESS = I18N_INCLUDE + r'''
 #include <cstdint>
 #include <iostream>
 

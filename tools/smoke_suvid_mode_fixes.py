@@ -78,7 +78,7 @@ if logic_text:
             "suvid_target_temp()",
             "\" (Нагрев)\"",
             "\" (Термостатирование)\"",
-            "F(\"Разгон колонны\")",
+            "F(TR(LOGIC_COLUMN_HEATUP, \"Разгон колонны\"))",
         ],
         errors,
     )
@@ -193,11 +193,11 @@ if suvid_text:
         body,
         [
             "optional_sensor_failed(WaterSensor)",
-            "process_sensor_failed(\"Сувид\", \"воды\")",
+            "process_sensor_failed(TR(SUVID_MODE_NAME, \"Сувид\"), TR(SUVID_SENSOR_WATER, \"воды\"))",
             "optional_sensor_failed(ACPSensor)",
-            "process_sensor_failed(\"Сувид\", \"ТСА\")",
+            "process_sensor_failed(TR(SUVID_MODE_NAME, \"Сувид\"), TR(SUVID_SENSOR_ACP, \"ТСА\"))",
             "sensor_valid(TankSensor)",
-            "process_sensor_failed(\"Сувид\", \"куба\")",
+            "process_sensor_failed(TR(SUVID_MODE_NAME, \"Сувид\"), TR(SUVID_SENSOR_TANK, \"куба\"))",
         ],
         errors,
     )

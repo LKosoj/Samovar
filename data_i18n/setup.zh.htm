@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<link rel="stylesheet" href="style.css?v=7.00u9">
+<title>Samovar</title>
+
+  <script src="app.js"></script>
+  <script>
+    function sendbutton (command) {
+      // SamovarApp.sendCommand уже показывает ошибку через showRequestError -
+      // отдельный alert() тут был бы вторым, конкурирующим способом её показать.
+      return SamovarApp.sendCommand(command);
+    };
+
+    function confirmLeaveIfDirty () {
+      var setupForm = document.getElementById('setupform');
+      if (setupForm && setupForm.dataset.dirty === 'true') {
+        return confirm('设置有未保存的更改。不保存就离开页面?');
+      }
+      return true;
+    }
+
+    function confirmSelfTest () {
+      var message = '自检：将开启供水（泵或打开阀), ' +
+        '将启动采出蠕动泵，伺服将依次经过 ' +
+        '5 各容器位置。继续?';
+      if (confirm(message)) sendbutton('startst');
+    }
+
+    async function set_program () {
+      try {
+        var result = await SamovarApp.postProgram(document.forms.setupform);
+        if (!result.ok) {
+          alert(result.err || '程序未被接受.');
+          return;
+        }
+        alert('程序已保存.');
+      } catch (e) {
+        alert('网络错误: ' + e);
+      }
+    };
+
+    HTMLElement.prototype.serialize = function() {
+      var obj = {};
+      var elements = this.querySelectorAll("input[type='text'], input[type='color'], input[type='checkbox'], input[type='range'], select");
+      for (var i = 0; i < elements.length; ++i) {
+        var element = elements[i];
+        var name = element.name;
+        var value = element.value;
+        if (element.type == 'checkbox') value = element.checked;
+
+        if (name) {
+          obj[name] = value;
+        }
+      }
+      return JSON.stringify(obj);
+    }
+
+    function loadFile (e) {
+      var file = e;
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        var data;
+        try {
+          data = JSON.parse(reader.result);
+        } catch (err) {
+          SamovarApp.showRequestError('设置文件已损坏或格式不正确 JSON: ' + err.message);
+          return;
+        }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          SamovarApp.showRequestError('文件不是Samovar设置格式（应为JSON对象).');
+          return;
+        }
+        var errors = mapJson(data);
+        if (errors.length > 0) {
+          SamovarApp.showRequestError('设置已载入表单，但有错误: ' + errors.join('; '));
+        } else {
+          SamovarApp.showRequestError('设置已载入表单，点击「保存」以应用.', 2);
+        }
+      };
+      reader.onerror = function() {
+        SamovarApp.showRequestError('无法读取设置文件.');
+      };
+      reader.readAsText(file, "UTF-8");
+    }
+
+    function mapJson (data) {
+      var inputs = Array.prototype.slice.call(document.querySelectorAll('form input, form select'));
+
+      for( var i = 0; i < inputs.length; i++){
+        if ( inputs[i].name === "StepperStepMl") {
+            inputs.splice(i, 1);
+        }
+      }
+      var appliedAny = false;
+      Object.keys(data).map(function(dataItem) {
+        inputs.map(function(inputItem) {
+          if (inputItem.name === dataItem && inputItem.type == 'checkbox') {inputItem.checked = data[dataItem]; appliedAny = true; return true;}
+          if (inputItem.name === dataItem) { inputItem.value = data[dataItem]; appliedAny = true; return true; }
+          return false;
+        });
+      });
+      // Прямое присваивание .value/.checked не порождает событий 'input'/'change',
+      // поэтому форма сама по себе не помечается изменённой - делаем это явно,
+      // только если реально подставили хотя бы одно поле (см. markSetupDirty()).
+      if (appliedAny && typeof window.markSetupDirty === 'function') window.markSetupDirty();
+      // Поля с числовой схемой (setupNumericSchema) проверяем на диапазон/тип, чтобы
+      // сообщить пользователю о конкретной некорректной строке файла, а не молчать.
+      var errors = [];
+      setupNumericSchema.forEach(function (rule) {
+        if (!Object.prototype.hasOwnProperty.call(data, rule.name)) return;
+        var result = SamovarApp.validateNumericInput(rule.name, rule);
+        if (!result.ok) errors.push(result.error);
+      });
+      return errors;
+    }
+
+    function SaveFormToFile (form) {
+      var filename, text;
+      filename = 'samovarbackup.txt';
+      //  text = getJson(document.getElementById('setupform'));
+      text = document.querySelector("form").serialize();
+
+      var pom = document.createElement('a');
+      pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+      pom.setAttribute('download', filename);
+
+      pom.style.display = 'none';
+      document.body.appendChild(pom);
+
+      pom.click();
+
+      document.body.removeChild(pom);
+    }
+
+    function rescanSensors () {
+      sendbutton('rescands').then(function (ok) {
+        if (ok) setTimeout(function () { location.reload(); }, 1000);
+      });
+    }
+
+    const setupNumericSchema = [
+      { name: 'mode', integer: true, min: 0, max: 7 },
+      { name: 'DistTemp', min: 30, max: 150 },
+      { name: 'DistTimeF', integer: true, min: 0, max: 255 },
+      { name: 'ColDiam', min: 0.1, max: 10 },
+      { name: 'ColHeight', min: 0.01, max: 10 },
+      { name: 'PackDens', integer: true, min: 0, max: 100 },
+      { name: 'autospeed', integer: true, min: 0, max: 20 },
+      { name: 'MaxPressureValue', min: 0, max: 10000 },
+      { name: 'MpxZeroAdc', min: 0, max: 4095 },
+      { name: 'MpxCountsPerMmHg', min: 0.001, max: 4095 },
+      { name: 'DeltaSteamTemp', min: -1000, max: 1000 },
+      { name: 'SetSteamTemp', min: 0, max: 150 },
+      { name: 'SteamDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaPipeTemp', min: -1000, max: 1000 },
+      { name: 'SetPipeTemp', min: 0, max: 150 },
+      { name: 'PipeDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaWaterTemp', min: -1000, max: 1000 },
+      { name: 'SetWaterTemp', min: 0, max: 150 },
+      { name: 'WaterDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaTankTemp', min: -1000, max: 1000 },
+      { name: 'SetTankTemp', min: 0, max: 150 },
+      { name: 'TankDelay', integer: true, min: 0, max: 65535 },
+      { name: 'DeltaACPTemp', min: -1000, max: 1000 },
+      { name: 'SetACPTemp', min: 0, max: 150 },
+      { name: 'ACPDelay', integer: true, min: 0, max: 65535 },
+      { name: 'SteamAddr', integer: true, min: -1, max: 255 },
+      { name: 'PipeAddr', integer: true, min: -1, max: 255 },
+      { name: 'WaterAddr', integer: true, min: -1, max: 255 },
+      { name: 'TankAddr', integer: true, min: -1, max: 255 },
+      { name: 'ACPAddr', integer: true, min: -1, max: 255 },
+      { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
+      { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
+      { name: 'Kp', min: 0, max: 100000 },
+      { name: 'Ki', min: 0, max: 100000 },
+      { name: 'Kd', min: 0, max: 100000 },
+      { name: 'StbVoltage', min: 0, max: 10000 },
+      { name: 'BVolt', min: 0, max: 10000 },
+      { name: 'BKPower', min: Number('%BKPowerFloor%'), max: 10000 },
+      { name: 'NbkIn', min: 0, max: 100000 },
+      { name: 'NbkDelta', min: 0, max: 100000 },
+      { name: 'NbkDM', min: 0, max: 100000 },
+      { name: 'NbkDP', min: 0, max: 100000 },
+      { name: 'NbkSteamT', min: 0, max: 150 },
+      { name: 'NbkOwPress', min: 0, max: 100000 },
+      { name: 'NbkTn', min: 0, max: 150 },
+      { name: 'TimeZone', integer: true, min: 0, max: 23 },
+      { name: 'HeaterR', min: 2, max: 65 },
+      { name: 'MainsVoltage', min: 0, max: 1000 },
+      { name: 'rele1', integer: true, min: 0, max: 1 },
+      { name: 'rele2', integer: true, min: 0, max: 1 },
+      { name: 'rele3', integer: true, min: 0, max: 1 },
+      { name: 'rele4', integer: true, min: 0, max: 1 }
+    ];
+
+    // [T35 п.4] Сервер /save отвечает на ошибку диапазона конвертом
+    // {error, field, message, fields} - field/message для обратной совместимости
+    // (первое плохое поле), fields - имена ВСЕХ полей вне диапазона (см.
+    // WebServer.ino: build_save_range_errors_envelope). Структурные ошибки вида "прибор
+    // занят" (конфликт смены режима, занятая очередь сохранения) отвечают text/plain, а
+    // не JSON - body здесь останется null, и обработка уходит в ветку responseErrorText().
+    // А вот "режим недоступен в этой сборке" - тоже JSON-конверт, но с field == "mode"
+    // (WebServer.ino: mode_available_in_build) - он намеренно идёт по полевой ветке ниже
+    // и показывает "Проверьте поля: Режим работы", это менять не нужно.
+    async function showSetupSaveError(form, response) {
+      let body = null;
+      try {
+        const probe = response.clone();
+        if ((probe.headers.get('Content-Type') || '').indexOf('application/json') !== -1) {
+          body = await probe.json();
+        }
+      } catch (err) {
+        body = null;
+      }
+      if (!body || !body.field) {
+        SamovarApp.showRequestError(await SamovarApp.responseErrorText(response, '设置未保存'));
+        return;
+      }
+      const names = Array.isArray(body.fields) && body.fields.length ? body.fields : [body.field];
+      const labels = names.map(function (name) {
+        return SamovarApp.fieldLabelFromDom(name) || name;
+      });
+      const input = form.elements[body.field];
+      const tab = input && typeof input.closest === 'function' ? input.closest('.tabcontent') : null;
+      if (tab && tab.id) SamovarApp.openTab(null, tab.id);
+      if (input) {
+        if (typeof input.scrollIntoView === 'function') input.scrollIntoView({ block: 'center' });
+        if (typeof input.focus === 'function') input.focus();
+      }
+      SamovarApp.showRequestError('设置未保存。请检查各字段: ' + labels.join(', ') + '.');
+    }
+
+    async function submitSetupForm(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (form.dataset.submitting === 'true') return false;
+      if (!SamovarApp.validateNumericFields(form, setupNumericSchema)) return false;
+      const button = document.getElementById('save');
+      const submittedRevision = form.dataset.editRevision;
+      form.dataset.dirty = 'true';
+      form.dataset.submitting = 'true';
+      button.disabled = true;
+      try {
+        const response = await fetch('/save', { method: 'POST', body: new FormData(form) });
+        if (!response.ok) {
+          await showSetupSaveError(form, response);
+          return false;
+        }
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        if (form.dataset.editRevision !== submittedRevision) {
+          SamovarApp.showRequestError('设置已保存，但表单的新更改尚未保存.');
+          return true;
+        }
+        form.dataset.dirty = 'false';
+        SamovarApp.clearRequestError();
+        window.location.assign('/');
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError('设置未保存: ' + error);
+        return false;
+      } finally {
+        form.dataset.submitting = 'false';
+        button.disabled = false;
+      }
+    }
+
+    let setupI2cAddress = 1;
+    let setupI2cDevices = [];
+    let setupI2cSelected = null;
+    let setupI2cScanning = false;
+    // Бит optionFlags «плавный разгон и торможение» (I2CSTEPPER_FLAG_SMOOTH_START в прошивке Nano).
+    const SETUP_I2C_OPTION_SMOOTH = 2;
+    // Бит capabilities «умеет наполнение» (I2CSTEPPER_V3_CAP_FILLING): есть только у платы-насоса.
+    const SETUP_I2C_CAP_FILLING = 4;
+
+    function setupI2cValue(id) {
+      return document.getElementById('i2c-' + id);
+    }
+
+    function setupI2cUrl(command) {
+      const params = new URLSearchParams({address: String(setupI2cAddress)});
+      if (command) params.set('cmd', command);
+      return '/i2cstepper?' + params;
+    }
+
+    function renderSetupI2c() {
+      const panel = setupI2cValue('panel');
+      const missing = setupI2cValue('missing');
+      const scan = setupI2cValue('scan');
+      const present = setupI2cDevices.filter(function (device) { return device.present; });
+      scan.disabled = setupI2cScanning;
+      scan.textContent = setupI2cScanning ? '正在搜索…' : '重新扫描I2C设备';
+      const selectorRow = setupI2cValue('selectorRow');
+      const selector = setupI2cValue('selector');
+      selectorRow.hidden = present.length < 2;
+      selector.replaceChildren();
+      present.forEach(function (device) {
+        const option = document.createElement('option');
+        option.value = device.address;
+        option.textContent = (device.address & 1 ? '搅拌器' : '泵') + ', 地址 ' + device.address;
+        option.selected = device.address === setupI2cAddress;
+        selector.append(option);
+      });
+      if (!setupI2cSelected || !setupI2cSelected.present) {
+        panel.hidden = true;
+        missing.hidden = false;
+        missing.textContent = setupI2cScanning
+          ? '正在按地址搜索I2CStepper 1–10.'
+          : present.length
+            ? '所选I2CStepper不可用。未自动选择其他设备.'
+            : 'I2CStepper 未找到.';
+        return;
+      }
+      missing.hidden = true;
+      panel.hidden = false;
+      const config = setupI2cSelected.config;
+      const address = setupI2cValue('newAddress');
+      address.replaceChildren();
+      for (let value = 1; value <= 10; value++) {
+        const existing = setupI2cDevices.find(function (device) { return device.address === value; });
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value + (value & 1 ? ' — 搅拌器' : ' — 泵');
+        option.disabled = Boolean(existing && existing.present && value !== setupI2cAddress);
+        address.append(option);
+      }
+      address.value = String(config.address);
+      ['mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
+       'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+        setupI2cValue(name).value = config[name];
+      });
+      setupI2cValue('smoothStart').checked = Boolean(config.optionFlags & SETUP_I2C_OPTION_SMOOTH);
+      updateSetupI2cFields();
+    }
+
+    // Показываем только поля выбранного типа. Тип платы задаёт адрес: нечётный - мешалка, чётный - насос.
+    function updateSetupI2cFields() {
+      const mixer = Boolean(Number(setupI2cValue('newAddress').value) & 1);
+      const mode = setupI2cValue('mode');
+      // В списке только занятия насоса. У платы, которая была мешалкой, сохранённого занятия насоса нет.
+      if (!mode.value) mode.value = '2';
+      setupI2cValue('modeRow').hidden = mixer;
+      setupI2cValue('mixerGroup').hidden = !mixer;
+      setupI2cValue('pumpGroup').hidden = mixer || mode.value !== '2';
+      setupI2cValue('fillingGroup').hidden = mixer || mode.value !== '3';
+      setupI2cValue('calibrationGroup').hidden = mixer;
+      // Калибруется сама плата по её нынешнему адресу: мешалку, которой только выбрали адрес насоса, калибровать нельзя.
+      const canCalibrate = !(setupI2cAddress & 1) && Boolean(setupI2cSelected.capabilities & SETUP_I2C_CAP_FILLING);
+      setupI2cValue('calibrateRow').hidden = !canCalibrate;
+      setupI2cValue('calibrateHint').hidden = !canCalibrate;
+    }
+
+    async function refreshSetupI2c() {
+      if (!setupI2cAddress) return;
+      try {
+        const response = await fetch(setupI2cUrl(), {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'I2CStepper 不可用'));
+        const payload = await response.json();
+        setupI2cDevices = Array.isArray(payload.devices) ? payload.devices : [];
+        setupI2cSelected = payload.selected || null;
+        setupI2cScanning = payload.scanning === 1;
+        renderSetupI2c();
+        SamovarApp.clearRequestError();
+        return true;
+      } catch (error) {
+        setupI2cSelected = null;
+        renderSetupI2c();
+        SamovarApp.showRequestError(String(error));
+        return false;
+      }
+    }
+
+    function chooseSetupI2c() {
+      setupI2cAddress = Number(setupI2cValue('selector').value);
+      refreshSetupI2c();
+    }
+
+    async function rescanSetupI2c() {
+      const button = setupI2cValue('scan');
+      const hadSelectedDevice = Boolean(setupI2cSelected && setupI2cSelected.present);
+      const expectedAddress = hadSelectedDevice ? Number(setupI2cSelected.config.address) : 0;
+      button.disabled = true;
+      try {
+        const response = await fetch(setupI2cUrl('scan'), {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'I2CStepper搜索未启动'));
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        const deadline = Date.now() + 5000;
+        do {
+          await new Promise(function (resolve) { setTimeout(resolve, 200); });
+          if (!await refreshSetupI2c()) throw new Error('无法获取搜索结果 I2CStepper');
+        } while (setupI2cScanning && Date.now() < deadline);
+        if (setupI2cScanning) throw new Error('I2CStepper搜索未在5秒内完成');
+        const expected = expectedAddress !== setupI2cAddress && setupI2cDevices.find(function (device) {
+          return device.present && device.address === expectedAddress;
+        });
+        const first = !hadSelectedDevice && setupI2cDevices.find(function (device) { return device.present; });
+        const next = expected || first;
+        if (next) {
+          setupI2cAddress = next.address;
+          await refreshSetupI2c();
+        }
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError(String(error));
+        return false;
+      } finally {
+        button.disabled = setupI2cScanning;
+      }
+    }
+
+    async function saveSetupI2c() {
+      if (!setupI2cSelected || !setupI2cSelected.present) return false;
+      const addressChanged = Number(setupI2cValue('newAddress').value) !== setupI2cAddress;
+      const params = new URLSearchParams({address: String(setupI2cAddress), cmd: 'save'});
+      ['newAddress', 'mode', 'stepsPerMl', 'mixerRpm', 'mixerRunSec', 'mixerPauseSec',
+       'pumpMlHour', 'fillingMl', 'fillingMlHour'].forEach(function (name) {
+        params.set(name, setupI2cValue(name).value);
+      });
+      // У мешалки режим один, и в списке «Что делает насос» его нет.
+      if (Number(setupI2cValue('newAddress').value) & 1) params.set('mode', '1');
+      // Меняем только свой бит: остальные биты optionFlags (направление, реверс после паузы) не трогаем.
+      const optionFlags = setupI2cSelected.config.optionFlags;
+      params.set('optionFlags', String(setupI2cValue('smoothStart').checked
+        ? optionFlags | SETUP_I2C_OPTION_SMOOTH : optionFlags & ~SETUP_I2C_OPTION_SMOOTH));
+      // Поколение настроек, с которым заполнена форма: Самовар откажет, если их уже поменяли на Nano.
+      params.set('generation', String(setupI2cSelected.status.generation));
+      const button = setupI2cValue('save');
+      button.disabled = true;
+      try {
+        const response = await fetch('/i2cstepper?' + params, {cache: 'no-store'});
+        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'Nano设置未被接受'));
+        const accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        await refreshSetupI2c();
+        SamovarApp.showRequestError(addressChanged
+          ? '设置已保存到Nano。请重启Nano，然后点击一次「重新扫描I2C设备」».'
+          : '设置已保存到 Nano.');
+        return true;
+      } catch (error) {
+        SamovarApp.showRequestError(String(error));
+        return false;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    window.onload = function() {
+      var setupForm = document.getElementById('setupform');
+      setupForm.dataset.dirty = 'false';
+      setupForm.dataset.editRevision = '0';
+      setupForm.addEventListener('submit', submitSetupForm);
+      function markSetupDirty(event) {
+        // Сам выбор файла в <input type="file" id="fileToLoad"> тоже порождает
+        // 'change' на форме, но это ещё не правка настроек - реальные поля
+        // проставляет mapJson() (см. ниже) и сама решает, когда помечать форму
+        // изменённой. Иначе показ (даже неудачного) диалога выбора файла уже
+        // без причины взводил бы предупреждение "есть несохранённые изменения".
+        if (event && event.target && event.target.id === 'fileToLoad') return;
+        setupForm.dataset.editRevision = String(Number(setupForm.dataset.editRevision) + 1);
+        setupForm.dataset.dirty = 'true';
+      }
+      window.markSetupDirty = markSetupDirty;
+      setupForm.addEventListener('input', markSetupDirty);
+      setupForm.addEventListener('change', markSetupDirty);
+
+      // П52: браузерное предупреждение при уходе со страницы (закрытие вкладки,
+      // обновление, переход по адресу, кнопка "назад") - работает для НЕсохранённых
+      // изменений формы. Для переходов по внутренним ссылкам (кнопки ниже) это же
+      // событие не гарантированно показывает диалог во всех браузерах (особенно
+      // мобильных), поэтому они дополнительно защищены confirmLeaveIfDirty().
+      window.addEventListener('beforeunload', function (event) {
+        if (setupForm.dataset.dirty === 'true') {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      });
+
+      // Обновление отображения плотности насадки при изменении слайдера
+      var packDensSlider = document.getElementById('PackDens');
+      var packDensDisplay = document.getElementById('PackDensDisplay');
+      if (packDensSlider && packDensDisplay) {
+        packDensSlider.addEventListener('input', function() {
+          packDensDisplay.value = this.value;
+        });
+      }
+      // Подчинённые настройки детектора видны только при включённом детекторе
+      var useDetectorBox = document.getElementById('useDetector');
+      var detectorSpeedOptions = document.getElementById('detectorSpeedOptions');
+      if (useDetectorBox && detectorSpeedOptions) {
+        var syncDetectorOptions = function() {
+          detectorSpeedOptions.style.display = useDetectorBox.checked ? '' : 'none';
+        };
+        useDetectorBox.addEventListener('change', syncDetectorOptions);
+        syncDetectorOptions();
+      }
+      SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
+      SamovarApp.enhanceTooltips();
+      SamovarApp.loadUiBootstrap(function (bootstrap) {
+        SamovarApp.applyModeNavigation(bootstrap.mode);
+        if (bootstrap && Array.isArray(bootstrap.i2cSteppers)) {
+          setupI2cDevices = bootstrap.i2cSteppers;
+          var first = setupI2cDevices.find(function (device) { return device.present; });
+          setupI2cAddress = first ? first.address : 1;
+          refreshSetupI2c();
+        }
+      }).catch(function () {});
+    };
+
+    // ==================== THEME TOGGLE =================================================================
+    SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
+  </script>
+</head>
+
+<body>
+  <header class="top">
+    <a class="brand" href="/" title="主页" onclick="return SamovarApp.confirmLeave()">
+      <svg viewBox="0 0 108 108" aria-hidden="true"><path fill="#E08A3C" d="M43 40h22a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H43a5 5 0 0 1-5-5V45a5 5 0 0 1 5-5z"/><path fill="#8A4A16" d="M40 71h27l3 5H37zM48 66h12v6H48zM42 40h24l-4-4H46z"/><circle cx="76" cy="66" r="2.5" fill="#FF6B4A"/><path fill="none" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round" d="M52 30c-3-3 3-6 0-9M57 30c3-3-3-6 0-9"/></svg>
+      Samovar
+    </a>
+    <nav class="page-nav" aria-label="分区">
+      <a class="nav-link" href="/" onclick="return SamovarApp.confirmLeave()">模式</a>
+      <a class="nav-link" href="/chart.htm" onclick="return SamovarApp.confirmLeave()">图表</a>
+      <a class="nav-link" data-mode-navigation-slot hidden onclick="return SamovarApp.confirmLeave()"></a>
+      <a class="nav-link" href="/setup.htm" onclick="return SamovarApp.confirmLeave()">设置</a>
+    </nav>
+    <div class="spacer"></div>
+
+    <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="切换主题">☾</button>
+  </header>
+  <form action='/save' method="post" name="setupform" id="setupform">
+    <input type="hidden" name="fullsetup" value="1">
+    <h1>设置</h1>
+    <div class="tab">
+      <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="基础" aria-pressed="true">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Temp');" value="温度" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Pump');" value="泵" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Beer');" value="啤酒" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Cheese');" value="奶酪" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'NBK');" value="连续醪塔" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="其他" aria-pressed="false">
+      <input id='i2cStepperSetupTab' type='button' class="tablinks" value="I2CStepper"
+             onclick="SamovarApp.openTab(event, 'I2CStepper')" aria-pressed="false">
+    </div>
+    <div id="I2CStepper" class="tabcontent" aria-hidden="true">
+      <h2>设置 Nano I2CStepper</h2>
+      <p><button id="i2c-scan" type="button" class="button" onclick="rescanSetupI2c()">重新扫描I2C设备</button></p>
+      <p id="i2c-missing" hidden></p>
+      <p id="i2c-selectorRow" hidden><label>设备 <select id="i2c-selector" onchange="chooseSetupI2c()"></select></label></p>
+      <section id="i2c-panel" hidden>
+        <fieldset class="i2c-group">
+          <legend>连接</legend>
+          <div class="i2c-row"><label for="i2c-newAddress">总线地址 I2C</label> <select id="i2c-newAddress" onchange="updateSetupI2cFields()"></select></div>
+          <div class="hint">板型决定地址：奇数为搅拌器，偶数为泵。新地址在重启后生效 Nano.</div>
+          <div class="i2c-row" id="i2c-modeRow"><label for="i2c-mode">泵的作用</label> <select id="i2c-mode" onchange="updateSetupI2cFields()"><option value="2">持续供给</option><option value="3">定量灌装</option></select></div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-mixerGroup">
+          <legend>搅拌器</legend>
+          <div class="i2c-row"><label for="i2c-mixerRpm">速度，rpm</label> <input id="i2c-mixerRpm" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-mixerRunSec">运行, s</label> <input id="i2c-mixerRunSec" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-mixerPauseSec">暂停, s</label> <input id="i2c-mixerPauseSec" type="number" min="0"></div>
+          <div class="hint">搅拌器运转「工作」秒，然后停止「暂停」秒，如此循环。工作&nbsp;0 表示持续旋转.</div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-pumpGroup">
+          <legend>持续供给</legend>
+          <div class="i2c-row"><label for="i2c-pumpMlHour">供给速度，ml/h</label> <input id="i2c-pumpMlHour" type="number" min="0"></div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-fillingGroup">
+          <legend>定量灌装</legend>
+          <div class="i2c-row"><label for="i2c-fillingMl">体积, ml</label> <input id="i2c-fillingMl" type="number" min="0"></div>
+          <div class="i2c-row"><label for="i2c-fillingMlHour">速度，ml/h</label> <input id="i2c-fillingMlHour" type="number" min="0"></div>
+          <div class="hint">泵灌装设定的体积后自动停止.</div>
+        </fieldset>
+        <fieldset class="i2c-group" id="i2c-calibrationGroup">
+          <legend>泵校准</legend>
+          <div class="i2c-row"><label for="i2c-stepsPerMl">每1&nbsp;ml电机步数</label> <input id="i2c-stepsPerMl" type="number" min="1"></div>
+          <div class="hint">ml/h按此数值换算为电机速度。如果泵灌出的量多于设定值，请增大该数；如果少于设定值，请减小.</div>
+          <p id="i2c-calibrateRow"><button id="i2c-calibrate" type="button" class="button" onclick="if (confirmLeaveIfDirty()) location.assign('/calibrate.htm?address=' + setupI2cAddress)">泵校准 I2CStepper</button></p>
+          <div class="hint" id="i2c-calibrateHint">在校准页面，泵向量杯灌入100&nbsp;ml，每1&nbsp;ml的步数由系统自动计算.</div>
+        </fieldset>
+        <fieldset class="i2c-group">
+          <legend>电机</legend>
+          <div><input id="i2c-smoothStart" type="checkbox"> <label for="i2c-smoothStart">平滑加速和减速</label></div>
+          <div class="hint">加速约10秒。按设定体积或时间运行时，电机同样平滑减速；连续旋转则立即停止.</div>
+        </fieldset>
+        <p><button id="i2c-save" type="button" class="button" onclick="saveSetupI2c()">保存到 Nano</button></p>
+        <p class="hint">这些设置保存在Nano板上，只能通过此按钮写入。页面底部的「保存」按钮与它们无关.</p>
+      </section>
+    </div>
+    <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>
+          <div>
+            <label for="mode">工作模式</label>
+            <select id="mode" name="mode">
+              <option value="0" %RECT%>精馏</option>
+              <option value="1" %DIST%>蒸馏</option>
+              <option value="2" %BEER%>啤酒</option>
+              <option value="3" %BK%>醪塔</option>
+              <option value="4" %NBK%>连续醪塔</option>
+              <option value="7" %CHEESE%>奶酪制作</option>
+            </select>
+          </div>
+        </h2>
+        <h2 class="tooltip"><label for="DistTemp">精馏、蒸馏和醪塔，直到釜温:</label> <input id="DistTemp" name='DistTemp' type='text' inputmode='decimal' value='%DistTemp%'>&#176;C<span class="tooltiptext">如果「使用压力修正」已关闭，且下方的结束监控时间为0，在高海拔地区设定的阈值（默认99.9&#176;C）可能无法达到——流程不会自行停止.</span></h2>
+        <h2 class="tooltip"><label for="DistTimeF">蒸馏结束监控时间:</label> <input id="DistTimeF" name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> min<span class="tooltiptext">在釜传感器数值不变的情况下，停止蒸馏和醪塔运行的时间，单位分钟。不超过255分钟。0表示不考虑。默认60分钟；加热功率较小时，可能在釜内还剩1-3&#37;酒精时就结束.</span></h2>
+        <h2>
+          <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
+          <label for='usepressure'>使用压力修正</label>
+        </h2>
+        <h2>
+          <input id='useflevel' type='checkbox' name='useflevel' value='useflevel' %FLChecked%>
+          <label for='useflevel' %IgnFL% >精馏时使用回流液位传感器</label>
+        </h2>
+        <h2>
+          <input id="HideProcessScheme" type="checkbox" name="HideProcessScheme" value="HideProcessScheme" %HideProcessSchemeChecked%>
+          <label for="HideProcessScheme">不显示流程示意图</label>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em;">
+        <h2 style="color: var(--accent-text);">⚙️ 设备参数(塔)</h2>
+        <h2>
+          <label for="ColDiam">直径:</label>
+          <select name="ColDiam" id="ColDiam">
+            <option value="1.5" %ColDiam_1.5%>1.5</option>
+            <option value="2.0" %ColDiam_2.0%>2.0</option>
+            <option value="3.0" %ColDiam_3.0%>3.0</option>
+          </select> 英寸
+        </h2>
+        <h2>
+          <label for="ColHeight">填料高度:</label>
+          <select name="ColHeight" id="ColHeight">
+            <option value="0.50" %ColHeight_0.50%>0.50</option>
+            <option value="0.75" %ColHeight_0.75%>0.75</option>
+            <option value="1.00" %ColHeight_1.00%>1.00</option>
+            <option value="1.25" %ColHeight_1.25%>1.25</option>
+            <option value="1.50" %ColHeight_1.50%>1.50</option>
+            <option value="1.75" %ColHeight_1.75%>1.75</option>
+            <option value="2.00" %ColHeight_2.00%>2.00</option>
+            <option value="2.25" %ColHeight_2.25%>2.25</option>
+            <option value="2.50" %ColHeight_2.50%>2.50</option>
+          </select> 米
+        </h2>
+        <h2>
+          <label for="PackDens">填料密度:</label>
+          <input name="PackDens" id="PackDens" type="range" min="0" max="100" step="5" value="%PackDens%" style="width: 200px; vertical-align: middle;">
+          <output id="PackDensDisplay" name="PackDensDisplay" for="PackDens">%PackDens%</output>&nbsp;&#37; <span class="nowrap">(0-100)</span>
+        </h2>
+      </div>
+      <div>
+
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2>杂质穿透检测器(精馏)</h2>
+          <h2>
+            <input id='useDetector' type='checkbox' name='useDetector' value='useDetector' %UASDetectorChecked%>
+            <label for='useDetector' class="tooltip">使用检测器<span class="tooltiptext">总开关：关闭时检测器完全不工作。它在程序所有行上监视温度趋势（在酒头上只观察），温度危险上升时让采出暂停，并自行恢复</span></label>
+          </h2>
+          <div id='detectorSpeedOptions' style="padding-left: 2em;">
+            <h2>
+              <input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
+              <label for='useautospeed' class="tooltip">温度上升时降低采出速度<span class="tooltiptext">仅与检测器一起生效：趋势上升超过阈值时，检测器会平滑降低泵速，趋势平稳后再恢复</span></label>
+            </h2>
+            <h2><label for="autospeed">速度降低步长:</label> <input id="autospeed" name='autospeed' type='text' inputmode='numeric' value='%autospeed%'> &#37; (0 = 默认5，最大 20)</h2>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2><label for="MaxPressureValue" class="tooltip">触发紧急状态的压力:<span class="tooltiptext">达到此压力时，Samovar将进入紧急模式</span></label><input id="MaxPressureValue" name='MaxPressureValue' type='text' inputmode='decimal' value='%MaxPressureValue%'>mmHg.</h2>
+          <div style="display: %MpxSettingsDisplay%;">
+            <h2><label for="MpxZeroAdc" class="tooltip">零点 MPX:<span class="tooltiptext">表压为零时的ADC读数。每次测量都会减去它.</span></label> <input id="MpxZeroAdc" name='MpxZeroAdc' type='text' inputmode='decimal' value='%MpxZeroAdc%'></h2>
+            <h2><label for="MpxCountsPerMmHg" class="tooltip">每1 mmHg的MPX计数.:<span class="tooltiptext">传感器比例：当前ADC读数与零点之差除以此数。出厂值 — 12.</span></label> <input id="MpxCountsPerMmHg" name='MpxCountsPerMmHg' type='text' inputmode='decimal' value='%MpxCountsPerMmHg%'></h2>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2>蜂鸣器设置</h2>
+          <h2>
+            <input id='UseBuzzer' type='checkbox' name='UseBuzzer' value='UseBuzzer' %CUBuzz%>
+            <label for='UseBuzzer' class="tooltip">使用蜂鸣器提示<span class="tooltiptext">该选项关闭时，蜂鸣器完全禁用</span></label>
+          </h2>
+          <h2>
+            <input id='UseBBuzzer' type='checkbox' name='UseBBuzzer' value='UseBBuzzer' %CUBBuzz%>
+            <label for='UseBBuzzer' class="tooltip">在浏览器中使用蜂鸣器提示<span class="tooltiptext">该选项关闭时，不使用浏览器蜂鸣器</span></label>
+          </h2>
+          <h2>
+            <input id='ChangeProgramBuzzer' type='checkbox' name='ChangeProgramBuzzer' value='ChangeProgramBuzzer' %CPBuzz%>
+            <label for='ChangeProgramBuzzer' class="tooltip">程序切换时启用蜂鸣器<span class="tooltiptext">用于提示 </span></label>
+          </h2>
+        </div>
+      </div>
+      <div
+        style="border: 1px dashed #bbb; display: flex; flex-direction: column; margin-bottom: 1em;  margin-top: 1em; padding: 1em; align-items: center;"
+        >
+        <input id='selftest' type='button' name='selftest' value='自检' onclick='confirmSelfTest()' class="button"
+          title="将开启水泵（或打开阀），启动采出蠕动泵，伺服将经过5个位置."
+        >
+        <p style="margin: 0.5em 0 0; font-size: 0.85em; color: var(--text-main); text-align: center;">
+          注意：将开启供水（泵或阀），启动采出蠕动泵，伺服将经过5个容器位置.
+        </p>
+      </div>
+    </div>
+
+    <div id="Temp" class="tabcontent" aria-hidden="true">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %SteamColor%; text-decoration-line: underline; text-decoration-color: %SteamColor%;">
+          <h2>
+            <div>
+              <label for="SteamAddr">分凝器前蒸汽传感器地址</label>
+              <select id="SteamAddr" name="SteamAddr">
+                %SteamAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaSteamTemp">分凝器前蒸汽传感器修正:</label> <input id="DeltaSteamTemp" name='DeltaSteamTemp' type='text' inputmode='decimal' value='%DeltaSteamTemp%'>&#176;C</h2>
+          <h2><label for="SetSteamTemp">分凝器前蒸汽传感器设定值超限:</label> <input id="SetSteamTemp" name='SetSteamTemp' type='text' inputmode='decimal' value='%SetSteamTemp%'>&#176;C</h2>
+          <h2><label for="SteamDelay">蒸汽温度超出设定值时的采出延迟:</label> <input id="SteamDelay" name='SteamDelay' type='text' inputmode='decimal' value='%SteamDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %PipeColor%; text-decoration-line: underline; text-decoration-color: %PipeColor%;">
+          <h2>
+            <div>
+              <label for="PipeAddr">塔传感器地址</label>
+              <select id="PipeAddr" name="PipeAddr">
+                %PipeAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaPipeTemp">塔2/3处传感器修正:</label> <input id="DeltaPipeTemp" name='DeltaPipeTemp' type='text' inputmode='decimal' value='%DeltaPipeTemp%'>&#176;C</h2>
+          <h2><label for="SetPipeTemp">塔2/3处传感器设定值超限:</label> <input id="SetPipeTemp" name='SetPipeTemp' type='text' inputmode='decimal' value='%SetPipeTemp%'>&#176;C</h2>
+          <h2><label for="PipeDelay">塔温超出设定值时的采出延迟:</label> <input id="PipeDelay" name='PipeDelay' type='text' inputmode='decimal' value='%PipeDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %WaterColor%; text-decoration-line: underline; text-decoration-color: %WaterColor%;">
+          <h2>
+            <div>
+              <label for="WaterAddr">水传感器地址</label>
+              <select id="WaterAddr" name="WaterAddr">
+                %WaterAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaWaterTemp">水传感器修正:</label> <input id="DeltaWaterTemp" name='DeltaWaterTemp' type='text' inputmode='decimal' value='%DeltaWaterTemp%'>&#176;C</h2>
+          <h2><label for="SetWaterTemp" class="tooltip">水传感器设定值:<span class="tooltiptext">在蒸馏类模式中为冷却维持的温度。在啤酒和奶酪模式中，同一个数值是围绕该行设定温度的容差：从0.3到 3&#176;C.</span></label> <input id="SetWaterTemp" name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2><label for="WaterDelay">水温超出设定值时的响应延迟:</label> <input id="WaterDelay" name='WaterDelay' type='text' inputmode='decimal' value='%WaterDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %TankColor%; text-decoration-line: underline; text-decoration-color: %TankColor%;">
+          <h2>
+            <div>
+              <label for="TankAddr">釜传感器地址</label>
+              <select id="TankAddr" name="TankAddr">
+                %TankAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaTankTemp">釜传感器修正:</label> <input id="DeltaTankTemp" name='DeltaTankTemp' type='text' inputmode='decimal' value='%DeltaTankTemp%'>&#176;C</h2>
+          <h2><label for="SetTankTemp">釜传感器设定值超限:</label> <input id="SetTankTemp" name='SetTankTemp' type='text' inputmode='decimal' value='%SetTankTemp%'>&#176;C</h2>
+          <h2><label for="TankDelay">釜温超出设定值时的响应延迟:</label> <input id="TankDelay" name='TankDelay' type='text' inputmode='decimal' value='%TankDelay%'> s</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %ACPColor%; text-decoration-line: underline; text-decoration-color: %ACPColor%;">
+          <h2>
+            <div>
+              <label for="ACPAddr">通气管传感器地址</label>
+              <select id="ACPAddr" name="ACPAddr">
+                %ACPAddr%
+              </select>
+            </div>
+          </h2>
+          <h2><label for="DeltaACPTemp">通气管传感器修正</label> <input id="DeltaACPTemp" name='DeltaACPTemp' type='text' inputmode='decimal' value='%DeltaACPTemp%'>&#176;C</h2>
+          <h2><label for="SetACPTemp" class="tooltip">通气管传感器设定值:<span class="tooltiptext">在蒸馏类模式中为冷却维持的温度。在啤酒和奶酪模式中，同一个数值是围绕该行设定温度的容差：从0.3到 3&#176;C.</span></label> <input id="SetACPTemp" name='SetACPTemp' type='text' inputmode='decimal' value='%SetACPTemp%'>&#176;C</h2>
+          <h2><label for="ACPDelay">通气管温度超出设定值时的响应延迟:</label> <input id="ACPDelay" name='ACPDelay' type='text' inputmode='decimal' value='%ACPDelay%'> s</h2>
+        </div>
+      </div>
+      <div 
+        style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
+        >
+        <input id='scanSensorsButton' type='button' name='selftest' value='扫描传感器' onclick='rescanSensors();' class="button"
+          title="读取已连接温度传感器的地址"
+        >
+      </div>
+    </div>
+
+    <div id="Pump" class="tabcontent" aria-hidden="true">
+      <h2><label for="StepperStepMl">步进电机步数:</label> <input id="StepperStepMl" name='StepperStepMl' type='text' inputmode='decimal' value='%StepperStepMl%' style="width: 6em;"> /ml.</h2>
+      <div style="display: %I2CPumpTab%;">
+        <h2>
+          <input id='UseSecondI2CPump' type='checkbox' name='UseSecondI2CPump' value='UseSecondI2CPump' %SecondI2CPumpChecked%>
+          <label for='UseSecondI2CPump' class="tooltip">在PC上方使用I2C泵<span class="tooltiptext">只有在Samovar启动时检测到该泵，它才参与精馏。对于酒头，它成为主泵；对于酒心和预液泛，它与本地泵同时工作.</span></label>
+        </h2>
+        <h2><label for="SecondI2CPumpRate" class="tooltip">PC上方采出速度:<span class="tooltiptext">酒心行B和预液泛行C上I2C泵的恒定速度。酒头行H使用程序行本身的速度.</span></label> <input id="SecondI2CPumpRate" name='SecondI2CPumpRate' type='text' inputmode='decimal' value='%SecondI2CPumpRate%'> l/h</h2>
+      </div>
+      <div class="btn-cell" style="margin: 0 auto;">
+        <input id='setstvolume' type='button' name='return' value='泵校准' onclick='if (confirmLeaveIfDirty()) location.href="calibrate.htm"' class="button">
+      </div>
+    </div>
+
+    <div id="Beer" class="tabcontent" aria-hidden="true">
+      <h2>
+        <label for="BeerBrewOrder" class="tooltip">酿造布局<span class="tooltiptext">这是酿造设备的布局，不是配方。All-in-one在釜中加热糖化醪。HERMS：按水传感器（水箱）PID控制，泵持续运行。RIMS：按塔传感器（回流）PID控制，泵持续运行。糖化方式（浸出/煮出）取自步骤TYPE BeerXML.</span></label>
+        <select id="BeerBrewOrder" name="BeerBrewOrder">
+          <option value="0" %BeerBrewOrder_0%>All-in-one / BIAB</option>
+          <option value="1" %BeerBrewOrder_1%>HERMS</option>
+          <option value="2" %BeerBrewOrder_2%>RIMS</option>
+        </select>
+      </h2>
+      <h2>加热调压器的PID系数:</h2>
+      <h2><label for="Kp">Kp:</label> <input id="Kp" name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
+      <h2><label for="Ki">Ki:</label> <input id="Ki" name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>
+      <h2><label for="Kd">Kd:</label> <input id="Kd" name='Kd' type='text' inputmode='decimal' value='%Kd%'></h2>
+      <div id='VoltH2' style=''>
+        <h2><label for="StbVoltage">温度保持模式下调压器的电压/功率.:</label> <input name='StbVoltage' id='StbVoltage' type='text' inputmode='decimal' value='%StbVoltage%'> V</h2>
+      </div>
+      <div id='VoltBoil' style=''>
+        <h2><label for="BVolt">加热和煮沸模式下调压器的电压/功率:</label> <input name='BVolt' id='BVolt' type='text' inputmode='decimal' value='%BVolt%'> V</h2>
+      </div>
+      <div id='VoltBK' style=''>
+        <h2><label for="BKPower">沸腾后醪塔功率:</label> <input name='BKPower' id='BKPower' type='text' inputmode='decimal' value='%BKPower%'> V</h2>
+      </div>
+        <h2>
+          <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
+          <label for='UseST' class="tooltip">煮沸时使用加速加热器<span class="tooltiptext">如果使用加速加热器，也可以在煮沸模式下使用。在蒸馏中：如果此选项关闭，开始沸腾时加速加热器立即关闭.</span></label>
+        </h2>
+    </div>
+
+    <div id="Cheese" class="tabcontent" aria-hidden="true">
+      <h2>奶酪制作设置:</h2>
+      <p><strong>「奶酪」模式的连接»:</strong> 如果已定义 <code>USE_ADS1115</code>, pH传感器按指定地址自动从ADS1115的AIN0读取，并且 <code>LUA_PIN</code> 不用于pH。如果未找到ADS1115，奶酪制作和pH校准将被锁定，其他模式继续工作。如果没有 <code>USE_ADS1115</code> PH-4502C 占用 <code>LUA_PIN</code> 并与MPX5010DP冲突。排放阀占用继电器4，取代加速加热器.</p>
+      <div class="btn-cell" style="margin: 0 auto;">
+        <input type="button" value="校准 pH" onclick="if (confirmLeaveIfDirty()) location.href='calibrate_ph.htm'" class="button">
+      </div>
+    </div>
+
+    <div id="NBK" class="tabcontent" aria-hidden="true">
+      <h2>连续醪塔设置:</h2>
+      <h2><label for="NbkIn" class="tooltip">惯性:<span class="tooltiptext">功率或进料改变后，塔达到新稳定状态所需的时间（s）。默认180。对于浓稠的谷物醪和带预热的塔，通常为300-600：据论坛经验，对一次调整的响应需要5-15分钟.</span></label> <input id="NbkIn" name='NbkIn' type='text' inputmode='decimal' value='%NbkIn%'></h2>
+      <h2><label for="NbkDelta" class="tooltip">Delta:<span class="tooltiptext">釜残液温度相对于基准Tn的允许偏差，在此范围内功率和进料不变.</span></label> <input id="NbkDelta" name='NbkDelta' type='text' inputmode='decimal' value='%NbkDelta%'></h2>
+      <h2><label for="NbkDM" class="tooltip">功率步长:<span class="tooltiptext">自动控制每次修正时功率改变的瓦数.</span></label> <input id="NbkDM" name='NbkDM' type='text' inputmode='decimal' value='%NbkDM%'></h2>
+      <h2><label for="NbkDP" class="tooltip">进料步长:<span class="tooltiptext">自动控制每次修正时醪液进料改变的升每小时数.</span></label> <input id="NbkDP" name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
+      <h2><label for="NbkSteamT" class="tooltip">蒸汽 T:<span class="tooltiptext">蒸汽温度的工作上限。接近该上限时，自动控制会减少进料.</span></label> <input id="NbkSteamT" name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
+      <h2><label for="NbkOwPress" class="tooltip">液泛压力:<span class="tooltiptext">压力传感器上判定为液泛的阈值。工作压力上限是该值的一半（例如40 mm时为20 mm，如HD手册）：超过它时自动控制会降低进料.</span></label> <input id="NbkOwPress" name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
+      <h2><label for="NbkTn" class="tooltip">结束T(釜残液):<span class="tooltiptext">压榨后釜残液的基准温度。在优化的第一次迭代中，会根据传感器读数自动向上修正（最高到 102&#176;C).</span></label> <input id="NbkTn" name='NbkTn' type='text' inputmode='decimal' value='%NbkTn%'>&#176;C</h2>
+      <h2>
+        <input id='NbkUseStreamServo' type='checkbox' name='NbkUseStreamServo' value='NbkUseStreamServo' %NbkStreamServoChecked%>
+        <label for='NbkUseStreamServo' class="tooltip">液泛时用伺服切换流向<span class="tooltiptext">液泛时选择位置1：脏流。位置0：净流，仅在完整恢复暂停后或连续醪塔结束时恢复.</span></label>
+      </h2>
+    </div>
+
+    <div id="Other" class="tabcontent" aria-hidden="true">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2><label for="blynkauth">令牌 Blynk:</label> <input id="blynkauth" name='blynkauth' type='text' size="32" class="setup-long-input" style="width: 22em;" value='%blynkauth%'></h2>
+        <h2><label for="videourl">URL 摄像头视频:</label> <input id="videourl" name='videourl' type='text' size="32" class="setup-long-input" style="width: 30em;" value='%videourl%'></h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2><label for="TimeZone">时区:</label> <input id="TimeZone" name='TimeZone' type='text' inputmode='decimal' value='%TimeZone%'></h2>
+        <h2>
+          <input id='CheckPower' type='checkbox' name='CheckPower' value='CheckPower' %ChckPwr%>
+          <label for='CheckPower' class="tooltip">使用调压器连接检查<span class="tooltiptext">如果使用调压器，与其失去通信时Samovar将关闭电源</span></label>
+        </h2>
+        <h2><label for="HeaterR">用于计算功率的加热器电阻:</label> <input id="HeaterR" name='HeaterR' type='text' inputmode='decimal' value='%HeaterR%'> Ohm</h2>
+        <h2><label for="MainsVoltage">电网电压:</label> <input id="MainsVoltage" name='MainsVoltage' type='text' inputmode='decimal' value='%MainsVoltage%'> V</h2>
+        <h2>
+          <input id='UseWS' type='checkbox' name='UseWS' value='UseWS' %UseWS%>
+          <label for='UseWS' class="tooltip">使用水流量控制<span class="tooltiptext">如果已连接水流量传感器，关闭此选项后可忽略其读数</span></label>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>
+          <p>温度颜色:</p>
+          <div>
+            <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
+            <label for="SteamColor">蒸汽温度</label>
+          </div>
+          <div>
+            <input type="color" id="PipeColor" name="PipeColor" value="%PipeColor%">
+            <label for="PipeColor">塔内传感器温度</label>
+          </div>
+          <div>
+            <input type="color" id="WaterColor" name="WaterColor" value="%WaterColor%">
+            <label for="WaterColor">水温度</label>
+          </div>
+          <div>
+            <input type="color" id="TankColor" name="TankColor" value="%TankColor%">
+            <label for="TankColor">釜内传感器温度</label>
+          </div>
+          <div>
+            <input type="color" id="ACPColor" name="ACPColor" value="%ACPColor%">
+            <label for="ACPColor">通气管传感器温度</label>
+          </div>
+        </h2>
+        <p><a href="https://www.w3schools.com/colors/colors_picker.asp" target="blank">可在此处选择颜色</a></p>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>继电器电平设置
+          <div>
+            <label for="rele1">继电器 1</label>
+            <select id="rele1" name="rele1">
+              <option value="0" %RAL%>LOW</option>
+              <option value="1" %RAH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            <label for="rele2">继电器 2</label>
+            <select id="rele2" name="rele2">
+              <option value="0" %RBL%>LOW</option>
+              <option value="1" %RBH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            <label for="rele3">继电器 3</label>
+            <select id="rele3" name="rele3">
+              <option value="0" %RCL%>LOW</option>
+              <option value="1" %RCH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            <label for="rele4">继电器 4</label>
+            <select id="rele4" name="rele4">
+              <option value="0" %RDL%>LOW</option>
+              <option value="1" %RDH%>HIGH</option>
+            </select>
+          </div>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em 2em 1em 2em; justify-content: space-between;">
+  <div class="container_column" style="margin-bottom: 1em;">
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <div>
+            <input id='saveform' type='button' name='saveform' value='下载设置文件' onclick='SaveFormToFile(this);' class="button">
+          </div>
+          <div>
+            <input id='resetwifi' type='button' name='resetwifi' value='重置设置 WiFI' onclick='if (confirm("重置设置 WiFi?")) sendbutton("resetwifi=1");' class="button">
+          </div>
+    </div>
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <div class="file-upload-control">
+            <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
+              <i class="fa fa-cloud-upload"></i> 上传设置文件
+            </label>
+            <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" />
+          </div>
+          <div>
+            <input id='reboot' type='button' name='reboot' value='重启 Samovar' onclick='if (confirm("重启 Samovar?")) sendbutton("reboot");' class="button">
+          </div>
+    </div>
+        </div>
+      </div>
+    </div>
+    <div class="setup-actions">
+      <input id='save' type='submit' name='save' value='保存' class="button">
+      <input id='return' type='button' name='return' value='返回主页' onclick='if (confirmLeaveIfDirty()) location.href="index.htm"' class="button">
+      <input id='edit' type='button' name='edit' value='编辑器' onclick='if (confirmLeaveIfDirty()) location.href="/edit"' class="button">
+    </div>
+  </form>
+</body>
+
+</html>

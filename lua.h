@@ -73,7 +73,7 @@ inline void lua_remove_timeout_hook_locked() {
 inline void lua_report_timeout_if_fired() {
   if (!luaTimeoutFired) return;
   luaTimeoutFired = false;
-  SendMsg("Lua: выполнение чанка прервано по таймауту", ALARM_MSG);
+  SendMsg(TR(LUA_CHUNK_TIMEOUT, "Lua: выполнение чанка прервано по таймауту"), ALARM_MSG);
 }
 
 inline String lua_exec_locked(String& script, bool collect_garbage = false) {
@@ -253,7 +253,7 @@ end
 -- локальную переменную (ту, что замкнули функции выше), и `armCoroutineWatchdog
 -- = nil` обнулил бы ИМЕННО её, а не глобаль.
 _G.armCoroutineWatchdog = nil
-)lua";
+)lua"; // i18n-keep: кириллица только в Lua-комментариях внутри прелюдии, пользователю не показывается
 
 // Исполняется один раз при инициализации Lua-состояния (см. lua_init(), сразу
 // после lua_install_constants_locked()). Ошибка прелюдии делает Lua runtime
@@ -285,9 +285,9 @@ inline void check_alarm_lua() {
   // [П3] Lua мог поднять канал нагрева сырым digitalWrite мимо PowerOn -
   // в этом случае надзор датчиков обязан работать так же, как при PowerOn.
   if (PowerOn || lua_heater_channel_raised()) {
-    if (optional_sensor_failed(WaterSensor) && process_sensor_failed("Lua", "воды")) return;
-    if (optional_sensor_failed(ACPSensor) && process_sensor_failed("Lua", "ТСА")) return;
-    if (optional_sensor_failed(TankSensor) && process_sensor_failed("Lua", "куба")) return;
+    if (optional_sensor_failed(WaterSensor) && process_sensor_failed("Lua", TR(LUA_SENSOR_WATER, "воды"))) return;
+    if (optional_sensor_failed(ACPSensor) && process_sensor_failed("Lua", TR(LUA_SENSOR_ACP, "ТСА"))) return;
+    if (optional_sensor_failed(TankSensor) && process_sensor_failed("Lua", TR(LUA_SENSOR_TANK, "куба"))) return;
   }
 
 #ifdef SAMOVAR_USE_POWER
@@ -2484,11 +2484,11 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog("ERR in script.lua: " + sr);
           lua_periodic_failure_count_script1++;
           if (lua_periodic_failure_count_script1 >= LUA_PERIODIC_FAILURE_STOP_THRESHOLD) {
-            WriteConsoleLog("script.lua остановлен после " + String(lua_periodic_failure_count_script1) +
-                             " ошибок подряд, см. предыдущие ERR");
+            WriteConsoleLog(TR(LUA_SCRIPT1_STOPPED_AFTER, "script.lua остановлен после ") + String(lua_periodic_failure_count_script1) +
+                             TR(LUA_ERRORS_IN_ROW_SEE_ERR, " ошибок подряд, см. предыдущие ERR"));
             lua_script1_disabled = true;
             lua_periodic_failure_count_script1 = 0;
-            SendMsg("Общий скрипт script.lua отключён после повторных ошибок", WARNING_MSG);
+            SendMsg(TR(LUA_SCRIPT1_DISABLED, "Общий скрипт script.lua отключён после повторных ошибок"), WARNING_MSG);
           }
         } else {
           lua_periodic_failure_count_script1 = 0;
@@ -2517,8 +2517,8 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog("ERR in " + localScriptName + ": " + sr);
           lua_periodic_failure_count_script2++;
           if (lua_periodic_failure_count_script2 >= LUA_PERIODIC_FAILURE_STOP_THRESHOLD) {
-            WriteConsoleLog("режимный скрипт (" + localScriptName + ") остановлен после " + String(lua_periodic_failure_count_script2) +
-                             " ошибок подряд, см. предыдущие ERR");
+            WriteConsoleLog(TR(LUA_MODE_SCRIPT_BEGIN, "режимный скрипт (") + localScriptName + TR(LUA_MODE_SCRIPT_STOPPED_AFTER, ") остановлен после ") + String(lua_periodic_failure_count_script2) +
+                             TR(LUA_ERRORS_IN_ROW_SEE_ERR, " ошибок подряд, см. предыдущие ERR"));
             loop_lua_fl = false;
             lua_periodic_failure_count_script2 = 0;
           }
