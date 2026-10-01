@@ -57,7 +57,7 @@ static uint64_t adaptiveHeaterPowerGeneration = 0;
 #endif
 
 inline void reset_adaptive_heater_controller() {
-  adaptive_heater_reset(adaptiveHeaterState);
+  adaptive_heater_reset(adaptiveHeaterState, SamSetup.HeaterHorizon);
 #ifdef SAMOVAR_USE_POWER
   adaptiveHeaterPowerGeneration = 0;
 #endif
@@ -737,20 +737,22 @@ void beer_abort_config_error(const String& reason) {
 }
 
 /**
- * @brief Проверяет превышение предельных температур воды/ТСА на этапах охлаждения
- *        ('C' и 'F' - оба реально гоняют воду через тракт охлаждения)
+ * @brief Проверяет превышение предельных температур воды/ТСА на строке брожения 'F'
  *        и инициирует аварийный останов. Надзорная функция alarm-пути (mode_alarm_beer),
  *        работает независимо от каденции beer_stage_tick() в loop().
+ *        На 'C' не проверяем: охлаждаем кипящее сусло, вода на выходе первые минуты
+ *        штатно выше MAX_WATER_TEMP, нагрев там и так выключен, а авария перекрыла бы
+ *        воду и оставила сусло горячим.
  */
 inline void beer_check_cooling_limits() {
-  if (current_program_type() != 'C' && current_program_type() != 'F') return;
+  if (current_program_type() != 'F') return;
   mode_request_overheat_emergency_if_needed();
 }
 
 /**
  * @brief Верхний предел температуры сусла в кубе - надзор на ВСЕХ типах строк
  *        (M/P/B/L/A/C/F), в отличие от beer_check_cooling_limits(), которая
- *        покрывает только 'C'/'F'. Порог совпадает с уставкой нагрева на
+ *        покрывает только 'F'. Порог совпадает с уставкой нагрева на
  *        кипячении (см. set_heater_state(BOILING_TEMP + 5, temp) выше).
  */
 inline void beer_check_wort_overheat_limit() {
@@ -1404,6 +1406,10 @@ void set_heater_state(float setpoint, float temp, float boostTarget) {
   const AdaptiveHeaterResult adaptiveResult = adaptive_heater_step(
       adaptiveHeaterState, setpoint, boostTarget, temp,
       ACCELERATION_HEATER_DELTA, nowMs);
+  if (adaptiveHeaterState.horizonLearned) {
+    adaptiveHeaterState.horizonLearned = false;
+    persist_heater_horizon(adaptiveHeaterState.predictionHorizonSeconds);
+  }
 #ifdef SAMOVAR_USE_POWER
   if (adaptiveResult.boost) {
     if (!acceleration_heater) {
@@ -1422,6 +1428,8 @@ void set_heater_state(float setpoint, float temp, float boostTarget) {
     const bool modeApplied = set_current_power_mode_value(POWER_WORK_MODE);
     adaptiveHeaterState.lastCommandApplied = modeApplied &&
         heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN | SAFETY_HEATER_OUTPUT_BOOST);
+    // Разгон без регулятора - полная мощность: замер выбега отсчитывает сброс от неё.
+    adaptiveHeaterState.lastOutput = 1.0f;
   } else {
     set_heater(adaptiveResult.duty);
     adaptiveHeaterState.lastCommandApplied = true;

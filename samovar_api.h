@@ -90,6 +90,7 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate, PersistResult& persis
 ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate);
 PersistResult save_profile_nvs(const SetupEEPROM& candidate);
 void persist_nbk_optimum(float optimalPower, float optimalFeed);
+void persist_heater_horizon(float horizonSeconds);
 const char* persist_result_code(PersistResult result);
 const char* profile_load_result_code(ProfileLoadResult result);
 void print_nvs_stats(const char* context);

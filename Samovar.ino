@@ -265,6 +265,21 @@ void persist_nbk_optimum(float optimalPower, float optimalFeed) {
   portEXIT_CRITICAL(&configMux);
 }
 
+// Горизонт предсказания нагрева пива/сыра, выученный по выбегу котла (adaptive_pid.h).
+// Не сохранился - регулятор продолжает с выученным в RAM, следующая пауза повторит запись.
+void persist_heater_horizon(float horizonSeconds) {
+  SetupEEPROM candidate{};
+  portENTER_CRITICAL(&configMux);
+  candidate = SamSetup;
+  portEXIT_CRITICAL(&configMux);
+  if (candidate.HeaterHorizon == horizonSeconds) return;
+  candidate.HeaterHorizon = horizonSeconds;
+  if (save_profile_nvs(candidate) != PERSIST_OK) return;
+  portENTER_CRITICAL(&configMux);
+  SamSetup.HeaterHorizon = horizonSeconds;
+  portEXIT_CRITICAL(&configMux);
+}
+
 // ---------------------------------------------------------------------------
 // Отложенные команды для выполнения из loop() (set из async-обработчиков)
 // ---------------------------------------------------------------------------

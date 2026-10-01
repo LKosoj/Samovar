@@ -1554,6 +1554,8 @@
   "Значения мощности в этом примере - вольты; для регулятора в ваттах первая": "The power values in this example are volts; for a regulator in watts the first",
   "ненулевая мощность должна быть больше": "non-zero power must be above",
   "Колонка 5 = вольты, источник истины для регулятора мощности": "Column 5 = volts, the source of truth for the power regulator",
-  "Колонка 6 = ватты для эталонного ТЭНа 3480 Вт/230 В (R=15.2 Ом), запасной путь, когда сопротивление ТЭНа не задано в настройках": "Column 6 = watts for the reference heater 3480 W/230 V (R=15.2 Ohm), a backup path when the heater resistance is not set in Settings"
+  "Колонка 6 = ватты для эталонного ТЭНа 3480 Вт/230 В (R=15.2 Ом), запасной путь, когда сопротивление ТЭНа не задано в настройках": "Column 6 = watts for the reference heater 3480 W/230 V (R=15.2 Ohm), a backup path when the heater resistance is not set in Settings",
+  "Программа переведена из формата 6.x, строк": "Program converted from the 6.x format, rows",
+  "Проверьте мешалку и насос": "Check the mixer and pump"
  }
 }

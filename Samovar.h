@@ -627,6 +627,7 @@ struct SetupEEPROM {
   float NbkProgramOPower;
   float NbkProgramWSpeed;
   float NbkProgramWPower;
+  float HeaterHorizon;                                         //Выученный горизонт предсказания нагрева пива/сыра, с; 0 = не выучен
 };
 
 struct ImpurityDetector {

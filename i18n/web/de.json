@@ -1553,6 +1553,8 @@
   "Значения мощности в этом примере - вольты; для регулятора в ваттах первая": "Die Leistungswerte in diesem Beispiel sind Volt; bei einem Regler in Watt muss die erste",
   "ненулевая мощность должна быть больше": "Leistung ungleich null größer sein als",
   "Колонка 5 = вольты, источник истины для регулятора мощности": "Spalte 5 = Volt, Quelle der Wahrheit für den Leistungsregler",
-  "Колонка 6 = ватты для эталонного ТЭНа 3480 Вт/230 В (R=15.2 Ом), запасной путь, когда сопротивление ТЭНа не задано в настройках": "Spalte 6 = Watt für das Referenz-Heizelement 3480 W/230 V (R=15.2 Ohm), Ersatzweg, wenn der Widerstand des Heizelements nicht in den Einstellungen gesetzt ist"
+  "Колонка 6 = ватты для эталонного ТЭНа 3480 Вт/230 В (R=15.2 Ом), запасной путь, когда сопротивление ТЭНа не задано в настройках": "Spalte 6 = Watt für das Referenz-Heizelement 3480 W/230 V (R=15.2 Ohm), Ersatzweg, wenn der Widerstand des Heizelements nicht in den Einstellungen gesetzt ist",
+  "Программа переведена из формата 6.x, строк": "Programm aus dem 6.x-Format umgewandelt, Zeilen",
+  "Проверьте мешалку и насос": "Prüfen Sie Rührwerk und Pumpe"
  }
 }

@@ -136,8 +136,29 @@
       return program_error(str) === '';
     }
 
+    // Программы 6.x писали «Устройства» в 4 поля: тип^скорость^работа^пауза. В 7.00 их 5:
+    // тип^обороты I2C-мешалки^мл/ч I2C-насоса^работа^пауза. Скорость старой мешалки на реле
+    // не влияла, поэтому обороты и насос становятся 0 - работа через реле.
+    function convert_legacy_program () {
+      var area = document.getElementById('WProgram');
+      var converted = 0;
+      var lines = area.value.split("\n").map(function(line) {
+        var fields = line.split(";");
+        if (fields.length != 5) return line;
+        var device = fields[3].split("^");
+        if (device.length != 4 || device.some(function(v) { return v.trim() === '' || !Number.isFinite(Number(v)); })) return line;
+        fields[3] = [device[0], '0', '0', device[2], device[3]].join("^");
+        converted++;
+        return fields.join(";");
+      });
+      if (!converted) return;
+      area.value = lines.join("\n");
+      SamovarApp.notify("Программа переведена из формата 6.x, строк: " + converted + ". Проверьте мешалку и насос.", 1);
+    }
+
     // Сообщает причину отказа; true - программа верна.
     function program_ok_or_notify () {
+      convert_legacy_program();
       var err = program_error(document.getElementById('WProgram').value);
       if (err) SamovarApp.notify("Ошибка программы. " + err, 1);
       return !err;

@@ -529,6 +529,8 @@ class BrowserTestRunnerTests(unittest.TestCase):
         expected = {
             "test_accessibility_ui_browser.py",
             # 02.09.2026: пакет "Пиво" - кнопка паузы на beer.htm и импорт рецепта brewxml.htm.
+            # 01.10.2026: перевод программ пива из формата 6.x на beer.htm.
+            "test_beer_legacy_program_browser.py",
             "test_beer_pause_button_browser.py",
             "test_beer_program_backup_browser.py",
             # 16.09.2026 (T3): каталог рецептов пива с сайта на program.htm -> brewxml.htm.

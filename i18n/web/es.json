@@ -1553,6 +1553,8 @@
   "Значения мощности в этом примере - вольты; для регулятора в ваттах первая": "Los valores de potencia de este ejemplo son voltios; para un regulador en vatios la primera",
   "ненулевая мощность должна быть больше": "potencia distinta de cero debe ser mayor de",
   "Колонка 5 = вольты, источник истины для регулятора мощности": "Columna 5 = voltios, fuente de verdad para el regulador de potencia",
-  "Колонка 6 = ватты для эталонного ТЭНа 3480 Вт/230 В (R=15.2 Ом), запасной путь, когда сопротивление ТЭНа не задано в настройках": "Columna 6 = vatios para la resistencia de referencia de 3480 W/230 V (R=15.2 Ohm), vía de reserva cuando la resistencia no está indicada en los Ajustes"
+  "Колонка 6 = ватты для эталонного ТЭНа 3480 Вт/230 В (R=15.2 Ом), запасной путь, когда сопротивление ТЭНа не задано в настройках": "Columna 6 = vatios para la resistencia de referencia de 3480 W/230 V (R=15.2 Ohm), vía de reserva cuando la resistencia no está indicada en los Ajustes",
+  "Программа переведена из формата 6.x, строк": "Programa convertido desde el formato 6.x, filas",
+  "Проверьте мешалку и насос": "Compruebe el agitador y la bomba"
  }
 }

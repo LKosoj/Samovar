@@ -317,7 +317,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 89, "SetupEEPROM v10 field inventory changed")
+require(len(setup_fields) == 90, "SetupEEPROM v11 field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -379,6 +379,7 @@ nvs_harness = (
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V9ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
         #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V10ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V11ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
         // UPTO4-поля (LogPeriod/tg_token/tg_chat_id) остались в X-macro списке для
         // прохода курсора при чтении старых форматов, но физически ушли из
         // SetupEEPROM (T1) - sizeof(((SetupEEPROM*)0)->name) для них не скомпилируется.
@@ -395,6 +396,7 @@ nvs_harness = (
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO7
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V9ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V10ONLY
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V11ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V3ONLY
         #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V2ONLY
@@ -412,7 +414,7 @@ nvs_harness = (
         r'''
         static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
         static const char* const SAMOVAR_PROFILE_KEY = "profile";
-        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 10;
+        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 11;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
@@ -433,10 +435,15 @@ nvs_harness = (
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V9 = 474;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V10 = 515;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V10 = 515;
+        static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V11 = 519;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V11 = 519;
 
         using ProfileCodec = ProfileBlobCodec<
-            SAMOVAR_PROFILE_PAYLOAD_SIZE_V10,
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V11,
             SAMOVAR_PROFILE_FORMAT_VERSION>;
+        using V10ProfileCodec = ProfileBlobCodec<
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V10,
+            10>;
         using V9ProfileCodec = ProfileBlobCodec<
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V9,
             9>;
@@ -467,8 +474,9 @@ nvs_harness = (
 
         static void set_profile_version_defaults(SetupEEPROM&, uint8_t);
 
-        static_assert(sizeof(SetupEEPROM) == 540, "host ABI drift");
-        static_assert(ProfileCodec::BLOB_SIZE == 529, "v10 blob size drift");
+        static_assert(sizeof(SetupEEPROM) == 544, "host ABI drift");
+        static_assert(ProfileCodec::BLOB_SIZE == 533, "v11 blob size drift");
+        static_assert(V10ProfileCodec::BLOB_SIZE == 529, "v10 blob size drift");
         static_assert(V9ProfileCodec::BLOB_SIZE == 488, "v9 blob size drift");
         static_assert(V8ProfileCodec::BLOB_SIZE == 487, "v8 blob size drift");
         static_assert(V7ProfileCodec::BLOB_SIZE == 489, "v7 blob size drift");
@@ -896,6 +904,10 @@ for token, signature in [
         "template <size_t PayloadSize>\nstatic bool decode_setup_payload_v10only_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
     ),
     (
+        "decode_setup_payload_v11only_fields(",
+        "template <size_t PayloadSize>\nstatic bool decode_setup_payload_v11only_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
+    ),
+    (
         "decode_setup_payload(",
         "static bool decode_setup_payload(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
@@ -906,6 +918,10 @@ for token, signature in [
     (
         "decode_setup_payload_v9(",
         "static bool decode_setup_payload_v9(const uint8_t* payload, SetupEEPROM& candidate)",
+    ),
+    (
+        "decode_setup_payload_v10(",
+        "static bool decode_setup_payload_v10(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
     (
         "decode_setup_payload_v7(",
@@ -1168,6 +1184,7 @@ nvs_harness += (
           candidate.NbkProgramOPower = 456.0f;
           candidate.NbkProgramWSpeed = 1.75f;
           candidate.NbkProgramWPower = 89.0f;
+          candidate.HeaterHorizon = 321.5f;
           return candidate;
         }
 
@@ -1196,6 +1213,16 @@ nvs_harness += (
           memcpy(payload, currentPayload, sizeof(payload));
           V9ProfileCodec::Blob blob{};
           V9ProfileCodec::encode(payload, blob);
+          return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
+        }
+
+        static std::vector<uint8_t> encode_v10_blob(const SetupEEPROM& candidate) {
+          uint8_t payload[V10ProfileCodec::PAYLOAD_SIZE] = {};
+          uint8_t currentPayload[ProfileCodec::PAYLOAD_SIZE] = {};
+          assert(encode_setup_payload(candidate, currentPayload));
+          memcpy(payload, currentPayload, sizeof(payload));
+          V10ProfileCodec::Blob blob{};
+          V10ProfileCodec::encode(payload, blob);
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
@@ -1238,6 +1265,7 @@ nvs_harness += (
 #define SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_V9ONLY(kind, name)
 #define SAMOVAR_LEGACY_ENCODE_TERM_V10ONLY(kind, name)
+#define SAMOVAR_LEGACY_ENCODE_TERM_V11ONLY(kind, name)
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO4(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO5(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
 #define SAMOVAR_LEGACY_ENCODE_TERM_UPTO6(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
@@ -1253,6 +1281,7 @@ nvs_harness += (
 #undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO7
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V9ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V10ONLY
+#undef SAMOVAR_LEGACY_ENCODE_TERM_V11ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V3ONLY
 #undef SAMOVAR_LEGACY_ENCODE_TERM_V2ONLY
@@ -1533,6 +1562,7 @@ nvs_harness += (
           assert(loaded.NbkOptimalFeed == expected.NbkOptimalFeed);
           assert(loaded.NbkProgramLength == expected.NbkProgramLength);
           assert(loaded.NbkProgramSPower == expected.NbkProgramSPower);
+          assert(loaded.HeaterHorizon == expected.HeaterHorizon);
           assert(encode_blob(loaded) == fake.blob);
         }
 
@@ -1720,6 +1750,24 @@ nvs_harness += (
           assert(loaded.NbkOptimalFeed == 0.0f);
           assert(loaded.NbkProgramLength == 4);
           assert(loaded.NbkProgramSPower == SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT);
+          assert(loaded.HeaterHorizon == 0.0f);
+          assert(fake.writes == 1 && fake.blob.size() == ProfileCodec::BLOB_SIZE);
+
+          reset_fake();
+          // V10 несёт поля НБК, но не горизонт нагрева: поля НБК сохраняются,
+          // горизонт (в исходнике 555 - в блоб V10 он не попадает) встаёт в 0.
+          SetupEEPROM v10Source = legacy;
+          v10Source.NbkOptimalPower = 777.0f;
+          v10Source.NbkProgramWPower = 66.0f;
+          v10Source.HeaterHorizon = 555.0f;
+          fake.blob = encode_v10_blob(v10Source);
+          loaded = {};
+          persistResult = PERSIST_OK;
+          assert(load_profile_nvs(loaded, persistResult) == PROFILE_LOAD_OK);
+          assert(persistResult == PERSIST_OK);
+          assert(loaded.NbkOptimalPower == 777.0f);
+          assert(loaded.NbkProgramWPower == 66.0f);
+          assert(loaded.HeaterHorizon == 0.0f);
           assert(fake.writes == 1 && fake.blob.size() == ProfileCodec::BLOB_SIZE);
 
           reset_fake();
@@ -2272,9 +2320,10 @@ nvs_harness += (
           {"NbkProgramOPower", 503, 4, offsetof(SetupEEPROM, NbkProgramOPower), sizeof(((SetupEEPROM*)0)->NbkProgramOPower)},
           {"NbkProgramWSpeed", 507, 4, offsetof(SetupEEPROM, NbkProgramWSpeed), sizeof(((SetupEEPROM*)0)->NbkProgramWSpeed)},
           {"NbkProgramWPower", 511, 4, offsetof(SetupEEPROM, NbkProgramWPower), sizeof(((SetupEEPROM*)0)->NbkProgramWPower)},
+          {"HeaterHorizon", 515, 4, offsetof(SetupEEPROM, HeaterHorizon), sizeof(((SetupEEPROM*)0)->HeaterHorizon)},
         };
 
-        static const uint8_t GOLDEN_A[515] = {
+        static const uint8_t GOLDEN_A[519] = {
           0x0B,  // [  0-  0] flag
           0x00, 0x00, 0x00, 0x00,  // [  1-  4] DeltaSteamTemp
           0x00, 0x00, 0x50, 0xC0,  // [  5-  8] DeltaPipeTemp
@@ -2364,9 +2413,10 @@ nvs_harness += (
           0x00, 0x00, 0xE4, 0x43,  // [503-506] NbkProgramOPower
           0x00, 0x00, 0xE0, 0x3F,  // [507-510] NbkProgramWSpeed
           0x00, 0x00, 0xB2, 0x42,  // [511-514] NbkProgramWPower
+          0x00, 0x00, 0xF7, 0x42,  // [515-518] HeaterHorizon
         };
 
-        static const uint8_t GOLDEN_B[515] = {
+        static const uint8_t GOLDEN_B[519] = {
           0xEE,  // [  0-  0] flag
           0x00, 0xC0, 0x48, 0x43,  // [  1-  4] DeltaSteamTemp
           0x00, 0x60, 0x96, 0x43,  // [  5-  8] DeltaPipeTemp
@@ -2456,9 +2506,10 @@ nvs_harness += (
           0x00, 0x00, 0x66, 0x43,  // [503-506] NbkProgramOPower
           0x00, 0x00, 0xC0, 0x41,  // [507-510] NbkProgramWSpeed
           0x00, 0x00, 0x70, 0x43,  // [511-514] NbkProgramWPower
+          0x00, 0xC0, 0xE4, 0x43,  // [515-518] HeaterHorizon
         };
 
-        static const uint8_t GOLDEN_DEFAULT_NOSEM[515] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_NOSEM[519] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2548,9 +2599,10 @@ nvs_harness += (
           0x00, 0x00, 0x00, 0x00,  // [503-506] NbkProgramOPower
           0x00, 0x00, 0x00, 0x00,  // [507-510] NbkProgramWSpeed
           0x00, 0x00, 0x00, 0x00,  // [511-514] NbkProgramWPower
+          0x00, 0x00, 0x00, 0x00,  // [515-518] HeaterHorizon
         };
 
-        static const uint8_t GOLDEN_DEFAULT_SEM[515] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_SEM[519] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2640,6 +2692,7 @@ nvs_harness += (
           0x00, 0x00, 0x00, 0x00,  // [503-506] NbkProgramOPower
           0x00, 0x00, 0x00, 0x00,  // [507-510] NbkProgramWSpeed
           0x00, 0x00, 0x00, 0x00,  // [511-514] NbkProgramWPower
+          0x00, 0x00, 0x00, 0x00,  // [515-518] HeaterHorizon
         };
 
 
@@ -2771,6 +2824,7 @@ nvs_harness += (
         candidateA.NbkProgramOPower = 456.0f;
         candidateA.NbkProgramWSpeed = 1.75f;
         candidateA.NbkProgramWPower = 89.0f;
+        candidateA.HeaterHorizon = 123.5f;
           uint8_t payloadA[ProfileCodec::PAYLOAD_SIZE] = {};
           assert(encode_setup_payload(candidateA, payloadA) &&
                  "encode_setup_payload must succeed for golden set A");
@@ -2871,6 +2925,7 @@ nvs_harness += (
         candidateB.NbkProgramOPower = 230.0f;
         candidateB.NbkProgramWSpeed = 24.0f;
         candidateB.NbkProgramWPower = 240.0f;
+        candidateB.HeaterHorizon = 457.5f;
           uint8_t payloadB[ProfileCodec::PAYLOAD_SIZE] = {};
           assert(encode_setup_payload(candidateB, payloadB) &&
                  "encode_setup_payload must succeed for golden set B");
@@ -3307,16 +3362,16 @@ if load_body:
         "decode_setup_payload_v3(payload, migrated)" in load_body and
         "decode_setup_payload_v2(payload, migrated)" in load_body and
         "decode_setup_payload_v1(payload, migrated)" in load_body and
-        load_body.count("save_profile_nvs(migrated)") == 9 and
+        load_body.count("save_profile_nvs(migrated)") == 10 and
         "SetupEEPROM decoded" not in load_body,
-        "profile load must decode V1-V9 and confirm their V10 rewrite with fixed buffers",
+        "profile load must decode V1-V10 and confirm their V11 rewrite with fixed buffers",
     )
     require(
         load_body.startswith("\n  persistResult = PERSIST_OK;") and
-        load_body.count("candidate = migrated;") == 9 and
-        load_body.count("persistResult = save_profile_nvs(migrated);") == 9 and
-        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 9,
-        "V1-V9 load must retain its decoded candidate and report the exact V10 persist failure",
+        load_body.count("candidate = migrated;") == 10 and
+        load_body.count("persistResult = save_profile_nvs(migrated);") == 10 and
+        load_body.count("PROFILE_LOAD_MIGRATION_PERSIST_FAILED") == 10,
+        "V1-V10 load must retain its decoded candidate and report the exact V11 persist failure",
     )
 
 if migrate_body:
@@ -3403,8 +3458,8 @@ else:
     )
     total_size = sum(int(row[2]) for row in profile_field_rows if row[4] not in ("UPTO4", "UPTO5", "UPTO6", "UPTO7"))
     require(
-        total_size == 515,
-        f"profile_setup_fields.h SIZE column (без retired-полей) sums to {total_size} bytes, expected 515",
+        total_size == 519,
+        f"profile_setup_fields.h SIZE column (без retired-полей) sums to {total_size} bytes, expected 519",
     )
     # decode_setup_payload_fields() и decode_setup_payload_v2only_fields() читают
     # ОДИН И ТОТ ЖЕ курсор reader двумя последовательными проходами по одному и
@@ -3417,7 +3472,7 @@ else:
     # V2ONLY-хвост) - это нормально; интерливинг ALL/V2ONLY - нет.
     v2only_fields = [row[1] for row in profile_field_rows if row[4] == "V2ONLY"]
     scopes = [row[4] for row in profile_field_rows]
-    expected_scope_order = {"ALL": 0, "UPTO4": 0, "UPTO7": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3, "UPTO6": 4, "UPTO5": 5, "V9ONLY": 6, "V10ONLY": 7}
+    expected_scope_order = {"ALL": 0, "UPTO4": 0, "UPTO7": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3, "UPTO6": 4, "UPTO5": 5, "V9ONLY": 6, "V10ONLY": 7, "V11ONLY": 8}
     require(
         all(scope in expected_scope_order for scope in scopes) and
         all(expected_scope_order[left] <= expected_scope_order[right]
@@ -3588,14 +3643,16 @@ for forbidden in [
 require("void save_profile()" not in (ROOT / "FS.ino").read_text(encoding="utf-8"),
         "FS.ino void save_profile wrapper remains")
 require("void save_profile();" not in api_text, "void save_profile API remains")
-require('static_assert(sizeof(SetupEEPROM) == 540' in nvs_text,
-        "production SetupEEPROM v10 ABI assertion is missing")
+require('static_assert(sizeof(SetupEEPROM) == 544' in nvs_text,
+        "production SetupEEPROM v11 ABI assertion is missing")
 for token in [
-    "SAMOVAR_PROFILE_FORMAT_VERSION = 10",
+    "SAMOVAR_PROFILE_FORMAT_VERSION = 11",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V9 = 474",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V9 = 474",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V10 = 515",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V10 = 515",
+    "SAMOVAR_PROFILE_PAYLOAD_SIZE_V11 = 519",
+    "SAMOVAR_PROFILE_CANONICAL_BYTES_V11 = 519",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V8 = 473",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V8 = 473",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V7 = 475",
@@ -3606,6 +3663,7 @@ for token in [
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V5 = 480",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545",
+    "using V10ProfileCodec = ProfileBlobCodec<",
     "using V8ProfileCodec = ProfileBlobCodec<",
     "using V9ProfileCodec = ProfileBlobCodec<",
     "using V7ProfileCodec = ProfileBlobCodec<",
@@ -3615,7 +3673,7 @@ for token in [
     "using V3ProfileCodec = ProfileBlobCodec<",
     "using V2ProfileCodec = ProfileBlobCodec<",
 ]:
-    require(token in nvs_text, f"production profile v9 contract is missing {token}")
+    require(token in nvs_text, f"production profile v11 contract is missing {token}")
 
 setup_body = function_body(samovar_text, "void setup()")
 if setup_body:

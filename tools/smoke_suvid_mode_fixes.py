@@ -105,11 +105,14 @@ if beer_text:
         "beer cooling limits gate by stage then delegate to common overheat helper",
         body,
         [
-            "if (current_program_type() != 'C' && current_program_type() != 'F') return;",
+            "if (current_program_type() != 'F') return;",
             "mode_request_overheat_emergency_if_needed();",
         ],
         errors,
     )
+    # Строка 'C' охлаждает кипящее сусло: вода штатно выше MAX_WATER_TEMP (01.10.2026).
+    if "'C'" in body:
+        errors.append("beer cooling limits must not trip on stage 'C' (hot water is normal while chilling wort)")
 
 suvid_text = strip_cpp_comments(read_text("suvid.h"))
 if suvid_text:

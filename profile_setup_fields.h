@@ -19,7 +19,7 @@
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
 //   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY, V9ONLY,
-//             V10ONLY,
+//             V10ONLY, V11ONLY,
 //             UPTO4, UPTO5, UPTO6 или UPTO7.
 //             V2ONLY/V3ONLY/V4ONLY/V9ONLY образуют последовательные хвосты канонического
 //             формата (поле появляется начиная с этой версии и остаётся во всех
@@ -142,4 +142,5 @@ static const float SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT = 167.0f;
   X(FLOAT, NbkProgramOSpeed, 4, candidate.NbkProgramOSpeed = 0.0f, V10ONLY) \
   X(FLOAT, NbkProgramOPower, 4, candidate.NbkProgramOPower = 0.0f, V10ONLY) \
   X(FLOAT, NbkProgramWSpeed, 4, candidate.NbkProgramWSpeed = 0.0f, V10ONLY) \
-  X(FLOAT, NbkProgramWPower, 4, candidate.NbkProgramWPower = 0.0f, V10ONLY)
+  X(FLOAT, NbkProgramWPower, 4, candidate.NbkProgramWPower = 0.0f, V10ONLY) \
+  X(FLOAT, HeaterHorizon, 4, candidate.HeaterHorizon = 0.0f, V11ONLY)
