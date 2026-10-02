@@ -377,6 +377,35 @@ BROWSER_TEST = r'''async page => {
              deviceEditor.pumpBoardSaved && deviceEditor.pumpBoardValue === "3^0^1200^30^10",
              "pump-mode I2CStepper did not use relay mixer and stepper pump: " + JSON.stringify(deviceEditor));
 
+      for (const schedule of ["0^0^0^30^10", "3^-100^1200^45^7"]) {
+        await page.evaluate(() => {
+          document.getElementById("WProgram").value = "F;18;0;0^0^0^0^0;0";
+          document.getElementById("WProgram").dispatchEvent(new Event("change"));
+        });
+        await page.locator("[id^=pmixer]").first().dispatchEvent("focus");
+        await page.evaluate(value => {
+          const fields = value.split("^");
+          ["m_type", "m_mixer_rpm", "m_pump_rate", "m_time", "m_pause"]
+            .forEach((id, i) => document.getElementById(id).value = fields[i]);
+          document.getElementById("m_type").value = "0";
+        }, schedule);
+        const postCount = beerProgramPosts.length;
+        const disabled = await page.evaluate(async () => {
+          const saved = SamovarApp.saveDeviceScheduleModal();
+          const program = document.getElementById("WProgram").value.trim();
+          const error = program_error(program);
+          if (saved && !error) await set_program();
+          return {saved, program, error};
+        });
+        expect(disabled.saved && disabled.program === "F;18;0;0^0^0^0^0;0" &&
+               !disabled.error,
+               "Disabled fermentation device retained its work/pause or speed settings: " +
+               JSON.stringify(disabled));
+        expect(beerProgramPosts.length === postCount + 1 &&
+               beerProgramPosts[postCount].includes("0^0^0^0^0"),
+               "Fermentation program with disabled device was not sent to /program");
+      }
+
       await page.locator("[id^=pmixer]").first().dispatchEvent("focus");
       const pumpModeEditor = await page.evaluate(() => ({
         open:document.getElementById("popup").style.display,

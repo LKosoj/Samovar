@@ -739,6 +739,11 @@
   function saveDeviceScheduleModal() {
     if (!deviceScheduleInput) return false;
     const type = Number(byId('m_type').value);
+    if (type === 0) {
+      ['m_mixer_rpm', 'm_pump_rate', 'm_time', 'm_pause'].forEach(function(id) {
+        byId(id).value = '0';
+      });
+    }
     const mixer = readNumericInput('m_mixer_rpm', {
       integer: true, min: -32768, max: 32767, label: 'Обороты мешалки'
     });
