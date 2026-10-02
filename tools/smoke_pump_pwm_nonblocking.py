@@ -118,15 +118,13 @@ PID_HARNESS = r'''
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <GyverPID.h>
+uint32_t nowMs = 1000;
 
 #define PWM_LOW_VALUE 10
-#define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
 struct SetupStub { float SetWaterTemp; } SamSetup = {30.0f};
-struct RegulatorStub {
-  float setpoint; float input;
-  float getResultNow() { return 555.0f; }
-} pump_regulator = {0.0f, 0.0f};
+GyverPID pump_regulator(6.5f, 0.3f, 30.0f, 1000);
 static bool pump_started = true;
 static int wp_count = 10;
 static float water_pump_speed = 100.0f;
@@ -158,28 +156,45 @@ int main() {
   check(pump_pid_soften_factor(200.0f) > pump_pid_soften_factor(150.0f),
         "soften factor must grow with PWM");
 
+  pump_regulator.setDirection(REVERSE);
+  pump_regulator.setLimits(100, 1023);
   set_pump_speed_pid(32.0f, true);
   check(near(pump_regulator.setpoint, 30.0f), "setpoint must follow SetWaterTemp");
-  check(near(pump_regulator.input, 30.0f + 2.0f * 60.0f / 350.0f),
-        "low PWM must soften the water temperature deviation");
-  check(near(writtenDuty, 555.0f), "PID result must reach set_pump_pwm");
+  check(near(pump_regulator.input, 32.0f), "temperature must stay measured at low PWM");
+  check(near(pump_regulator.Kp, 6.5f * 60.0f / 350.0f) &&
+        near(pump_regulator.Ki, 0.3f * 60.0f / 350.0f) &&
+        near(pump_regulator.Kd, 30.0f * 60.0f / 350.0f),
+        "low PWM must soften all coefficients");
+  check(near(writtenDuty, pump_regulator.output), "PID result must reach set_pump_pwm");
 
+  nowMs += 1000;
   set_pump_speed_pid(33.0f, false);
+  check(near(pump_regulator.Kp, 6.5f) && near(pump_regulator.Ki, 0.3f) && near(pump_regulator.Kd, 30.0f),
+        "hot ACP must restore full coefficients");
   check(near(pump_regulator.input, 33.0f), "hot ACP substitute must reach the regulator unchanged");
 
+  nowMs += 1000;
   wp_count = 9;
   set_pump_speed_pid(32.0f, true);
   check(near(pump_regulator.input, 32.0f), "soft start must keep the 6.27 regulator input");
+  check(near(pump_regulator.Kp, 6.5f) && near(pump_regulator.Ki, 0.3f) && near(pump_regulator.Kd, 30.0f),
+        "soft start must keep full coefficients");
   wp_count = 10;
 
+  nowMs += 1000;
   pump_started = false;
   set_pump_speed_pid(32.0f, true);
   check(near(pump_regulator.input, 32.0f), "stopped pump must keep the 6.27 regulator input");
+  check(near(pump_regulator.Kp, 6.5f) && near(pump_regulator.Ki, 0.3f) && near(pump_regulator.Kd, 30.0f),
+        "stopped pump must keep full coefficients");
   pump_started = true;
 
+  nowMs += 1000;
   water_pump_speed = 800.0f;
   set_pump_speed_pid(32.0f, true);
   check(near(pump_regulator.input, 32.0f), "high PWM must keep the 6.27 regulator input");
+  check(near(pump_regulator.Kp, 6.5f) && near(pump_regulator.Ki, 0.3f) && near(pump_regulator.Kd, 30.0f),
+        "high PWM must keep full coefficients");
   return 0;
 }
 '''
@@ -189,9 +204,15 @@ def run_pid_harness(source_text: str):
     with tempfile.TemporaryDirectory() as temp_dir:
         source = Path(temp_dir) / "pump_pid_test.cpp"
         binary = Path(temp_dir) / "pump_pid_test"
+        (Path(temp_dir) / "Arduino.h").write_text(
+            "#pragma once\n#include <cstdint>\n"
+            "extern uint32_t nowMs;\ninline uint32_t millis() { return nowMs; }\n"
+            "#define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))\n",
+            encoding="utf-8",
+        )
         source.write_text(source_text, encoding="utf-8")
         built = subprocess.run(
-            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
+            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I" + temp_dir, "-I" + str(ROOT / "libraries/GyverPID/src"), str(source), "-o", str(binary)],
             text=True, capture_output=True,
         )
         if built.returncode != 0:
@@ -219,14 +240,14 @@ if pid_body and soften_body:
         errors.append("pump PID harness failed:\n" + (ran.stderr if ran else "not run"))
 
     pid_mutations = (
-        ("ACP substitute softened", "if (soften &&", "if ((soften || true) &&",
-         "hot ACP substitute must reach the regulator unchanged"),
+        ("ACP substitute softened", "soften && pump_started", "(soften || true) && pump_started",
+         "hot ACP must restore full coefficients"),
         ("soft start softened", "wp_count >= 10", "wp_count >= 0",
-         "soft start must keep the 6.27 regulator input"),
+         "soft start must keep full coefficients"),
         ("stopped pump softened", "&& pump_started &&", "&& (pump_started || true) &&",
-         "stopped pump must keep the 6.27 regulator input"),
+         "stopped pump must keep full coefficients"),
         ("softening removed", "pump_pid_soften_factor(water_pump_speed)", "1.0f",
-         "low PWM must soften the water temperature deviation"),
+         "low PWM must soften all coefficients"),
         ("softening reaches high PWM", "+ 60.0f) / 350.0f", "+ 60.0f) / 3500.0f",
          "full PWM must keep the 6.27 regulator"),
         ("soften floor removed", ", 0.15f, 1.0f)", ", 0.0f, 1.0f)",
@@ -249,7 +270,7 @@ if water_pid_body:
         strip_cpp_comments(water_pid_body),
         [
             "const bool acpHot = mode_acp_above_boost_threshold(acpBoostThreshold);",
-            "if (!valve_status) return;",
+            "if (!valve_status || is_self_test) return;",
             "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {",
             "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);",
             "} else {",
@@ -278,7 +299,7 @@ if bk_alarm_body:
             "if (mode_should_open_cooling(false, true, true))",
             "set_pump_pwm(bk_pwm);",
             "coolingOpenedThisTick = true;",
-            "if (!coolingOpenedThisTick && valve_status && pump_started && wp_count <= 10)",
+            "if (!is_self_test && !coolingOpenedThisTick && valve_status && pump_started && wp_count <= 10)",
             "set_pump_pwm(bk_pwm);",
         ],
         errors,

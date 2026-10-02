@@ -22,6 +22,7 @@ HARNESS = r'''
 struct Sensor { float avgTemp = 0; } WaterSensor, ACPSensor;
 struct Setup { float SetWaterTemp = 55; } SamSetup;
 static bool PowerOn = true;
+static bool is_self_test = false;
 static bool valve_status = true;
 static uint32_t nowMs = 1000;
 static uint32_t millis() { return nowMs; }
@@ -75,11 +76,22 @@ int main() {
   check(!softenInput, "быстрый рост действует до следующего окна измерения");
   WaterSensor.avgTemp = 54.1f;
   mode_update_water_pump_pid(45);
-  check(softenInput, "при падении температуры ускорение сразу прекращается");
+  check(!softenInput, "одиночное снижение не должно отменять реакцию");
   nowMs += 4000;
   WaterSensor.avgTemp = 54.4f;
   mode_update_water_pump_pid(45);
+  check(!softenInput, "медленный рост за окно должен удерживать полную реакцию");
+  nowMs += 5000;
+  mode_update_water_pump_pid(45);
   check(softenInput, "после стабилизации обычное регулирование возвращается");
+  nowMs += 5000;
+  WaterSensor.avgTemp = 55.6f;
+  mode_update_water_pump_pid(45);
+  check(!softenInput, "новый быстрый рост должен снова включить полную реакцию");
+  nowMs += 5000;
+  WaterSensor.avgTemp = 55.2f;
+  mode_update_water_pump_pid(45);
+  check(softenInput, "снижение за окно должно возвращать смягчение");
 
   reset(30000, 40, 38);
   mode_update_water_pump_pid(45);
@@ -87,6 +99,10 @@ int main() {
   WaterSensor.avgTemp = 39.3f;
   mode_update_water_pump_pid(45);
   check(!softenInput, "другая уставка воды тоже должна ускорять насос");
+  nowMs += 5000;
+  WaterSensor.avgTemp = 39.5f;
+  mode_update_water_pump_pid(45);
+  check(!softenInput, "медленный рост при другой уставке должен удерживать реакцию");
   valve_status = false;
   mode_update_water_pump_pid(45);
   valve_status = true;
@@ -104,6 +120,10 @@ int main() {
   mode_update_water_pump_pid(45);
   check(inputTemp == SamSetup.SetWaterTemp + 3 && !softenInput,
         "существующее усиление по ТСА должно сохраниться");
+  is_self_test = true;
+  inputTemp = -1;
+  mode_update_water_pump_pid(45);
+  check(inputTemp == -1, "самотест не должен получать команды обычного PID");
   return 0;
 }
 '''
@@ -131,7 +151,15 @@ for name, old, new, expected in (
     ("growth threshold", ">= 1.0f", ">= 10.0f", "рост воды у уставки"),
     ("setpoint proximity", "SamSetup.SetWaterTemp - 2.0f", "SamSetup.SetWaterTemp + 2.0f", "рост воды у уставки"),
     ("PID softening", "!waterRisingFast", "waterRisingFast", "первое измерение"),
-    ("falling temperature", "WaterSensor.avgTemp < windowStartTemp", "WaterSensor.avgTemp < -100", "при падении температуры"),
+    ("single sample cancels hold", "  return fast;",
+     "  if (WaterSensor.avgTemp < windowStartTemp) fast = false;\n  return fast;",
+     "одиночное снижение"),
+    ("hold removed", "fast && WaterSensor.avgTemp > windowStartTemp",
+     "fast && WaterSensor.avgTemp > windowStartTemp + 1.0f", "медленный рост за окно"),
+    ("hold persists on flat water", "fast && WaterSensor.avgTemp > windowStartTemp",
+     "fast && WaterSensor.avgTemp >= windowStartTemp", "после стабилизации"),
+    ("hold persists on falling water", "fast && WaterSensor.avgTemp > windowStartTemp",
+     "fast && WaterSensor.avgTemp != windowStartTemp", "снижение за окно"),
 ):
     if harness.count(old) != 1:
         raise SystemExit(f"FAIL: cannot mutate {name}")

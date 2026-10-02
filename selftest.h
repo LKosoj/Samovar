@@ -9,6 +9,9 @@
 static SafetyTransition selfTestTransition = {SAFETY_TRANSITION_IDLE, 0};
 static bool selfTestCompleted = false;
 static uint64_t selfTestOwnerGeneration = 0;
+#ifdef USE_WATER_PUMP
+static uint32_t selfTestPumpTickMs = 0;
+#endif
 
 inline void finish_self_test_now(bool completed) {
   if (heater_power_on() || PowerOn) set_power(false, false);
@@ -62,6 +65,15 @@ inline void tick_self_test(void) {
   if (!safety_transition_active(selfTestTransition)) return;
   if (selfTestTransition.phase != SELF_TEST_STOP && abort_self_test_if_owner_lost()) return;
 
+#ifdef USE_WATER_PUMP
+  // Продолжаем пуск раз в секунду, затем держим тестовую скорость независимо от воды.
+  if (is_self_test && selfTestTransition.phase != SELF_TEST_STOP &&
+      (uint32_t)(millis() - selfTestPumpTickMs) >= 1000) {
+    selfTestPumpTickMs = millis();
+    set_pump_pwm((PWM_START_VALUE + 20) * 10);
+  }
+#endif
+
   if (selfTestTransition.phase == SELF_TEST_START) {
     is_self_test = true;
     SendMsg((TR(SELF_STARTING, "Запуск самотестирования.")), NOTIFY_MSG);
@@ -69,6 +81,7 @@ inline void tick_self_test(void) {
     open_valve(true, true);
     if (abort_self_test_if_owner_lost()) return;
 #ifdef USE_WATER_PUMP
+    selfTestPumpTickMs = millis();
     set_pump_pwm((PWM_START_VALUE + 20) * 10);
     if (abort_self_test_if_owner_lost()) return;
 #endif

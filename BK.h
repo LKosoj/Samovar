@@ -275,7 +275,7 @@ void check_alarm_bk() {
   // PWM_LOW_VALUE*40 (старое дефолтное значение bk_pwm) больше не имеет смысла,
   // счётчика wp_count достаточно. Счётчик останавливается на 10, поэтому после
   // пуска bk_pwm переписывается каждый тик - как и раньше, идемпотентно.
-  if (!coolingOpenedThisTick && valve_status && pump_started && wp_count <= 10) {
+  if (!is_self_test && !coolingOpenedThisTick && valve_status && pump_started && wp_count <= 10) {
     set_pump_pwm(bk_pwm);
   }
 #endif
@@ -328,7 +328,7 @@ void check_alarm_bk() {
   // остальными авариями - process_sensor_failed() не должен прерывать функцию через
   // return (см. mode_request_overheat_emergency_if_needed() выше - её вызовы
   // тоже не гейтятся ранним return).
-  if (bk_water_auto) {
+  if (bk_water_auto && !is_self_test) {
     if (!sensor_valid(SteamSensor)) {
       // [Решение владельца] Пропавший датчик пара во время авторежима - авария,
       // а не откат в ручной режим: process_sensor_failed синхронно останавливает

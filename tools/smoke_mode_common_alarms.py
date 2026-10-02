@@ -165,7 +165,7 @@ if mode_common:
                 "mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
                 "#ifdef USE_WATER_PUMP",
                 "mode_water_rising_fast()",
-                "if (!valve_status) return;",
+                "if (!valve_status || is_self_test) return;",
                 "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {",
                 "set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false)",
                 "set_pump_speed_pid(WaterSensor.avgTemp, !waterRisingFast)",

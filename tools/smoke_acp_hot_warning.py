@@ -54,6 +54,7 @@ static DSSensor WaterSensor;
 static DSSensor ACPSensor;
 static Setup SamSetup;
 static bool PowerOn = false;
+static bool is_self_test = false;
 static bool valve_status = true;
 static uint32_t fakeMillis = 0;
 static uint32_t millis() { return fakeMillis; }
@@ -249,8 +250,8 @@ MUTATIONS = [
     ("предупреждение без нагрева", "  if (!PowerOn) {\n    warned = false;\n    return;\n  }",
      "  if (!PowerOn) {\n    warned = false;\n  }", "без нагрева предупреждений о ТСА нет"),
     ("предупреждение спрятано за клапаном",
-     "  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);\n#ifdef USE_WATER_PUMP\n  const bool waterRisingFast = mode_water_rising_fast();\n  if (!valve_status) return;",
-     "#ifdef USE_WATER_PUMP\n  const bool waterRisingFast = mode_water_rising_fast();\n  if (!valve_status) return;\n  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
+     "  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);\n#ifdef USE_WATER_PUMP\n  const bool waterRisingFast = mode_water_rising_fast();\n  if (!valve_status || is_self_test) return;",
+     "#ifdef USE_WATER_PUMP\n  const bool waterRisingFast = mode_water_rising_fast();\n  if (!valve_status || is_self_test) return;\n  mode_warn_acp_hot_once(acpHot, acpBoostThreshold);",
      "не зависит от клапана воды"),
     ("насос не сравнивает ТСА с водой", "if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp)", "if (acpHot)",
      "ТСА холоднее воды - насос"),

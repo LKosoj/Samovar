@@ -204,12 +204,13 @@ inline bool mode_water_rising_fast() {
     windowStartTemp = WaterSensor.avgTemp;
     fast = false;
   } else if ((uint32_t)(now - windowStartMs) >= 5000) {
+    // После быстрого роста держим полную реакцию, пока вода растёт за окно.
+    // Одиночное снижение показания внутри окна не отменяет её.
     fast = WaterSensor.avgTemp >= SamSetup.SetWaterTemp - 2.0f &&
-           WaterSensor.avgTemp - windowStartTemp >= 1.0f;
+           (WaterSensor.avgTemp - windowStartTemp >= 1.0f ||
+            (fast && WaterSensor.avgTemp > windowStartTemp));
     windowStartMs = now;
     windowStartTemp = WaterSensor.avgTemp;
-  } else if (WaterSensor.avgTemp < windowStartTemp) {
-    fast = false;
   }
   return fast;
 }
@@ -220,7 +221,7 @@ inline void mode_update_water_pump_pid(float acpBoostThreshold) {
   mode_warn_acp_hot_once(acpHot, acpBoostThreshold);
 #ifdef USE_WATER_PUMP
   const bool waterRisingFast = mode_water_rising_fast();
-  if (!valve_status) return;
+  if (!valve_status || is_self_test) return;
   if (acpHot && ACPSensor.avgTemp > WaterSensor.avgTemp) {
     set_pump_speed_pid(SamSetup.SetWaterTemp + 3, false);
   } else {

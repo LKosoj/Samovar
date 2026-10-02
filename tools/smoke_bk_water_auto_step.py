@@ -99,6 +99,7 @@ static unsigned long fakeMillis = 0;
 static unsigned long millis() { return fakeMillis; }
 
 static bool bk_water_auto = false;
+static bool is_self_test = false;
 static float bk_steam_setpoint = 0.0f;
 static uint32_t bk_water_last_adjust_ms = 0;
 
@@ -111,6 +112,7 @@ static void check(bool condition, const char* message) {
 }
 
 static void reset_all() {
+  is_self_test = false;
   PowerOn = false;
   mode_water_rising_fast();
   TankSensor = Sensor(); SteamSensor = Sensor(); PipeSensor = Sensor(); WaterSensor = Sensor();
@@ -308,9 +310,27 @@ int main() {
   fakeMillis += 4000;
   WaterSensor.avgTemp = 24.4f;
   check_alarm_bk();
-  check(bk_pwm == 500 + BK_WATER_PWM_STEP * 7,
+  check(bk_pwm == 500 + BK_WATER_PWM_STEP * 12,
+        "сценарий 10: медленный рост воды должен удерживать усиленный шаг");
+  fakeMillis += 5000;
+  check_alarm_bk();
+  check(bk_pwm == 500 + BK_WATER_PWM_STEP * 11,
         "сценарий 10: после стабилизации воды снова действует уставка пара");
 
+  // Ни ручное поддержание ШИМ, ни авторегулятор БК не должны мешать самотесту.
+  for (bool autoMode : {false, true}) {
+    reset_all();
+    is_self_test = true;
+    bk_water_auto = autoMode;
+    valve_status = true;
+    pump_started = true;
+    wp_count = 10;
+    bk_steam_setpoint = 80;
+    SteamSensor.avgTemp = 90;
+    bk_water_last_adjust_ms = fakeMillis - BK_WATER_ADJUST_PERIOD_MS;
+    check_alarm_bk();
+    check(setPumpPwmCalls == 0, "сценарий 11: самотест должен владеть насосом и в режиме БК");
+  }
   if (failures != 0) return 1;
   std::cout << "BK water auto step passed\n";
   return 0;
@@ -411,12 +431,20 @@ def main() -> int:
 
     status = run_mutant(
         "auto_gate_swapped",
-        "if (bk_water_auto) {\n    if (!sensor_valid(SteamSensor)) {",
+        "if (bk_water_auto && !is_self_test) {\n    if (!sensor_valid(SteamSensor)) {",
         "if (true) {\n    if (!sensor_valid(SteamSensor)) {",
         "датчик пара проверяется даже при выключенном auto",
     )
     if status != 0:
         return status
+
+    for name, old, new in (
+        ("selftest_manual_override", "!is_self_test && !coolingOpenedThisTick", "!coolingOpenedThisTick"),
+        ("selftest_auto_override", "bk_water_auto && !is_self_test", "bk_water_auto"),
+    ):
+        status = run_mutant(name, old, new, "самотест должен владеть насосом")
+        if status != 0:
+            return status
 
     print("BK water auto step mutation checks passed")
     return 0

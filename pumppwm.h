@@ -65,21 +65,23 @@ ActuatorCommandResult set_pump_pwm(float duty) {
 
 // У нижнего предела ШИМ поток насоса меняется от оборотов очень круто (насос едва
 // пересиливает высоту подъёма), и ПИД с общими коэффициентами там раскачивается.
-// Множитель ослабляет отклонение температуры на малом ШИМ; выше ~40% он равен 1,
+// Множитель ослабляет коэффициенты на малом ШИМ; выше ~40% он равен 1,
 // и регулятор работает как раньше.
 inline float pump_pid_soften_factor(float pwm) {
   return constrain((pwm - PWM_LOW_VALUE * 10 + 60.0f) / 350.0f, 0.15f, 1.0f);
 }
 
 // soften == false - ветка горячей ТСА (mode_common.h): подставленная "уставка + 3"
-// обязана дойти до регулятора целиком. Во время мягкого пуска (wp_count < 10)
-// множитель тоже не применяется - старт остаётся прежним.
+// обрабатывается с обычными коэффициентами. Во время мягкого пуска (wp_count < 10)
+// множитель тоже не применяется - старт остаётся прежним. Температуру не меняем:
+// иначе изменение ШИМ само создаёт скачок входа дифференциальной составляющей.
 void set_pump_speed_pid(float temp, bool soften) {
   pump_regulator.setpoint = SamSetup.SetWaterTemp;
-  if (soften && pump_started && wp_count >= 10) {
-    temp = SamSetup.SetWaterTemp +
-           (temp - SamSetup.SetWaterTemp) * pump_pid_soften_factor(water_pump_speed);
-  }
+  const float factor = soften && pump_started && wp_count >= 10
+      ? pump_pid_soften_factor(water_pump_speed) : 1.0f;
+  pump_regulator.Kp = 6.5f * factor;
+  pump_regulator.Ki = 0.3f * factor;
+  pump_regulator.Kd = 30.0f * factor;
   pump_regulator.input = temp;
   set_pump_pwm(pump_regulator.getResultNow());
 }
