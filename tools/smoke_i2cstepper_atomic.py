@@ -25,6 +25,7 @@ def function(lookup: str, definition: str) -> str:
 
 HARNESS = r'''
 #include <cstdint>
+#include <iostream>
 #include <I2CStepperV3.h>
 #define I2CSTEPPER_DEVICE_COUNT 10U
 #define I2CSTEPPER_HEARTBEAT_MS 250UL
@@ -44,6 +45,9 @@ float i2cStepperPumpRateOverride = 0.0f;
 bool PowerOn = true;
 int16_t startval = 1;
 static constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
+static constexpr uint8_t SAMOVAR_RECTIFICATION_MODE = 0;
+static constexpr uint8_t SAMOVAR_BEER_MODE = 2;
+uint8_t Samovar_Mode = SAMOVAR_BEER_MODE;
 @LOOKUP@
 @LOWEST@
 @SESSION@
@@ -70,6 +74,33 @@ bool i2c_stepper_send_heartbeat(I2CStepperDevice& device) {
 int main() {
   for (uint8_t address = 1; address <= 10; address++)
     i2cSteppers[address - 1].address = address;
+  Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+  startval = SAMOVAR_STARTVAL_IDLE;
+  for (uint8_t address : {uint8_t(4), uint8_t(10)}) {
+    i2cSteppers[address - 1].present = true;
+    PowerOn = true;
+    if (i2c_stepper_session_active() ||
+        i2c_stepper_selected_pump() != &i2cSteppers[address - 1]) {
+      std::cerr << "FAIL: rectification heating before withdrawal must keep the detected pump visible\n";
+      return 20;
+    }
+    i2c_stepper_session_begin();
+    startval = 1;
+    i2cSteppers[address - 1].present = false;
+    i2cSteppers[1].present = true;
+    if (!i2c_stepper_session_active() ||
+        i2c_stepper_selected_pump() != &i2cSteppers[address - 1]) {
+      std::cerr << "FAIL: rectification withdrawal must keep the pinned pump after it disappears\n";
+      return 21;
+    }
+    i2cSteppers[1].present = false;
+    PowerOn = false;
+    startval = SAMOVAR_STARTVAL_IDLE;
+    i2c_stepper_session_end_if_idle();
+  }
+  Samovar_Mode = SAMOVAR_BEER_MODE;
+  PowerOn = true;
+  startval = 1;
   i2cSteppers[2].present = true;  // 3
   i2cSteppers[8].present = true;  // 9
   i2cSteppers[3].present = true;  // 4
@@ -133,7 +164,7 @@ int main() {
 '''
 
 
-def run_selection() -> tuple[int, str]:
+def run_selection(session_active_body: str | None = None) -> tuple[int, str]:
   source = HARNESS
   replacements = {
       "@SCAN_MS@": SCAN_MS,
@@ -168,6 +199,9 @@ def run_selection() -> tuple[int, str]:
           "inline void i2c_stepper_tick",
           "inline void i2c_stepper_tick()"),
   }
+  if session_active_body is not None:
+    replacements["@SESSION_ACTIVE@"] = (
+        "inline bool i2c_stepper_session_active() {" + session_active_body + "}")
   for token, value in replacements.items():
     source = source.replace(token, value)
   with tempfile.TemporaryDirectory(prefix="samovar-i2c-v3-select-") as temp:
@@ -194,6 +228,11 @@ def main() -> int:
   if code:
     print(output, end="", file=sys.stderr)
     return code
+  code, output = run_selection("return startval != SAMOVAR_STARTVAL_IDLE || PowerOn;")
+  if code != 20 or "rectification heating before withdrawal must keep the detected pump visible" not in output:
+    print("FAIL: the original heating-selection bug was not rejected by the behavioral check",
+          file=sys.stderr)
+    return 1
   atomic = subprocess.run(
       [sys.executable, str(ROOT / "tools/smoke_i2c_operation_results.py")],
       capture_output=True, text=True, check=False)

@@ -383,7 +383,9 @@ inline void i2c_stepper_session_end() {
 }
 
 inline bool i2c_stepper_session_active() {
-  return startval != SAMOVAR_STARTVAL_IDLE || PowerOn;
+  // В ректификации адреса закрепляются при старте отбора, а не при включении нагрева.
+  return startval != SAMOVAR_STARTVAL_IDLE ||
+      (PowerOn && Samovar_Mode != SAMOVAR_RECTIFICATION_MODE);
 }
 
 inline void i2c_stepper_session_end_if_idle() {
