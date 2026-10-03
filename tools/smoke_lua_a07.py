@@ -269,6 +269,8 @@ def run_behavioral_harness() -> tuple[int, str, str]:
         ]
     )
     string_helper = definition(
+        LUA, "static void lua_prepare_string_args(lua_State *lua_state, int count)"
+    ) + "\n" + definition(
         LUA, "static String lua_to_string_arg(lua_State *lua_state, int index)"
     )
     callback_signatures = [
@@ -277,6 +279,8 @@ def run_behavioral_harness() -> tuple[int, str, str]:
         "static int lua_wrapper_set_str_variable(lua_State *lua_state)",
         "static int lua_wrapper_get_str_variable(lua_State *lua_state)",
         "static int lua_wrapper_set_object(lua_State *lua_state)",
+        "static int lua_wrapper_get_object(lua_State *lua_state)",
+        "static int lua_wrapper_http_request(lua_State *lua_state)",
         "static int lua_wrapper_set_lua_status(lua_State *lua_state)",
         "static int lua_wrapper_exp_pinMode(lua_State *lua_state)",
         "static int lua_wrapper_exp_digitalWrite(lua_State *lua_state)",
@@ -386,6 +390,7 @@ class String : public std::string {
     liveStringCount++;
   }
   String(const String& value) : std::string(value) { liveStringCount++; }
+  String& operator=(const String&) = default;
   explicit String(float value) : std::string(std::to_string(value)) {
     liveStringCount++;
   }
@@ -559,6 +564,7 @@ struct LuaObjectFake {
   std::string lastKey;
   std::string lastValue;
 
+  String get(const String& key) { return key == lastKey ? String(lastValue) : String(); }
   bool has(const String&) { return false; }
   int size() { return 0; }
 
@@ -570,6 +576,12 @@ struct LuaObjectFake {
 } luaObject;
 
 LuaObjectFake* luaObj = &luaObject;
+int httpCalls = 0;
+String http_sync_request_custom(const String& method, const String& url,
+                               const String& body, const String& contentType) {
+  httpCalls++;
+  return method + url + body + contentType;
+}
 
 bool luaStatusSetResult = true;
 int luaStatusSetCalls = 0;
@@ -788,6 +800,8 @@ void register_callbacks(lua_State* state) {
   lua_register(state, "setStrVariable", lua_wrapper_set_str_variable);
   lua_register(state, "getStrVariable", lua_wrapper_get_str_variable);
   lua_register(state, "setObject", lua_wrapper_set_object);
+  lua_register(state, "getObject", lua_wrapper_get_object);
+  lua_register(state, "http_request", lua_wrapper_http_request);
   lua_register(state, "setLuaStatus", lua_wrapper_set_lua_status);
   lua_register(state, "exp_pinMode", lua_wrapper_exp_pinMode);
   lua_register(state, "exp_digitalWrite", lua_wrapper_exp_digitalWrite);
@@ -1493,6 +1507,41 @@ void test_string_callbacks(lua_State* state) {
   check_strings_destroyed("Lua_status success retained Arduino String");
 }
 
+void test_tostring_errors(lua_State* state) {
+  modeSwitchActive = false;
+  run_chunk(state,
+      "bad = setmetatable({}, {__tostring=function() error('conversion failed') end})",
+      true, 0);
+  for (int length : {128, 2048}) {
+    for (const char* expression : {
+        "setObject(string.rep('x', LENGTH), bad)",
+        "setStrVariable(string.rep('x', LENGTH), bad)",
+        "getObject(string.rep('x', LENGTH), bad)",
+        "http_request(string.rep('x', LENGTH), bad, 'text/plain', 'body')",
+        "http_request('url', string.rep('x', LENGTH), bad, 'body')",
+        "http_request('url', 'POST', string.rep('x', LENGTH), bad)"}) {
+      std::string chunk = expression;
+      chunk.replace(chunk.find("LENGTH"), 6, std::to_string(length));
+      const int beforeHttp = httpCalls, beforePut = luaObject.putCalls;
+      for (int i = 0; i < 20; i++) {
+        run_chunk(state, chunk, false);
+        check_last_error_contains("conversion failed", "tostring error was swallowed");
+        check_strings_destroyed("tostring error retained Arduino String");
+      }
+      check(httpCalls == beforeHttp && luaObject.putCalls == beforePut,
+            "failed conversion reached HTTP or object mutation");
+    }
+  }
+  // tostring is still called once per argument and custom conversion is preserved.
+  run_chunk(state,
+      "local calls=0; local good=setmetatable({}, {__tostring=function() "
+      "calls=calls+1; return 'converted' end}); setObject(good, good); assert(calls==2)",
+      true, 0);
+  check(luaObject.lastKey == "converted" && luaObject.lastValue == "converted",
+        "custom tostring result was lost");
+  check_strings_destroyed("successful tostring retained Arduino String");
+}
+
 void test_longjmp_allocations(lua_State* state) {
   modeSwitchActive = false;
   runtimeEventResult = RUNTIME_EVENT_PUBLISH_LOCK_BUSY;
@@ -1535,6 +1584,7 @@ int main() {
   test_timer(state);
   test_string_callbacks(state);
   test_longjmp_allocations(state);
+  test_tostring_errors(state);
   lua_close(state);
   check(allocatedBytes == 0, "lua_close leaked tracked allocations");
   if (failures != 0) return 1;
@@ -1605,4 +1655,27 @@ sys.stderr.write(stderr)
 if returncode != 0:
     raise SystemExit(returncode)
 
-print("Lua A-07 checked argument/error contracts passed")
+# Восстанавливаем старый порядок только у setObject: ошибочный tostring второго
+# аргумента снова перескакивает через деструктор первой строки.
+original_lua = LUA
+original_helper = extract_function_body(LUA, "static String lua_to_string_arg(lua_State *lua_state, int index)")
+unsafe_helper = """
+  lua_getglobal(lua_state, "tostring");
+  lua_pushvalue(lua_state, index);
+  lua_call(lua_state, 1, 1);
+  const char* text = lua_tolstring(lua_state, -1, nullptr);
+  String value = text ? String(text) : String();
+  lua_pop(lua_state, 1);
+  return value;
+"""
+original_callback = extract_function_body(LUA, "static int lua_wrapper_set_object(lua_State *lua_state)")
+LUA = LUA.replace(original_helper, unsafe_helper).replace(
+    original_callback,
+    original_callback.replace("  lua_prepare_string_args(lua_state, 2);\n", ""),
+)
+returncode, stdout, stderr = run_behavioral_harness()
+LUA = original_lua
+if returncode == 0 or "tostring error retained Arduino String" not in stdout + stderr:
+    sys.stderr.write(stdout + stderr)
+    raise SystemExit("Lua tostring leak mutation was not rejected by the allocation assert")
+print("Lua A-07 checked argument/error contracts and tostring leak mutation passed")

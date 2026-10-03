@@ -855,16 +855,21 @@ static bool lua_copy_current_program(WProgram& currentProgram) {
   return !program_type_empty(currentProgram.WType);
 }
 
+// tostring может вызвать ошибку Lua (longjmp), поэтому все аргументы преобразуем
+// до создания Arduino String: иначе их деструкторы будут пропущены.
+static void lua_prepare_string_args(lua_State *lua_state, int count) {
+  if (lua_gettop(lua_state) < count) lua_settop(lua_state, count);
+  for (int index = 1; index <= count; index++) {
+    lua_getglobal(lua_state, "tostring");
+    lua_pushvalue(lua_state, index);
+    lua_call(lua_state, 1, 1);
+    lua_replace(lua_state, index);
+  }
+}
+
 static String lua_to_string_arg(lua_State *lua_state, int index) {
-  String value;
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, index);
-  lua_call(lua_state, 1, 1);
-  size_t len;
-  const char *text = lua_tolstring(lua_state, -1, &len);
-  if (text) value = text;
-  lua_pop(lua_state, 1);
-  return value;
+  const char *text = lua_tolstring(lua_state, index, nullptr);
+  return text ? String(text) : String();
 }
 
 enum LuaVariableAccess : uint8_t {
@@ -1611,6 +1616,7 @@ static int lua_wrapper_get_state(lua_State *lua_state) {
 static int lua_wrapper_send_msg(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = lua_check_truncated_arg(lua_state, 2);
+  lua_prepare_string_args(lua_state, 1);
   String st = lua_to_string_arg(lua_state, 1);
   if (a == -1) {
     WriteConsoleLog(st);
@@ -1660,6 +1666,7 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
 
 static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   float a = 0;
+  lua_prepare_string_args(lua_state, 1);
   String Var = lua_to_string_arg(lua_state, 1);
   const LuaNumVariableDescriptor* descriptor = find_lua_num_variable(Var.c_str());
   if (descriptor && (descriptor->access & LUA_VAR_READ) && descriptor->getter) {
@@ -1674,6 +1681,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
 static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  lua_prepare_string_args(lua_state, 2);
   const char* errorMessage = nullptr;
   {
     String Var = lua_to_string_arg(lua_state, 1);
@@ -1702,6 +1710,7 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
 static int lua_wrapper_set_object(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  lua_prepare_string_args(lua_state, 2);
   // [П26] luaL_error - longjmp мимо деструкторов живых String (см. П25 у
   // lua_wrapper_get/set_str_variable) - прячем Var/Val во вложенный блок и
   // зовём luaL_error только после его закрытия.
@@ -1724,9 +1733,10 @@ static int lua_wrapper_set_object(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_object(lua_State *lua_state) {
-  String Var, Type;
   int n = lua_gettop(lua_state); /* number of arguments */
-  Var = lua_to_string_arg(lua_state, 1);
+  lua_prepare_string_args(lua_state, n == 2 ? 2 : 1);
+  String Type;
+  String Var = lua_to_string_arg(lua_state, 1);
 
   String v = luaObj->get(Var);
   if (n == 2) {
@@ -1743,6 +1753,7 @@ static int lua_wrapper_get_object(lua_State *lua_state) {
 static int lua_wrapper_set_lua_status(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  lua_prepare_string_args(lua_state, 1);
   bool statusSet = false;
   bool statusTooLong = false;
   {
@@ -1833,6 +1844,7 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
   // в этом кадре стека, их деструкторы не выполнятся (утечка). Как и в
   // lua_wrapper_set_str_variable/lua_wrapper_set_lua_status, прячем String во
   // вложенный блок и зовём luaL_error только после его закрытия.
+  lua_prepare_string_args(lua_state, 1);
   const char* errorMessage = nullptr;
   int pushCount = 0;
   {
@@ -1865,6 +1877,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
     return 1;
   }
 
+  lua_prepare_string_args(lua_state, n);
   String Var = lua_to_string_arg(lua_state, 1);
   String payload;
 

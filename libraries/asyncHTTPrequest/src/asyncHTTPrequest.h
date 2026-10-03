@@ -59,6 +59,7 @@
 #define HTTPCODE_ENCODING            (-9)
 #define HTTPCODE_STREAM_WRITE        (-10)
 #define HTTPCODE_TIMEOUT             (-11)
+#define HTTPCODE_RESPONSE_TOO_LARGE  (-12)
 
 class asyncHTTPrequest {
 
@@ -116,6 +117,7 @@ class asyncHTTPrequest {
     bool    open(const char* /*GET/POST*/, const char* URL);        // Initiate a request
     void    onReadyStateChange(readyStateChangeCB, void* arg = 0);  // Optional event handler for ready state change
                                                                     // or you can simply poll readyState()    
+    void    setMaxResponseBufferSize(uint16_t bytes);
     void	  setTimeout(int);                                        // overide default timeout (seconds)
     void    setReqHeader(const char* name, const char* value);      // add a request header 
     void    setReqHeader(const char* name, const __FlashStringHelper* value);
@@ -188,6 +190,7 @@ class asyncHTTPrequest {
 
     // request and response String buffers and header list (same queue for request and response).   
 
+    uint16_t    _maxResponseBufferBytes = 16 * 1024;
     xbuf*       _request;                       // Tx data buffer 
 	  xbuf*       _response;                      // Rx data buffer for headers
     xbuf*       _chunks;                        // First stage for chunked response    
@@ -205,6 +208,7 @@ class asyncHTTPrequest {
     bool        _connect();
     size_t      _send();
     void        _setReadyState(readyStates);
+    void        _failRequest(int);
     char*       _charstar(const __FlashStringHelper *str);
     
     // callbacks

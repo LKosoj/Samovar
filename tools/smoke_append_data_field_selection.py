@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Поведенческая проверка append_data() (FS.ino): «первое изменившееся поле».
 
-append_data() раньше был цепочкой if/else if по четырём датчикам, потом по
-давлению, потом по номеру программы: "первый, кто изменился с прошлой
-записи в лог - тот и решает, что писать и чей LogPrevTemp/bme_prev_pressure/
-prev_ProgramNum обновить". Свёртка первых четырёх веток в цикл с break легко
-могла бы перепутать пару (датчик, его позиция в CSV) - тест ловит именно
-это, а не общий факт "что-то записалось".
+Файловый лог содержит дату и четыре температуры. Давление и номер программы
+не вызывают запись. Первое изменившееся значение определяет, чей LogPrevTemp
+обновить; остальные температуры тоже присутствуют в записанной строке.
 
 Тело append_data() (FS.ino) вытаскивается через extract_function_body
 дословно и подставляется в host-харнесс (образец -
@@ -15,11 +12,11 @@ tools/smoke_alarm_tank_overheat_escalation.py). Внешние зависимо�
 как и в образце; сама логика выбора победившего поля и порядок колонок CSV -
 код, скопированный компилятором из настоящего файла, не переписанный тестом.
 
-Два инварианта (оба обязательны):
+Инварианты:
   1) меняется только Pipe -> в CSV-строке все четыре температуры в порядке
      Steam,Pipe,Water,Tank, и LogPrevTemp обновляется ТОЛЬКО у Pipe.
-  2) одновременно меняются Water и давление -> побеждает Water (датчики
-     проверяются раньше давления), bme_prev_pressure НЕ обновляется.
+  2) одновременно меняются Water и давление -> обновляется только Water.
+  3) изменения давления и программы без изменений температур не пишутся.
 """
 import subprocess
 import sys
@@ -35,7 +32,7 @@ FUNCTION_SIGNATURE = "String append_data() {"
 # build_idle_v34_line() для V34 в простое) - append_data() теперь зовёт её, а не собирает
 # строку инлайн, поэтому харнесс обязан взять и её тело настоящим, а не заглушкой.
 BASE_FIELDS_SIGNATURE = (
-    "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum)"
+    "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum, bool fileLog)"
 )
 
 HARNESS_TEMPLATE = r'''
@@ -66,6 +63,9 @@ class String {
   String& operator+=(int v) { value_ += std::to_string(v); return *this; }
   size_t length() const { return value_.size(); }
   const std::string& value() const { return value_; }
+  int indexOf(char c) const { auto n = value_.find(c); return n == std::string::npos ? -1 : static_cast<int>(n); }
+  bool endsWith(const char* suffix) const { std::string tail(suffix); return value_.size() >= tail.size() && value_.compare(value_.size()-tail.size(), tail.size(), tail)==0; }
+  void remove(size_t start) { value_.erase(start); }
 
  private:
   std::string value_;
@@ -89,9 +89,7 @@ DSSensor* const sensorList[DS_LOGGED_SENSOR_COUNT] = {
 static bool data_log_ready = true;
 static String Crt = "2026-08-23T00:00:00";
 static float bme_pressure = 0.0f;
-static float bme_prev_pressure = 0.0f;
 static uint8_t ProgramNum = 0;
-static uint8_t prev_ProgramNum = 0;
 static volatile uint32_t log_write_seq = 0;
 static uint32_t used_byte = 0;
 static uint32_t total_byte = 100000;
@@ -154,9 +152,7 @@ static void reset_fixture() {
   WaterSensor.LogPrevTemp = 20.0f;
   TankSensor.LogPrevTemp = 20.0f;
   bme_pressure = 750.0f;
-  bme_prev_pressure = 750.0f;
   ProgramNum = 3;
-  prev_ProgramNum = 3;
   data_log_ready = true;
 }
 
@@ -184,24 +180,22 @@ static void test_pipe_only_change_orders_columns_and_updates_only_pipe() {
   String result = append_data();
   std::vector<std::string> fields = split_csv(result.value());
 
-  check(fields.size() >= 6, "CSV-строка должна содержать дату + 4 температуры + давление");
-  if (fields.size() >= 6) {
-    check(fields[1] == "20.000", "Steam должен остаться прежним и стоять в колонке 2");
-    check(fields[2] == "55.500", "Pipe должен быть изменённым значением и стоять в колонке 3");
-    check(fields[3] == "20.000", "Water должен остаться прежним и стоять в колонке 4");
-    check(fields[4] == "20.000", "Tank должен остаться прежним и стоять в колонке 5");
-    check(fields[5] == "750.00", "давление должно остаться прежним и стоять в колонке 6");
+  check(fields.size() == 5, "CSV-строка должна содержать дату и ровно 4 температуры");
+  if (fields.size() == 5) {
+    check(fields[1] == "20", "Steam должен остаться прежним и стоять в колонке 2");
+    check(fields[2] == "55.5", "Pipe должен быть изменённым значением и стоять в колонке 3");
+    check(fields[3] == "20", "Water должен остаться прежним и стоять в колонке 4");
+    check(fields[4] == "20", "Tank должен остаться прежним и стоять в колонке 5");
   }
 
   check(PipeSensor.LogPrevTemp == 55.5f, "LogPrevTemp у Pipe должен обновиться до нового значения");
   check(SteamSensor.LogPrevTemp == 20.0f, "LogPrevTemp у Steam не должен измениться");
   check(WaterSensor.LogPrevTemp == 20.0f, "LogPrevTemp у Water не должен измениться");
   check(TankSensor.LogPrevTemp == 20.0f, "LogPrevTemp у Tank не должен измениться");
-  check(bme_prev_pressure == 750.0f, "bme_prev_pressure не должен измениться, когда победил датчик");
 }
 
 // Инвариант 2: одновременно меняются Water и давление -> побеждает Water
-// (датчики проверяются раньше давления), давление не "уезжает".
+// Давление не входит в файловый лог.
 static void test_water_and_pressure_together_water_wins() {
   reset_fixture();
   WaterSensor.avgTemp = 33.25f;  // изменился
@@ -210,17 +204,26 @@ static void test_water_and_pressure_together_water_wins() {
   String result = append_data();
 
   check(WaterSensor.LogPrevTemp == 33.25f, "LogPrevTemp у Water должен обновиться - Water победил");
-  check(bme_prev_pressure == 750.0f,
-        "РЕГРЕСС: bme_prev_pressure не должен обновляться, когда датчик меняется одновременно с давлением");
   check(SteamSensor.LogPrevTemp == 20.0f, "LogPrevTemp у Steam не должен измениться");
   check(PipeSensor.LogPrevTemp == 20.0f, "LogPrevTemp у Pipe не должен измениться");
   check(TankSensor.LogPrevTemp == 20.0f, "LogPrevTemp у Tank не должен измениться");
   (void)result;
 }
 
+static void test_non_temperature_changes_do_not_write() {
+  reset_fixture();
+  bme_pressure = 760.0f;
+  ProgramNum = 9;
+  check(append_data().length() == 0, "pressure/program changes must not write the local log");
+  bme_pressure = 720.0f;
+  ProgramNum = 12;
+  check(append_data().length() == 0, "second pressure/program changes must not write the local log");
+}
+
 int main() {
   test_pipe_only_change_orders_columns_and_updates_only_pipe();
   test_water_and_pressure_together_water_wins();
+  test_non_temperature_changes_do_not_write();
   if (failures != 0) return 1;
   std::cout << "append_data field-selection behaviour checks passed\n";
   return 0;

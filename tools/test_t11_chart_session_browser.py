@@ -18,7 +18,7 @@ from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE, QuietHandler, cl
 
 
 CSV_A = "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\nA-csv,71,70,20,80,760,1\n"
-CSV_B = "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\nB-csv,82,81,21,90,761,2\n"
+CSV_B = "Date,Steam,Pipe,Water,Tank\nB-csv,82,81.25,21.5,90\n"
 CSV_C = "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\nC-csv,83,82,22,91,762,3\n"
 CSV_D = "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\nD-csv,84,83,23,92,763,4\n"
 
@@ -138,6 +138,11 @@ BROWSER_TEST = r'''async page => {
 
   await page.evaluate(() => renderTelemetry({sessionId:202, crnt_tm:"B-first", stm:"00", SteamTemp:82, PipeTemp:81, WaterTemp:21, TankTemp:90, ACPTemp:20, VolumeAll:0, ActualVolumePerHour:0, WthdrwlProgress:0, Status:"Готов", PrgType:"", bme_temp:20, heap:1, rssi:-50, fr_bt:1, UseBBuzzer:false, PowerOn:0}));
   await page.waitForFunction(() => chartSessionId === 202 && chartCsvSessionId === 202 && chart.rows.length === 1 && chart.rows[0].Date === "B-csv");
+  const compactRow = await page.evaluate(() => chart.rows[0]);
+  if (compactRow.Steam !== 82 || compactRow.Pipe !== 81.25 || compactRow.Water !== 21.5 ||
+      compactRow.Tank !== 90 || compactRow.Pressure !== null || compactRow.ProgNum !== null) {
+    throw new Error("compact CSV fields must retain values without pressure/program columns: " + JSON.stringify(compactRow));
+  }
   releaseOldA();
   await page.waitForTimeout(100);
   const afterLateA = await page.evaluate(() => ({

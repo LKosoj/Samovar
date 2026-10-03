@@ -3382,6 +3382,9 @@ static bool http_sync_request_connect_and_send(const String& method, const Strin
                                                uint32_t timeoutMs,
                                                File* bodySink = nullptr,
                                                size_t* bodyWritten = nullptr) {
+  // Lua/version держат ответ целиком; файлы сливаются по мере прихода.
+  // Верхняя граница xbuf — uint16_t, даже потоковая загрузка не должна её превышать.
+  sharedHttpRequest.setMaxResponseBufferSize(bodySink != nullptr ? UINT16_MAX : 16 * 1024);
   if (!sharedHttpRequest.open(method.c_str(), url.c_str())) {
     Serial.println("HTTP " + method + " open() failed, readyState = " + String(sharedHttpRequest.readyState()));
     return false;
@@ -3407,7 +3410,6 @@ static bool http_sync_request_connect_and_send(const String& method, const Strin
     return false;
   }
 
-  vTaskDelay(150 / portTICK_PERIOD_MS);
   startTime = millis();
   while (sharedHttpRequest.readyState() != 4) {
     if (millis() - startTime > timeoutMs) {
@@ -3466,6 +3468,7 @@ String http_sync_request_get(String url) {
   }
   const size_t availableBefore = request.available();
   String response = request.responseText();
+  if (request.responseHTTPcode() < 0) return "<ERR>";
   size_t expectedLength = request.responseLength();
   if (expectedLength > 0 && response.length() != expectedLength) {
     Serial.println("Content " + url + " incomplete: " + String(response.length()) + "/" + String(expectedLength));
@@ -3580,7 +3583,9 @@ String http_sync_request_custom(const String& method, const String& url, const S
     return "<ERR>";
   }
   if (request.responseHTTPcode() > 0) {
-    return request.responseText();
+    String response = request.responseText();
+    if (request.responseHTTPcode() < 0) return "<ERR>";
+    return response;
   }
   return "<ERR>";
 }

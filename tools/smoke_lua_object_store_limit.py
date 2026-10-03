@@ -96,6 +96,7 @@ static int lua_reject_state_mutation(lua_State*) {
 }
 
 static std::string argVar, argVal;
+static void lua_prepare_string_args(lua_State*, int) {}
 static String lua_to_string_arg(lua_State*, int index) {
   return String((index == 1 ? argVar : argVal).c_str());
 }

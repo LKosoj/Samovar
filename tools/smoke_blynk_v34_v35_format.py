@@ -81,7 +81,7 @@ runtime_helpers_h = strip_cpp_comments(read_text("runtime_helpers.h"))
 if fs_ino:
     base_fields_body = body(
         fs_ino,
-        "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum)",
+        "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum, bool fileLog)",
     )
     require_ordered_tokens(
         "format_log_base_fields (базовые 7 полей V34/append_data в фиксированном порядке)",
@@ -89,7 +89,7 @@ if fs_ino:
         [
             "str = Crt;",
             "for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++)",
-            "format_float(sensorTemp[i], 3)",
+            "format_float(sensorTemp[i], fileLog ? 2 : 3)",
             "format_float(pressure, 2)",
             "#ifdef WRITE_PROGNUM_IN_LOG",
             "programNum + 1",
@@ -102,7 +102,7 @@ if fs_ino:
         "build_idle_v34_line (V34 в простое: sessionId=0, статус, базовые+хвостовые поля)",
         idle_body,
         [
-            "format_log_base_fields(sensorTemp, bme_pressure, ProgramNum)",
+            "build_current_log_base_line()",
             '"5,0,"',
             "String((int)SamovarStatusInt)",
             "base",

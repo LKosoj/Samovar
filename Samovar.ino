@@ -2380,10 +2380,12 @@ void triggerSysTicker(void *parameter) {
 
       if (startval != SAMOVAR_STARTVAL_IDLE) {
         tcntST++;
-        if (tcntST >= LOG_PERIOD_S) {
+        if (tcntST % LOG_PERIOD_S == 0) {
+          tick_publish_log_line(build_current_log_base_line());
+        }
+        if (tcntST >= FILE_LOG_PERIOD_S) {
           tcntST = 0;
-          String s = append_data();  //Записываем данные в память ESP32;
-          tick_publish_log_line(s);
+          append_data();
         }
       }
 

@@ -1,4 +1,5 @@
 #include <xbuf.h>
+#include <new>
 
 xbuf::xbuf(const uint16_t segSize)
     : _head(nullptr)
@@ -31,18 +32,19 @@ size_t      xbuf::write(String string){
 
 //*******************************************************************************************************************
 size_t      xbuf::write(const uint8_t* buf, const size_t len){
-    size_t supply = len;
+    size_t supply = len > UINT16_MAX - _used ? UINT16_MAX - _used : len;
+    const size_t requested = supply;
     while(supply){
         if(!_free){
-            addSeg();
+            if(!addSeg()) return requested - supply;
         }
         size_t demand = _free < supply ? _free : supply;
-        memcpy(_tail->data + ((_offset + _used) % _segSize), buf + (len - supply), demand);
+        memcpy(_tail->data + ((_offset + _used) % _segSize), buf + (requested - supply), demand);
         _free -= demand;
         _used += demand;
         supply -= demand;
     }
-    return len;
+    return requested;
 }
 
 //*******************************************************************************************************************
@@ -51,10 +53,13 @@ size_t      xbuf::write(xbuf* buf, const size_t len){
     if(supply > buf->available()){
         supply = buf->available();
     }
+    if(supply > UINT16_MAX - _used){
+        supply = UINT16_MAX - _used;
+    }
     size_t read = 0;
     while(supply){
         if(!_free){
-            addSeg();
+            if(!addSeg()) return read;
         }
         size_t demand = _free < supply ? _free : supply;
         read += buf->read(_tail->data + ((_offset + _used) % _segSize), demand);
@@ -239,16 +244,19 @@ void        xbuf::flush(){
 }
 
 //*******************************************************************************************************************
-void        xbuf::addSeg(){
+bool        xbuf::addSeg(){
+    xseg* segment = (xseg*) new (std::nothrow) uint32_t[_segSize / 4 + 1];
+    if(!segment) return false;
     if(_tail){
-        _tail->next = (xseg*) new uint32_t[_segSize / 4 + 1];
-        _tail = _tail->next;
+        _tail->next = segment;
+        _tail = segment;
     }
     else {
-        _tail = _head = (xseg*) new uint32_t[_segSize / 4 + 1];
+        _tail = _head = segment;
     }
     _tail->next = nullptr;
     _free += _segSize;
+    return true;
 }
 
 //*******************************************************************************************************************

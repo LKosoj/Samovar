@@ -47,7 +47,7 @@
 #endif
 #endif
 
-#define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
+#define WRITE_PROGNUM_IN_LOG                 // передавать на сервер номер текущей строки программы
 
 #include "Samovar_ini.h"
 
@@ -404,9 +404,9 @@ TaskHandle_t GetBMPTask = NULL;
 
 static constexpr uint32_t SYS_TICKER_STACK_BYTES = 4608;
 
-// Период записи строки лога (было настраиваемое поле LogPeriod, теперь фиксировано:
-// решение 2026-09-07, см. blynk-log-channel.md).
+// Периоды отправки строки на сервер и записи в локальный файл, в секундах.
 static constexpr uint8_t LOG_PERIOD_S = 4;
+static constexpr uint8_t FILE_LOG_PERIOD_S = 16;
 static constexpr uint32_t GET_CLOCK_STACK_BYTES = 5500;
 static constexpr uint32_t LUA_SCRIPT_STACK_BYTES = 8192;
 static constexpr uint32_t POWER_STATUS_STACK_BYTES = 3072;
@@ -776,7 +776,6 @@ unsigned long last_reg_online = 0;                              // Время п
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
 volatile float bme_pressure;                                    // Давление BME
-volatile float bme_prev_pressure;                               // Давление BME предыдущее значение
 //float bme_humidity;                                           // Влажность
 //float bme_altitude;                                           // Высота
 //float bme_gas;                                                // Газ
@@ -784,7 +783,6 @@ String SamovarStatus;                                           // Текущи�
 volatile int16_t SamovarStatusInt;                              // Текущий статус работы Самовара числом
 volatile uint8_t capacity_num;                                  // Текущая позиция емкости для отбора
 
-volatile uint8_t prev_ProgramNum;                               // Пердыдущая программа отбора
 volatile uint8_t ProgramNum;                                    // Текущая программа отбора
 volatile uint8_t ProgramLen;                                    // Количество строк программы отбора
 volatile uint8_t WthdrwlProgress;                               // Прогресс текущего отбора

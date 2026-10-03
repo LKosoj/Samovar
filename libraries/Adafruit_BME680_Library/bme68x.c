@@ -433,6 +433,7 @@ int8_t bme68x_set_op_mode(const uint8_t op_mode, struct bme68x_dev *dev)
     uint8_t tmp_pow_mode;
     uint8_t pow_mode = 0;
     uint8_t reg_addr = BME68X_REG_CTRL_MEAS;
+    uint32_t sleep_wait_us = 0;
 
     /* Call until in sleep */
     do
@@ -447,6 +448,12 @@ int8_t bme68x_set_op_mode(const uint8_t op_mode, struct bme68x_dev *dev)
                 tmp_pow_mode &= ~BME68X_MODE_MSK; /* Set to sleep */
                 rslt = bme68x_set_regs(&reg_addr, &tmp_pow_mode, 1, dev);
                 dev->delay_us(BME68X_PERIOD_POLL, dev->intf_ptr);
+                sleep_wait_us += BME68X_PERIOD_POLL;
+                /* A responding sensor must not keep the I2C owner blocked forever. */
+                if ((rslt == BME68X_OK) && (sleep_wait_us >= UINT32_C(5000000)))
+                {
+                    return BME68X_E_COM_FAIL;
+                }
             }
         }
     } while ((pow_mode != BME68X_SLEEP_MODE) && (rslt == BME68X_OK));

@@ -117,8 +117,11 @@ bool Adafruit_BME280::init() {
   delay(10);
 
   // if chip is still reading calibration, delay
-  while (isReadingCalibration())
+  const uint32_t calibrationStart = millis();
+  while (isReadingCalibration()) {
+    if (millis() - calibrationStart >= 1000) return false;
     delay(10);
+  }
 
   readCoefficients(); // read trimming parameters, see DS 4.2.2
 

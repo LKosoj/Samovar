@@ -110,7 +110,7 @@ class xbuf: public Print {
         uint16_t     _offset;
         uint16_t     _segSize;
 
-        void        addSeg();
+        bool        addSeg();
         void        remSeg();
 
 };

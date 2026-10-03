@@ -14,7 +14,7 @@ static volatile bool data_log_ready = false;
 // из SysTicker; подробности - у process_state_snapshot() ниже.
 static const uint8_t STATE_SNAPSHOT_PERIOD_S = 30;
 
-// ACPSensor сознательно не пишется в data.csv (заголовок "...,Tank,Pressure"),
+// ACPSensor сознательно не пишется в data.csv (заголовок "...,Tank"),
 // поэтому циклы лога идут по первым четырём элементам sensorList
 // (Steam,Pipe,Water,Tank), а не по всем DS_SENSOR_COUNT.
 static const uint8_t DS_LOGGED_SENSOR_COUNT = 4;
@@ -292,10 +292,7 @@ bool create_data() {
     Serial.println(F("data log create failed: open data.csv"));
     return false;
   }
-  String str = "Date,Steam,Pipe,Water,Tank,Pressure";
-#ifdef WRITE_PROGNUM_IN_LOG
-  str += ",ProgNum";
-#endif
+  String str = "Date,Steam,Pipe,Water,Tank";
   size_t headerWritten = fileToWrite.println(str);
   if (headerWritten == 0) {
     fileToWrite.close();
@@ -308,8 +305,6 @@ bool create_data() {
 
   for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->PrevTemp = 0;
   for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->LogPrevTemp = 0;
-  bme_prev_pressure = 0;
-  prev_ProgramNum = PROGRAM_END;
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
   if (!fileToAppend) {
     log_file_unlock(true);
@@ -574,25 +569,34 @@ static void enforce_data_log_free_space_budget() {
   }
 }
 
-// Базовые 7 полей строки лога (Crt + 4 температуры + давление [+ номер программы]).
+// Общие поля файла и сервера; давление и фиксированная точность — только для сервера.
 // Вынесено из append_data(), чтобы то же форматирование использовал build_idle_v34_line()
 // (V34 в простое, ниже) без записи в data.csv и без гейта на изменение. Массив передан без
 // компилируемого размера в скобках ([] вместо [DS_LOGGED_SENSOR_COUNT]): у объединённого
 // .ino-файла PlatformIO автоматически выносит прототипы функций к началу единицы трансляции
 // по одним лишь сигнатурам (см. tools/pioino.py), и DS_LOGGED_SENSOR_COUNT в списке
 // параметров туда не попал бы - там она ещё не объявлена.
-static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum) {
+static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum, bool fileLog) {
   String str;
   str = Crt;
   for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
     str += ",";
-    str += format_float(sensorTemp[i], 3);
+    String temperature = format_float(sensorTemp[i], fileLog ? 2 : 3);
+    if (fileLog && temperature.indexOf('.') >= 0) {
+      while (temperature.endsWith("0")) temperature.remove(temperature.length() - 1);
+      if (temperature.endsWith(".")) temperature.remove(temperature.length() - 1);
+    }
+    str += temperature;
   }
-  str += ",";
-  str += format_float(pressure, 2);
+  if (!fileLog) {
+    str += ",";
+    str += format_float(pressure, 2);
+  }
 #ifdef WRITE_PROGNUM_IN_LOG
-  str += ",";
-  str += programNum + 1;
+  if (!fileLog) {
+    str += ",";
+    str += programNum + 1;
+  }
 #else
   (void)programNum;
 #endif
@@ -609,25 +613,14 @@ String append_data() {
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   const float sensorTemp[DS_LOGGED_SENSOR_COUNT] = {
       SteamSensor.avgTemp, PipeSensor.avgTemp, WaterSensor.avgTemp, TankSensor.avgTemp};
-  float pressure = bme_pressure;
-  uint8_t programNum = ProgramNum;
   uint8_t changedField = 0;
 
   // Побеждает первое изменившееся поле: сперва четыре датчика по порядку
-  // (Steam,Pipe,Water,Tank), потом давление, потом номер программы.
+  // (Steam,Pipe,Water,Tank).
   for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
     if (sensorTemp[i] != sensorList[i]->LogPrevTemp) {
       changedField = i + 1;
       break;
-    }
-  }
-  if (changedField == 0) {
-    if (bme_prev_pressure != pressure) {
-      changedField = 5;
-#ifdef WRITE_PROGNUM_IN_LOG
-    } else if (prev_ProgramNum != programNum) {
-      changedField = 6;
-#endif
     }
   }
 
@@ -636,7 +629,7 @@ String append_data() {
     // уборка/предупреждение о месте срабатывали на любой ветке раннего выхода ниже.
     enforce_data_log_free_space_budget();
 
-    String str = format_log_base_fields(sensorTemp, pressure, programNum);
+    String str = format_log_base_fields(sensorTemp, 0, 0, true);
 
     bool locked = log_file_lock(pdMS_TO_TICKS(50));
     if (!locked) {
@@ -671,10 +664,6 @@ String append_data() {
       case 4:
         sensorList[changedField - 1]->LogPrevTemp = sensorTemp[changedField - 1];
         break;
-      case 5: bme_prev_pressure = pressure; break;
-#ifdef WRITE_PROGNUM_IN_LOG
-      case 6: prev_ProgramNum = programNum; break;
-#endif
       default: break;
     }
     log_file_unlock(true);
@@ -690,15 +679,19 @@ String append_data() {
   return "";
 }
 
+static String build_current_log_base_line() {
+  const float sensorTemp[DS_LOGGED_SENSOR_COUNT] = {
+      SteamSensor.avgTemp, PipeSensor.avgTemp, WaterSensor.avgTemp, TankSensor.avgTemp};
+  return format_log_base_fields(sensorTemp, bme_pressure, ProgramNum, false);
+}
+
 #ifdef SAMOVAR_USE_BLYNK
 // Строка V34 для простоя (SAMOVAR_STARTVAL_IDLE), раз в 5 с из blynk_push_tick() (Blynk.ino).
 // sessionId=0 - по тексту мастер-плана: в простое сессии нет. format_v34_tail_fields()
 // определена в Samovar.ino - вызов через границу .ino-файлов работает благодаря
 // автопрототипам PlatformIO (см. AGENTS.md/T2), сама функция без параметров.
 static String build_idle_v34_line() {
-  const float sensorTemp[DS_LOGGED_SENSOR_COUNT] = {
-      SteamSensor.avgTemp, PipeSensor.avgTemp, WaterSensor.avgTemp, TankSensor.avgTemp};
-  String base = format_log_base_fields(sensorTemp, bme_pressure, ProgramNum);
+  String base = build_current_log_base_line();
   return "5,0," + String((int)SamovarStatusInt) + "," + base + format_v34_tail_fields();
 }
 #endif

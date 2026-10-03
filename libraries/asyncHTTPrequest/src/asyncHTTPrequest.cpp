@@ -1,4 +1,5 @@
 #include "asyncHTTPrequest.h"
+#include <new>
 
 //**************************************************************************************************************
 asyncHTTPrequest::asyncHTTPrequest()
@@ -80,6 +81,7 @@ bool	asyncHTTPrequest::open(const char* method, const char* URL){
     _chunks = nullptr;
     _chunked = false;
     _contentRead = 0;
+    _HTTPcode = 0;
     _readyState = readyStateUnsent;
 
     if (strcmp(method, "GET") == 0) {
@@ -93,10 +95,12 @@ bool	asyncHTTPrequest::open(const char* method, const char* URL){
         return false;}
     if( _client && _client->connected() && 
       (strcmp(_URL->host, _connectedHost) != 0 || _URL->port != _connectedPort)){return false;}
-    char* hostName = new char[strlen(_URL->host)+10];
+    char* hostName = new (std::nothrow) char[strlen(_URL->host)+10];
+    if(!hostName){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
     sprintf(hostName,"%s:%d", _URL->host, _URL->port);  
-    _addHeader("host",hostName);
+    const bool hostAdded = _addHeader("host",hostName) != nullptr;
     delete[] hostName;
+    if(!hostAdded) return false;
     _lastActivity = millis();
 	return _connect();
 }
@@ -104,6 +108,12 @@ bool	asyncHTTPrequest::open(const char* method, const char* URL){
 void    asyncHTTPrequest::onReadyStateChange(readyStateChangeCB cb, void* arg){
     _readyStateChangeCB = cb;
     _readyStateChangeCBarg = arg;
+}
+
+void asyncHTTPrequest::setMaxResponseBufferSize(uint16_t bytes){
+    _seize;
+    _maxResponseBufferBytes = bytes;
+    _release;
 }
 
 //**************************************************************************************************************
@@ -116,7 +126,10 @@ void	asyncHTTPrequest::setTimeout(int seconds){
 bool	asyncHTTPrequest::send(){
     DEBUG_HTTP("send()\r\n");
     _seize;
-    if( ! _buildRequest()) return false;
+    if( ! _buildRequest()){
+        _release;
+        return false;
+    }
     _send();
     _release;
     return true;
@@ -131,7 +144,11 @@ bool    asyncHTTPrequest::send(String body){
         _release;
         return false;
     }
-    _request->write(body);
+    if(_request->write(body) != body.length()){
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        _release;
+        return false;
+    }
     _send();
     _release;
     return true;
@@ -146,7 +163,11 @@ bool	asyncHTTPrequest::send(const char* body){
         _release;
         return false;
     } 
-    _request->write(body);
+    if(_request->write(body) != strlen(body)){
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        _release;
+        return false;
+    }
     _send();
     _release;
     return true;
@@ -161,7 +182,11 @@ bool	asyncHTTPrequest::send(const uint8_t* body, size_t len){
         _release;
         return false;
     } 
-    _request->write(body, len);
+    if(_request->write(body, len) != len){
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        _release;
+        return false;
+    }
     _send();
     _release;
     return true;
@@ -176,7 +201,11 @@ bool	asyncHTTPrequest::send(xbuf* body, size_t len){
         _release;
         return false;
     } 
-    _request->write(body, len);
+    if(_request->write(body, len) != len){
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        _release;
+        return false;
+    }
     _send();
     _release;
     return true;
@@ -246,7 +275,7 @@ size_t  asyncHTTPrequest::responseRead(uint8_t* buf, size_t len){
 
 //**************************************************************************************************************
 size_t	asyncHTTPrequest::available(){
-    if(_readyState < readyStateLoading) return 0;
+    if(_readyState < readyStateLoading || !_response) return 0;
     if(_chunked && (_contentLength - _contentRead) < _response->available()){
         return _contentLength - _contentRead;
     }
@@ -292,8 +321,10 @@ ________________________________________________________________________________
 //**************************************************************************************************************
 bool  asyncHTTPrequest::_parseURL(const char* url){
     delete _URL;
-    _URL = new URL;
-    _URL->buffer = new char[strlen(url) + 8];
+    _URL = new (std::nothrow) URL;
+    if(!_URL){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
+    _URL->buffer = new (std::nothrow) char[strlen(url) + 8];
+    if(!_URL->buffer){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
     char *bufptr = _URL->buffer;
     const char *urlptr = url;
 
@@ -376,14 +407,16 @@ bool  asyncHTTPrequest::_connect(){
     DEBUG_HTTP("  > Creating new AsyncClient instance.\r\n");
     // +++++++++++++++++++++++++++++
     if( ! _client){
-        _client = new AsyncClient();
+        _client = new (std::nothrow) AsyncClient();
+        if(!_client){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
     }
 	    // ++++ ДОБАВЬТЕ ЭТОТ БЛОК ++++
     DEBUG_HTTP("  > Attempting to connect to %s:%d\r\n", _URL->host, _URL->port);
     DEBUG_HTTP("  > Local port will be assigned by TCP stack.\r\n");
     // +++++++++++++++++++++++++++++
     delete[] _connectedHost;	
-    _connectedHost = new char[strlen(_URL->host) + 1];
+    _connectedHost = new (std::nothrow) char[strlen(_URL->host) + 1];
+    if(!_connectedHost){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
     strcpy(_connectedHost, _URL->host);
     _connectedPort = _URL->port;
     _client->onConnect([](void *obj, AsyncClient *client){((asyncHTTPrequest*)(obj))->_onConnect(client);}, this);
@@ -411,7 +444,12 @@ bool   asyncHTTPrequest::_buildRequest(){
     
         // Build the header.
 
-    if( ! _request) _request = new xbuf;
+    if(_HTTPcode < 0 || !_URL) return false;
+    if( ! _request) _request = new (std::nothrow) xbuf;
+    if(!_request){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
+    size_t expected = _request->available() +
+        (_HTTPmethod == HTTPmethodGET ? 4 : 5) + strlen(_URL->path) +
+        strlen(_URL->query) + strlen(" HTTP/1.1\r\n") + 2;
     _request->write(_HTTPmethod == HTTPmethodGET ? "GET " : "POST ");
     _request->write(_URL->path);
     _request->write(_URL->query);
@@ -420,6 +458,7 @@ bool   asyncHTTPrequest::_buildRequest(){
     _URL = nullptr;
     header* hdr = _headers;
     while(hdr){
+        expected += strlen(hdr->name) + strlen(hdr->value) + 3;
         _request->write(hdr->name);
         _request->write(':');
         _request->write(hdr->value);
@@ -429,6 +468,10 @@ bool   asyncHTTPrequest::_buildRequest(){
     delete _headers;
     _headers = nullptr;
     _request->write("\r\n");
+    if(_request->available() != expected){
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        return false;
+    }
 
     return true;
 }
@@ -452,13 +495,12 @@ size_t  asyncHTTPrequest::_send(){
     size_t demand = _client->space();
     if(supply > demand) supply = demand;
     size_t sent = 0;
-    uint8_t* temp = new uint8_t[100];
+    uint8_t temp[100];
     while(supply){
         size_t chunk = supply < 100 ? supply : 100;
         supply -= _request->read(temp, chunk);
         sent += _client->add((char*)temp, chunk);
     }
-    delete temp;
     if(_request->available() == 0){
         delete _request;
         _request = nullptr;
@@ -467,6 +509,15 @@ size_t  asyncHTTPrequest::_send(){
     DEBUG_HTTP("*sent %d\r\n", sent);
     _lastActivity = millis(); 
     return sent;
+}
+
+void asyncHTTPrequest::_failRequest(int code){
+    _HTTPcode = code;
+    _requestEndTime = millis();
+    _lastActivity = 0;
+    _timeout = 0;
+    _setReadyState(readyStateDone);
+    if(_client) _client->abort();
 }
 
 //**************************************************************************************************************
@@ -485,7 +536,11 @@ void  asyncHTTPrequest::_processChunks(){
     while(_chunks->available()){
         DEBUG_HTTP("_processChunks() %.16s... (%d)\r\n", _chunks->peekString(16).c_str(), _chunks->available());
         size_t _chunkRemaining = _contentLength - _contentRead - _response->available();
-        _chunkRemaining -= _response->write(_chunks, _chunkRemaining);
+        const size_t availableChunk = _chunks->available();
+        const size_t expected = _chunkRemaining < availableChunk ? _chunkRemaining : availableChunk;
+        const size_t copied = _response->write(_chunks, expected);
+        if(copied != expected){ _failRequest(HTTPCODE_TOO_LESS_RAM); return; }
+        _chunkRemaining -= copied;
         if(_chunks->indexOf("\r\n") == -1){
             return;
         }
@@ -526,7 +581,12 @@ void  asyncHTTPrequest::_onConnect(AsyncClient* client){
     _seize;
     _client = client;
     _setReadyState(readyStateOpened);
-    _response = new xbuf;
+    _response = new (std::nothrow) xbuf;
+    if(!_response){
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        _release;
+        return;
+    }
     _contentLength = 0;
     _contentRead = 0;
     _chunked = false;
@@ -556,7 +616,7 @@ void  asyncHTTPrequest::_onPoll(AsyncClient* client){
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onError(AsyncClient* client, int8_t error){
     DEBUG_HTTP("_onError handler error=%d\r\n", error);
-    _HTTPcode = error;
+    if(_HTTPcode >= 0) _HTTPcode = error;
 }
 
 //**************************************************************************************************************
@@ -597,22 +657,41 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
     DEBUG_HTTP("_onData handler %.16s... (%d)\r\n",(char*) Vbuf, len);
     _seize;
     _lastActivity = millis();
-    
+    if(_readyState == readyStateDone || !_response){ _release; return; }
+    const size_t buffered = _response->available() + (_chunks ? _chunks->available() : 0);
+    if(buffered > _maxResponseBufferBytes || len > _maxResponseBufferBytes - buffered){
+        _failRequest(HTTPCODE_RESPONSE_TOO_LARGE);
+        _release;
+        return;
+    }
+
                 // Transfer data to xbuf
 
     if(_chunks){
-        _chunks->write((uint8_t*)Vbuf, len);
+        if(_chunks->write((uint8_t*)Vbuf, len) != len){
+            _failRequest(HTTPCODE_TOO_LESS_RAM);
+            _release;
+            return;
+        }
         _processChunks();
+        if(_HTTPcode < 0){ _release; return; }
     }
     else {
-        _response->write((uint8_t*)Vbuf, len);                
+        if(_response->write((uint8_t*)Vbuf, len) != len){
+            _failRequest(HTTPCODE_TOO_LESS_RAM);
+            _release;
+            return;
+        }
     }
 
                 // if headers not complete, collect them.
                 // if still not complete, just return.
 
     if(_readyState == readyStateOpened){
-        if( ! _collectHeaders()) return;
+        if( ! _collectHeaders()){
+            _release;
+            return;
+        }
     }
 
                 // If there's data in the buffer and not Done,
@@ -685,7 +764,7 @@ bool  asyncHTTPrequest::_collectHeaders(){
                 name.trim();
                 String value = headerLine.substring(colon+1);
                 value.trim();
-                _addHeader(name.c_str(), value.c_str());
+                if(!_addHeader(name.c_str(), value.c_str())) return false;
             }   
         } 
     } while(_readyState == readyStateOpened); 
@@ -704,9 +783,15 @@ bool  asyncHTTPrequest::_collectHeaders(){
         DEBUG_HTTP("*transfer-encoding: chunked\r\n");
         _chunked = true;
         _contentLength = 0;
-        _chunks = new xbuf;
-        _chunks->write(_response, _response->available());
+        _chunks = new (std::nothrow) xbuf;
+        if(!_chunks){ _failRequest(HTTPCODE_TOO_LESS_RAM); return false; }
+        const size_t expected = _response->available();
+        if(_chunks->write(_response, expected) != expected){
+            _failRequest(HTTPCODE_TOO_LESS_RAM);
+            return false;
+        }
         _processChunks();
+        if(_HTTPcode < 0) return false;
     }         
 
     
@@ -734,7 +819,7 @@ void	asyncHTTPrequest::setReqHeader(const char* name, const char* value){
 void	asyncHTTPrequest::setReqHeader(const char* name, const __FlashStringHelper* value){
     if(_readyState <= readyStateOpened && _headers){
         char* _value = _charstar(value);
-        _addHeader(name, _value);
+        if(_value) _addHeader(name, _value);
         delete[] _value;
     }
 }
@@ -743,7 +828,7 @@ void	asyncHTTPrequest::setReqHeader(const char* name, const __FlashStringHelper*
 void	asyncHTTPrequest::setReqHeader(const __FlashStringHelper *name, const char* value){
     if(_readyState <= readyStateOpened && _headers){
         char* _name = _charstar(name);
-        _addHeader(_name, value);
+        if(_name) _addHeader(_name, value);
         delete[] _name;
     }
 }
@@ -753,7 +838,7 @@ void	asyncHTTPrequest::setReqHeader(const __FlashStringHelper *name, const __Fla
     if(_readyState <= readyStateOpened && _headers){
         char* _name = _charstar(name);
         char* _value = _charstar(value);
-        _addHeader(_name, _value);
+        if(_name && _value) _addHeader(_name, _value);
         delete[] _name;
         delete[] _value;
     }
@@ -770,7 +855,7 @@ void	asyncHTTPrequest::setReqHeader(const char* name, int32_t value){
 void	asyncHTTPrequest::setReqHeader(const __FlashStringHelper *name, int32_t value){
     if(_readyState <= readyStateOpened && _headers){
         char* _name = _charstar(name);
-        setReqHeader(_name, String(value).c_str());
+        if(_name) setReqHeader(_name, String(value).c_str());
         delete[] _name;
     }
 }
@@ -859,25 +944,47 @@ String  asyncHTTPrequest::headers(){
 //**************************************************************************************************************
 asyncHTTPrequest::header*  asyncHTTPrequest::_addHeader(const char* name, const char* value){
     _seize;
-    header* hdr = (header*) &_headers;
-    while(hdr->next) {
-        if(strcasecmp(name, hdr->next->name) == 0){
-            header* oldHdr = hdr->next;
-            hdr->next = hdr->next->next;
-            oldHdr->next = nullptr;
-            delete oldHdr;
-        }
-        else {
-            hdr = hdr->next;
+    if(!name || !value){ _release; return nullptr; }
+    size_t bytes = strlen(name) + strlen(value);
+    size_t count = 1;
+    for(header* current = _headers; current; current = current->next){
+        if(strcasecmp(name, current->name) != 0){
+            bytes += strlen(current->name) + strlen(current->value);
+            count++;
         }
     }
-    hdr->next = new header;
-    hdr->next->name = new char[strlen(name)+1];
-    strcpy(hdr->next->name, name);
-    hdr->next->value = new char[strlen(value)+1];
-    strcpy(hdr->next->value, value);
+    if(bytes > 4096 || count > 64){
+        _failRequest(HTTPCODE_RESPONSE_TOO_LARGE);
+        _release;
+        return nullptr;
+    }
+    header* added = new (std::nothrow) header;
+    if(added){
+        added->name = new (std::nothrow) char[strlen(name)+1];
+        added->value = new (std::nothrow) char[strlen(value)+1];
+    }
+    if(!added || !added->name || !added->value){
+        delete added;
+        _failRequest(HTTPCODE_TOO_LESS_RAM);
+        _release;
+        return nullptr;
+    }
+    strcpy(added->name, name);
+    strcpy(added->value, value);
+    header** link = &_headers;
+    while(*link){
+        if(strcasecmp(name, (*link)->name) == 0){
+            header* old = *link;
+            *link = old->next;
+            old->next = nullptr;
+            delete old;
+        } else {
+            link = &(*link)->next;
+        }
+    }
+    *link = added;
     _release;
-    return hdr->next;
+    return added;
 }
 
 //**************************************************************************************************************
@@ -907,7 +1014,8 @@ asyncHTTPrequest::header* asyncHTTPrequest::_getHeader(int ndx){
 //**************************************************************************************************************
 char* asyncHTTPrequest::_charstar(const __FlashStringHelper * str){
   if( ! str) return nullptr;
-  char* ptr = new char[strlen_P((PGM_P)str)+1];
+  char* ptr = new (std::nothrow) char[strlen_P((PGM_P)str)+1];
+  if(!ptr){ _failRequest(HTTPCODE_TOO_LESS_RAM); return nullptr; }
   strcpy_P(ptr, (PGM_P)str);
   return ptr;
 }

@@ -51,7 +51,7 @@ THRESHOLD_NAME = "DATA_LOG_CLEANUP_THRESHOLD_BYTES"
 # T2 (blynk-log-channel.md): append_data() теперь зовёт вынесенную format_log_base_fields()
 # вместо инлайновой сборки строки - харнесс обязан взять и её тело настоящим.
 BASE_FIELDS_SIGNATURE = (
-    "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum)"
+    "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum, bool fileLog)"
 )
 
 HARNESS_TEMPLATE = r'''
@@ -80,6 +80,9 @@ class String {
   String& operator+=(int v) { value_ += std::to_string(v); return *this; }
   size_t length() const { return value_.size(); }
   const std::string& value() const { return value_; }
+  int indexOf(char c) const { auto n = value_.find(c); return n == std::string::npos ? -1 : static_cast<int>(n); }
+  bool endsWith(const char* suffix) const { std::string tail(suffix); return value_.size() >= tail.size() && value_.compare(value_.size()-tail.size(), tail.size(), tail)==0; }
+  void remove(size_t start) { value_.erase(start); }
 
  private:
   std::string value_;
@@ -109,9 +112,7 @@ DSSensor* const sensorList[DS_LOGGED_SENSOR_COUNT] = {
 static bool data_log_ready = true;
 static String Crt = "2026-08-24T00:00:00";
 static float bme_pressure = 0.0f;
-static float bme_prev_pressure = 0.0f;
 static uint8_t ProgramNum = 0;
-static uint8_t prev_ProgramNum = 0;
 static volatile uint32_t log_write_seq = 0;
 static uint32_t used_byte = 0;
 static uint32_t total_byte = 100000;
@@ -203,9 +204,7 @@ static void reset_fixture() {
   WaterSensor.LogPrevTemp = 20.0f;
   TankSensor.LogPrevTemp = 20.0f;
   bme_pressure = 750.0f;
-  bme_prev_pressure = 750.0f;
   ProgramNum = 3;
-  prev_ProgramNum = 3;
   data_log_ready = true;
   fileToAppend.ok = true;
   fileToAppend.simulate_partial_write = false;
