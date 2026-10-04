@@ -12,7 +12,7 @@ Consider a critical situation: failure of the cooling water supply. Cooling wate
 
 A reliable safety system must:
 
-1.  Continuously monitor the cooling water temperature (using a sensor, as described in [Chapter 4: Sensor Data Acquisition](04_sensor_data_acquisition__.md)).
+1.  Continuously monitor the cooling water temperature (using a sensor, as described in [Chapter 4: Sensor Data Acquisition](04_sensor_data_acquisition_.md)).
 2.  If necessary, monitor the water flow (using a flow sensor).
 3.  Check whether the readings exceed the safe limits.
 4.  If a dangerous limit is reached, immediately:
@@ -26,19 +26,20 @@ This chapter explains how Samovar implements this important safety function.
 
 The safety system combines several elements that we have already discussed:
 
-1.  **Monitoring:** This is the continuous reading of sensor data ([Chapter 4: Sensor Data Acquisition](04_sensor_data_acquisition__.md)). The system does not merely display the data — it specifically checks it against preset safety limits.
-2.  **Critical conditions:** These are the specific situations that trigger the safety system. They are defined by thresholds set in Samovar's configuration (often in a header file such as `Samovar_ini.h` or in the settings). Examples:
-    *   Temperature sensors exceed the maximum allowed value (`MAX_WATER_TEMP`, `MAX_STEAM_TEMP`).
-    *   No cooling water flow for a certain period of time (checked by the flow sensor or the water outlet temperature).
-    *   Pressure exceeds the safe limit (`MaxPressureValue`).
+1.  **Monitoring:** This is the continuous reading of sensor data ([Chapter 4: Sensor Data Acquisition](04_sensor_data_acquisition_.md)). The system does not merely display the data — it specifically checks it against preset safety limits.
+2.  **Critical conditions:** These are the specific situations that trigger the safety system. They are defined by thresholds set when the firmware is built (in `Samovar_ini.h` and `Samovar_pin.h`) or in the settings (`SamSetup`). Examples:
+    *   Temperature sensors exceed the maximum allowed value (`MAX_WATER_TEMP`, `MAX_STEAM_TEMP`, `MAX_ACP_TEMP`).
+    *   No cooling water flow for longer than `WF_ALARM_COUNT` seconds (checked by the flow sensor).
+    *   Pressure exceeds the safe limit (`SamSetup.MaxPressureValue`).
     *   High liquid level in the column head (an indication of flooding, monitored by the head level sensor).
+    *   A sensor failure (no data from the vapor, water, tank or TCA sensor during operation) or a press of the emergency button.
 3.  **Alarm signals:** When a critical condition is detected, the system raises an alarm. It can be:
-    *   Audible: a buzzer or another sound signal.
-    *   Visual/text: messages on the LCD or the web interface.
-    *   Remote: notifications over the network ([Chapter 8: Network and External Communication](08_network___external_communication__.md)), for example Telegram or MQTT.
-4.  **Protective actions:** These are automatic steps to reduce the danger. The most common and important one is switching off the main heating element. Other actions may include stopping pumps, closing valves or changing the system state ([Chapter 3: System State and Mode Management](03_system_state___mode_management__.md)) to "Error" or "Alarm".
+    *   Audible: the buzzer (if it is enabled in the settings).
+    *   Visual/text: messages in the web interface.
+    *   Remote: via Blynk ([Chapter 8: Network and External Communication](08_network___external_communication_.md)) — a message on virtual pin V26 and a push notification to the mobile app. Alarms arrive with the header "Тревога!" ("Alarm!"), warnings with the header "Предупреждение!" ("Warning!").
+4.  **Protective actions:** These are automatic steps to reduce the danger. The most common and important one is switching off the main heating element. Other actions include stopping the pumps and the mixer, closing the water valve (in rectification, distillation, BK and NBK the cooling keeps running for 3 more minutes if water is flowing) and resetting the process state ([Chapter 3: System State and Mode Management](03_system_state___mode_management_.md)).
 
-The safety system is always active, regardless of which process program ([Chapter 2: Process Program Execution](02_process_program_execution__.md)) is running and what the main system state is ([Chapter 3: System State and Mode Management](03_system_state___mode_management__.md)). It is an independent layer focused solely on safety.
+The safety checks run regardless of which process program ([Chapter 2: Process Program Execution](02_process_program_execution_.md)) is running: they are called by a background task, not by the program steps. The set of checks is chosen by the current operating mode ([Chapter 3: System State and Mode Management](03_system_state___mode_management_.md)).
 
 ## How Safety Monitoring Works: A Simple Algorithm
 
@@ -58,15 +59,22 @@ sequenceDiagram
     end
 ```
 
-This happens repeatedly — many times per second or minute, depending on the sensor update rate and how often the safety check function is called in the program's main loop. The key here is vigilance and fast reaction.
+This happens once per second: the `SysTicker` background task (file `Samovar.ino`) reads the sensors and right after that calls `mode_dispatch_alarm()`, which runs the check for the current mode. The key here is vigilance and fast reaction.
 
 ## Deep Dive into the Code: the `check_alarm` Functions
 
-The safety monitoring logic is implemented primarily in functions named like `check_alarm()`, `check_alarm_beer()` and `check_alarm_nbk()`, depending on the operating mode. These functions are often called from the main `loop()` or as part of the handling functions of the corresponding modes ([Chapter 3: System State and Mode Management](03_system_state___mode_management__.md)).
+The safety monitoring logic is split into functions, one per mode. Which one is called is decided by the mode table in `mode_registry.h`:
 
-Let's look at simplified fragments from `logic.h` (general safety checks applied in rectification mode) and possibly from `distiller.h` or `nbk.h`.
+*   rectification — `check_alarm()` (`alarm.h`);
+*   distillation — `check_alarm_distiller()` (`distiller.h`);
+*   BK — `check_alarm_bk()` (`BK.h`);
+*   NBK — `check_nbk_critical_alarms()` and `check_alarm_nbk()` (`nbk.h`);
+*   beer — `mode_alarm_beer()`, cheese — `mode_alarm_cheese()` (`mode_registry.h`);
+*   sous-vide — `check_alarm_suvid()` (`suvid.h`), Lua — `check_alarm_lua()` (`lua.h`).
 
-First, let's see where the alarm limits are often defined (in `Samovar_ini.h`):
+Checks shared by several modes (water and TCA overheating, no water flow, the hot water warning) live in `mode_common.h`.
+
+First, let's see where the alarm limits are defined (in `Samovar_ini.h`):
 
 ```c++
 // From Samovar_ini.h (simplified)
@@ -81,158 +89,140 @@ First, let's see where the alarm limits are often defined (in `Samovar_ini.h`):
 // Maximum TCA temperature at which the power will be switched off
 #define MAX_ACP_TEMP 75
 
-// ... other safety settings, such as WF_ALARM_COUNT (flow sensor threshold), MaxPressureValue, etc.
+// WF_ALARM_COUNT (seconds without water flow before the alarm, 20 by default) is defined in Samovar_pin.h,
+// the pressure limit MaxPressureValue is in the settings (SamSetup)
 ```
 
 These `#define` lines set the most important safety thresholds. The safety check code compares the actual sensor readings with these values.
 
-Now let's look at a simplified version of the `check_alarm()` function from `logic.h`, focused on critical temperature alarms:
+All emergency stops go through a single function — `request_emergency_stop(reason)` from `alarm.h`. It immediately drops the heater relays and latches the alarm, sets `alarm_event = true` and turns on the buzzer. The rest is done by `perform_emergency_stop()`, which is called by the main `loop()`: it sends the message with the reason (`ALARM_MSG`), switches the power off (`set_power(false)`), closes the water or keeps the cooling running for 3 more minutes, stops the pumps and the mixer and resets the process state.
+
+Now let's look at a simplified version of the `check_alarm()` function from `alarm.h` (rectification mode):
 
 ```c++
-// Simplified fragment from logic.h (the check_alarm function)
+// Simplified fragment from alarm.h (the check_alarm function)
 
 void check_alarm() {
-  // --- Check for critical temperature alarms ---
-  // If ANY of these temperatures exceeds the absolute maximum AND power is on...
-  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP ||
-       WaterSensor.avgTemp >= MAX_WATER_TEMP ||
-       ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
+  // Clear the water warning pause if 30 seconds have passed
+  mode_clear_alarm_pause_if_expired();
 
-    // ... then the emergency shutdown is triggered!
-    delay(1000); // Short pause so other commands can complete
-    set_buzzer(true); // Sound the alarm!
-    set_power(false); // Switch off the power immediately!
-
-    // Build the message about the exceeded temperature limit
-    String s = "";
-    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s += " Пара"; // " Steam"
-    if (WaterSensor.avgTemp >= MAX_WATER_TEMP) { if (s.length() > 0) s+= " и"; s += " Воды"; } // " and" / " Water"
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) { if (s.length() > 0) s+= " и"; s += " ТСА"; } // " and" / " TCA"
-
-    SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG); // Critical message ("Emergency shutdown! Maximum temperature exceeded")
-
-    // Global flag that an alarm has occurred (prevents restarting the system, etc.)
-    alarm_event = true;
-
-    // Note: the system state may also be updated here or by the power-off handler (see Chapter 3)
-
-    return; // Stop further checks in this cycle, a critical alarm has occurred.
+  // --- Sensor failure during operation ---
+  if (PowerOn) {
+    // The vapor, water and tank sensors are not assigned — switch the heating off with a normal command
+    // (rectification_ds_sensors_assigned(), SAMOVAR_POWER_OFF)
+    // No data from the vapor, water, TCA or tank sensor — emergency stop:
+    if (optional_sensor_failed(SteamSensor) && process_sensor_failed("Ректификация", "пара")) return; // "Rectification", "vapor"
+    if (!mode_check_powered_cooling_sensors("Ректификация")) return;
+    if (optional_sensor_failed(TankSensor) && process_sensor_failed("Ректификация", "куба")) return; // "Rectification", "tank"
   }
 
-  // --- Check for warnings / less critical alarms ---
-
-  // Check for the high cooling water temperature warning (threshold lower than MAX_WATER_TEMP)
-  // Use a delay timer (alarm_t_min) to avoid frequent triggering
-  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
-    set_buzzer(true); // Sound the warning signal (may differ from the critical one)
-    SendMsg(("Критическая температура воды!"), WARNING_MSG); // Warning ("Critical water temperature!")
-
-    // If desired, take less drastic measures, for example, reduce power (if there is a regulator)
-    #ifdef SAMOVAR_USE_POWER
-    if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
-        SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG, ALARM_MSG); // "Critical water temperature! Reducing " + PWR_MSG
-        // Example: reduce power by a fixed amount/percentage
-        set_current_power(target_power_volt * 0.9); // Reduce power by 10%
-    }
-    #endif
-
-    // Set a timer so that it does not trigger again immediately
-    alarm_t_min = millis() + 1000 * 30; // Wait 30 seconds before the next trigger
-  }
-
-  // --- Check for a water flow sensor alarm ---
-  #ifdef USE_WATERSENSOR
-  // Check whether the water flow counter (WFAlarmCount, incremented when there is no flow)
-  // exceeds the limit (WF_ALARM_COUNT) and power is on
-  if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
-      set_buzzer(true); // Sound the alarm
-      // Signal the system to perform shutdown and cleanup (see the synchronizing command in Chapter 3)
-      queue_samovar_command(SAMOVAR_POWER);
-      SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG); // Critical message ("Emergency shutdown! Water supply has stopped.")
-      alarm_event = true; // Global alarm flag
-      return; // Stop further checks
-  }
-  #endif
-
-  // --- Check for a head level sensor alarm (flooding) ---
-  #ifdef USE_HEAD_LEVEL_SENSOR
-  // Check whether the level sensor button (whls) is held ("stuck" — high liquid level)
-  // and whether a previous trigger is not already being handled (alarm_h_min timer) and power is on
+  // --- Head level sensor (flooding) ---
+#ifdef USE_HEAD_LEVEL_SENSOR
   if (SamSetup.UseHLS && PowerOn) {
-      whls.tick(); // Update the button state
-      if (whls.isHolded() && alarm_h_min == 0) {
-          whls.resetStates(); // Reset the state after detection
-          set_buzzer(true); // Sound the alarm signal
-          SendMsg(("Сработал датчик захлёба!"), ALARM_MSG); // Critical message ("The flooding sensor has triggered!")
-
-          // This alarm often causes a *reduction* of power rather than a complete shutdown
-          // This allows the column to clear the accumulated liquid.
-          #ifdef SAMOVAR_USE_POWER
-          // Save the current power before reducing it
-          prev_target_power_volt = target_power_volt;
-          // Reduce power significantly (e.g., by 20%)
-          set_current_power(target_power_volt * 0.8);
-          SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG); // PWR_MSG + " reducing from " + target_power_volt
-          #endif
-
-          // Set a recovery timer before checking for the alarm again
-          alarm_h_min = millis() + 1000 * 40; // Wait 40 seconds
+    // head_level_sensor_holded() polls the whls sensor button (held = high level)
+    if (head_level_sensor_holded() && alarm_h_min == 0) {
+      if (current_program_type() != 'C') {
+        set_buzzer(true); // Sound the alarm signal
+        SendMsg("Сработал датчик захлёба!", ALARM_MSG); // "The flooding sensor has triggered!"
       }
-       // Check whether the timer for re-enabling the check has expired
-      if (alarm_h_min > 0 && millis() >= alarm_h_min) {
-        whls.resetStates(); // Reset the button state once more
-        alarm_h_min = 0; // Reset the timer
-        // If the cause of the alarm has still not been eliminated (e.g., whls.isHolded() is true again)
-        // the alarm will trigger again in the next cycle.
-      }
+      // On a 'C' line (pre-flooding) there is no alarm: the sensor trigger is a normal part of the program.
+#ifdef SAMOVAR_USE_POWER
+      // This alarm causes a *reduction* of power rather than a shutdown,
+      // so that the column can clear the accumulated liquid.
+      SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG); // PWR_MSG + " reducing from " + target_power_volt
+      // Reduce by 1 V (by 3% for the SEM_AVR regulator), but not below the working threshold
+      set_current_power(max(target_power_volt - 1 * PWR_FACTOR, power_work_mode_threshold()));
+#endif
+      // The process is inertial — wait 40 seconds before the next reaction
+      alarm_h_min = millis() + 1000 * 40;
+    }
+    // The timer has expired — the check is active again. If the cause of the alarm
+    // has still not been eliminated, the alarm will trigger again on the next pass.
+    if (alarm_h_min > 0 && (int32_t)(millis() - alarm_h_min) >= 0) alarm_h_min = 0;
+    // ... on a 'C' line the power is restored after TIME_C minutes and then raised little by little
   }
-  #endif
+#endif
 
-  // --- Check for a pressure sensor alarm ---
-  // Check whether the pressure value (pressure_value, from the pressure sensor)
-  // exceeds the maximum allowed (SamSetup.MaxPressureValue) and power is on
-  #ifdef USE_PRESSURE_MPX // Example for the MPX pressure sensor
-  if (use_pressure_sensor && pressure_value >= SamSetup.MaxPressureValue && PowerOn) {
-      set_buzzer(true); // Sound the alarm
-      set_power(false); // Switch off the power
-      SendMsg(("Аварийное отключение! Превышено максимальное давление."), ALARM_MSG); // Critical message ("Emergency shutdown! Maximum pressure exceeded.")
-      alarm_event = true; // Global alarm flag
-      return; // Stop further checks
+  // ... control of the water valve and the cooling pump
+
+  // --- Critical temperatures ---
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP ||
+       TankSensor.avgTemp >= SamSetup.DistTemp || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
+    String s = "";
+    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Пара"; // " Vapor"
+    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = s + " Воды"; // " Water"
+    else if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) s = s + " ТСА"; // " TCA"
+
+    if (TankSensor.avgTemp >= SamSetup.DistTemp) {
+      // The tank temperature has reached the set value — this is a normal finish, not an alarm
+      SendMsg("Лимит максимальной температуры куба. Программа завершена.", NOTIFY_MSG); // "Maximum tank temperature limit. Program finished."
+      queue_samovar_command(SAMOVAR_POWER); // if the queue did not accept the command — emergency stop
+    } else
+      request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s); // "Emergency shutdown! Maximum temperature exceeded"
   }
-  #endif
 
-  // ... other checks may be here as well (e.g., exceeding the number of sensor read errors)
+  // --- Water flow (flow sensor, USE_WATERSENSOR) ---
+  // WFAlarmCount — how many seconds in a row there has been no flow while water should be flowing.
+  // More than WF_ALARM_COUNT — siren and "Аварийное отключение! Прекращена подача воды." ("Emergency shutdown! Water supply has stopped.")
+  mode_request_water_flow_emergency_if_needed();
 
-  // If a critical alarm was *already* detected in a previous cycle (alarm_event == true),
-  // the system remains in the alarm state until reset (handled elsewhere).
-  // The checks above look for *new* critical conditions.
+  // --- Hot water warning (threshold ALARM_WATER_TEMP - 5, i.e. 65 °C) ---
+  if (mode_water_pre_alarm_due()) { // WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5 && PowerOn && alarm_t_min == 0
+    mode_warn_water_hot(); // buzzer and WARNING_MSG "Высокая температура воды: ... Проверьте охлаждение." ("High water temperature: ... Check the cooling.")
+#ifdef SAMOVAR_USE_POWER
+    // At ALARM_WATER_TEMP (70 °C) and above — ALARM_MSG "Критическая температура воды! Ошибка подачи воды. ..." ("Critical water temperature! Water supply error. ...")
+    // and a power reduction by 5 V (by 8% for SEM_AVR), but not below the working threshold
+    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! ...", 5);
+#endif
+    mode_set_alarm_pause_ms(30000); // alarm_t_min: the next reaction no earlier than 30 seconds later
+  }
+
+  // ... transition from heat-up to stabilization, boiling detection
 }
 ```
 
-This function (and its variations for other modes) is the heart of the safety system. It shows:
+The pressure limit is not checked in `check_alarm()` but directly in `SysTicker` (`Samovar.ino`), once per second and in all modes. The check exists if the firmware is built with a pressure sensor (`USE_PRESSURE_XGZ`, `USE_PRESSURE_MPX` or `USE_PRESSURE_1WIRE`) and a limit greater than zero is set in the settings:
 
-*   Reading the latest sensor values (for example, `SteamSensor.avgTemp`, `WaterSensor.avgTemp`, `ACPSensor.avgTemp`, `WFAlarmCount`, `pressure_value`).
-*   Comparing these values with the limits from `Samovar_ini.h` (`MAX_STEAM_TEMP`, `MAX_WATER_TEMP`, `ALARM_WATER_TEMP`, `WF_ALARM_COUNT`, `MaxPressureValue`) or from `SamSetup`.
+```c++
+// Simplified fragment from Samovar.ino (the SysTicker task)
+if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
+  if (!pressure_alarm_sent) {
+    request_emergency_stop("Превышено предельное давление!"); // "Pressure limit exceeded!"
+    pressure_alarm_sent = true;
+  }
+}
+// pressure_alarm_sent is cleared when the pressure drops below the limit by 5% (at least 5 units)
+```
+
+These fragments are the heart of the safety system. They show:
+
+*   Reading the latest sensor values (for example, `SteamSensor.avgTemp`, `WaterSensor.avgTemp`, `ACPSensor.avgTemp`, `TankSensor.avgTemp`, `WFAlarmCount`, `pressure_value`).
+*   Comparing these values with the limits from `Samovar_ini.h` and `Samovar_pin.h` (`MAX_STEAM_TEMP`, `MAX_WATER_TEMP`, `MAX_ACP_TEMP`, `ALARM_WATER_TEMP`, `WF_ALARM_COUNT`) or from `SamSetup` (`MaxPressureValue`, `DistTemp`).
 *   Actions when a limit is exceeded:
     *   Calling `set_buzzer(true)` to sound the alarm.
-    *   Calling `SendMsg()` to notify the user through the interfaces.
-    *   Calling `set_power(false)` to switch off the main heater (a critical action).
-    *   Calling `set_current_power()` to reduce power (a less critical action, for example in case of flooding).
-    *   Setting the `alarm_event = true;` flag. This is an important global variable indicating that an emergency stop has occurred. Other parts of the code ([Chapter 3: System State and Mode Management](03_system_state___mode_management__.md), [Chapter 1: User Interaction (Web and LCD)](01_user_interaction__web___lcd__.md)) check this flag to prevent an accidental restart until the user acknowledges and resets the alarm state.
+    *   Calling `SendMsg()` to notify the user through the web interface and Blynk.
+    *   Calling `request_emergency_stop()` for an emergency stop: switching off the heating and all the protective actions described above (a critical action).
+    *   Calling `set_current_power()` to reduce power (a less critical action, for example in case of flooding or hot water).
+    *   Setting the `alarm_event = true;` flag (inside the emergency stop). This is an important global variable indicating that an emergency stop has occurred.
 *   Using timers (`alarm_t_min`, `alarm_h_min`) or counters (`WFAlarmCount`) to avoid false triggers caused by short-term fluctuations or to give time to recover after a minor event (for example, a brief trigger of the flooding sensor).
 
-The `check_alarm_beer()` and `check_alarm_nbk()` functions contain similar logic but are adapted to the safety specifics of those modes (for example, different temperature limits or pressure control logic relevant to beer brewing or NBK).
+The checks of the other modes are built the same way but take their specifics into account:
+
+*   distillation and BK — water and TCA overheating, sensor failure, water flow and the hot water warning;
+*   NBK — sensor failure, program errors, insufficient cooling (TCA above 60 °C or water above `MAX_WATER_TEMP` for 60 seconds in a row), pressure sensor failure (no readings for more than 60 seconds); the end of the wash and flooding usually finish the program normally, and if that fails — with an emergency stop;
+*   beer — water and TCA overheating on the fermentation line `F`, wort overheating in the tank (above `BOILING_TEMP + 5`) on any line, water flow;
+*   cheese — the same checks as in beer mode.
 
 ## Alarms and System State
 
-When a critical alarm occurs, the safety system not only switches off the equipment but also affects the overall system state ([Chapter 3: System State and Mode Management](03_system_state___mode_management__.md)). The `alarm_event` flag is the main way of passing information about the critical event to the rest of Samovar's logic.
+When a critical alarm occurs, the safety system not only switches off the equipment but also affects the overall system state ([Chapter 3: System State and Mode Management](03_system_state___mode_management_.md)). The emergency stop resets the process state, and the alarm latch (`heater_safety_latched()`) and the `alarm_event` flag tell the rest of Samovar's logic about the critical event.
 
-The main `loop()` function or the mode handlers check `alarm_event`. If it is set, the execution of program steps or reactions to user commands (for example, "Start" («Старт»)) are usually stopped. To resume operation after an alarm, the user must explicitly reset the system (usually via a button or a command that resets the `alarm_event` flag and the state, for example the `SAMOVAR_RESET` command described in Chapter 3).
+While the latch is set, the heating does not switch on: attempts to start a process (for example, with the "Start" («Старт») button) are rejected, and the alarm reason is kept so that the operator can see why the heating is blocked. The `SAMOVAR_RESET` command does not clear the latch. To work again after an alarm, eliminate the cause and reboot the controller.
 
 ## Conclusion
 
-In this chapter we got acquainted with Samovar's important role as a guardian through **Safety Monitoring and Alarms**. We saw how the system constantly watches sensor data, comparing it with the specified critical limits. When a dangerous condition is detected, such as water overheating or no flow, the system raises alarm signals (audible and visual) and immediately takes protective measures, first of all by switching off the heating element. We looked at simplified code examples showing how the sensors are checked (the `check_alarm` functions), how the limits are defined (`Samovar_ini.h`) and how the actuators are used to eliminate the danger (`set_power`, `set_buzzer`). We also touched on the `alarm_event` flag, which signals the critical safety state to the rest of Samovar's code. Understanding the safety system gives confidence that Samovar is designed not only for automation but also for safe operation.
+In this chapter we got acquainted with Samovar's important role as a guardian through **Safety Monitoring and Alarms**. We saw how the system constantly watches sensor data, comparing it with the specified critical limits. When a dangerous condition is detected, such as water overheating or no flow, the system raises alarm signals (audible and visual) and immediately takes protective measures, first of all by switching off the heating element. We looked at simplified code examples showing how the sensors are checked (the `check_alarm` functions), how the limits are defined (`Samovar_ini.h`) and how the emergency stop is performed (`request_emergency_stop`, `set_power`, `set_buzzer`). We also touched on the `alarm_event` flag and the alarm latch, which signal the critical safety state to the rest of Samovar's code. Understanding the safety system gives confidence that Samovar is designed not only for automation but also for safe operation.
 
-Safety limits and settings are extremely important and may need to be adjusted for your specific equipment or conditions. In the next chapter, [Chapter 7: Configuration Persistence](07_configuration_persistence__.md), we will learn how these important settings, as well as program definitions and calibration values, are stored permanently and are not lost when Samovar is powered off.
+Safety limits and settings are extremely important and may need to be adjusted for your specific equipment or conditions. In the next chapter, [Chapter 7: Configuration Persistence](07_configuration_persistence_.md), we will learn how these important settings, as well as program definitions and calibration values, are stored permanently and are not lost when Samovar is powered off.
 
-[Chapter 7: Configuration Persistence](07_configuration_persistence__.md)
+[Chapter 7: Configuration Persistence](07_configuration_persistence_.md)

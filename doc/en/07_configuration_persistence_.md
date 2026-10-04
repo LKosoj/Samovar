@@ -27,96 +27,92 @@ All of this information has to be saved and loaded automatically.
 
 Unlike main memory (RAM), which loses all data when the power is cut, Samovar's microcontroller (ESP32) has special kinds of memory that can retain data:
 
-1.  **EEPROM (Electrically Erasable Programmable Read-Only Memory):** A small memory area suited to storing small amounts of configuration data, such as numbers, flags and short strings. It is rated for many read/write cycles, but its size is limited.
-2.  **SPIFFS / LittleFS:** File systems designed for flash memory (similar to what is used in USB drives or SD cards, but built into the ESP32). They are well suited to storing larger amounts of data, for example text files (web pages, log files, program definitions) and large data structures. Samovar can use either SPIFFS or LittleFS depending on the specific hardware or configuration. The code often uses the term `SPIFFS` even when LittleFS is running under the hood.
+1.  **NVS (Non-Volatile Storage, a "key — value" store):** A small flash partition (`nvs` in `partitions.csv`) where the ESP32 stores named values. Samovar keeps its settings profile here: the whole `SetupEEPROM` structure as one binary block (blob) under the key `profile` in the `sam_cfg` namespace. The block carries a format number and a CRC32 checksum (`profile_store.h`), so corrupted data is detected on read.
+2.  **LittleFS:** A file system in flash memory (the `spiffs` partition in `partitions.csv`). It is well suited to files: web pages, the process log (`data.csv`, `data_old.csv`), the recorded program (`prg.csv`), the state snapshot (`state.csv`), program templates (`program_fruit.txt` etc.), Lua scripts. `Samovar.h` sets `#define USE_LittleFS` and makes the name `SPIFFS` an alias of `LittleFS` (`#define SPIFFS LittleFS`), so the code says `SPIFFS.open(...)` while LittleFS is what actually runs.
 
-Samovar uses a combination of these storage methods so that all the necessary configuration and program data is preserved.
+Samovar uses a combination of these storage methods so that all the necessary configuration and program data are saved.
 
 ## What Needs to Be Saved?
 
-Samovar has a main data structure (a container) that holds most of the important settings. In the code it is defined as the `SetupEEPROM` structure.
+Samovar has a main data structure (container) that holds most of the important settings. In the code it is defined as the `SetupEEPROM` structure (despite the name, it is stored in NVS).
 
 ```c++
 // From Samovar.h (simplified)
 struct SetupEEPROM {
-  uint8_t flag;                 // Internal flag (e.g., for versioning)
+  uint8_t flag;                 // Flag for writing to memory
   float DeltaSteamTemp;         // Calibration offset of the steam sensor
-  float DeltaPipeTemp;          // Calibration offset of the pipe sensor
-  // ... other calibration values ...
+  float DeltaPipeTemp;          // Calibration offset of the column sensor
+  // ... other calibration values and setpoints ...
   uint16_t StepperStepMl;       // Stepper motor steps per 1 ml (pump calibration!)
-  bool UsePreccureCorrect;      // Pressure correction
+  bool UsePreccureCorrect;      // Hearts take-off temperature correction by pressure
   uint8_t TimeZone;             // Time zone setting
   float HeaterResistant;        // Heater resistance (for power calculation)
-  uint8_t LogPeriod;            // Data logging period
-  char SteamColor[20];          // Web interface colors
-  // ... other interface parameters (colors, buzzer flags) ...
+  char SteamColor[20];          // Temperature colors in the web interface
+  // ... other colors, relay levels rele1..rele4 ...
   uint8_t SteamAdress[8];       // Saved address of the steam sensor
-  // ... saved addresses of other sensors ...
-  bool useautospeed;            // Pump auto-speed setting
-  uint8_t autospeed;            // Pump auto-speed percentage
-  char blynkauth[33];           // Blynk authentication token
-  char videourl[120];           // Video URL
+  // ... saved addresses of the other sensors ...
+  bool useautospeed;            // Automatic take-off speed correction
+  uint8_t autospeed;            // Speed change percentage
+  char blynkauth[33];           // Blynk token
+  char videourl[120];           // Camera video URL
   float DistTemp;               // Distillation end temperature
   int Mode;                     // Last used mode
-  // ... PID settings (Kp, Ki, Kd), settings of other modes (Beer, NBK) ...
+  float Kp, Ki, Kd;             // Heating PID controller coefficients
   bool UseBuzzer;               // Buzzer enable flag
-  float MaxPressureValue;       // Maximum pressure limit
-  char tg_token[50];            // Telegram bot token
-  char tg_chat_id[14];          // Telegram chat ID
-  // ... other safety settings and general parameters ...
+  float MaxPressureValue;       // Pressure that triggers an alarm
+  // ... settings for NBK (including the NBK program), Sous Vide, beer, cheese (pH calibration), etc. ...
 };
 
 SetupEEPROM SamSetup; // This variable holds ALL current settings
 ```
 
-The `SamSetup` variable (of type `SetupEEPROM`) is where Samovar keeps *all* of these settings while it is running. When it is time to save, the contents of `SamSetup` are written to non-volatile memory. At startup they are read back from memory and fill `SamSetup` with the saved values.
+The `SamSetup` variable (of type `SetupEEPROM`) is where Samovar keeps *all* these settings while running. When something needs to be saved, the new settings are written to NVS. At startup the profile is read from NVS and fills `SamSetup` with the saved values.
 
-Process programs (the `WProgram` array, see [Chapter 2: Process Program Execution](02_process_program_execution_.md)) are often saved and loaded separately, usually into files on SPIFFS/LittleFS, especially if they are edited through the web interface. This gives flexibility when editing and storing several programs.
+Process programs (the `program` array of `WProgram` structures, see [Chapter 2: Process Program Execution](02_process_program_execution_.md)) are stored separately from the profile, in LittleFS files (the `state.csv` snapshot). The exception is the four-row NBK program: it is stored directly in the profile (fields `NbkProgramLength`, `NbkProgramHSpeed` … `NbkProgramWPower`).
 
 ## How Saving and Loading Work
 
-The process of saving the configuration involves two main actions:
+Configuration persistence involves two main actions:
 
-1.  **Saving:** Writing the current `SamSetup` structure and, possibly, the current program array to non-volatile memory. This usually happens when the user explicitly clicks the "Save" button in the web interface, or after certain critical events.
-2.  **Loading:** Reading the saved `SamSetup` structure and the program data from non-volatile memory into the `SamSetup` variable and the program arrays when Samovar starts. This happens automatically after every power-on or power reset.
+1.  **Saving:** Writing new settings to NVS. This happens when the user presses the "Save" button in the web interface, saves settings from the LCD menu, switches the mode, and also after PID autotuning or pump calibration.
+2.  **Loading:** Reading the profile from NVS into the `SamSetup` variable and restoring the program from the `state.csv` snapshot when Samovar starts. This happens automatically after every power-up or reset.
 
-Let us visualize the save/load process:
+Let's visualize the save/load process:
 
 ```mermaid
 sequenceDiagram
-    User->>User Interface (Web/LCD): Clicks "Save settings"
-    User Interface (Web/LCD)->>Samovar Logic: Sends the "Save" command
-    Samovar Logic->>Samovar Logic: Updates the SamSetup variable with the new settings
-    Samovar Logic->>Persistence Code: Calls save_profile()
-    Persistence Code->>EEPROM: Writes the SamSetup data
-    Persistence Code->>File System (SPIFFS/LittleFS): Writes the SamSetup data to a file (.prf)
-    File System (SPIFFS/LittleFS)-->>Persistence Code: Confirms the write
+    User->>User Interface (Web/LCD): Presses "Save settings"
+    User Interface (Web/LCD)->>Samovar Logic: POST /save (handleSave)
+    Samovar Logic->>Samovar Logic: Validates fields, queues the operation (queue_profile_operation)
+    Samovar Logic->>Persistence Code: loop(): commit_profile_operation() calls save_profile_nvs()
+    Persistence Code->>NVS: Writes the profile (blob sam_cfg/profile)
+    NVS-->>Persistence Code: Read-back check and comparison
+    Persistence Code->>Samovar Logic: Updates SamSetup, applies settings (apply_config_runtime)
 
-    Note over Power Off/On: Power is turned off and on again
+    Note over Power Off/On: Power is cut and restored
 
-    Samovar Startup->>Persistence Code: Calls load_profile()
-    Persistence Code->>EEPROM: Reads the SamSetup data
-    Persistence Code->>File System (SPIFFS/LittleFS): Reads the SamSetup data from the file (.prf)
-    File System (SPIFFS/LittleFS)-->>Persistence Code: Returns the data that was read
+    Samovar Startup->>Persistence Code: setup() calls load_profile_nvs()
+    Persistence Code->>NVS: Reads the profile, checks CRC
+    NVS-->>Persistence Code: Returns the data read
     Persistence Code->>Samovar Logic: Fills the SamSetup variable
-    Samovar Logic->>Samovar Logic: Fills the program array (from the program file, if applicable)
-    Samovar Logic->>Samovar System: Uses the loaded settings and programs
+    Samovar Logic->>File System (LittleFS): Reads state.csv (restore_state_snapshot)
+    Samovar Logic->>Samovar System: Uses the loaded settings and program
 ```
 
-The diagram shows that saving is copying the contents of the `SamSetup` variable into memory, and loading is copying data *from* memory *into* the `SamSetup` variable (and the program arrays). The main handlers in the code are the `save_profile()` and `load_profile()` functions.
+The diagram shows that saving means writing the new settings to NVS, and loading means copying data *from* NVS *into* the `SamSetup` variable (and the program from the snapshot into the `program` array). The main functions in the code are `save_profile_nvs()` and `load_profile_nvs()` from `NVS_Manager.ino`.
 
-## Diving Into the Code
+## Diving into the Code
 
-Let us look at how this is implemented in Samovar's code.
+Let's look at how this is implemented in Samovar's code.
 
 ### The `SamSetup` Structure (Simplified)
 
-As shown above, the `SetupEEPROM` structure is a template for storing settings. The global variable `SamSetup` holds the live configuration.
+As shown above, the `SetupEEPROM` structure is the template for storing settings. The global `SamSetup` variable holds the live configuration.
 
 ```c++
 // From Samovar.h
 struct SetupEEPROM {
-  uint8_t flag; // Internal flag
+  uint8_t flag; // Flag for writing to memory
   float DeltaSteamTemp; // Sensor offset
   // ... many other settings ...
   uint16_t StepperStepMl; // Pump calibration!
@@ -124,160 +120,122 @@ struct SetupEEPROM {
   // ... more settings ...
 };
 
-SetupEEPROM SamSetup; // In the current RAM
+SetupEEPROM SamSetup; // In current RAM
 ```
 
-While Samovar is running, any changes made through the web interface (for example, changing `StepperStepMl` or `DeltaSteamTemp`) update the corresponding fields of the `SamSetup` variable *in RAM*. These changes are temporary until a save operation takes place.
+The web interface does not change `SamSetup` directly. The request handler builds a copy of the settings with the new values (for example, `StepperStepMl` or `DeltaSteamTemp`) and queues it. The main `loop()` first writes this copy to NVS and only after a successful write copies it into `SamSetup` *in RAM*.
 
-### Saving Settings: `save_profile()`
+### Saving Settings: `save_profile_nvs()`
 
-The `save_profile()` function is called to make the current settings in `SamSetup` permanent.
+The `save_profile_nvs()` function (from `NVS_Manager.ino`) makes the settings passed to it permanent.
 
 ```c++
-// From FS.ino
-void save_profile() {
-  // Get the file name based on the current Samovar mode (Samovar_CR_Mode)
-  String filename = get_prf_name();
+// From NVS_Manager.ino (simplified)
+PersistResult save_profile_nvs(const SetupEEPROM& candidate) {
+  // Pack the structure fields into a byte block and add a header with CRC32
+  uint8_t payload[ProfileCodec::PAYLOAD_SIZE] = {};
+  if (!encode_setup_payload(candidate, payload)) return PERSIST_READBACK_PAYLOAD_ENCODING;
+  ProfileCodec::Blob encoded{};
+  ProfileCodec::encode(payload, encoded);
 
-  // Open a file on SPIFFS/LittleFS for writing. FILE_WRITE creates or overwrites.
-  File file = SPIFFS.open(filename, FILE_WRITE);
-  if (!file) {
-    Serial.println(F("Не удалось открыть файл конфигурации для записи")); // Failed to open the configuration file for writing
-    // Error handling, possibly sending a message to the user
-    SendMsg("Не удалось сохранить файл конфигурации!", ALARM_MSG); // Failed to save the configuration file!
-    return;
-  }
+  // Write the block to NVS: namespace "sam_cfg", key "profile"
+  Preferences writer;
+  if (!writer.begin(SAMOVAR_PROFILE_NAMESPACE, false)) return PERSIST_OPEN_FAILED;
+  const size_t written = writer.putBytes(SAMOVAR_PROFILE_KEY, encoded.bytes, ProfileCodec::BLOB_SIZE);
+  writer.end();
+  if (written != ProfileCodec::BLOB_SIZE) return PERSIST_SHORT_WRITE;
 
-  // Write the entire contents of the SamSetup structure to the file
-  // sizeof(SamSetup) is the total size of the structure in bytes
-  file.write((uint8_t *)&SamSetup, sizeof(SamSetup));
-  file.close(); // Close the file to guarantee the write
-
-  // Also write the settings to EEPROM as a backup or alternative
-  // EEPROM.put(address, data) writes data at an address
-  EEPROM.put(0, SamSetup); // Write SamSetup starting at address 0
-  EEPROM.commit(); // Guarantee that the changes are saved to the EEPROM flash
-
-  Serial.println(F("Конфигурация сохранена.")); // Configuration saved.
-  SendMsg("Настройки сохранены!", NOTIFY_MSG); // Settings saved! (notify the user)
+  // Read back what was written, check the CRC and compare byte by byte
+  // ... nvs_open(), nvs_read_blob(), ProfileCodec::decode(), memcmp() ...
+  return PERSIST_OK;
 }
 ```
 
-This function takes the `SamSetup` variable and writes its "raw" bytes to a `.prf` profile file on the file system. The same data is also written to EEPROM. Writing to two places provides fault tolerance. The `EEPROM.commit()` call is required to complete the write to the EEPROM flash.
+This function packs the settings into a block with a format number and a checksum and writes it to NVS. Right after writing, the block is read back and compared with what was written, so a flash error does not go unnoticed. The result is returned as a `PersistResult` code; on error the user gets a message ("Settings not saved: …").
 
-Usually this function is called by the web server handler when the `/save` form is submitted (see Chapter 1).
+Usually this function is called after the `/save` form is submitted (see Chapter 1):
 
 ```c++
 // From WebServer.ino (see Chapter 1)
 server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
-  handleSave(request); // This function reads parameters from the POST request and updates SamSetup
-  save_profile(); // <-- After updating, call the save
-  request->send(200, "text/plain", "OK");
+  handleSave(request); // Validates the fields, builds a copy of the settings and queues the operation
 });
+
+// From Samovar.ino: loop() -> process_profile_operation() -> commit_profile_operation()
+const PersistResult persistResult = save_profile_nvs(settingsToSave);
 ```
 
-The `handleSave` function (not shown in full, but it iterates over the form data) updates the `SamSetup` variable in RAM. *Then* `save_profile()` is called to write the updated values to memory.
+The `handleSave` function validates each form field (an unknown or invalid field gets an error response) and calls `queue_profile_operation()`. *Then*, in the main loop, `commit_profile_operation()` calls `save_profile_nvs()` and, on success, updates `SamSetup` and applies the settings (`apply_config_runtime()`).
 
-### Loading Settings: `load_profile()` and `read_config()`
+### Loading Settings: `load_profile_nvs()`
 
-Loading happens automatically in Samovar's `setup()` function (code that runs once when the device starts). It calls the `read_config()` function, which in turn calls `load_profile()`.
+Loading happens automatically in Samovar's `setup()` function (the code that runs once when the device starts).
 
 ```c++
 // From Samovar.ino (simplified setup())
 void setup() {
-  // ... system initialization ...
-  EEPROM.begin(sizeof(SamSetup)); // Initialize EEPROM for the required size
-  read_config(); // Call the settings-loading function
-  // ... rest of setup ...
-}
-
-// From FS.ino
-void read_config() {
-  // First read from EEPROM (may be stale or default)
-  EEPROM.get(0, SamSetup);
-
-  // Determine the file name based on the mode stored in SamSetup (from EEPROM)
-  // NOTE: Samovar_CR_Mode is used internally and usually corresponds to the last saved mode
-  Samovar_CR_Mode = (SAMOVAR_MODE)SamSetup.Mode;
-  String filename = get_prf_name();
-
-  // Check whether the profile file exists on the file system
-  if (SPIFFS.exists(filename)) {
-    // If the file exists, open it for reading
-    File file = SPIFFS.open(filename, FILE_READ);
-    if (!file) {
-       Serial.println(F("Не удалось открыть файл конфигурации для чтения")); // Failed to open the configuration file for reading
-       // Error handling
-       return;
-    }
-
-    // Read the entire contents of the file directly into the SamSetup structure
-    file.read((uint8_t *)&SamSetup, sizeof(SamSetup));
-    file.close(); // Close the file
-
-    // Update the current operating mode based on the loaded setting
-    Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
-
-    Serial.println(F("Конфигурация загружена из файла.")); // Configuration loaded from file.
-  } else {
-    // If there is no profile file (first start or the file was deleted),
-    // try to save the current SamSetup (default or from EEPROM)
-    // This guarantees that a file is created for future saves.
-    Serial.println(F("Файл конфигурации не найден, создаётся по умолчанию.")); // Configuration file not found, creating the default one.
-    save_profile();
+  init_power_outputs_safe_off(); // Heating outputs to a safe state before reading settings
+  // ...
+  SetupEEPROM startupProfile{};
+  PersistResult profilePersistResult = PERSIST_OK;
+  ProfileLoadResult profileResult = load_profile_nvs(startupProfile, profilePersistResult);
+  if (profileResult == PROFILE_LOAD_NOT_FOUND) {
+    // No profile yet (first start): defaults, written to NVS right away
+    set_default_setup_profile(startupProfile);
+    // ... save_profile_nvs(startupProfile) ...
   }
-
-  // ... Additional logic for initializing other settings or sensors based on SamSetup ...
-  SteamSensor.SetTemp = SamSetup.SetSteamTemp; // Copy the loaded value into the current sensor variable
-  // ... copying other loaded settings into working variables ...
-
-  // Validation of the loaded data (checking for NaN, zeros, etc.), setting defaults
-  if (isnan(SamSetup.Kp)) { SamSetup.Kp = 150; }
-  // ... validation of other settings ...
+  if (profileResult != PROFILE_LOAD_OK) {
+    // Profile is corrupted: report it and run on safe defaults
+    report_degraded_boot("load", profile_load_result_code(profileResult));
+    set_default_setup_profile(startupProfile);
+  }
+  // Range check of the heater resistance
+  startupProfile.HeaterResistant = trusted_heater_resistance(startupProfile.HeaterResistant);
+  SamSetup = startupProfile;
+  // ... FS_init(), apply_config_runtime(), restore_state_snapshot() and the rest of setup ...
 }
 ```
 
-The `read_config()` function first reads the `SamSetup` structure from EEPROM. Then it checks whether the corresponding profile file (`.prf`) exists on the file system. If the file exists, the `SamSetup` structure is read *from the file*, overwriting what was read from EEPROM. This gives priority to the settings saved in the file, which are easier to manage through the web interface. If there is no file, `save_profile()` is called to create a file with the default settings (or those that were in EEPROM). Finally, the values from `SamSetup` are copied into other variables used throughout the code, and validation is performed.
+The `load_profile_nvs()` function reads the block from NVS and checks its size and checksum. If there is no profile, the defaults (`set_default_setup_profile()`) are used and written to NVS right away. If the profile is corrupted, Samovar reports it and starts on safe defaults (heating relays off). Then the values from `SamSetup` are applied to the working variables (`apply_config_runtime()`), for example sensor addresses and setpoints.
 
 ### Saving Programs
 
-Process programs (the `program` array) are usually saved separately from the main `SamSetup` structure. They are often edited on a dedicated web interface page and saved as files (for example, `/rectificat.prg`, `/beer.prg`) on the file system.
+Process programs (the `program` array, up to `PROGRAM_MAX` = 30 rows) are stored separately from the `SamSetup` profile. A program is edited as text on the program page of the web interface and sent to the device with a `/program` request; it can also be loaded from a file on the computer or from a template (`program_fruit.txt`, `program_grain.txt`, `program_shugar.txt`, `program_bk.txt`).
 
-The `create_data()` function, which is called at the start of a program run (see Chapter 2), includes logic for saving the *current* program configuration to a file named `prg.csv` or similar, depending on the mode. This serves as a record of the specific program that was run.
+The `create_data()` function, which is called when a program starts (see Chapter 2), writes the program of the current mode to the `prg.csv` file. This serves as a record of the specific program that was run.
 
 ```c++
 // From FS.ino (simplified create_data)
-void create_data() {
-  // ... close the previous log file if it is open ...
-
-  // Save the current program to a file based on the active mode
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-      File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
-      // get_program(CAPACITY_NUM * 2) formats the program array into a string
-      filePrg.println(get_program(CAPACITY_NUM * 2));
-      filePrg.close();
+bool create_data() {
+  // Write the program of the current mode to a file (the format depends on the mode)
+  String programText = serialize_program_for_mode(Samovar_Mode);
+  if (programText.length() > 0) {
+    File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
+    if (!filePrg) return false;
+    filePrg.print(programText);
+    filePrg.close();
   }
-  // ... similar logic for the BEER, DISTILLATION and NBK modes, saving their own programs ...
 
-  // ... log file management logic (data.csv) ...
+  // ... log rotation: data.csv -> data_old.csv, creating a new data.csv ...
+  return true;
 }
 ```
 
-Loading the program array (`program[30]`) usually happens when the user *selects* a program through the web interface or LCD, rather than automatically at startup. The web interface provides a mechanism for choosing a program file from the file system and loading its contents into the active `program` array for execution. The `/program` endpoint in `WebServer.ino` is responsible for saving and loading program files in response to web requests.
+To keep the program from being lost on reboot, Samovar periodically (normally every 30 seconds, and immediately when heating is switched off) writes a state snapshot to the `state.csv` file (`process_state_snapshot()` → `write_state_snapshot()` in `FS.ino`). The first line of the snapshot holds `key=value` fields (mode, program row number, heating state, session number, etc.), followed by the program text. At startup `restore_state_snapshot()` reads the snapshot and, if the mode matches, restores the program into the `program` array.
 
 ```c++
 // From WebServer.ino (see Chapter 1)
 server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request) {
-  web_program(request); // This function loads/saves program files
+  web_program(request); // Accepts the program text (WProgram field)
 });
 ```
 
-The `web_program` function (not shown) contains the logic for reading/writing program data to/from SPIFFS/LittleFS files, filling or saving the global `program` array.
+The `web_program` function (not shown) validates the request parameters, parses the program text according to the format of the current mode and puts it into the same operation queue as the settings. The main loop applies the program (`commit_profile_operation()`); while a process is running, only the rows after the current one can be changed.
 
 ## Conclusion
 
-In this chapter we looked at **configuration persistence**, the essential mechanism that lets Samovar remember settings and process programs between power-ups. We learned that Samovar uses non-volatile memory, such as **EEPROM** and the **SPIFFS/LittleFS file system**, for permanent data storage. We saw how the main configuration is managed by the `SamSetup` structure, and how the `save_profile()` function writes it to memory, while `load_profile()` (called from `read_config()`) loads it at startup. We also looked at how process programs are usually saved and loaded as separate files on the file system, managed through the web interface and the corresponding code. Understanding the persistence mechanism lets Samovar keep your important individual settings, making operation more efficient and reliable.
+In this chapter we looked at **configuration persistence**, the essential mechanism that lets Samovar remember settings and process programs between power-ups. We learned that Samovar uses non-volatile memory: **NVS** for the settings profile and the **LittleFS file system** for files. We saw how the main configuration is managed by the `SamSetup` structure, how the `save_profile_nvs()` function writes it to NVS with a checksum and read-back verification, and how `load_profile_nvs()` loads it at startup. We also looked at how process programs are saved in files on the file system (`state.csv`, `prg.csv`) and restored after a reboot. Understanding the persistence mechanism lets Samovar keep your important individual settings, making operation more efficient and reliable.
 
-In the final chapter we will look at [Network & External Communication](08_network___external_communication_.md), exploring how Samovar connects to your network, serves the web interface discussed earlier and, possibly, interacts with other services such as Blynk or Telegram.
+In the final chapter we will look at [Network & External Communication](08_network___external_communication_.md), exploring how Samovar connects to your network, serves the web interface discussed earlier and communicates with the samovar-tool.ru server via Blynk.
 
 [Chapter 8: Network & External Communication](08_network___external_communication_.md)

@@ -30,16 +30,17 @@ the process and sends an alarm.
   controlled automatically, and the discovered parameters can be accepted as optimal.
 - **Brewing** — malt addition, temperature rests, boiling, cooling, fermentation, brewing
   schedules, agitator and water-pump control, and manual pause.
-- **Sous vide** — program-controlled water temperature maintenance.
+- **Sous vide** — a thermostat that holds the set temperature by the boiler sensor for the set
+  hold time (0 means no limit); the setpoint and time are configured in the settings.
 - **Cheese making** — heating, holding, cooling, acidity monitoring with a pH sensor, agitator,
-  and brine drain valve; includes dedicated program-row types such as culture, enzyme, starter,
-  cutting, draining, and others.
+  and drain valve; includes dedicated program-row types: heating, holding, cooling, stirring,
+  dosing, waiting for pH, flocculation, manual action, draining, and Lua.
 - **Lua** — a mode in which the entire process is controlled by a user script.
 
 ## Key Features
 
-- A process program for every mode: a sequence of rows configured in the web interface and
-  executed one after another. See the documentation and forum for details.
+- A process program for rectification, distillation, BK, NBK, brewing, and cheese making: a
+  sequence of rows configured in the web interface and executed one after another. See the documentation and forum for details.
 - Smooth power control through external regulators, including the new Kvic version, RMVK, and
   SEM, with automatic boiling-point correction for atmospheric pressure.
 - Precise product collection: the rate in liters per hour is maintained automatically.
@@ -69,7 +70,8 @@ the process and sends an alarm.
 
 - ESP32 (DEVKIT or LILYGO) or ESP32-S3
 - Five DS18B20 temperature sensors
-- MPX5010D or XGZ pressure sensor and BMP180 atmospheric-pressure sensor
+- Pressure sensor (MPX5010D, XGZP6897D, or a 1-Wire sensor) and atmospheric-pressure sensor
+  (BME680, BME280, BMP280, or BMP180)
 - Power regulator such as Kvic, RMVK, or SEM
 - LCD
 - Rotary encoder with a button
@@ -88,14 +90,14 @@ Cheese mode uses shared connections:
   address `0x48`. There is no separate channel setting, and `LUA_PIN` is not used for pH.
   If the ADS1115 is not found, Cheese mode startup and pH calibration are blocked while all
   other modes remain operational.
-- Without `USE_ADS1115`, the previous connection remains: `LUA_PIN` is the PH-4502C input.
+- Without `USE_ADS1115`, `LUA_PIN` is the PH-4502C input.
   Connect either a PH-4502C for Cheese mode or an MPX5010DP for other modes, but never both
   sensors at the same time.
-- Relay 4 controls the brine drain valve. Connect either the cheese-making valve or the boost
+- Relay 4 controls the drain valve. Connect either the cheese-making valve or the boost
   heating element used by other modes, but never both devices at the same time.
 
 These assignments apply only in Cheese mode. In all other modes, Lua, the MPX5010DP, and the
-boost heating element work as before.
+boost heating element work as usual.
 
 Wiring diagram
 
@@ -164,7 +166,7 @@ replace the compiler: PlatformIO always builds the firmware as a separate step.
 
 ### Arduino IDE
 
-Arduino IDE remains a separately supported build and upload method. Open the root `Samovar.ino`,
+Arduino IDE is a separately supported build and upload method. Open the root `Samovar.ino`,
 select your ESP32 board and port, then build and upload the firmware. For the first installation,
 upload LittleFS separately from the prepared `data/` directory. The configurator and PlatformIO
 are not required for this method.
@@ -198,14 +200,15 @@ Homebrew is required to install Python and Tkinter automatically on macOS. On Li
 2. Set user parameters in `user_config_override.h`, using `user_config_override.example.h` as
    the starting point.
 3. Build and upload the required environment: `pio run -e Samovar -t upload` for ESP32
-   DEVKIT/LILYGO or `pio run -e Samovar_s3 -t upload` for ESP32-S3.
+   DEVKIT/LILYGO (for LILYGO, add `#define BOARD LILYGO` to `user_config_override.h`) or
+   `pio run -e Samovar_s3 -t upload` for ESP32-S3.
 4. For the first web-interface installation, run `pio run -e <environment> -t uploadfs` for the
    same environment.
 
 ## Languages
 
 The firmware and web-interface language is chosen when flashing; it cannot be switched on a
-running device. Available now: Russian, English (`en`), German (`de`), French (`fr`), Spanish
+running device. Available languages: Russian, English (`en`), German (`de`), French (`fr`), Spanish
 (`es`), and Chinese (`zh`). The beer and cheese recipe catalog from the site
 opens in the device language.
 
@@ -247,7 +250,8 @@ this file as a dependency, because the name of the included file is computed by 
 - `SamovarMqtt.h` — optional MQTT telemetry publishing
 - `I2CStepper.h`, `i2c_stepper_params.h` — expansion board: agitator and dosing pump over I2C
 - `impurity_detector.h` — impurity breakthrough detector
-- `operation_store.h`, `crash_handler.h` — state snapshots and recovery after reboot
+- `FS.ino` — file system, local log, and state snapshots for recovery after reboot
+- `crash_handler.h` — optional crash report (`USE_CRASH_HANDLER`)
 - `tools/samovar_configurator.py` — configurator started by `flash_windows.bat` and
   `flash_macos_linux.sh`
 - `beer.h` — brewing mode
@@ -259,7 +263,8 @@ this file as a dependency, because the name of the included file is computed by 
 
 ### Web Interface
 
-The dark copper-themed interface contains a process diagram with live readings, the current
+The copper-themed interface has light and dark themes (following the system setting or a
+toggle) and contains a process diagram with live readings, the current
 program row, charts, mode pages, settings, and program and file editors.
 
 Operational pages are served as static gzip files and receive their initial data in a single
@@ -275,10 +280,12 @@ even while a process is running. Viewing and downloading files remain available 
 
 ### Server Connection, Process Logs, and Sessions
 
-The device's only network channel is the samovar-tool.ru server over TLS. It carries live
-readings and commands for the apps and website, along with process logs, session starts, and
-messages. The server stores them in its database, which supplies the website log page and the
-charts in the apps. The logging interval is fixed at `LOG_PERIOD_S = 4` seconds and cannot be
+The device communicates with the website and apps through the samovar-tool.ru server using the
+Blynk protocol (TCP, port 8080). It carries live readings and commands for the apps and website,
+along with process logs, session starts, and messages (virtual pins V34, V35, and V26). The
+server stores them in its database, which supplies the website log page and the charts in the
+apps. The intervals are fixed: a log line is sent to the server every `LOG_PERIOD_S = 4` seconds
+and written to the local `data.csv` file every `FILE_LOG_PERIOD_S = 16` seconds; neither can be
 configured in the web interface. When no process is active, readings are still sent every five
 seconds so the apps can show temperatures.
 
@@ -296,33 +303,36 @@ appends to the existing log record instead of creating another.
 
 The Android and iOS apps have the same structure and communicate through the samovar-tool.ru
 server. On first launch, they register or use an existing account with an email address and
-password; the device token in settings is the same token configured in the firmware.
+password. In settings, you enter the device token, the same token configured in the firmware,
+or connect the devices added on the website.
 
-The apps contain five screens:
+The apps have four main tabs and a More menu:
 
 - **Main** — connection state, process diagram with live temperatures, key readings, current
   program row and progress, heating, Next, pause, and reset controls, and mode-specific data such
-  as alcohol content, impurity detector, forecasts, mash feed, and pH.
+  as alcohol content, impurity detector, forecasts, wash feed, and pH.
 - **Program** — all program rows with field descriptions; the active row is highlighted.
 - **Control** — voltage, collection rate, hearts temperature lock, I2CStepper agitator and pump
-  settings, start, calibration, and relays, Lua row execution with the device response, and
-  system information.
+  settings, start, calibration, and relays, Lua row execution with the device response, system
+  information, and session messages.
 - **Charts** — current-session history from the server database plus live points, series groups,
   and ranges from one minute to the entire session.
-- **Settings** — server address, token, account, and push notifications.
+- **More** — the Cheesemaker and Brewer sections (journals, recipes, inventory, calculators),
+  Distiller (journals, calculators), and Settings (token or website devices, account, theme).
 
 Data refreshes every three seconds while the app is visible. Alarms arrive as push notifications
 with a loud sound and appear over the lock screen. Tablet layouts use two columns.
 
 ## Control Through samovar-tool.ru
 
-The website provides https://www.samovar-tool.ru/control/ with the same five screens as the
-mobile apps (Main, Program, Control, Charts, and Messages), without installing anything on a
-phone or computer. Requirements:
+The website provides https://www.samovar-tool.ru/control/ with the Main, Program, Control,
+Charts, and Messages screens, as in the mobile apps, without installing anything on a phone or
+computer. Requirements:
 
 - You must be signed in to the website.
-- Your user profile must contain the device token, the same one used by the firmware and apps.
-  Without a token, the page shows instructions instead of the interface.
+- A device must be added to your account (the token is the same one used by the firmware and
+  apps) on the User → Devices page. If you have several devices, choose one on the control page.
+  Without a device, the page reports that you need to add one first.
 
 The website contacts the server on the user's behalf; the token is not passed to the browser.
 Commands are sent only while the device is online, and controls are disabled when data is stale.
@@ -364,7 +374,7 @@ and distillation systems:
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Core control logic** | **Dynamic process control.** Logic depends on the stage, temperature, pressure, time, and **events**. | **Static setpoint control.** Usually a thermostat that maintains a selected temperature or power level. | **Step-by-step programming.** Runs recipes such as “heat to 80 °C → hold for 20 min → heat to 90 °C.” | **Fully programmable logic.** Any relationship between parameters can be implemented, including highly complex ones. |
 | **2. Power control** | **Smooth and precise.** PID power control through external regulators such as triacs and SSRs. | **Discrete on/off.** A simple relay causes temperature swings due to process inertia. | **Smooth.** Usually PID control through phase-angle control for an SSR. | **Smooth and high-precision.** Closed-loop power control. |
-| **3. Product collection control** | **A core feature.** **High-precision control of a pump stepper motor** or valve servo. The collection rate is specified in ml/hour and maintained automatically. | **None.** The operator controls collection manually. | **Usually absent or optional.** May control a simple open/closed valve, but rarely the collection rate. | **Full control.** Any type of valve or pump can be controlled with flow feedback. |
+| **3. Product collection control** | **A core feature.** **High-precision control of a pump stepper motor** or valve servo. The collection rate is specified in l/h and maintained automatically. | **None.** The operator controls collection manually. | **Usually absent or optional.** May control a simple open/closed valve, but rarely the collection rate. | **Full control.** Any type of valve or pump can be controlled with flow feedback. |
 | **4. Process adaptability** | **Very high.** **Automatic boiling-point correction for pressure**, **automatic collection-rate reduction** as tails approach, and **complete logic customization through Lua**. | **None.** Responds only to deviation from a temperature setpoint. | **Low.** May switch recipe steps on an event, such as reaching a temperature, but cannot dynamically change the current step's parameters. | **Absolute.** Logic is written for a specific installation and process. |
 | **5. Interface and monitoring** | **Modern.** Web interface with real-time charts, remote access, and a local LCD. | **Primitive.** Digital display and a few buttons. | **Functional but utilitarian.** Often a text LCD, optionally with data output to a PC over RS-485 or USB. | **Industrial.** SCADA systems with full process visualization, archiving, and reports. |
 | **6. Safety** | **Multi-level and configurable.** Monitors temperature, pressure, water, and power errors. The user configures alarm logic. | **Basic.** Usually only overheat protection. | **Good.** Multiple sensors and watchdog timers. | **Maximum.** Redundant systems, certified components, and hardware protection. |

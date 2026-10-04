@@ -204,6 +204,60 @@ BROWSER_TEST = r'''async page => {
     throw new Error(scenario + " mismatch: " + JSON.stringify(rectAnimation));
   }
 
+  // Тот же сценарий через настоящий опрос /ajax: index.htm рисует статус раньше схемы
+  // и не должен портить код типа строки. На головах с ЦП основной насос стоит и его
+  // подпись — 0, а подпись насоса голов — фактическая скорость ISspd.
+  scenario = "poll/rectification-heads";
+  const cpBase = Object.assign({}, base, {
+    PowerOn: 1, WthdrwlStatus: 1, ProgramNum: 1,
+    i2c_pump_present: 1, i2c_pump_running: 1, i2c_second_pump: 1, i2c_second_pump_running: 1
+  });
+  fixture = Object.assign({}, cpBase, { PrgType: "H", ActualVolumePerHour: 0.1, ISspd: 0.25 });
+  await page.goto(baseUrl + "/index.htm", { waitUntil: "load" });
+  function readPolled() {
+    return page.evaluate(() => {
+      const scheme = document.getElementById("sec-scheme");
+      return {
+        status: document.getElementById("Status").textContent,
+        mainPump: scheme.querySelector('[data-on="_pumpOn"]').classList.contains("is-on"),
+        mainRate: scheme.querySelector('[data-tele="_mainRate"]').textContent,
+        headsRate: scheme.querySelector('[data-show="_cp"] [data-tele="ISspd"]').textContent
+      };
+    });
+  }
+  await page.waitForFunction(() =>
+    document.getElementById("Status").textContent.startsWith("Головы; ") &&
+    document.querySelector('#sec-scheme [data-tele="ISspd"]').textContent === "0.25",
+    null, { timeout: 5000 });
+  const polledHeads = await readPolled();
+  fixture = Object.assign({}, cpBase, { PrgType: "B", ActualVolumePerHour: 0.7, ISspd: 0.4 });
+  await page.waitForFunction(() =>
+    document.querySelector('#sec-scheme [data-tele="ISspd"]').textContent === "0.40",
+    null, { timeout: 5000 });
+  const polledBody = await readPolled();
+  if (polledHeads.mainPump || polledHeads.mainRate !== "0.00" || polledHeads.headsRate !== "0.25" ||
+      !polledBody.status.startsWith("Тело; ") || !polledBody.mainPump ||
+      polledBody.mainRate !== "0.70" || polledBody.headsRate !== "0.40") {
+    throw new Error(scenario + " mismatch: " + JSON.stringify({ polledHeads, polledBody }));
+  }
+
+  // Колонна с ЦП сплошная: ЦП примыкает к дефлегматору, царга начинается не ниже ЦП.
+  scenario = "geometry/rectification-cp";
+  const cpGeometry = await page.evaluate(() => {
+    const scheme = document.getElementById("sec-scheme");
+    const box = el => ({ top: Number(el.getAttribute("y")), bottom: Number(el.getAttribute("y")) + Number(el.getAttribute("height")) });
+    const metals = Array.from(scheme.querySelectorAll('[data-show="_cp"] > rect.metal')).map(box);
+    const deflegmator = Array.from(scheme.querySelectorAll("svg > rect.metal"))
+      .map(box).find(item => item.bottom - item.top === 66);
+    return { deflegmator, metals };
+  });
+  const cpBox = cpGeometry.metals.find(item => item.bottom - item.top < 100);
+  const pipeBox = cpGeometry.metals.find(item => item.bottom - item.top >= 100);
+  if (!cpGeometry.deflegmator || !cpBox || !pipeBox ||
+      cpBox.top !== cpGeometry.deflegmator.bottom || pipeBox.top > cpBox.bottom) {
+    throw new Error(scenario + " mismatch: " + JSON.stringify(cpGeometry));
+  }
+
   // У I2C-мешалки анимация следует подтверждённому Nano флагу RUNNING,
   // а не одному программному намерению mixer=true.
   scenario = "animation/i2c-mixer";

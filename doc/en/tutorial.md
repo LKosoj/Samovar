@@ -1,10 +1,11 @@
 # Technical Documentation: Samovar
 
-Samovar is an automated system designed for **automating distillation, rectification and beer brewing processes**.
+Samovar is an automated system designed for **automating distillation, rectification, beer column (BK and NBK), beer brewing, cheese making and sous vide processes**.
 It *monitors* various sensors (such as temperature and pressure),
 *controls* equipment (heaters, pumps, valves) and follows predefined
 *process programs* to automate tasks such as rectification or brewing beer.
-Users *interact* with the system through a web interface or an LCD,
+Users *interact* with the system through a web interface or an LCD
+(as well as through the mobile apps and the samovar-tool.ru website, connected via Blynk),
 and the system includes important *safety monitoring* and *external communication* features.
 Settings and programs are *saved* for persistent configuration.
 
@@ -25,7 +26,7 @@ flowchart TD
     A0 -- "Controls actuators" --> A2
     A0 -- "Manages programs" --> A3
     A0 -- "Provides status to the user interface" --> A4
-    A4 -- "Sends commands to the user interface" --> A0
+    A4 -- "Sends commands from the user" --> A0
     A5 -- "Provides initial configuration" --> A0
     A1 -- "Provides sensor data to the user interface" --> A4
     A4 -- "Updates configuration" --> A5

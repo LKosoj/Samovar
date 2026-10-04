@@ -28,10 +28,11 @@
               <rect x="206" y="132" width="28" height="236" fill="url(#pack)"/>
             </g>
             <g data-show="_cp">
-              <rect class="metal" x="196" y="134" width="48" height="58" rx="6"/>
-              <rect x="200" y="138" width="40" height="50" fill="url(#pack)" opacity=".8"/>
-              <rect class="metal" x="202" y="192" width="36" height="180" rx="4"/>
+              <!-- Царга заходит под ЦП, ЦП примыкает к дефлегматору: колонна без зазоров -->
+              <rect class="metal" x="202" y="186" width="36" height="186" rx="4"/>
               <rect x="206" y="196" width="28" height="172" fill="url(#pack)"/>
+              <rect class="metal" x="196" y="128" width="48" height="64" rx="4"/>
+              <rect x="200" y="132" width="40" height="56" fill="url(#pack)" opacity=".8"/>
               <g transform="translate(152 156)"><rect class="tag-bg" x="0" y="-12" width="32" height="18" rx="5"/><text class="tag-lbl" x="7" y="1">ЦП</text></g>
             </g>
             <g class="bubbles" data-on="_running" style="--rise:-228px;--rise-time:3.6s">
@@ -66,11 +67,11 @@
               <g class="rotor" data-on="_cpPumpOn"><circle cx="40" cy="204" r="3.5"/><circle cx="49" cy="219" r="3.5"/><circle cx="31" cy="219" r="3.5"/></g>
               <path class="pipe" d="M40 232 V250"/>
               <g class="drops" data-on="_cpPumpOn"><circle class="drop" cx="40" cy="256" r="3"/><circle class="drop" cx="40" cy="256" r="2.2"/></g>
-              <text class="tag-lbl" x="40" y="300" text-anchor="middle">головы</text>
+              <g transform="translate(9 300)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">головы</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="ISspd" data-fmt="2"></tspan> л/ч</text></g>
             </g>
             <circle class="metal" cx="96" cy="400" r="24"/>
             <g class="rotor" data-on="_pumpOn"><circle cx="96" cy="386" r="4"/><circle cx="108" cy="407" r="4"/><circle cx="84" cy="407" r="4"/></g>
-            <g transform="translate(10 388)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">Отбор</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="ActualVolumePerHour" data-fmt="2"></tspan> л/ч</text></g>
+            <g transform="translate(10 388)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">Отбор</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="_mainRate" data-fmt="2"></tspan> л/ч</text></g>
             <path class="pipe" d="M96 424 V452"/>
             <g class="drops" data-on="_pumpOn"><circle class="drop" cx="96" cy="458" r="3"/><circle class="drop" cx="96" cy="458" r="2.2"/></g>
             <!-- Банки сервопривода: активная подсвечена медью -->

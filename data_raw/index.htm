@@ -251,12 +251,14 @@
           } else {
             detBlock.style.display = 'none';
           }
-          if (myObj.PrgType === "P") myObj.PrgType = "Пауза"
-          else if (myObj.PrgType === "H") myObj.PrgType = "Головы; "
-          else if (myObj.PrgType === "B") myObj.PrgType = "Тело; "
-          else if (myObj.PrgType === "C") myObj.PrgType = "Предзахлеб; "
-          else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты; "
-          document.getElementById('Status').textContent = myObj.PrgType + myObj.Status;
+          // Код типа строки не перезаписываем: после этой функции схема (app.js) читает его как «H».
+          let prgTypeText = myObj.PrgType;
+          if (prgTypeText === "P") prgTypeText = "Пауза"
+          else if (prgTypeText === "H") prgTypeText = "Головы; "
+          else if (prgTypeText === "B") prgTypeText = "Тело; "
+          else if (prgTypeText === "C") prgTypeText = "Предзахлеб; "
+          else if (prgTypeText === "T") prgTypeText = "Хвосты; "
+          document.getElementById('Status').textContent = prgTypeText + myObj.Status;
           
           let new_progNum = Number(myObj.ProgramNum || 0);
           if (current_progNum !== new_progNum) {

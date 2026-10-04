@@ -18,17 +18,18 @@ Samovar can operate in several different ways, each corresponding to a separate 
 
 ```c++
 // From Samovar.h
-enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
+enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE, SAMOVAR_CHEESE_MODE};
 volatile SAMOVAR_MODE Samovar_Mode; // This variable stores the current mode.
 ```
 
 *   `SAMOVAR_RECTIFICATION_MODE`: For producing high-purity spirits (rectification).
 * `SAMOVAR_DISTILLATION_MODE`: for simpler distillation of spirits.
 * `SAMOVAR_BEER_MODE`: for automating the beer brewing stages (mashing, boiling).
-* `SAMOVAR_BK_MODE`: for working with a specific type of column (the BK wash column).
-* `SAMOVAR_NBK_MODE`: for continuous distillation (the NBK continuous wash column).
-* `SAMOVAR_SUVID_MODE`: (probably for Sous Vide, temperature control).
+* `SAMOVAR_BK_MODE`: for running a wash column (BK).
+* `SAMOVAR_NBK_MODE`: for continuous wash distillation (the NBK continuous wash column).
+* `SAMOVAR_SUVID_MODE`: sous vide, a thermostat that holds the set temperature in the boiler.
 * `SAMOVAR_LUA_MODE`: for running custom processes defined in Lua scripts.
+* `SAMOVAR_CHEESE_MODE`: for program-driven cheese making.
 
 Only one mode can be active at a time. The `Samovar_Mode` variable tells the system which "hat" it is currently wearing. The `volatile` keyword is a bit technical, but essentially it tells the compiler that this variable may be changed by different parts of the program that run independently (for example, the main loop and possibly interrupt handlers), so the system must always re-read its value.
 
@@ -44,40 +45,59 @@ String SamovarStatus; // Stores a human-readable description of the state
 
 While `SamovarStatus` is a text description that you can read on the display, `SamovarStatusInt` is a numeric value that the program uses internally. Different number ranges often correspond to different modes or phases:
 
-* `0`: Idle / Off
-* `10`, `15`: Running a program step (rectification mode)
-* `20`: Program finished
-* `50`, `51`, `52`: Heating / Stabilization (rectification mode)
+* `0`: Idle / Off (in the Sous vide and Lua modes the status stays `0` the whole time)
+* `10`: Withdrawal by a program row is running (rectification mode)
+* `15`: Automatic pause between program rows (rectification mode)
+* `20`: Program finished (rectification mode)
+* `30`: Withdrawal pump calibration
+* `40`: Manual pause (in any mode)
+* `50`, `51`, `52`: Column heat-up / Stabilization / Stabilization finished (rectification mode)
 * `1000`: Distillation mode
 * `2000`: Beer mode
 * `3000`: BK mode
 * `4000`: NBK mode
-- Statuses are also used for errors, calibration, self-test, and so on.
+* `5000`: Cheese mode
 
-The function `get_Samovar_Status()` (see `logic.h`) is responsible for looking at `SamovarStatusInt` and other system flags (`PowerOn`, `PauseOn`, `program_Wait`, `ProgramNum`, and so on) and generating the descriptive text shown on the LCD and in the web interface.
+These numbers are declared in `Samovar.h` as `SAMOVAR_STATUS_*` constants (for example, `SAMOVAR_STATUS_RECT_WITHDRAWAL = 10`, `SAMOVAR_STATUS_BEER = 2000`). Next to them are the values of the second state variable, `startval` (`SAMOVAR_STARTVAL_*` constants): it shows whether a withdrawal or a mode session is running and at what stage (for example, `1` means withdrawal is running, `2` means the rectification program has reached its end, `2001` means the beer is heating up to the malt addition temperature).
+
+The function `tick_status_fsm()` (see `logic.h`) is responsible for looking at `SamovarStatusInt` and other system flags (`PowerOn`, `PauseOn`, `program_Wait`, `startval`, `ProgramNum`, and so on) and generating the descriptive text shown on the LCD and in the web interface. It builds the text through `format_status_fsm_text()`, and the transitions between rectification statuses (`10`, `15`, `20`, `30`, `40`, `50`) are made by `decide_status_fsm()`.
 
 ```c++
-// Simplified snippet from logic.h (the actual function is quite long)
-String get_Samovar_Status() {
-  if (!PowerOn) {
-    SamovarStatusInt = 0; // System is off -> State 0
-    return F(«Выключено»); // "Off"
-  } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
-    SamovarStatusInt = 10; // Powered on, program started, not paused/not waiting -> State 10
-    return «Прг №» + String(ProgramNum + 1); // "Prg #" - show the current program step
+// Simplified snippet from logic.h (the actual functions are quite long)
+String format_status_fsm_text(bool stepperState, bool nbkTransitionActive) {
+  String local;
+  if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_IDLE) {
+    local = "Off";
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
+    local = "Prg #" + String(ProgramNum + 1); // Show the current program row
   }
-  // ... many other conditions checking state variables and ProgramNum ...
-  else if (SamovarStatusInt == 2000) {
-    // If in Beer mode (state 2000), describe the specific Beer program step
-    // ... check program[ProgramNum].WType and time ...
-    return «Прг №» + String(ProgramNum + 1) + «; » + «Beer specific status»; // "Prg #"
+  // ... many other conditions: auto pause, program finished, calibration, pause, sous vide, column heat-up ...
+  else {
+    // Other modes (distillation 1000, beer 2000, BK 3000, NBK 4000, cheese 5000):
+    // the text comes from the mode's function in the mode_registry.h registry (for example, get_beer_status_text())
+    mode_status_by_status(SamovarStatusInt, local);
   }
-  // ... and so on for other modes (Distillation 1000, NBK 4000, etc.) ...
-  return «Неизвестный статус»; // "Unknown status" - default fallback
+  return local;
+}
+
+void decide_status_fsm(bool stepperState, bool nbkTransitionActive) {
+  // The same conditions, but the status number changes instead of the text
+  if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL; // -> State 10
+  }
+  // ... other transitions ...
+}
+
+String tick_status_fsm() {
+  String local = format_status_fsm_text(stepperState, nbkTransitionActive); // text for the state BEFORE the transition
+  decide_status_fsm(stepperState, nbkTransitionActive);                      // then the transition
+  // ... append the remaining time and body temperatures ...
+  SamovarStatus = local; // store the text (under a lock); the web and Blynk read it from here
+  return local;
 }
 ```
 
-This function runs periodically to update the information shown on the interfaces (Chapter 1). However, the core logic relies on the numeric variables `SamovarStatusInt` and `Samovar_Mode` to determine what the system *is doing*.
+`tick_status_fsm()` runs once a second from the `triggerSysTicker` system task to update the information shown on the interfaces (Chapter 1). However, the core logic relies on the numeric variables `SamovarStatusInt` and `Samovar_Mode` to determine what the system *is doing*.
 
 ## Transitions Between States and Modes: Shifting Gears
 
@@ -95,7 +115,7 @@ As shown in Chapter 1, web commands, Blynk/Lua commands, menus and alarm handler
 
 ```c++
 // From Samovar.h and samovar_command_queue.h
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_BK_NEXT, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF, SAMOVAR_CHEESE, SAMOVAR_CHEESE_NEXT, SAMOVAR_POWER_ON};
 struct SamovarCommandMsg {
   SamovarCommands command;
 };
@@ -103,7 +123,7 @@ bool queue_samovar_command(SamovarCommands command, TickType_t timeout = 0);
 bool queue_samovar_reset_command(TickType_t timeout = 0);
 ```
 
-The main `loop()` function in `Samovar.ino` takes messages from the queue via `receive_samovar_command(...)`. Each command is handled in a `switch` (often changing `Samovar_Mode` or `SamovarStatusInt`), after which `loop()` proceeds to the normal handling of the active mode. `SAMOVAR_RESET` is queued through a separate helper: it clears pending commands and places the reset at the front of the queue.
+The main `loop()` function in `Samovar.ino` takes messages from the queue via `receive_samovar_command(...)`. Each command is handled in a `switch` (often changing `Samovar_Mode` or `SamovarStatusInt`), after which `loop()` proceeds to the normal handling of the active mode. While a mode switch is in progress (`mode_switch_in_progress()`), new commands are neither accepted into the queue nor read from it. `SAMOVAR_RESET` is queued through a separate helper: it clears pending commands and places the reset at the front of the queue.
 
 Here is a simplified view of this process:
 ```mermaid
@@ -113,9 +133,9 @@ sequenceDiagram
     Command handler->>Command queue: queue_samovar_command(SAMOVAR_BEER)
     Samovar main loop->>Command queue: receive_samovar_command(...)
     Samovar main loop->>Samovar main loop: Handles SAMOVAR_BEER
-    Samovar main loop->>Samovar logic: Changes Samovar_Mode to SAMOVAR_BEER_MODE
-    Samovar logic->>Samovar logic: Changes SamovarStatusInt to 2000 (initial state of beer mode)
-    Samovar main loop->>Samovar logic: calls beer_proc() (based on the new state)
+    Samovar main loop->>Samovar logic: mode_apply_power_on_command(): Samovar_Mode = SAMOVAR_BEER_MODE
+    Samovar logic->>Samovar logic: Changes SamovarStatusInt and startval to 2000 (initial state of beer mode)
+    Samovar main loop->>Samovar logic: mode_dispatch_loop() calls beer_proc() (based on the new state)
     Samovar logic->>Interface handler: Notifies about the state/mode change
     Interface handler->>Interface (LCD/Web): Displays updates ("Beer mode", "Program ready to start")
     Interface (LCD/Web)->>User: Displays the updated status
@@ -124,77 +144,79 @@ This diagram shows how a user action cascades through the system to change the c
 
 ## Inside `loop()`: The Conductor's Baton
 
-The main `loop()` function in `Samovar.ino` is the one through which the conductor (`loop()`) reads the score (the `SamovarCommandMsg` queue, `Samovar_Mode`, `SamovarStatusInt`) and directs the various parts of the orchestra (the mode-dependent processing functions such as `beer_proc`, `distiller_proc`, and so on).
+The main `loop()` function in `Samovar.ino` is the one through which the conductor (`loop()`) reads the score (the `SamovarCommandMsg` queue, `Samovar_Mode`, `SamovarStatusInt`) and directs the various parts of the orchestra (the mode-dependent processing functions such as `beer_proc`, `distiller_proc`, and so on). Which function belongs to which mode is recorded in a single table, the mode registry `mode_registry_table()` in `mode_registry.h`: for each mode it lists the main status (`activeStatus`), the start command, the finish function, the status text function, the alarm check and the tick function (`tick`).
 
 Let's look at a simplified version of the relevant parts of the `loop()` function:
 
 ```c++
-// Simplified snippet from Samovar.ino loop()
+// Simplified snippet from Samovar.ino loop() and mode_registry.h
 void loop() {
-  // ... other necessary tasks (like checking for button presses, network) ...
+  // ... other tasks (buttons, network) ...
 
-  // Drain commands queued by web, LCD, Blynk, Lua, or alarm paths.
+  // Drain commands queued by the web, menu, Blynk, Lua or alarm checks.
   SamovarCommandMsg commandMsg;
-  while (receive_samovar_command(commandMsg, 0)) {
+  while (!mode_switch_in_progress() && receive_samovar_command(commandMsg, 0)) {
     switch (commandMsg.command) {
-      case SAMOVAR_START: // User clicked Start (defaults to Rectification)
-        Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-        // menu_samovar_start(); // Function to start/advance Rectification program (Chapter 2)
-        SamovarStatusInt = 50; // Example: Transition to Heating state
+      case SAMOVAR_START:        // rectification "Start"
+      case SAMOVAR_DISTILLATION: // start distillation
+      case SAMOVAR_BEER:         // start beer
+      case SAMOVAR_BK:
+      case SAMOVAR_CHEESE:
+        mode_apply_power_on_command(commandMsg.command); // mode and initial status come from the registry
         break;
-      case SAMOVAR_POWER: // User clicked general Power toggle
-        // Check current status to decide what Power means (Finish current mode or just toggle power)
-        if (SamovarStatusInt == 1000) distiller_finish(); // If in Distillation, Power button finishes it
-        else if (SamovarStatusInt == 2000) beer_finish();     // If in Beer, Power button finishes it
-        // ... checks for other modes ...
-        else set_power(!PowerOn); // Otherwise, just toggle the main Power (sets PowerOn flag)
+      case SAMOVAR_POWER: // general power button
+        // If a mode with a finish function is active (distillation, beer, BK, NBK, cheese), finish it,
+        // otherwise just toggle the heating
+        if (!mode_finish_by_status(SamovarStatusInt)) set_power(!PowerOn);
+        if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+          SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL; // rectification: column heat-up (50)
+        }
         break;
-      case SAMOVAR_BEER: // User specifically requested Beer Mode
-        Samovar_Mode = SAMOVAR_BEER_MODE; // Set the mode
-        SamovarStatusInt = 2000;          // Set the initial state for Beer Mode
-        startval = 2000;                  // Another state variable used internally by beer_proc
+      case SAMOVAR_BEER_NEXT:
+        run_beer_program(ProgramNum + 1); // next beer program row
         break;
-      case SAMOVAR_DISTILLATION: // User specifically requested Distillation Mode
-        Samovar_Mode = SAMOVAR_DISTILLATION_MODE; // Set the mode
-        SamovarStatusInt = 1000;                  // Set the initial state for Distillation Mode
-        startval = 1000;                          // Another state variable
-        break;
-      // ... cases for SAMOVAR_NBK, SAMOVAR_BK, SAMOVAR_RESET, SAMOVAR_PAUSE, etc. ...
+      // ... SAMOVAR_NBK, SAMOVAR_POWER_ON/OFF, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, *_NEXT, etc. ...
       case SAMOVAR_RESET:
-        samovar_reset(); // Call a function to reset all states and modes
+        samovar_reset(); // reset all states
         break;
       case SAMOVAR_NONE:
-         break; // Should not happen due to the outer if check, but good practice
+        break;
     }
   }
 
-  // Now, based on the current SamovarStatusInt, call the appropriate mode/state handler
-  if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
-    // States 1-999 typically relate to Rectification/General operation states (Heating, Running Program)
-    // withdrawal(); // Function handling Rectification program execution & state checks (Chapter 2)
-  } else if (SamovarStatusInt == 1000) {
-    // Distillation Mode is active
-    distiller_proc(); // Function handling Distillation logic
-  } else if (SamovarStatusInt == 2000) { // Note: Beer mode uses SamovarStatusInt = 2000 for its main loop check
-    // Beer Mode is active
-    beer_proc(); // Function handling Beer logic
-  } else if (SamovarStatusInt == 3000) {
-    // BK Mode is active
-    // bk_proc(); // Function handling BK logic
-  } else if (SamovarStatusInt == 4000) {
-    // NBK Mode is active
-    nbk_proc(); // Function handling NBK logic
-  }
-  // ... other state/mode checks ...
+  // ... deferred operations, including the mode switch (process_profile_operation()) ...
 
+  mode_dispatch_loop(); // call the tick function of the active mode
   // ... other loop tasks ...
+}
+
+// mode_registry.h: starting a mode by command
+bool mode_apply_power_on_command(SamovarCommands command) {
+  // SAMOVAR_START: Samovar_Mode = SAMOVAR_RECTIFICATION_MODE and menu_samovar_start() (Chapter 2)
+  const ModeOps* ops = mode_ops_by_power_on_command(command); // the mode's registry row
+  Samovar_Mode = ops->mode;               // for example, SAMOVAR_BEER_MODE
+  change_samovar_mode();
+  SamovarStatusInt = ops->activeStatus;   // for example, 2000
+  startval = ops->activeStatus;           // initial session stage
+  return true;
+}
+
+// mode_registry.h: tick of the active mode
+void mode_dispatch_loop() {
+  const ModeOps* ops = mode_ops_current();            // registry row by Samovar_Mode
+  if (mode_status_belongs(ops, SamovarStatusInt)) {    // does the status belong to this mode?
+    if (ops->tick != nullptr) ops->tick();             // withdrawal(), distiller_proc(), beer_proc()/beer_stage_tick(),
+                                                       // bk_proc(), nbk_proc(), cheese_proc()/cheese_stage_tick()
+    return;
+  }
+  // status of another mode -> warn once, skip the tick
 }
 ```
 This simplified code shows the essence of state and mode management:
 1. It takes pending commands from the `SamovarCommandMsg` queue.
 2. When a command arrives, the `switch` acts like a conductor reading the score: it identifies the command (`SAMOVAR_BEER`, `SAMOVAR_START`, and so on).
-3. Based on the command, it sets the core system variables (`Samovar_Mode` and `SamovarStatusInt`) that reflect the desired new state or mode. For example, `SAMOVAR_BEER` sets the mode to `SAMOVAR_BEER_MODE` and the initial state to `2000`.
-4. Importantly, after a potential change of state/mode, the code *later* in `loop()` uses these new values (especially `SamovarStatusInt`) to decide which mode-dependent function (`beer_proc()`, `distiller_proc()`, and so on) to call in this iteration of the loop. This is like the conductor raising the baton, and the corresponding section of the orchestra starts to play.
+3. Based on the command, it sets the core system variables (`Samovar_Mode`, `SamovarStatusInt` and `startval`) that reflect the desired new state or mode. For example, `SAMOVAR_BEER` sets the mode to `SAMOVAR_BEER_MODE` and the initial state to `2000`. The start is rejected if a mode switch is in progress or a session of another mode is already running.
+4. Importantly, after a potential change of state/mode, `mode_dispatch_loop()` *later* in `loop()` picks the registry row by `Samovar_Mode` and checks that `SamovarStatusInt` belongs to that mode (statuses `1`–`999` belong to rectification, `1000` to distillation, `2000` to beer, and so on). Only then is the mode's tick function (`beer_proc()`, `distiller_proc()`, and so on) called. This is like the conductor raising the baton, and the corresponding section of the orchestra starts to play. The Sous vide and Lua modes have no tick function in the registry: sous vide is served by a separate `suvid_tick()` function, and the Lua script runs in a separate `do_lua_script` task (see `lua.h`).
 
 This mechanism ensures that only the code corresponding to the current operating state and the active mode runs its main logic cycle, keeping the system organized and efficient.
 

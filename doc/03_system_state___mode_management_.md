@@ -18,17 +18,18 @@ Samovar может работать несколькими различными 
 
 ```c++
 // Из Samovar.h
-enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
+enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE, SAMOVAR_CHEESE_MODE};
 volatile SAMOVAR_MODE Samovar_Mode; // Эта переменная хранит текущий режим.
 ```
 
 *   `SAMOVAR_RECTIFICATION_MODE`: Для производства спиртных напитков высокой чистоты (ректификация).
 * `SAMOVAR_DISTILLATION_MODE`: для более простой дистилляции спиртных напитков.
 * `SAMOVAR_BEER_MODE`: для автоматизации этапов варки пива (затирание, кипячение).
-* `SAMOVAR_BK_MODE`: для работы с определенным типом колонны (колонна Брага).
-* `SAMOVAR_NBK_MODE`: для непрерывной дистилляции (колонна Начало Брага).
-* `SAMOVAR_SUVID_MODE`: (вероятно, для Sous Vide, контроль температуры).
+* `SAMOVAR_BK_MODE`: для работы бражной колонны (БК).
+* `SAMOVAR_NBK_MODE`: для непрерывной перегонки браги (непрерывная бражная колонна, НБК).
+* `SAMOVAR_SUVID_MODE`: сувид — термостат, поддерживающий заданную температуру в кубе.
 * `SAMOVAR_LUA_MODE`: для запуска пользовательских процессов, определенных в скриптах Lua.
+* `SAMOVAR_CHEESE_MODE`: для сыроварения по программе.
 
 Одновременно может быть активен только один режим. Переменная `Samovar_Mode` сообщает системе, какую «шапку» она сейчас носит. Ключевое слово `volatile` является немного техническим, но по сути оно сообщает компилятору, что эта переменная может быть изменена различными частями программы, которые работают независимо (например, главный цикл и, возможно, обработчики прерываний), поэтому система должна всегда считывать ее значение заново.
 
@@ -44,40 +45,59 @@ String SamovarStatus; // Хранит удобочитаемое описани�
 
 В то время как `SamovarStatus` является текстовым описанием, которое вы можете прочитать на дисплее, `SamovarStatusInt` — это числовое значение, которое программа использует внутренне. Различные диапазоны чисел часто соответствуют разным режимам или фазам:
 
-* `0`: Простой / Выключено
-* `10`, `15`: Выполнение шага программы (режим выпрямления)
-* `20`: Программа завершена
-* `50`, `51`, `52`: Нагрев / Стабилизация (режим ректификации)
+* `0`: Простой / Выключено (в режимах «Сувид» и Lua статус остаётся `0` всю работу)
+* `10`: Идёт отбор по строке программы (режим ректификации)
+* `15`: Автопауза между строками программы (режим ректификации)
+* `20`: Программа завершена (режим ректификации)
+* `30`: Калибровка насоса отбора
+* `40`: Ручная пауза (в любом режиме)
+* `50`, `51`, `52`: Разгон колонны / Стабилизация / Стабилизация завершена (режим ректификации)
 * `1000`: Режим дистилляции
 * `2000`: Режим пива
-* `3000`: Режим BK
-* `4000`: Режим NBK
-- Так же используются статусы для ошибок, калибровки, самотестирования и т. д.
+* `3000`: Режим БК
+* `4000`: Режим НБК
+* `5000`: Режим «Сыр»
 
-Функция `get_Samovar_Status()` (см. `logic.h`) отвечает за просмотр `SamovarStatusInt` и других системных флагов (`PowerOn`, `PauseOn`, `program_Wait`, `ProgramNum` и т. д.) и генерацию описательного текста, отображаемого на ЖК-дисплее и в веб-интерфейсе.
+Эти числа объявлены в `Samovar.h` константами `SAMOVAR_STATUS_*` (например, `SAMOVAR_STATUS_RECT_WITHDRAWAL = 10`, `SAMOVAR_STATUS_BEER = 2000`). Рядом объявлены значения второй переменной состояния — `startval` (константы `SAMOVAR_STARTVAL_*`): она показывает, идёт ли отбор или сессия режима и на какой она стадии (например, `1` — отбор идёт, `2` — программа ректификации дошла до конца, `2001` — разогрев пива до температуры засыпи солода).
+
+Функция `tick_status_fsm()` (см. `logic.h`) отвечает за просмотр `SamovarStatusInt` и других системных флагов (`PowerOn`, `PauseOn`, `program_Wait`, `startval`, `ProgramNum` и т. д.) и генерацию описательного текста, отображаемого на ЖК-дисплее и в веб-интерфейсе. Текст она строит через `format_status_fsm_text()`, а переходы между статусами ректификации (`10`, `15`, `20`, `30`, `40`, `50`) выполняет `decide_status_fsm()`.
 
 ```c++
-// Упрощенный фрагмент из logic.h (фактическая функция довольно длинная)
-String get_Samovar_Status() {
-  if (!PowerOn) {
-    SamovarStatusInt = 0; // Система выключена -> Состояние 0
-    return F(«Выключено»);
-  } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
-    SamovarStatusInt = 10; // Включено, программа запущена, не приостановлена/не находится в режиме ожидания -> Состояние 10
-    return «Прг №» + String(ProgramNum + 1); // Показать текущий шаг программы
+// Упрощенный фрагмент из logic.h (фактические функции довольно длинные)
+String format_status_fsm_text(bool stepperState, bool nbkTransitionActive) {
+  String local;
+  if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_IDLE) {
+    local = "Выключено";
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
+    local = "Прг №" + String(ProgramNum + 1); // Показать текущую строку программы
   }
-  // ... много других условий, проверяющих переменные состояния и ProgramNum ...
-  else if (SamovarStatusInt == 2000) {
-    // Если в режиме Beer (состояние 2000), опишите конкретный шаг программы Beer
-    // ... проверьте program[ProgramNum].WType и время ...
-    return «Прг №» + String(ProgramNum + 1) + «; » + «Beer specific status»;
+  // ... много других условий: автопауза, программа завершена, калибровка, пауза, сувид, разгон колонны ...
+  else {
+    // Остальные режимы (дистилляция 1000, пиво 2000, БК 3000, НБК 4000, сыр 5000):
+    // текст берётся из функции режима в реестре mode_registry.h (например, get_beer_status_text())
+    mode_status_by_status(SamovarStatusInt, local);
   }
-  // ... и так далее для других режимов (Distillation 1000, NBK 4000 и т. д.) ...
-  return «Неизвестный статус»; // Запасной вариант по умолчанию
+  return local;
+}
+
+void decide_status_fsm(bool stepperState, bool nbkTransitionActive) {
+  // Те же условия, но вместо текста меняется число статуса
+  if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL; // -> Состояние 10
+  }
+  // ... остальные переходы ...
+}
+
+String tick_status_fsm() {
+  String local = format_status_fsm_text(stepperState, nbkTransitionActive); // текст по состоянию ДО перехода
+  decide_status_fsm(stepperState, nbkTransitionActive);                      // затем переход
+  // ... добавить оставшееся время и температуры тела ...
+  SamovarStatus = local; // сохранить текст (под замком); веб и Blynk читают его отсюда
+  return local;
 }
 ```
 
-Эта функция запускается периодически для обновления информации, отображаемой на интерфейсах (глава 1). Однако основная логика полагается на числовые переменные `SamovarStatusInt` и `Samovar_Mode` для определения того, что *делает* система.
+`tick_status_fsm()` запускается раз в секунду из системной задачи `triggerSysTicker` для обновления информации, отображаемой на интерфейсах (глава 1). Однако основная логика полагается на числовые переменные `SamovarStatusInt` и `Samovar_Mode` для определения того, что *делает* система.
 
 ## Переходы между состояниями и режимами: смена передач
 
@@ -95,7 +115,7 @@ String get_Samovar_Status() {
 
 ```c++
 // Из Samovar.h и samovar_command_queue.h
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_BK_NEXT, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF, SAMOVAR_CHEESE, SAMOVAR_CHEESE_NEXT, SAMOVAR_POWER_ON};
 struct SamovarCommandMsg {
   SamovarCommands command;
 };
@@ -103,7 +123,7 @@ bool queue_samovar_command(SamovarCommands command, TickType_t timeout = 0);
 bool queue_samovar_reset_command(TickType_t timeout = 0);
 ```
 
-Основная функция `loop()` в `Samovar.ino` извлекает сообщения из очереди через `receive_samovar_command(...)`. Каждая команда обрабатывается в `switch` (часто изменяя `Samovar_Mode` или `SamovarStatusInt`), после чего `loop()` переходит к обычной обработке активного режима. `SAMOVAR_RESET` ставится через отдельный helper: он очищает ожидающие команды и помещает reset в начало очереди.
+Основная функция `loop()` в `Samovar.ino` извлекает сообщения из очереди через `receive_samovar_command(...)`. Каждая команда обрабатывается в `switch` (часто изменяя `Samovar_Mode` или `SamovarStatusInt`), после чего `loop()` переходит к обычной обработке активного режима. Пока идёт смена режима (`mode_switch_in_progress()`), новые команды в очередь не принимаются и из неё не читаются. `SAMOVAR_RESET` ставится через отдельный helper: он очищает ожидающие команды и помещает reset в начало очереди.
 
 Вот упрощенное представление этого процесса:
 ```mermaid
@@ -113,9 +133,9 @@ sequenceDiagram
     Обработчик команд->>Очередь команд: queue_samovar_command(SAMOVAR_BEER)
     Основной цикл Samovar->>Очередь команд: receive_samovar_command(...)
     Основной цикл Samovar->>Основной цикл Samovar: Обрабатывает SAMOVAR_BEER
-    Основной цикл Samovar->>Логика Samovar: Изменяет Samovar_Mode на SAMOVAR_BEER_MODE
-    Логика Samovar->>Логика Samovar: Изменяет SamovarStatusInt на 2000 (начальное состояние пивного режима)
-    Основной цикл Samovar->>Логика Samovar: вызывает beer_proc() (на основе нового состояния)
+    Основной цикл Samovar->>Логика Samovar: mode_apply_power_on_command(): Samovar_Mode = SAMOVAR_BEER_MODE
+    Логика Samovar->>Логика Samovar: Изменяет SamovarStatusInt и startval на 2000 (начальное состояние пивного режима)
+    Основной цикл Samovar->>Логика Samovar: mode_dispatch_loop() вызывает beer_proc() (на основе нового состояния)
     Логика Samovar->>Обработчик интерфейса: Уведомляет об изменении состояния/режима
     Обработчик интерфейса->>Интерфейс (LCD/Web): Отображение обновлений ("Режим приготовления пива", "Программа готова к запуску")
     Интерфейс (LCD/Web)->>Пользователь: Отображение обновленного статуса
@@ -124,77 +144,79 @@ sequenceDiagram
 
 ## Внутри `loop()`: Дирижерская палочка
 
-Основная функция "loop()" в "Samovar.ino" - это функция, с помощью которой дирижер ("loop()") читает партитуру (очередь `SamovarCommandMsg`, `Samovar_Mode`, `SamovarStatusInt`) и управляет различными частями оркестра (функции обработки, зависящие от режима, такие как "beer_proc"), `distiller_proc` и т.д.).
+Основная функция "loop()" в "Samovar.ino" - это функция, с помощью которой дирижер ("loop()") читает партитуру (очередь `SamovarCommandMsg`, `Samovar_Mode`, `SamovarStatusInt`) и управляет различными частями оркестра (функции обработки, зависящие от режима, такие как `beer_proc`, `distiller_proc` и т.д.). Какая функция относится к какому режиму, записано в одной таблице — реестре режимов `mode_registry_table()` в `mode_registry.h`: для каждого режима там указаны его основной статус (`activeStatus`), команда запуска, функция завершения, функция текста статуса, аварийная проверка и функция такта (`tick`).
 
 Давайте рассмотрим упрощенную версию соответствующих частей функции `loop()`:
 
 ```c++
-// Simplified snippet from Samovar.ino loop()
+// Упрощенный фрагмент из Samovar.ino loop() и mode_registry.h
 void loop() {
-  // ... other necessary tasks (like checking for button presses, network) ...
+  // ... другие задачи (кнопки, сеть) ...
 
-  // Drain commands queued by web, LCD, Blynk, Lua, or alarm paths.
+  // Забираем команды, поставленные вебом, меню, Blynk, Lua или аварийными проверками.
   SamovarCommandMsg commandMsg;
-  while (receive_samovar_command(commandMsg, 0)) {
+  while (!mode_switch_in_progress() && receive_samovar_command(commandMsg, 0)) {
     switch (commandMsg.command) {
-      case SAMOVAR_START: // User clicked Start (defaults to Rectification)
-        Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-        // menu_samovar_start(); // Function to start/advance Rectification program (Chapter 2)
-        SamovarStatusInt = 50; // Example: Transition to Heating state
+      case SAMOVAR_START:        // «Старт» ректификации
+      case SAMOVAR_DISTILLATION: // запуск дистилляции
+      case SAMOVAR_BEER:         // запуск пива
+      case SAMOVAR_BK:
+      case SAMOVAR_CHEESE:
+        mode_apply_power_on_command(commandMsg.command); // режим и начальный статус берутся из реестра
         break;
-      case SAMOVAR_POWER: // User clicked general Power toggle
-        // Check current status to decide what Power means (Finish current mode or just toggle power)
-        if (SamovarStatusInt == 1000) distiller_finish(); // If in Distillation, Power button finishes it
-        else if (SamovarStatusInt == 2000) beer_finish();     // If in Beer, Power button finishes it
-        // ... checks for other modes ...
-        else set_power(!PowerOn); // Otherwise, just toggle the main Power (sets PowerOn flag)
+      case SAMOVAR_POWER: // общая кнопка питания
+        // Если активен режим с функцией завершения (дистилляция, пиво, БК, НБК, сыр) — завершаем его,
+        // иначе просто переключаем нагрев
+        if (!mode_finish_by_status(SamovarStatusInt)) set_power(!PowerOn);
+        if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+          SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL; // ректификация: разгон колонны (50)
+        }
         break;
-      case SAMOVAR_BEER: // User specifically requested Beer Mode
-        Samovar_Mode = SAMOVAR_BEER_MODE; // Set the mode
-        SamovarStatusInt = 2000;          // Set the initial state for Beer Mode
-        startval = 2000;                  // Another state variable used internally by beer_proc
+      case SAMOVAR_BEER_NEXT:
+        run_beer_program(ProgramNum + 1); // следующая строка программы пива
         break;
-      case SAMOVAR_DISTILLATION: // User specifically requested Distillation Mode
-        Samovar_Mode = SAMOVAR_DISTILLATION_MODE; // Set the mode
-        SamovarStatusInt = 1000;                  // Set the initial state for Distillation Mode
-        startval = 1000;                          // Another state variable
-        break;
-      // ... cases for SAMOVAR_NBK, SAMOVAR_BK, SAMOVAR_RESET, SAMOVAR_PAUSE, etc. ...
+      // ... SAMOVAR_NBK, SAMOVAR_POWER_ON/OFF, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, *_NEXT и т.д. ...
       case SAMOVAR_RESET:
-        samovar_reset(); // Call a function to reset all states and modes
+        samovar_reset(); // сброс всех состояний
         break;
       case SAMOVAR_NONE:
-         break; // Should not happen due to the outer if check, but good practice
+        break;
     }
   }
 
-  // Now, based on the current SamovarStatusInt, call the appropriate mode/state handler
-  if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
-    // States 1-999 typically relate to Rectification/General operation states (Heating, Running Program)
-    // withdrawal(); // Function handling Rectification program execution & state checks (Chapter 2)
-  } else if (SamovarStatusInt == 1000) {
-    // Distillation Mode is active
-    distiller_proc(); // Function handling Distillation logic
-  } else if (SamovarStatusInt == 2000) { // Note: Beer mode uses SamovarStatusInt = 2000 for its main loop check
-    // Beer Mode is active
-    beer_proc(); // Function handling Beer logic
-  } else if (SamovarStatusInt == 3000) {
-    // BK Mode is active
-    // bk_proc(); // Function handling BK logic
-  } else if (SamovarStatusInt == 4000) {
-    // NBK Mode is active
-    nbk_proc(); // Function handling NBK logic
-  }
-  // ... other state/mode checks ...
+  // ... отложенные операции, в том числе смена режима (process_profile_operation()) ...
 
-  // ... other loop tasks ...
+  mode_dispatch_loop(); // вызвать функцию такта активного режима
+  // ... другие задачи цикла ...
+}
+
+// mode_registry.h: запуск режима по команде
+bool mode_apply_power_on_command(SamovarCommands command) {
+  // SAMOVAR_START: Samovar_Mode = SAMOVAR_RECTIFICATION_MODE и menu_samovar_start() (глава 2)
+  const ModeOps* ops = mode_ops_by_power_on_command(command); // строка реестра режима
+  Samovar_Mode = ops->mode;               // например, SAMOVAR_BEER_MODE
+  change_samovar_mode();
+  SamovarStatusInt = ops->activeStatus;   // например, 2000
+  startval = ops->activeStatus;           // начальная стадия сессии
+  return true;
+}
+
+// mode_registry.h: такт активного режима
+void mode_dispatch_loop() {
+  const ModeOps* ops = mode_ops_current();            // строка реестра по Samovar_Mode
+  if (mode_status_belongs(ops, SamovarStatusInt)) {    // статус принадлежит этому режиму?
+    if (ops->tick != nullptr) ops->tick();             // withdrawal(), distiller_proc(), beer_proc()/beer_stage_tick(),
+                                                       // bk_proc(), nbk_proc(), cheese_proc()/cheese_stage_tick()
+    return;
+  }
+  // статус чужого режима -> один раз предупреждение, такт пропускается
 }
 ```
 Этот упрощенный код показывает суть управления состоянием и режимами:
 1. Он извлекает ожидающие команды из очереди `SamovarCommandMsg`.
 2. Когда поступает команда, `switch` действует подобно дирижеру, читающему партитуру, – он идентифицирует команду (`SAMOVAR_BEER`, `SAMOVAR_START` и т.д.).
-3. На основе команды он устанавливает основные системные переменные (`Samovar_Mode` и `SamovarStatusInt`), которые отражают желаемое новое состояние или режим. Например, SAMOVAR_BEER` устанавливает режим на `SAMOVAR_BEER_MODE`, а начальное состояние - на `2000`.
-4. Важно отметить, что после потенциального изменения состояния/режима структура кода *позже* в `loop()` использует эти новые значения (особенно `SamovarStatusInt`), чтобы решить, какую функцию, зависящую от режима (`beer_proc()`, `distiller_proc()` и т.д.), вызывать в этой итерации цикла. Это подобно тому, как дирижер поднимает палочку, и соответствующая часть оркестра начинает играть.
+3. На основе команды он устанавливает основные системные переменные (`Samovar_Mode`, `SamovarStatusInt` и `startval`), которые отражают желаемое новое состояние или режим. Например, `SAMOVAR_BEER` устанавливает режим на `SAMOVAR_BEER_MODE`, а начальное состояние - на `2000`. Запуск отклоняется, если идёт смена режима или уже работает сессия другого режима.
+4. Важно отметить, что после потенциального изменения состояния/режима `mode_dispatch_loop()` *позже* в `loop()` выбирает по `Samovar_Mode` строку реестра и проверяет, что `SamovarStatusInt` принадлежит этому режиму (статусы `1`–`999` — ректификации, `1000` — дистилляции, `2000` — пива и т.д.). Только тогда вызывается функция такта режима (`beer_proc()`, `distiller_proc()` и т.д.). Это подобно тому, как дирижер поднимает палочку, и соответствующая часть оркестра начинает играть. У режимов «Сувид» и Lua функции такта в реестре нет: сувид обслуживает отдельная функция `suvid_tick()`, а Lua-скрипт выполняется в отдельной задаче `do_lua_script` (см. `lua.h`).
 
 Этот механизм гарантирует, что только код, соответствующий текущему рабочему состоянию и активному режиму, выполняет свой основной логический цикл, сохраняя систему организованной и эффективной.
 

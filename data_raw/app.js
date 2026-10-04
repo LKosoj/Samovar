@@ -2341,9 +2341,12 @@
     // При втором насосе на головах локальный тракт отбора остановлен.
     v._cp = kind === 'rect' && !!Number(data.i2c_second_pump);
     v._noCp = !v._cp;
-    v._withdrawing = Number(data.WthdrwlStatus) > 0 && !v._paused &&
-      !(v._cp && data.PrgType === 'H');
-    const rate = num(data.ActualVolumePerHour);
+    // На головах с ЦП прошивка кладёт в ActualVolumePerHour скорость насоса голов,
+    // а основной насос стоит: его подпись — 0, скорость голов — фактическая ISspd.
+    const cpHeads = v._cp && data.PrgType === 'H';
+    v._withdrawing = Number(data.WthdrwlStatus) > 0 && !v._paused && !cpHeads;
+    v._mainRate = cpHeads ? 0 : data.ActualVolumePerHour;
+    const rate = num(v._mainRate);
     const i2cPumpOn = Number(data.i2c_pump_running) === 1;
     v._pumpOn = kind === 'nbk' ? (num(data.ISspd) > 0 && v._running) || i2cPumpOn
       : kind === 'beer' || kind === 'cheese' ? (!!data.mixer && v._running) || i2cPumpOn

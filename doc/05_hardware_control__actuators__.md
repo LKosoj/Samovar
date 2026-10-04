@@ -64,22 +64,22 @@
 ```mermaid
 sequenceDiagram
     Program Execution->>Control Logic: Command (e.g., "Start Step 1")
-    Control Logic->>Actuator Control Function: Call set_stepper_target(speed, direction, steps)
-    Actuator Control Function->>Hardware Driver: Communicate with stepper motor driver (e.g., via I2C or GPIO signals)
+    Control Logic->>Actuator Control Function: Call stepper_safe_set_target(steps), startService()
+    Actuator Control Function->>Hardware Driver: GyverStepper2 + hardware timer (or I2CStepper board via I2C)
     Hardware Driver->>Physical Stepper Motor: Send step/direction pulses
     Physical Stepper Motor-->>Program Execution: (Implicitly, by changing state monitored by sensors/counters)
 
     Program Execution->>Control Logic: Command (e.g., "Heating State")
     Control Logic->>Actuator Control Function: Call set_current_power(voltage)
-    Actuator Control Function->>Power Regulator: Communicate with power controller (e.g., via UART)
+    Actuator Control Function->>Power Regulator: Power regulator task sends the command via UART2
     Power Regulator->>Physical Heating Element: Adjust power/voltage
     Physical Heating Element-->>Sensors: Changes temperature (monitored by sensors)
 ```
 
 В этом упрощенном потоке:
 1.  Логика **Выполнения программы** (или общая логика Самовара в зависимости от режима/состояния) определяет, что требуется действие исполнительного механизма.
-2.  Она вызывает функцию в слое **Логики управления** (например, `run_program` или `check_alarm_beer`).
-3.  Эта функция логики управления вызывает конкретную **Функцию управления исполнительным механизмом** (например, `set_stepper_target` или `set_current_power`).
+2.  Она вызывает функцию в слое **Логики управления** (например, `run_program` или `beer_stage_tick`).
+3.  Эта функция логики управления вызывает конкретную **Функцию управления исполнительным механизмом** (например, `stepper_safe_set_target` и `startService` или `set_current_power`).
 4.  Функция управления исполнительным механизмом содержит код, который напрямую взаимодействует с **Драйвером оборудования** (это может быть библиотека или собственный код для I2C, Serial или GPIO).
 5.  Драйвер оборудования отправляет необходимые сигналы или команды на **Физический исполнительный механизм**, заставляя его выполнять нужное действие.
 
@@ -91,142 +91,148 @@ sequenceDiagram
 
 ### Управление шаговым двигателем (перистальтический насос)
 
-Шаговый двигатель играет ключевую роль для точного сбора жидкости. Самовар использует функцию вроде `set_stepper_target` для управления им. Эта функция может напрямую управлять драйвером шагового двигателя через GPIO или, как показано в файле `I2CStepper.h`, общаться с отдельным микроконтроллером (например, Arduino Nano), который управляет двигателем по I2C.
+Шаговый двигатель играет ключевую роль для точного сбора жидкости. Основной насос отбора подключён к ESP32 напрямую (пины `STEPPER_STEP`, `STEPPER_DIR`, `STEPPER_EN` из `Samovar_pin.h`) и управляется объектом `stepper` библиотеки `GyverStepper2` (`GStepper2<STEPPER2WIRE>`, объявлен в `Samovar.h`). Импульсы шагов генерирует аппаратный таймер: `startService()` запускает его, `stopService()` останавливает, а в его прерывании `StepperTicker()` вызывается `stepper.tickManual()`. Задачи обращаются к `stepper` только через обёртки `stepper_safe_*` из `runtime_helpers.h`, которые защищают объект от одновременного доступа из прерывания.
 
 ```c++
-// Упрощённый фрагмент из I2CStepper.h (или logic.h, если не используется I2C stepper)
-bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
-  // ... (проверка: используется ли I2C-устройство или прямое управление GPIO) ...
+// Упрощённый фрагмент из logic.h (run_program): запуск отбора строки программы
+CurrrentStepperSpeed = get_speed_from_rate(program[num].Speed);      // л/ч -> шагов в секунду
+TargetStepps = (uint32_t)program[num].Volume * SamSetup.StepperStepMl; // мл -> шаги (калибровка насоса)
+stepper_safe_set_max_speed(CurrrentStepperSpeed);
+stepper_safe_set_current(0);           // Начать отсчёт шагов с 0 для этой строки
+stepper_safe_set_target(TargetStepps); // Задать количество шагов
+startService();                        // Запустить таймер, генерирующий импульсы шагов
 
-  if (!use_I2C_dev) {
-    // Прямое управление через GPIO с помощью библиотеки GyverStepper2
-    stepper.setMaxSpeed(spd);
-    //stepper.setSpeed(spd); // Примечание: setSpeed устарела в новых версиях GyverStepper2
-    stepper.setCurrent(0); // Начать отсчёт шагов с 0 для этой задачи
-    stepper.setTarget(target); // Задать количество шагов
+// Упрощённый фрагмент из Samovar.ino
+void startService(void) {
+  // Период таймера берётся из библиотеки (Arduino core 3.x; для core 2.x - timerAlarmWrite/timerAlarmEnable)
+  timerAlarm(timer, stepper.getPeriod(), true, 0);
+}
 
-    // Запустить сервис, генерирующий импульсы шагов (обычно через таймер)
-    startService(); // Функция для включения таймера/сервиса движения
-    return true;
-  } else {
-    // Управление по I2C на отдельную плату драйвера шагового двигателя
-    if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
-      // Отправка команды и параметров (скорость, направление, цель) по I2C
-      I2C2.writeByte(use_I2C_dev, 0, spd >> 8); // Старший байт скорости
-      I2C2.writeByte(use_I2C_dev, 1, spd);     // Младший байт скорости
-      I2C2.writeByte(use_I2C_dev, 2, direction); // Направление (0 или 1)
-      I2C2.writeByte(use_I2C_dev, 3, target >> 24); // Целевые шаги (4 байта)
-      I2C2.writeByte(use_I2C_dev, 4, target >> 16);
-      I2C2.writeByte(use_I2C_dev, 5, target >> 8);
-      I2C2.writeByte(use_I2C_dev, 6, target);
-      // Отправить командный байт для обработки команды I2C-устройством
-      I2C2.writeByte(use_I2C_dev, 8, 1); // Пример: старт двигателя
-      I2C2.writeByte(use_I2C_dev, 8, 0); // Пример: сброс/готов
-
-      xSemaphoreGive(xI2CSemaphore); // Освободить шину I2C
-      return true;
-    } else {
-      // Обработка ошибки связи по I2C
-      return false;
-    }
-  }
+void IRAM_ATTR StepperTicker(void) { // Прерывание таймера
+  portENTER_CRITICAL_ISR(&timerMux);
+  StepperMoving = stepper.tickManual(); // Сделать шаг, если пора
+  portEXIT_CRITICAL_ISR(&timerMux);
 }
 ```
 
-Эта функция получает желаемую скорость (`spd`), направление и общее количество шагов (`target`) для текущего шага программы. Далее используется либо библиотека `GyverStepper2` для прямого управления, либо отправляются параметры по I2C на внешний драйвер шагового двигателя. Функция `startService()` (или команда I2C) инициирует фактическое движение мотора. Система отслеживает `stepper.getCurrent()` (при использовании `GyverStepper2`) или читает текущий счетчик шагов по I2C для контроля прогресса по достижению `target`.
+Скорость (`CurrrentStepperSpeed`) и общее количество шагов (`TargetStepps`) рассчитываются из строки программы. Прогресс отбора система отслеживает через `stepper_safe_get_current()`, а `set_pump_speed()` (`logic.h`) меняет скорость на ходу.
+
+Второй насос и мешалка могут работать на плате I2CStepper — отдельном микроконтроллере (Arduino Nano), который управляет двигателем и получает команды по I2C. Для неё в `I2CStepper.h` есть функции `set_stepper_target()` (насос: заданное число шагов), `set_stepper_by_time()` (мешалка: обороты в минуту на заданное время) и `set_mixer_pump_target()` (реле 1 платы).
+
+```c++
+// Фрагмент из I2CStepper.h
+inline bool set_stepper_target(uint32_t speedStepsPerSecond, uint8_t direction,
+                               uint32_t targetSteps, bool requireI2c) {
+  I2CStepperDevice* device = i2c_stepper_selected_pump(); // Плата, выбранная насосом
+  if (!device || !device->present) return false;
+  if (speedStepsPerSecond == 0 || targetSteps == 0) return i2c_stepper_stop(*device); // Нули - остановка
+  // ... проверка пределов скорости и числа шагов ...
+  device->config.mode = I2CSTEPPER_V3_MODE_FILLING;
+  device->motion.mode = I2CSTEPPER_V3_MODE_FILLING;
+  device->motion.direction = direction;
+  device->motion.speedStepsPerSec = speedStepsPerSecond;
+  device->motion.targetSteps = targetSteps;
+  return i2c_stepper_start_finite(*device); // Настройки, параметры движения и команда START_FINITE
+}
+```
+
+Обмен с платой идёт по протоколу из библиотеки `I2CStepperV3`: ESP32 записывает блоки настроек и параметров движения, затем отправляет кадр команды с порядковым номером и ждёт, пока плата подтвердит результат. Доступ к шине I2C защищён семафором `xI2CSemaphore`. Состояние платы (в том числе остаток шагов, его возвращает `get_stepper_status()`) обновляется опросом каждые 250 мс.
 
 ### Управление основным нагревателем (мощность/напряжение)
 
-Управление мощностью нагревательного элемента часто сложнее, чем просто вкл./выкл. Самовар использует регулятор мощности/напряжения, вероятно, управляемый через последовательное соединение (UART). Для этого используются такие функции, как `set_current_power` и `set_power_mode`.
+Управление мощностью нагревательного элемента часто сложнее, чем просто вкл./выкл. Регулятор подключается к UART2 (`Serial2`, пины `RXD2`/`TXD2`) и выбирается в `Samovar_ini.h`:
+
+*   `SAMOVAR_USE_POWER` — регулятор KVIC (скорость обмена 38400, с `KVIC_USE_9600` — 9600), код в `power_regulator_kvic.h`;
+*   `SAMOVAR_USE_POWER` + `SAMOVAR_USE_RMVK` — регулятор напряжения РМВ-К (`power_regulator_rmvk.h`, `mod_rmvk.h`, `mod_rmv.ino`);
+*   `SAMOVAR_USE_POWER` + `SAMOVAR_USE_SEM_AVR` — регулятор мощности SEM_AVR, уставка в ваттах (`power_regulator_sem.h`; `SAMOVAR_USE_RMVK` при этом определяется автоматически);
+*   без `SAMOVAR_USE_POWER` нагрев управляется реле: реле 1 (`RELE_CHANNEL1`) — основной нагреватель, реле 4 (`RELE_CHANNEL4`) — разгонный ТЭН.
+
+Для управления используются функции `set_current_power`, `set_power_mode` и `set_power` из `power_regulator.h`. Они не пишут в порт сами: они ставят запрос, а команду в UART отправляет отдельная задача регулятора (`triggerPowerStatus`).
 
 ```c++
-// Упрощенный фрагмент из logic.h/mod_rmvk.h (предполагается управление по Serial)
-void set_current_power(float Volt) {
-  if (!PowerOn) return; // Управлять мощностью только если система включена
-
-  target_power_volt = Volt; // Сохраняем целевое напряжение
-
-  // Отправляем команду по Serial на плату регулятора мощности
-  // Формат команды зависит от модели регулятора (например, KVIC, RMVK)
-#ifdef SAMOVAR_USE_RMVK // Если используется регулятор RMVK через Serial
-  // Команда вида "AT+VS=Volt\r"
-  if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 3) / portTICK_RATE_MS)) == pdTRUE) {
-    String Cmd = "";
-    int V = Volt; // RMVK обычно ждёт целое напряжение
-    if (V < 100) Cmd = "0"; // Добавить лидирующий ноль при необходимости
-    Cmd += String(V);
-    Serial2.print("AT+VS=" + Cmd + "\r"); // Отправить команду через Serial2
-    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS); // Подождать выполнения
-    xSemaphoreGive(xSemaphoreAVR); // Освободить семафор Serial2
-  }
-#else // Если другой регулятор через Serial
-  // Команда вида "S[hex_voltage]\r"
-  String hexString = String((int)(Volt * 10), HEX); // Преобразовать напряжение*10 в hex-строку
-  Serial2.print("S" + hexString + "\r"); // Отправка команды через Serial2
-  vTaskDelay(300 / portTICK_PERIOD_MS); // Подождать выполнения
-#endif
+// Упрощенный фрагмент из power_regulator.h
+ActuatorCommandResult set_current_power(float Volt, uint64_t* generation) {
+  // ... уставка ограничивается 230 В (у SEM_AVR - мощностью, эквивалентной 230 В) ...
+  if (!PowerOn || heaterSafetyState.emergencyLatched) return ACTUATOR_COMMAND_FAILED; // Нагрев выключен или авария
+  // Ниже порога (40 В, у SEM_AVR 100 Вт) - режим сна, иначе рабочий режим с уставкой
+  const uint64_t requestGeneration = request_regulator_state_locked(
+    Volt < POWER_WORK_MODE_THRESHOLD ? SAFETY_REGULATOR_MODE_SLEEP : SAFETY_REGULATOR_MODE_WORK,
+    Volt >= POWER_WORK_MODE_THRESHOLD, Volt, false);
+  notify_power_worker(); // Разбудить задачу регулятора
+  return current_power_command_status(requestGeneration); // APPLIED, PENDING или FAILED
 }
 
-void set_power_mode(String Mode) {
-  // Перевести регулятор в разные режимы (например, ожидание, регуляция)
-  // Конкретные строки и команды зависят от регулятора
-  Serial2.print("M" + Mode + "\r"); // Отправить команду режима через Serial2
-  vTaskDelay(300 / portTICK_PERIOD_MS); // Подождать выполнения
+// Задача регулятора отправляет команду; формат зависит от модели.
+// power_regulator_kvic.h (KVIC): "S<напряжение*10 в hex>\r"
+inline bool apply_regulator_voltage_blocking(float Volt, uint64_t powerGeneration) {
+  String hexString = String((int)(Volt * 10), HEX);
+  const String command = "S" + hexString + "\r";
+  if (!heater_uart_enqueue(UART_NUM_2, command.c_str(), command.length(), powerGeneration, true)) return false;
+  target_power_volt = Volt;
+  return true;
 }
+// РМВ-К: RMVK_set_out_voltge() -> "AT+VS=087" (три цифры, вольты)
+// SEM_AVR: "АТ+VS=<уставка>\r" (префикс "АТ" из кириллических букв)
 
-void set_power(bool On) {
-  if (alarm_event && On) {
-    return; // Не включать питание при активной аварии
-  }
-  PowerOn = On; // Обновить внутренний флаг состояния питания
+// Режим регулятора: POWER_WORK_MODE ("0"), POWER_SPEED_MODE ("1", разгон), POWER_SLEEP_MODE ("2", сон).
+// KVIC: "M<режим>\r"; РМВ-К: RMVK_set_on(1/0); SEM_AVR: "АТ+ON=1\r" / "АТ+ON=0\r"
+inline void set_power_mode(String Mode);
+
+ActuatorCommandResult set_power(bool On, bool enqueueResetCommand = true) {
   if (On) {
-    digitalWrite(RELE_CHANNEL1, SamSetup.rele1); // Включить главное реле системы
-    // ... возможно, другие действия, например, установка начального режима регулятора ...
-    set_power_mode(POWER_SPEED_MODE); // Установить режим быстрого разогрева
+    // Отказ с сообщением, если задача регулятора не запущена, сработала аварийная защита,
+    // идёт выключение, самотест/калибровка или смена режима
+    heater_outputs_enable_locked(SAFETY_HEATER_OUTPUT_MAIN, true); // PowerOn = true, реле 1 включено
+    // С регулятором: через SAMOVAR_USE_POWER_START_TIME (2 с; у SEM_AVR 3 + 2 с) регулятор переводится в разгон.
+    // Без регулятора: сразу включается и реле 4 (разгонный ТЭН).
   } else {
-    // ... возможно, отключение вспомогательных реле ...
-    set_power_mode(POWER_SLEEP_MODE); // Перевести регулятор в режим ожидания/выключения
-    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1); // Отключить главное реле системы
-    queue_samovar_reset_command(); // Сигнал сброса/очистки системы (Глава 3)
+    // Реле 4 снимается сразу, через 700 мс регулятор получает команду сна,
+    // ещё через 200 мс снимается реле 1 и ставится команда сброса (Глава 3)
   }
+  return ACTUATOR_COMMAND_APPLIED;
 }
 ```
 
-Эти функции показывают, как команды высокого уровня, такие как установка целевого напряжения (`set_current_power`) или смена режима работы (`set_power_mode`), преобразуются в конкретные команды через Serial для внешнего регулятора мощности. Функция `set_power(bool On)` обеспечивает главное вкл./выкл. всего нагревательного контура, включая мастер-реле (`RELE_CHANNEL1`). Обратите внимание на использование семафоров для управления доступом к общему интерфейсу Serial.
+Эти функции показывают, как команды высокого уровня, такие как установка целевого напряжения (`set_current_power`) или смена режима работы (`set_power_mode`), преобразуются в конкретные команды через Serial для внешнего регулятора мощности. Функция `set_power(bool On)` обеспечивает главное вкл./выкл. всего нагревательного контура, включая мастер-реле (`RELE_CHANNEL1`). Обратите внимание: команды регулятору выполняет отдельная задача, а вызывающий код получает результат (`ACTUATOR_COMMAND_APPLIED`, `ACTUATOR_COMMAND_PENDING` или `ACTUATOR_COMMAND_FAILED`); если регулятор не ответил вовремя, нагрев отключается.
 
 ### Управление другими исполнительными механизмами (реле, ШИМ, сервопривод, зуммер)
 
 Остальные исполнительные механизмы управляются аналогично — через вызовы специализированных функций, управляющих соответствующими пинами или интерфейсами.
 
-*   **Реле (клапан воды, мешалка, вспомогательные нагреватели):** Простая запись на цифровой пин.
+*   **Реле (клапан воды, мешалка, нагреватель):** Простая запись на цифровой пин. Реле 1 — нагреватель (пускатель), реле 2 — мешалка в режиме «Пиво», реле 3 — клапан воды охлаждения, реле 4 — разгонный ТЭН, если регулятор не используется.
 
     ```c++
-    // Упрощённый фрагмент из logic.h/beer.h
-    void open_valve(bool Val, bool msg = true) {
-      valve_status = Val; // Обновить флаг состояния
+    // Упрощённый фрагмент из valve_buzzer.h
+    ActuatorCommandResult open_valve(bool Val, bool msg = true) {
       if (Val) {
+        if (mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED; // Идёт смена режима
         digitalWrite(RELE_CHANNEL3, SamSetup.rele3); // Включить реле клапана
-        // ... отправить сообщение пользователю, если msg == true ...
+        valve_status = true; // Обновить флаг состояния
+        // ... отправить сообщение пользователю ...
       } else {
         digitalWrite(RELE_CHANNEL3, !SamSetup.rele3); // Выключить реле клапана
-        // ... отправить сообщение пользователю, если msg == true ...
+        valve_status = false;
+        // ... отправить сообщение пользователю ...
       }
+      return ACTUATOR_COMMAND_APPLIED;
     }
 
+    // Упрощённый фрагмент из beer.h
     void setHeaterPosition(bool state) {
-      heater_state = state; // Обновить внутренний статус
+      set_heater_state_flag(state); // Обновить внутренний статус
       if (state) {
-        // Функция может управлять разным оборудованием в зависимости от SAMOVAR_USE_POWER
-    #ifndef SAMOVAR_USE_POWER
-        // Если нет регулятора мощности — просто включить главное реле нагревателя
-        digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-        // Или включить специфические вспомогательные нагреватели
-        digitalWrite(RELE_CHANNEL4, !SamSetup.rele4); // Пример: реле вспомогательного нагревателя
+    #ifdef SAMOVAR_USE_POWER
+        set_current_power(SamSetup.StbVoltage); // С регулятором - задать напряжение
+    #else
+        heater_boost_output_off();                        // Реле 4 (разгон) выключить
+        heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN); // Реле 1 (нагреватель) включить
     #endif
       } else {
-    #ifndef SAMOVAR_USE_POWER
+    #ifdef SAMOVAR_USE_POWER
+        set_power_mode(POWER_SLEEP_MODE); // Перевести регулятор в сон
+    #else
         digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-        digitalWrite(RELE_CHANNEL4, !SamSetup.rele4); // Пример: реле вспомогательного нагревателя
+        heater_boost_output_off();
     #endif
       }
     }
@@ -235,20 +241,23 @@ void set_power(bool On) {
 
     ```c++
     // Упрощённый фрагмент из pumppwm.h
-    void set_pump_pwm(float duty) {
-      // ... проверки безопасности (например, если alarm_event == true) ...
-      duty = constrain(duty, 0, 1023); // Ограничить диапазон скважности
-      pump_pwm.write(duty); // Установить скважность на соответствующий пин
+    ActuatorCommandResult set_pump_pwm(float duty) {
+      duty = constrain(duty, 0, 1023); // Ограничить диапазон скважности (ШИМ 10 бит)
+      if (duty > 0 && mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED; // Идёт смена режима
+      // ... мягкий пуск: первые вызовы после включения пишут PWM_START_VALUE * 10 ...
+      if (duty == 0) pump_started = false;
+      pump_pwm.write(duty); // Установить скважность на пин насоса
       water_pump_speed = duty; // Сохранить текущее значение скорости
-      // ... логика старта насоса (например, стартовый буст) ...
+      return ACTUATOR_COMMAND_APPLIED;
     }
     ```
-    Эта функция принимает заданное значение ШИМ (`duty`) и подает его на насос с помощью библиотеки `ESP32PWM`, регулируя его скорость.
+    Эта функция принимает заданное значение ШИМ (`duty`) и подает его на насос через объект `ESP32PWM` (библиотека `ESP32Servo`, частота `PUMP_PWM_FREQ`), регулируя его скорость. Значение подбирает ПИД-регулятор `set_pump_speed_pid()` по температуре воды.
 *   **Сервопривод (распределение жидкости):** Запись значения позиции в объект сервопривода.
 
     ```c++
-    // Упрощённый фрагмент из logic.h
+    // Фрагмент из logic.h
     void set_capacity(uint8_t cap) {
+      if (cap > CAPACITY_NUM) return; // Номер емкости вне диапазона
       capacity_num = cap; // Сохранить номер текущей емкости
     #ifdef SERVO_PIN // Если используется сервомотор
       // Рассчитать целевую позицию на основе номера емкости и калибровки
@@ -259,39 +268,43 @@ void set_power(bool On) {
     #endif
     }
     ```
-    Эта функция принимает желаемый номер приемной емкости (`cap`) и перемещает подключенный сервомотор в соответствующую физическую позицию.
-*   **Зуммер:** Переключение цифрового выхода, часто управляется отдельной задачей для генерации звуковых паттернов.
+    Эта функция принимает желаемый номер приемной емкости (`cap`) и перемещает подключенный сервомотор (объект `Servo` библиотеки `ESP32Servo`) в соответствующую физическую позицию.
+*   **Зуммер:** Переключение цифрового выхода `BZZ_PIN`; серию сигналов отсчитывает функция, которую вызывает основной цикл `loop()`.
 
     ```c++
-    // Упрощённый фрагмент из logic.h (вызывается из основного кода)
+    // Упрощённый фрагмент из valve_buzzer.h
     void set_buzzer(bool fl) {
       if (fl && SamSetup.UseBuzzer) { // Включаем только если запрос и разрешено в настройках
-        // Сигнализировать задаче зуммера начать пищать
-        BuzzerTaskFl = true;
-        // ... убедиться, что задача зуммера запущена (создать при необходимости) ...
+        buzzer_active = true;         // Начать серию сигналов
+        buzzer_beep_count = 0;
+        buzzer_state = false;
+        buzzer_next_time = millis();  // Начинаем сразу
       } else {
-        // Сигнализировать задаче зуммера остановиться или остановить ее напрямую
-        // ... логика остановки задачи зуммера при ненадобности ...
-        digitalWrite(BZZ_PIN, LOW); // Убедиться, что пин LOW при выключении
+        buzzer_active = false;
+        buzzer_beep_count = 0;
+        buzzer_state = false;
+        digitalWrite(BZZ_PIN, LOW);   // Убедиться, что пин LOW при выключении
       }
     }
 
-    // Упрощённый фрагмент из triggerBuzzerTask (работает в отдельной задаче)
-    void triggerBuzzerTask(void *parameter) {
-      while (true) {
-        if (BuzzerTaskFl) {
-          digitalWrite(BZZ_PIN, HIGH); // Включить зуммер
-          vTaskDelay(beep_duration / portTICK_PERIOD_MS); // Ждать
-          digitalWrite(BZZ_PIN, LOW); // Выключить зуммер
-          vTaskDelay(silent_duration / portTICK_PERIOD_MS); // Ждать
-          // ... логика подсчета сигналов и сброса BuzzerTaskFl ...
+    // Вызывается из loop() на каждом проходе
+    void process_buzzer() {
+      if (!buzzer_active) return;
+      if ((int32_t)(millis() - buzzer_next_time) >= 0) {
+        if (buzzer_state) {
+          digitalWrite(BZZ_PIN, LOW);       // Выключить зуммер
+          buzzer_state = false;
+          if (++buzzer_beep_count >= 5) buzzer_active = false; // Серия из 5 сигналов закончена
+          else buzzer_next_time = millis() + 600;              // Пауза 600 мс
         } else {
-          vTaskDelay(sleep_duration / portTICK_PERIOD_MS); // Спать, если не пищит
+          digitalWrite(BZZ_PIN, HIGH);      // Включить зуммер
+          buzzer_state = true;
+          buzzer_next_time = millis() + 400; // Сигнал 400 мс
         }
       }
     }
     ```
-    Функция `set_buzzer` подает сигнал задаче `triggerBuzzerTask` (фоновая задача FreeRTOS) начать подачу звукового сигнала, обеспечивая звуковую обратную связь пользователю.
+    Функция `set_buzzer` запускает серию сигналов, а `process_buzzer` (её вызывает основной цикл `loop()`) включает и выключает зуммер по времени: пять сигналов по 400 мс с паузами 600 мс, обеспечивая звуковую обратную связь пользователю.
 
 Эти примеры показывают, что независимо от конкретного оборудования, схема одна: основная логика вызывает функцию с параметрами высокого уровня, а эта функция реализует низкоуровневое взаимодействие (digitalWrite, ШИМ, serial-команды, I2C-сообщения), необходимое для выполнения действия исполнительным механизмом.
 
