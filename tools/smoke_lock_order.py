@@ -469,7 +469,28 @@ CONFIGMUX_EXIT = "portEXIT_CRITICAL(&configMux);"
 # (файл, сигнатура функции, обёрнутая целевая строка)
 CONFIGMUX_SITES = [
     ("Samovar.ino", "static OperationError commit_profile_operation()",
-     "SamSetup = active_profile_operation.settings;"),
+     "nbkProgramProfile = SamSetup;"),
+    ("Samovar.ino", "static OperationError commit_profile_operation()",
+     "SamSetup = persistNbkProgram\n"
+     "        ? nbkProgramProfile\n"
+     "        : active_profile_operation.settings;"),
+    ("Samovar.ino", "static OperationError commit_profile_operation()",
+     "SamSetup = nbkProgramProfile;"),
+    ("Samovar.ino", "void persist_nbk_optimum(float optimalPower, float optimalFeed)",
+     "candidate = SamSetup;"),
+    ("Samovar.ino", "void persist_nbk_optimum(float optimalPower, float optimalFeed)",
+     "SamSetup.NbkOptimalPower = optimalPower;\n"
+     "  SamSetup.NbkOptimalFeed = optimalFeed;"),
+    ("Samovar.ino", "void persist_heater_horizon(float horizonSeconds)",
+     "candidate = SamSetup;"),
+    ("Samovar.ino", "void persist_heater_horizon(float horizonSeconds)",
+     "SamSetup.HeaterHorizon = horizonSeconds;"),
+    ("Blynk.ino", "static void blynk_push_slow(bool force)",
+     "memcpy(colors[0], SamSetup.SteamColor, sizeof(colors[0]));\n"
+     "  memcpy(colors[1], SamSetup.PipeColor, sizeof(colors[1]));\n"
+     "  memcpy(colors[2], SamSetup.WaterColor, sizeof(colors[2]));\n"
+     "  memcpy(colors[3], SamSetup.TankColor, sizeof(colors[3]));\n"
+     "  memcpy(colors[4], SamSetup.ACPColor, sizeof(colors[4]));"),
     ("Samovar.ino", "static void setup_connect_wifi_and_notify()",
      "SamSetup = profileCandidate;"),
     ("WebServer.ino", "void handleSave(AsyncWebServerRequest *request)",

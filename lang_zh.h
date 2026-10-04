@@ -511,7 +511,7 @@
 #define LANG_CHEESE_ERR_COOLING_NOT_IN_BUILD "此版本中冷却不可用"
 #define LANG_CHEESE_ERR_PH_CAL_LINE "行中 pH 校准无效 "
 #define LANG_CHEESE_ERR_LUA_NOT_IN_BUILD "此版本中 Lua 不可用"
-#define LANG_CHEESE_ERR_LUA_FILE_LINE "行中未找到 Lua 文件 /cheese.lua "
+#define LANG_CHEESE_ERR_LUA_FILE_LINE "行中未找到 Lua 文件 "
 #define LANG_CHEESE_LUA_JOB_ACCEPTED "Lua 任务已接受"
 #define LANG_CHEESE_NEXT_LINE "转至下一行"
 #define LANG_CHEESE_WAIT_OPERATOR "等待操作员操作"

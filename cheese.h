@@ -654,8 +654,13 @@ inline bool cheese_validate_program(String& error) {
       error = TR(CHEESE_ERR_LUA_NOT_IN_BUILD, "Lua недоступна в этой сборке");
       return false;
 #else
-      if (!exists("/cheese.lua")) {
-        error = TR(CHEESE_ERR_LUA_FILE_LINE, "Lua-файл /cheese.lua не найден в строке ") + String(i + 1);
+      char call[PROGRAM_TEXT_POOL_SIZE] = {0};
+      String fileName;
+      if (!copy_program_lua_text(i, call, sizeof(call)) ||
+          !lua_split_program_call(String(call), fileName) ||
+          !exists(fileName.startsWith("/") ? fileName : "/" + fileName)) {
+        error = TR(CHEESE_ERR_LUA_FILE_LINE, "Lua-файл не найден в строке ") + String(i + 1) +
+            (fileName.length() > 0 ? ": " + fileName : String());
         return false;
       }
 #endif
@@ -1137,7 +1142,8 @@ void cheese_proc() {
 }
 
 inline void cheese_check_cooling_limits() {
-  beer_check_cooling_limits();
+  // У пива охлаждение водой идёт на строке брожения F, у сыра - на строке C (F - флокуляция).
+  if (current_program_type() == 'C') mode_request_overheat_emergency_if_needed();
   beer_check_wort_overheat_limit();
 }
 

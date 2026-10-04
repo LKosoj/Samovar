@@ -842,15 +842,22 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
   const uint8_t speedCount = request_param_count(request, "speed");
   const uint8_t volumeCount = request_param_count(request, "volume");
   uint8_t address = 0;
-  I2CStepperDevice* device = select_i2c_stepper_device(request, address);
-  if (addressCount != 1 || !device || !device->present ||
+  // Без address (вкладка «Внешний насос» режимов) - насос, выбранный для процесса.
+  I2CStepperDevice* device = nullptr;
+  if (addressCount == 1) {
+    device = select_i2c_stepper_device(request, address);
+  } else {
+    device = i2c_stepper_selected_pump();
+    if (device) address = device->address;
+  }
+  if (!device || !device->present ||
       (device->capabilities & I2CSTEPPER_V3_CAP_FILLING) == 0) {
     send_no_store_response(request, 400, "application/json",
         build_error_envelope("unavailable", "address", "I2C filling pump not available"));
     return;
   }
   if (stopCount == 1) {
-    if (speedCount != 0 || volumeCount != 0 || request->params() != 2) {
+    if (speedCount != 0 || volumeCount != 0 || request->params() != 1u + addressCount) {
       send_i2c_numeric_error(request, "stop", NUMERIC_PARSE_INVALID_ARGUMENT);
       return;
     }
@@ -871,7 +878,7 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
     send_operation_accepted(request, operationId);
     return;
   }
-  if (stopCount != 0 || speedCount != 1 || volumeCount != 1 || request->params() != 3) {
+  if (stopCount != 0 || speedCount != 1 || volumeCount != 1 || request->params() != 2u + addressCount) {
     send_i2c_numeric_error(request, "request", NUMERIC_PARSE_INVALID_ARGUMENT);
     return;
   }

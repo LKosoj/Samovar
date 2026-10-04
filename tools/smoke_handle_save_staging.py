@@ -163,12 +163,30 @@ if commit:
         "profile commit persists before publishing owner state",
         commit,
         [
-            "save_profile_nvs(active_profile_operation.settings)",
+            # Для НБК в NVS уходит профиль вместе с программой (nbkProgramProfile),
+            # для остальных режимов - сами настройки операции.
+            "persistNbkProgram ? nbkProgramProfile : active_profile_operation.settings;",
+            "save_profile_nvs(settingsToSave)",
             "if (persistResult != PERSIST_OK)",
-            "SamSetup = active_profile_operation.settings;",
+            "SamSetup = persistNbkProgram",
+            ": active_profile_operation.settings;",
             "program_commit(active_profile_operation.program);",
             "apply_setup_sensor_fields(active_profile_operation.sensorResetMask);",
             "if (hasSettings) apply_config_runtime();",
+        ],
+        errors,
+    )
+    # Правка только программы НБК (без настроек): тот же порядок - сначала NVS,
+    # при отказе выход, и лишь потом публикация в SamSetup.
+    require_ordered_tokens(
+        "nbk program commit persists before publishing owner state",
+        commit,
+        [
+            "if (persistNbkProgram && !hasSettings) {",
+            "save_profile_nvs(nbkProgramProfile)",
+            "if (persistResult != PERSIST_OK)",
+            "return OPERATION_ERROR_PROFILE_PERSIST_FAILED;",
+            "SamSetup = nbkProgramProfile;",
         ],
         errors,
     )

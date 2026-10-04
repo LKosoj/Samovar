@@ -181,7 +181,7 @@
     if (type === 'P') return temp > 0 && time > 0;
     if (type === 'B') return temp === 0 && time > 0;
     if (type === 'W') return temp === 0 && time === 0;
-    if (type === 'L') return temp === 0 && time === 0 && noDevice && sensor === 0;
+    if (type === 'L') return temp === 0 && time > 0 && noDevice && sensor === 0;
     if (type === 'A') return temp > 0 && time === 0 && noDevice;
     return false;
   }
@@ -195,7 +195,7 @@
   var BEER_MASH_DEVICE_DEFAULT = '1^-20^0^2^3';
   var BEER_PUMP_CONTINUOUS = '2^0^0^65535^0';
   var BEER_WAIT_DEVICE = '0^0^0^0^0';
-  var BEER_PROGRAM_MAX_ROWS = 20;
+  var BEER_PROGRAM_MAX_ROWS = 30;
   var configuredBeerBrewOrderId = 'allinone';
 
   function beerBrewOrders() {
@@ -2234,7 +2234,7 @@
     bk: { T: 'По Т куба', S: 'Спирт в кубе, отн.', A: 'Спирт в кубе, абс.', P: 'Спирт в паре, абс.', R: 'Спирт в паре, отн.' },
     nbk: { H: 'Прогрев', S: 'Настройка', O: 'Оптимизация', W: 'Работа' },
     beer: { M: 'Засыпь солода', P: 'Пауза', B: 'Кипячение', C: 'Охлаждение', W: 'Ожидание', F: 'Брожение', L: 'Lua', A: 'Автотюнинг' },
-    cheese: { M: 'Нагрев', P: 'Выдержка', C: 'Охлаждение', W: 'Ожидание', L: 'Lua', A: 'Кислотность', D: 'Слив' }
+    cheese: { H: 'Нагрев', P: 'Выдержка', C: 'Охлаждение', M: 'Перемешивание', D: 'Дозирование', N: 'Ожидание pH', W: 'Ручное действие', S: 'Слив', F: 'Флокуляция', L: 'Lua' }
   };
 
   function schemeKind() {
@@ -2284,7 +2284,8 @@
       row.summary = row.name + (row.value !== null ? ' · ' + row.value : '') +
         (row.capacity !== null ? ' · ёмк. ' + row.capacity : '');
     } else if (kind === 'beer' || kind === 'cheese') {
-      row.temp = num(f[1]); row.time = num(f[2]) !== null ? num(f[2]) / 60 : null;
+      // Время строки в минутах, у строки L - тайм-аут в секундах.
+      row.temp = num(f[1]); row.time = num(f[2]) !== null ? num(f[2]) / (row.type === 'L' ? 3600 : 60) : null;
       row.summary = row.name + (row.temp ? ' · ' + row.temp + ' °C' : '') +
         (row.time ? ' · ' + hoursText(row.time) : '');
     } else if (kind === 'nbk') {

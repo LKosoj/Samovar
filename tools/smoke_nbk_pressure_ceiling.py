@@ -608,7 +608,8 @@ int main() {
 def check_reset_and_init_pins(nbk_source: str) -> list:
     """[Пин без компиляции, блок E плана] Три места, которые обязаны
     оставаться синхронными с логикой T1: инициализация рабочего потолка на
-    старте сессии (после nbk_Po=0, там же где остальной сброс сессии),
+    старте сессии (после установки nbk_Po из сохранённого оптимума профиля,
+    там же где остальной сброс сессии),
     сброс счётчика nbk_high_pressure_ticks при новом заходе на строку O и
     при коммите строки актуатором (симметрично nbk_high_temp_ticks)."""
     stripped = strip_cpp_comments(nbk_source)
@@ -619,14 +620,16 @@ def check_reset_and_init_pins(nbk_source: str) -> list:
     except ValueError as error:
         errors.append(f"ProgramNum==0 session-start block not found: {error}")
         num0_block = ""
-    po_idx = num0_block.find("nbk_Po = 0;")
+    # b040ae3e: По на старте сессии берётся из сохранённого в профиле оптимума
+    # (раньше обнулялось) - якорь «установка По на новую сессию» сохраняется.
+    po_idx = num0_block.find("nbk_Po = SamSetup.NbkOptimalFeed;")
     ceiling_idx = num0_block.find("nbk_pressure_ceiling = nbkSessionConfig.overflowPressure * NBK_WORK_PRESSURE_RATIO;")
     if po_idx < 0:
         errors.append("ProgramNum==0 session start does not reset nbk_Po (anchor missing)")
     elif ceiling_idx < 0:
         errors.append("ProgramNum==0 session start does not initialize nbk_pressure_ceiling")
     elif ceiling_idx < po_idx:
-        errors.append("nbk_pressure_ceiling init must come AFTER nbk_Po = 0 in session-start block")
+        errors.append("nbk_pressure_ceiling init must come AFTER nbk_Po init in session-start block")
 
     try:
         o_block, _ = extract_braced_block_after(stripped, "if (program[ProgramNum].WType == 'O') {")

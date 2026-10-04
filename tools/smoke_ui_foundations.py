@@ -72,7 +72,8 @@ def inline_scripts_without_app_src(text):
 
 
 def has_app_script(text):
-  return bool(re.search(r'<script\s+src=["\']app\.js["\']\s*>\s*</script>', text, flags=re.I))
+  # ?v=<версия> - метка против устаревшего app.js в кэше браузера (3738e6d9).
+  return bool(re.search(r'<script\s+src=["\']app\.js(?:\?v=[\w.\-]+)?["\']\s*>\s*</script>', text, flags=re.I))
 
 
 def check_pages(errors):
@@ -88,7 +89,7 @@ def check_pages(errors):
 
     rel = page.relative_to(ROOT)
     if not has_app_script(text):
-      errors.append(f"{rel} does not include exact app script tag: <script src=\"app.js\"></script>")
+      errors.append(f"{rel} does not include exact app script tag: <script src=\"app.js[?v=...]\"></script>")
 
     if "ConnectError" in text:
       errors.append(f"{rel} still contains ConnectError")

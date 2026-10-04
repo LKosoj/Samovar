@@ -511,7 +511,7 @@
 #define LANG_CHEESE_ERR_COOLING_NOT_IN_BUILD "Kühlung in diesem Build nicht verfügbar"
 #define LANG_CHEESE_ERR_PH_CAL_LINE "Ungültige pH-Kalibrierung in Zeile "
 #define LANG_CHEESE_ERR_LUA_NOT_IN_BUILD "Lua in diesem Build nicht verfügbar"
-#define LANG_CHEESE_ERR_LUA_FILE_LINE "Lua-Datei /cheese.lua in Zeile nicht gefunden: "
+#define LANG_CHEESE_ERR_LUA_FILE_LINE "Lua-Datei nicht gefunden in Zeile "
 #define LANG_CHEESE_LUA_JOB_ACCEPTED "Lua-Job angenommen"
 #define LANG_CHEESE_NEXT_LINE "Wechsel zur nächsten Zeile"
 #define LANG_CHEESE_WAIT_OPERATOR "Warte auf Bedieneraktion"

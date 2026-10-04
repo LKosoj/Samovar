@@ -111,7 +111,6 @@
 
 #define LUA_PIN 12
 
-#define ALARM_BTN_PIN -1
 #undef USE_ALARM_BTN
 
 #define WATERSENSOR_PIN 14

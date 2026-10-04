@@ -95,6 +95,7 @@ enum SAMOVAR_MODE {
 };
 
 struct WProgram {
+  ProgramType WType;
   float Time;
 };
 
@@ -126,6 +127,8 @@ static void runtime_state_unlock(bool) {}
 
 @BEER_STAGE_ELAPSED_MS_BODY@
 
+@ROW_TIME_MINUTES@
+
 static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
 @BODY@
 }
@@ -143,6 +146,7 @@ static void reset_fixture() {
   Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
   ProgramNum = 0;
   ProgramLen = 1;
+  program[0].WType = 'M';
   program[0].Time = 60;  // минут на строку
   CurrrentStepps = 0;
   TargetStepps = 0;
@@ -207,11 +211,28 @@ static void test_beer_progress_subtracts_idle() {
         "REGRESS: прогресс пива должен учитывать вычтенный простой (~33%, не 50%)");
 }
 
+// (5) У строки L пива/сыра в поле Time тайм-аут в секундах: 600 с = 10 мин.
+// С начала строки прошло 5 мин -> прогресс 50%, остаток 5 мин.
+static void test_beer_lua_row_timeout_in_seconds() {
+  reset_fixture();
+  Samovar_Mode = SAMOVAR_BEER_MODE;
+  program[0].WType = 'L';
+  program[0].Time = 600;  // секунд
+  begintime = 1;
+  mockMillis = (unsigned long)5 * 60 * 1000;
+  tick_update_withdrawal_progress('L');
+  check(WthdrwlProgress >= 49 && WthdrwlProgress <= 51,
+        "REGRESS: тайм-аут строки L должен считаться в секундах (прогресс ~50%)");
+  check(WthdrwTimeAll > 4.9f && WthdrwTimeAll < 5.1f,
+        "REGRESS: остаток программы со строкой L 600 с через 5 мин должен быть 5 мин");
+}
+
 int main() {
   test_overshoot_steps_clamped_to_one();
   test_zero_steps_unchanged();
   test_overdue_pause_clamped();
   test_beer_progress_subtracts_idle();
+  test_beer_lua_row_timeout_in_seconds();
 
   if (failures != 0) return 1;
   std::cout << "rectification withdrawal progress clamp checks passed\n";
@@ -228,7 +249,10 @@ def build_harness() -> str:
     beer_source = (ROOT / "beer.h").read_text(encoding="utf-8")
     elapsed_body = extract_function_body(beer_source, BEER_STAGE_ELAPSED_MS_SIGNATURE)
     elapsed_fn = "float beer_stage_elapsed_ms(unsigned long nowMs) {" + elapsed_body + "}"
+    row_time_body = extract_function_body(source, "static float row_time_minutes(const WProgram& row) {")
+    row_time_fn = "static float row_time_minutes(const WProgram& row) {" + row_time_body + "}"
     harness = HARNESS_TEMPLATE.replace("@BEER_STAGE_ELAPSED_MS_BODY@", elapsed_fn)
+    harness = harness.replace("@ROW_TIME_MINUTES@", row_time_fn)
     return harness.replace("@BODY@", body)
 
 

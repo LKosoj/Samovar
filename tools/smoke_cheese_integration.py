@@ -107,6 +107,9 @@ class String {
   String(const char* text = "") : value_(text) {}
   String(uint8_t number) : value_(std::to_string(number)) {}
   String operator+(const char* text) const { return String(value_ + text); }
+  bool startsWith(const char* text) const { return value_.rfind(text, 0) == 0; }
+  size_t length() const { return value_.size(); }
+  const std::string& str() const { return value_; }
   String operator+(const String& text) const { return String(value_ + text.value_); }
   friend String operator+(const char* text, const String& value) {
     return String(std::string(text) + value.value_);
@@ -157,7 +160,19 @@ static uint16_t i2cPumpStepsPerMl = 0;
 uint32_t i2c_get_step_by_liquid_volume(float ml) { return static_cast<uint32_t>(ml * i2cPumpStepsPerMl); }
 float i2c_get_speed_from_rate(float litersPerHour) { return roundf(litersPerHour * 1000.0f * i2cPumpStepsPerMl / 3600.0f); }
 #ifdef USE_LUA
-bool exists(String) { return luaPresent; }
+// Строка L ссылается на свой файл: preflight проверяет именно его, а не /cheese.lua.
+constexpr size_t PROGRAM_TEXT_POOL_SIZE = 1025;
+static std::string luaCall = "brine.lua^5", checkedLuaFile;
+bool copy_program_lua_text(uint8_t, char* destination, size_t size) {
+  std::strncpy(destination, luaCall.c_str(), size - 1);
+  return !luaCall.empty();
+}
+bool lua_split_program_call(const String& call, String& fileName) {
+  const std::string& text = call.str();
+  fileName = String(text.substr(0, text.find('^')).c_str());
+  return fileName.length() > 0;
+}
+bool exists(String name) { checkedLuaFile = name.str(); return luaPresent; }
 #endif
 
 inline CheeseStageKind cheese_stage_kind(ProgramType type) { @KIND@ }
@@ -218,9 +233,13 @@ int main() {
   reset('L');
 #ifdef USE_LUA
   luaPresent = false;
-  check(!cheese_validate_program(error), "missing /cheese.lua passed preflight");
+  check(!cheese_validate_program(error), "missing Lua file of the row passed preflight");
   luaPresent = true;
-  check(cheese_validate_program(error), "present /cheese.lua failed preflight");
+  check(cheese_validate_program(error), "present Lua file of the row failed preflight");
+  check(checkedLuaFile == "/brine.lua", "preflight checked a file other than the one in the L row");
+  luaCall = "";
+  check(!cheese_validate_program(error), "L row without a Lua call passed preflight");
+  luaCall = "brine.lua^5";
 #else
   check(!cheese_validate_program(error), "Lua stage passed preflight without USE_LUA");
 #endif
@@ -302,7 +321,7 @@ def static_checks() -> list[str]:
     validate = extract_function_body(CHEESE, "inline bool cheese_validate_program(String& error)")
     for token in ("for (uint8_t i = 0; i < ProgramLen; i++)", "i2c_stepper_mixer_present()",
                   "cheese_local_doser_motion(row, targetSteps, speed)",
-                  "exists(\"/cheese.lua\")",
+                  "lua_split_program_call(String(call), fileName)",
                   "row.WType == 'D' && row.TempSensor == 3 ? 0.0 : row.Param"):
         if token not in validate:
             errors.append(f"Cheese preflight is missing {token}")
@@ -353,7 +372,8 @@ def main() -> int:
             ("!cheese_local_doser_motion(row, targetSteps, speed)",
              "false && !cheese_local_doser_motion(row, targetSteps, speed)",
              "local D conversion mutation"),
-            ("!exists(\"/cheese.lua\")", "false", "Lua file availability mutation"),
+            ("!exists(fileName.startsWith(\"/\") ? fileName : \"/\" + fileName)", "false",
+             "Lua file availability mutation"),
         ):
             mutant = validate_body.replace(old, new, 1)
             if mutant == validate_body:

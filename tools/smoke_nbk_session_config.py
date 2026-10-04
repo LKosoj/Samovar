@@ -571,6 +571,30 @@ def main() -> int:
         except ValueError as error:
             print(f"FAIL: {error}", file=sys.stderr)
             return 1
+        if signature.startswith("void run_nbk_program("):
+            # Единственное разрешённое чтение SamSetup.Nbk*: сохранённый в профиле
+            # оптимум Мо/По (b040ae3e) - один раз на старте сессии, в том же блоке
+            # ProgramNum == 0, рядом со снятием снимка. Вне этого блока и в других
+            # функциях запрет действует полностью.
+            try:
+                start_block, _ = extract_braced_block_after(
+                    body, "if (ProgramNum == 0) {", strip_comments=False)
+            except ValueError as error:
+                print(f"FAIL: {error}", file=sys.stderr)
+                return 1
+            trimmed_block = start_block
+            for allowed in (
+                "nbk_Mo = SamSetup.NbkOptimalPower;",
+                "nbk_Po = SamSetup.NbkOptimalFeed;",
+            ):
+                if trimmed_block.count(allowed) != 1:
+                    print(
+                        f"FAIL: старт сессии НБК должен ровно один раз брать {allowed}",
+                        file=sys.stderr,
+                    )
+                    return 1
+                trimmed_block = trimmed_block.replace(allowed, "", 1)
+            body = body.replace(start_block, trimmed_block, 1)
         for forbidden in (
             "SamSetup.Nbk",
             "SamSetup.MainsVoltage",
@@ -641,7 +665,7 @@ def main() -> int:
     )
     snapshot_guard = (
         "  if (!nbkSessionConfig.valid) {\n"
-        "    nbk_enter_safe_wait(\"Конфигурация сессии НБК не зафиксирована.\");\n"
+        "    nbk_enter_safe_wait(TR(NBK_SESSION_CONFIG_NOT_CAPTURED, \"Конфигурация сессии НБК не зафиксирована.\"));\n"
         "    return;\n"
         "  }\n"
     )

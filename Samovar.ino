@@ -9,7 +9,7 @@
 // add to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.x.x/boards.txt
 // esp32.menu.PartitionScheme.samovar=Samovar
 // esp32.menu.PartitionScheme.samovar.build.partitions=samovar
-// esp32.menu.PartitionScheme.samovar.upload.maximum_size=1507328
+// esp32.menu.PartitionScheme.samovar.upload.maximum_size=1572864
 
 //**************************************************************************************************************
 // Подключение библиотек
@@ -1083,6 +1083,11 @@ static void tick_publish_log_line(const String &baseLine) {
   }
 }
 
+// Время строки пива/сыра в минутах; у строки L в поле Time - тайм-аут в секундах.
+static float row_time_minutes(const WProgram& row) {
+  return row.WType == 'L' ? row.Time / 60.0f : row.Time;
+}
+
 static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
   //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
   if (Samovar_Mode == SAMOVAR_BEER_MODE ||
@@ -1093,18 +1098,18 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
       const unsigned long elapsedMs = Samovar_Mode == SAMOVAR_BEER_MODE
           ? beer_stage_elapsed_ms(millis())
           : millis() - begintime;
-      wp = elapsedMs / 1000.0f / 60.0f / program[ProgramNum].Time;
+      wp = elapsedMs / 1000.0f / 60.0f / row_time_minutes(program[ProgramNum]);
     } else
       wp = 0;
     if (wp < 0) wp = 0;
     if (wp > 1) wp = 1;
     //прогресс переводим в проценты
     WthdrwlProgress = wp * 100;
-    WthdrwTime = program[ProgramNum].Time * (1 - wp);
+    WthdrwTime = row_time_minutes(program[ProgramNum]) * (1 - wp);
 
     WthdrwTimeAll = WthdrwTime;
     for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
-      WthdrwTimeAll += program[i].Time;
+      WthdrwTimeAll += row_time_minutes(program[i]);
     }
 
     // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.

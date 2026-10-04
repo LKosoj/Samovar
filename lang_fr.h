@@ -511,7 +511,7 @@
 #define LANG_CHEESE_ERR_COOLING_NOT_IN_BUILD "Refroidissement indisponible dans cette version"
 #define LANG_CHEESE_ERR_PH_CAL_LINE "Étalonnage du pH non autorisé à la ligne "
 #define LANG_CHEESE_ERR_LUA_NOT_IN_BUILD "Lua indisponible dans cette version"
-#define LANG_CHEESE_ERR_LUA_FILE_LINE "Fichier Lua /cheese.lua introuvable à la ligne "
+#define LANG_CHEESE_ERR_LUA_FILE_LINE "Fichier Lua introuvable à la ligne "
 #define LANG_CHEESE_LUA_JOB_ACCEPTED "Tâche Lua acceptée"
 #define LANG_CHEESE_NEXT_LINE "Passage à la ligne suivante"
 #define LANG_CHEESE_WAIT_OPERATOR "Attente d’une action de l’opérateur"

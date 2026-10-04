@@ -427,9 +427,9 @@ async function onColumnDiameterChange(selectObject) {
 }
 
 // Ограничения соответствуют разбору формата rect на прошивке (program_io.h, program_types.h):
-// PROGRAM_MAX = CAPACITY_NUM*2 = 20 строк, номер ёмкости 0..CAPACITY_NUM, допустимые типы
+// PROGRAM_MAX = 30 строк, номер ёмкости 0..CAPACITY_NUM, допустимые типы
 // строки - allowedTypes формата rect, скорость - PROGRAM_RATE_MIN..MAX, мощность - +-PROGRAM_POWER_MAX.
-var PROGRAM_FILE_MAX_ROWS = 20;
+var PROGRAM_FILE_MAX_ROWS = 30;
 var PROGRAM_FILE_TYPES = "HBCTP";
 
 function parseProgramFileText(text) {

@@ -77,6 +77,12 @@ static bool scheduledKeepsOptimum = false;
 static uint32_t scheduledDelay = 0;
 static NbkActuatorDeadlineTarget scheduledDeadlineTarget = NBK_ACTUATOR_WORK_DEADLINE;
 static int cleanStreamCalls = 0;
+// Сохранение найденного оптимума в NVS при выходе из O (nbk.h) - здесь не проверяется,
+// текущая строка не O, поэтому вызов не происходит.
+static uint8_t ProgramNum = 0;
+static uint8_t ProgramLen = 0;
+static bool nbk_opt_found = false;
+void persist_nbk_optimum(float, float) {}
 void nbk_set_stream_clean() { cleanStreamCalls++; }
 float nbk_actual_feed_rate() { return feedRateStub; }
 float power_work_mode_threshold() { return 10.0f; }
