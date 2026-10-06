@@ -52,6 +52,7 @@ class String {
   String& operator+=(const String& other) { value_ += other.value_; return *this; }
   friend String operator+(String left, const String& right) { left += right; return left; }
   const std::string& raw() const { return value_; }
+  unsigned int length() const { return value_.size(); }
 
  private:
   std::string value_;
@@ -314,7 +315,7 @@ int main() {
   ProgramNum = 1;
   t_min = fake_millis_value + 5000;
   waitTypeTextOk = false;
-  expect("autopause_wait_type_read_fails", "Прг №2 пауза (ошибка). Продолжение через 5 сек.; Осталось:|", SAMOVAR_STATUS_RECT_AUTOPAUSE);
+  expect("autopause_wait_type_read_fails", "Прг №2 пауза (ошибка). Продолжение через 5 сек.", SAMOVAR_STATUS_RECT_AUTOPAUSE);
 
   // 5) Переход №3: программа завершена.
   reset_fixture();

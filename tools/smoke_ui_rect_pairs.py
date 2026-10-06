@@ -37,7 +37,7 @@ enum { UI_WAIT_MANUAL_RECT = 1, UI_WAIT_MANUAL_BEER = 2, UI_WAIT_RECT_DETECTOR =
 enum { RUNTIME_PAIR_RESUMED = 0, RUNTIME_PAIR_ROW_CHANGE = 1, RUNTIME_PAIR_USER_STOP = 2, RUNTIME_PAIR_PROCESS_END = 3, RUNTIME_PAIR_ERROR = 4 };
 static int Samovar_Mode, startval;
 static bool PauseOn, PowerOn, alarm_event, program_Wait, program_Pause, beerManualPause;
-static bool rectManualPauseActive, rectSecondPumpRunning, rectSecondPumpPaused;
+static bool rectManualPauseActive, rectSecondPumpRunning, rectSecondPumpPaused, rectSecondPumpHeadsRow;
 static unsigned long t_min;
 static unsigned TargetStepps, CurrrentStepps;
 static unsigned short CurrrentStepperSpeed = 12;
@@ -284,8 +284,8 @@ void p_hook(){ @BODY@ } bool check(bool x,const char*m){if(!x)std::fprintf(stder
 #define USE_LUA
 struct String { String(){} String(const char*){} String(unsigned){} String& operator+=(const String&){return *this;} }; String operator+(String a,const String&){return a;}
 enum { PROGRAM_END=255, UI_WAIT_LUA_KNOWN=23, SAMOVAR_RECTIFICATION_MODE=0, RUNTIME_PAIR_ROW_CHANGE=1, NOTIFY_MSG=2, ALARM_MSG=0 }; static bool accepted=true; static int pairBegin=0,lastReason=-1,stops=0,endCalls=0,closeCalls=0;
-static unsigned long millis(){return 50;} static void stopService(){stops++;} static void stepper_safe_stop_reset(){} static bool lua_sequence_stage_begin(unsigned,unsigned long){return accepted;} static void runtime_pair_begin(int reason,const char*,int){pairBegin++;lastReason=reason;} static void runtime_pair_close_mode(int,int,const char*,int){closeCalls++;} static void SendMsg(const String&,int){} static String program_line_start_tag(uint8_t){return String();} static void run_program(uint8_t);
-void lua_hook(uint8_t num){ @BODY@ } static void run_program(uint8_t n){endCalls++;if(n==PROGRAM_END)return;} bool check(bool x,const char*m){if(!x)std::fprintf(stderr,"FAIL: %s\\n",m);return x;} int main(){lua_hook(0);if(!check(accepted&&pairBegin==1&&lastReason==UI_WAIT_LUA_KNOWN&&closeCalls==1&&stops==1&&endCalls==0,"accepted Lua row must close old pair then begin q23"))return 1;accepted=false;pairBegin=closeCalls=endCalls=0;lua_hook(0);return check(pairBegin==0&&closeCalls==0&&endCalls==1,"rejected Lua row must not close old pair or begin q23")?0:1;}'''.replace("@BODY@", lua_row)
+static unsigned TargetStepps=99,localStepperTarget=7; static unsigned long millis(){return 50;} static void stopService(){stops++;} static void stepper_safe_stop_reset(){localStepperTarget=0;} static unsigned stepper_safe_get_target(){return localStepperTarget;} static bool lua_sequence_stage_begin(unsigned,unsigned long){return accepted;} static void runtime_pair_begin(int reason,const char*,int){pairBegin++;lastReason=reason;} static void runtime_pair_close_mode(int,int,const char*,int){closeCalls++;} static void SendMsg(const String&,int){} static String program_line_start_tag(uint8_t){return String();} static void run_program(uint8_t);
+void lua_hook(uint8_t num){ @BODY@ } static void run_program(uint8_t n){endCalls++;if(n==PROGRAM_END)return;} bool check(bool x,const char*m){if(!x)std::fprintf(stderr,"FAIL: %s\\n",m);return x;} int main(){lua_hook(0);if(!check(accepted&&pairBegin==1&&lastReason==UI_WAIT_LUA_KNOWN&&closeCalls==1&&stops==1&&endCalls==0,"accepted Lua row must close old pair then begin q23"))return 1;if(!check(TargetStepps==0,"Lua row must drop stale withdrawal target after stepper reset"))return 1;accepted=false;pairBegin=closeCalls=endCalls=0;lua_hook(0);return check(pairBegin==0&&closeCalls==0&&endCalls==1,"rejected Lua row must not close old pair or begin q23")?0:1;}'''.replace("@BODY@", lua_row)
     code, output = compile_run(lua_cpp)
     if code:
         print("FAIL: Lua-row hook harness:\n" + output, file=sys.stderr); return 1

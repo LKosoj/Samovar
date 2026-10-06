@@ -50,6 +50,9 @@ COMPRESS = (
 
 PLACEHOLDER = re.compile(r"%[A-Za-z_][A-Za-z0-9_.]*%")
 INCLUDE_RE = re.compile(rb"<!--#include\s+([A-Za-z0-9_.-]+)\s*-->")
+# Метка против устаревшего app.js в кэше браузера: в data_raw стоит "app.js?v=build",
+# при сборке туда подставляется версия из version.txt - вручную поднимать не нужно.
+APP_JS_VERSION_RE = re.compile(rb"app\.js\?v=[\w.\-]+")
 
 
 def check_no_placeholders(name: str, data: bytes) -> str | None:
@@ -79,6 +82,14 @@ def resolve_includes(
         )
 
     return INCLUDE_RE.sub(repl, data)
+
+
+def stamp_app_version(name: str, data: bytes, version: bytes) -> bytes:
+    """Подставляет версию из version.txt в метку app.js?v= страниц .htm."""
+    version = version.strip()
+    if not version or not name.endswith(".htm"):
+        return data
+    return APP_JS_VERSION_RE.sub(b"app.js?v=" + version, data)
 
 
 def check_no_unresolved_includes(name: str, data: bytes) -> str | None:
@@ -113,6 +124,9 @@ def load_sources() -> tuple[dict[str, bytes], list[str]]:
             errors.append(str(exc))
             continue
         sources[source.name] = data
+    version = sources.get("version.txt", b"")
+    for name, data in sources.items():
+        sources[name] = stamp_app_version(name, data, version)
     missing = sorted(set(COMPRESS) - {p.name for p in SOURCE.iterdir()})
     if missing:
         errors.append(f"в data_raw/ нет файлов из COMPRESS: {', '.join(missing)}")

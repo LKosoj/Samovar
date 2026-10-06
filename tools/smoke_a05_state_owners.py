@@ -321,6 +321,7 @@ struct SetupFixture {
 struct SensorFixture {
   float avgTemp;
   float BodyTemp;
+  float StartProgTemp;
 };
 using DSSensor = SensorFixture;
 
@@ -365,11 +366,11 @@ volatile float bme_temp = 1.25f;
 volatile float bme_pressure = 760.0f;
 volatile float start_pressure = 755.5f;
 SetupFixture SamSetup{true, true, 800, 0, true, 96.0f, 5, 15};
-SensorFixture SteamSensor{78.125f, 77.0f};
-SensorFixture PipeSensor{77.25f, 76.0f};
-SensorFixture WaterSensor{20.5f, 0.0f};
-SensorFixture TankSensor{89.75f, 0.0f};
-SensorFixture ACPSensor{30.0f, 0.0f};
+SensorFixture SteamSensor{78.125f, 77.0f, 0.0f};
+SensorFixture PipeSensor{77.25f, 76.0f, 0.0f};
+SensorFixture WaterSensor{20.5f, 0.0f, 0.0f};
+SensorFixture TankSensor{89.75f, 0.0f, 0.0f};
+SensorFixture ACPSensor{30.0f, 0.0f, 0.0f};
 WProgram program[8] = {};
 DetectorFixture impurityDetector{0.125f, 2};
 volatile float ActualVolumePerHour = 1.234f;
@@ -489,6 +490,11 @@ static int32_t targetSteps = 1000;
 static int32_t currentSteps = 250;
 static float stepperSpeed = 12.5f;
 static bool stepperState = true;
+// Головы со вторым насосом: окно шагов и скорость показывают I2C-насос.
+static bool rectSecondPumpHeadsRow = false;
+static uint32_t rectSecondPumpTargetSteps = 0;
+static uint32_t headsPumpCompleted = 0;
+static uint32_t headsPumpSpeed = 0;
 static ProgramType programType = 'B';
 static RuntimeAjaxSnapshotResult copyResult = RUNTIME_AJAX_SNAPSHOT_OK;
 static bool sourceHasEvent = true;
@@ -625,6 +631,17 @@ float stepper_safe_get_speed() {
 bool stepper_safe_get_state() {
   sourceGetterCalls++;
   return stepperState;
+}
+
+uint32_t rect_current_withdrawal_steps() {
+  if (!rectSecondPumpHeadsRow) return (uint32_t)stepper_safe_get_current();
+  sourceGetterCalls++;
+  return headsPumpCompleted;
+}
+
+uint32_t rect_heads_pump_speed() {
+  sourceGetterCalls++;
+  return headsPumpSpeed;
 }
 
 ProgramType current_program_type() {
@@ -806,6 +823,33 @@ int main() {
   if (captureAjaxTelemetrySnapshot(0, failed) != RUNTIME_AJAX_SNAPSHOT_CORRUPT ||
       sourceGetterCalls != gettersBeforeFailure) return 23;
 
+  // Головы со вторым насосом: встроенный мотор стоит, окно шагов и скорость - от I2C-насоса.
+  // Два набора значений, чтобы константа не прошла.
+  copyResult = RUNTIME_AJAX_SNAPSHOT_OK;
+  targetSteps = 0; currentSteps = 0; stepperSpeed = 0.0f; stepperState = false;
+  rectSecondPumpHeadsRow = true;
+  const uint32_t headsCases[2][3] = {{50000, 1200, 139}, {80000, 64000, 278}};
+  for (const auto& headsCase : headsCases) {
+    rectSecondPumpTargetSteps = headsCase[0];
+    headsPumpCompleted = headsCase[1];
+    headsPumpSpeed = headsCase[2];
+    AjaxTelemetrySnapshot heads{};
+    if (captureAjaxTelemetrySnapshot(0, heads) != RUNTIME_AJAX_SNAPSHOT_OK) return 26;
+    if (heads.targetSteps != (int32_t)headsCase[0] || heads.currentSteps != (int32_t)headsCase[1] ||
+        heads.currentSpeed != (float)headsCase[2]) {
+      std::cerr << "heads row: steps/speed must come from the I2C pump\n";
+      return 27;
+    }
+  }
+  rectSecondPumpHeadsRow = false;
+  targetSteps = 700; currentSteps = 300; stepperSpeed = 20.0f; stepperState = true;
+  AjaxTelemetrySnapshot builtin{};
+  if (captureAjaxTelemetrySnapshot(0, builtin) != RUNTIME_AJAX_SNAPSHOT_OK ||
+      builtin.targetSteps != 700 || builtin.currentSteps != 300 || builtin.currentSpeed != 20.0f) {
+    std::cerr << "other rows: steps/speed must come from the built-in stepper\n";
+    return 28;
+  }
+
   // Реальное извлечённое тело build_ui_state_from_loop(): два подтверждённых
   // значения НБК должны попасть в разные applied-controls, а не в requested.
   Samovar_Mode = SAMOVAR_NBK_MODE;
@@ -863,6 +907,51 @@ int main() {
       !cheeseFirst.end.hasRemainingSeconds || cheeseFirst.end.remainingSeconds != 480 ||
       cheeseSecond.end.remainingSeconds != 180 || cheeseFirst.waitCount != 1 ||
       cheeseFirst.waits[0].reason != UI_WAIT_CHEESE_HOLD_CLOCK_FREEZE) return 26;
+
+  // Ректификация: H - отбор голов, а не нагрев; ручная пауза на головах остаётся
+  // ожиданием оператора. Пауза P - секунды из Volume (в Time те же секунды в часах).
+  // Порог строки - по пару, как в rect_row_transition_requested(): до 20 - прирост.
+  Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+  PowerOn = true; PauseOn = false; program_Wait = false; program_Pause = false;
+  rectManualPauseActive = false;
+  ProgramNum = 1; ProgramLen = 3; programType = 'H';
+  program[1] = WProgram{}; program[1].WType = 'H';
+  if (build_ui_state_from_loop().phase != UI_PHASE_HEADS) return 29;
+  PauseOn = true; rectManualPauseActive = true;
+  if (build_ui_state_from_loop().phase != UI_PHASE_OPERATOR_WAIT) return 30;
+  PauseOn = false; rectManualPauseActive = false;
+  programType = 'P'; program[1].WType = 'P';
+  program[1].Volume = 600; program[1].Time = 600.0f / 3600.0f;
+  UiStateDescriptor rectPauseShort = build_ui_state_from_loop();
+  program[1].Volume = 900; program[1].Time = 900.0f / 3600.0f;
+  UiStateDescriptor rectPauseLong = build_ui_state_from_loop();
+  if (rectPauseShort.phase != UI_PHASE_HOLD || rectPauseShort.end.value != 600.0f ||
+      rectPauseLong.end.value != 900.0f || rectPauseShort.end.unit != UI_UNIT_S) return 31;
+  programType = 'C'; program[1] = WProgram{}; program[1].WType = 'C';
+  program[1].Temp = 0.5f; SteamSensor.StartProgTemp = 78.0f;
+  UiStateDescriptor rectDelta = build_ui_state_from_loop();
+  program[1].Temp = 79.5f;
+  UiStateDescriptor rectAbsolute = build_ui_state_from_loop();
+  if (!rectDelta.end.present || rectDelta.end.source != UI_END_SOURCE_STEAM ||
+      rectDelta.end.value != 78.5f || rectAbsolute.end.value != 79.5f) return 32;
+  programType = 'T'; program[1].WType = 'T';
+  if (build_ui_state_from_loop().end.source != UI_END_SOURCE_STEAM) return 33;
+
+  // Дистилляция: S/R - доля от стартовой спиртуозности, P/R - спиртуозность пара.
+  Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
+  program[1] = WProgram{}; programType = 'S'; program[1].WType = 'S'; program[1].Speed = 0.5f;
+  UiStateDescriptor distRatio = build_ui_state_from_loop();
+  programType = 'R'; program[1].WType = 'R';
+  UiStateDescriptor distSteamRatio = build_ui_state_from_loop();
+  programType = 'P'; program[1].WType = 'P'; program[1].Speed = 40.0f;
+  UiStateDescriptor distSteam = build_ui_state_from_loop();
+  programType = 'A'; program[1].WType = 'A';
+  UiStateDescriptor distTank = build_ui_state_from_loop();
+  if (distRatio.end.kind != UI_END_RATIO || distRatio.end.source != UI_END_SOURCE_TANK ||
+      distRatio.end.value != 50.0f || distSteamRatio.end.kind != UI_END_RATIO ||
+      distSteamRatio.end.source != UI_END_SOURCE_STEAM ||
+      distSteam.end.kind != UI_END_ALCOHOL || distSteam.end.source != UI_END_SOURCE_STEAM ||
+      distTank.end.kind != UI_END_ALCOHOL || distTank.end.source != UI_END_SOURCE_TANK) return 34;
 
   std::cout << before << '\n';
   return 0;
@@ -1033,6 +1122,7 @@ def main() -> int:
         "current_power_p", "water_pump_speed", "valve_status", "WFflowRate",
         "WFtotalMilliLitres", "pressure_value", "timePredictor",
         "millis(", "get_liquid_volume(", "stepper_safe_get_",
+        "rect_current_withdrawal_steps(", "rect_heads_pump_speed(", "rectSecondPump",
         "current_program_type(", "get_alcohol(", "get_steam_alcohol(",
         "copy_ajax_runtime_snapshot(", "heater_safety_latched(",
         # [9b] bk_water_auto/bk_steam_setpoint - те же безусловные глобалы БК,

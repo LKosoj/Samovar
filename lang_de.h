@@ -235,6 +235,8 @@
 #define LANG_LOGIC_PUMP_CAL_NOT_SAVED_TAIL ". Ergebnis verloren, Kalibrierung wiederholen."
 #define LANG_LOGIC_ACTION_PAUSE "Pause"
 #define LANG_LOGIC_ACTION_RESUME "Fortsetzen"
+#define LANG_LOGIC_ACTION_SPEED "Tempo"
+#define LANG_LOGIC_I2C_PUMP_SPEED_RANGE "I2C-Pumpe: Tempo außerhalb ihrer Grenzen, bisheriges bleibt."
 #define LANG_LOGIC_MANUAL_PAUSE_TAKEOFF "Manuelle Abnahmepause"
 #define LANG_LOGIC_MANUAL_PAUSE_MASH "Manuelle Maischepause"
 #define LANG_LOGIC_MASH_PAUSE_NEXT_STEP "Pause wird beim nächsten Maischeschritt angewendet."

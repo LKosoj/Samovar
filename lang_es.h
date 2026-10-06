@@ -235,6 +235,8 @@
 #define LANG_LOGIC_PUMP_CAL_NOT_SAVED_TAIL ". Resultado perdido, repita la calibración."
 #define LANG_LOGIC_ACTION_PAUSE "pausa"
 #define LANG_LOGIC_ACTION_RESUME "continuación"
+#define LANG_LOGIC_ACTION_SPEED "velocidad"
+#define LANG_LOGIC_I2C_PUMP_SPEED_RANGE "Bomba I2C: velocidad fuera de sus límites, se mantiene la anterior."
 #define LANG_LOGIC_MANUAL_PAUSE_TAKEOFF "Pausa manual de extracción"
 #define LANG_LOGIC_MANUAL_PAUSE_MASH "Pausa manual de maceración"
 #define LANG_LOGIC_MASH_PAUSE_NEXT_STEP "La pausa se aplicará en el próximo paso de maceración."

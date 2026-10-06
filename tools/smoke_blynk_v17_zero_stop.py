@@ -1,116 +1,138 @@
 #!/usr/bin/env python3
-"""Поведенческая проверка BLYNK_WRITE(V17) (Blynk.ino): ноль обязан штатно
-останавливать отбор.
+"""Поведенческая проверка BLYNK_WRITE(V17) (Blynk.ino): ноль во время отбора ставит
+отбор на ручную паузу, и снять её можно кнопкой паузы (V13).
 
-До правки нулевой вход шёл через get_speed_from_rate(0), которая зажимает
-результат СНИЗУ до 1 (минимальная скорость мотора), а затем через
-set_pump_speed(1, true) - эта функция внутри себя зовёт stopService() и тут же
-startService(), так что насос не останавливался, а полз на минимальной
-скорости. Правка обрабатывает rate==0 ДО строгого парсера и зовёт
-stopService() напрямую, без пересчёта скорости.
+История. Ноль сначала уходил в set_pump_speed(1) - насос не останавливался, а полз
+на минимальной скорости. Потом ноль стал звать stopService() напрямую: мотор
+вставал, но без PauseOn, и отбор было нечем возобновить - pause_withdrawal()
+выходит сразу при стоящем моторе и снятой паузе, а set_pump_speed() стоящий мотор
+не запускает. Теперь ноль зовёт enter_manual_pause() - ту же паузу, что V13.
 
-После код-ревью ветка rate==0 дополнительно проверяет тот же статус, что и
-set_pump_speed() (logic.h): тот же шаговый двигатель используют калибровка
-насоса, HopStepperStep() и самотест, и V17=0 вне отбора не должен обрывать
-их работу. После остановки CurrrentStepperSpeed и ActualVolumePerHour
-обнуляются - как и в остальных точках остановки отбора (WebServer.ino,
-alarm.h, I2CStepper.h, pause_withdrawal в logic.h) - иначе телеметрия V9 и
-расчёт флегмового числа продолжают считать по старой скорости.
+Харнесс собирает вместе НАСТОЯЩИЕ тела BLYNK_WRITE(V17) и BLYNK_WRITE(V13)
+(Blynk.ino), pause_withdrawal() и enter_manual_pause() (logic.h), а разбор чисел -
+настоящий control_numeric_input.h. Заглушки моделируют состояние: шаговый мотор
+(крутится/стоит, скорость, шаги, цель), второй I2C-насос, set_pump_speed() (на
+стоящем моторе только запоминает скорость, как и настоящая). resume_from_pause()
+заглушён до pause_withdrawal(false) - остальное в нём (детектор, пиво, тип
+ожидания) к V17 отношения не имеет.
 
-Тест вытаскивает РЕАЛЬНОЕ тело BLYNK_WRITE(V17) из Blynk.ino (extract_function_body)
-и компилирует его g++-харнессом. Разбор числа - настоящие parse_finite_float/
-parse_control_rate_steps из control_numeric_input.h (включены как есть, не
-переписаны); мокаются только истинно внешние побочные эффекты: stopService(),
-set_pump_speed(), report_blynk_numeric_error(), mode_switch_in_progress(), а
-также SamovarStatusInt/CurrrentStepperSpeed/ActualVolumePerHour.
-
-Мутационная проверка: удаляет из извлечённого тела ветку "rate==0 -> статус +
-stopService() + обнуление" целиком (та самая правка) - без неё сценарий "0"
-обязан начать проваливаться (stopService() не позовётся, вместо этого
-сработает строгий парсер и report_blynk_numeric_error). Если мутация не
-ловится - тест сам ничего не проверяет и обманывает.
+Мутации (каждая обязана провалить конкретный assert, а не компиляцию):
+  * ветка нуля вырезана целиком - ноль уходит в строгий парсер как ошибка;
+  * enter_manual_pause() заменён на прежний stopService() - V13 не возобновляет;
+  * снята проверка !PauseOn - повторный ноль на паузе открывает вторую пару событий;
+  * снята проверка статуса - ноль вне отбора останавливает калибровку насоса.
 """
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
-SIGNATURE = "BLYNK_WRITE(V17)"
-
-# Ветка фикса: ноль обрабатывается ДО строгого парсера, но только в статусе,
-# который проверяет и set_pump_speed() (logic.h) - вне отбора это no-op.
-# Используется и как якорь для мутации (её отсутствие в теле - ошибка теста),
-# и как сама мутация (её вырезание должно завалить сценарий "0").
-ZERO_STOP_BRANCH = (
-    "  if (result.ok() && rate == 0.0f) {\n"
-    "    if (SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED) {\n"
-    "      stopService();\n"
-    "      CurrrentStepperSpeed = 0;\n"
-    "      ActualVolumePerHour = 0;\n"
-    "      ui_note_withdrawal_control_source(UI_CONTROL_SOURCE_MANUAL);\n"
-    "    }\n"
-    "    return;\n"
-    "  }\n"
+ZERO_PAUSE_LINE = (
+    "    if (!PauseOn && SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL) enter_manual_pause();\n"
 )
 
-HARNESS_TEMPLATE = r'''
+HARNESS_TEMPLATE = I18N_INCLUDE + r'''
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
+#include <algorithm>
+using std::max;
 
 #include "control_numeric_input.h"
 
-// ---- Моки истинно внешних зависимостей (не-static) ----
 static bool modeSwitchInProgressStub = false;
 bool mode_switch_in_progress() { return modeSwitchInProgressStub; }
 
-struct SetupEEPROM {
-  uint16_t StepperStepMl = 1000;
-};
+struct SetupEEPROM { uint16_t StepperStepMl = 1000; };
 static SetupEEPROM SamSetup;
 
-// ---- Статус отбора (тот же предикат, что и set_pump_speed() в logic.h) ----
 static const int16_t SAMOVAR_STATUS_IDLE = 0;
 static const int16_t SAMOVAR_STATUS_RECT_WITHDRAWAL = 10;
 static const int16_t SAMOVAR_STATUS_RECT_AUTOPAUSE = 15;
 static const int16_t SAMOVAR_STATUS_PAUSED = 40;
-static const int16_t SAMOVAR_STATUS_RECT_ACCEL = 50;
 static int16_t SamovarStatusInt = SAMOVAR_STATUS_IDLE;
 
-// ---- Скорость/производительность, которые обязана обнулять остановка ----
+static const int SAMOVAR_RECTIFICATION_MODE = 0;
+static const int SAMOVAR_BEER_MODE = 4;
+static int Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+static const int SAMOVAR_STARTVAL_BEER_START = 2000;
+static int startval = 0;
+
+static bool PauseOn = false;
+static bool PowerOn = true;
+static bool alarm_event = false;
+static bool program_Wait = false;
+static bool program_Pause = false;
+static bool beerManualPause = false;
+static bool rectManualPauseActive = false;
 static uint16_t CurrrentStepperSpeed = 0;
-static float ActualVolumePerHour = 0.0f;
+static int32_t TargetStepps = 0;
+static int32_t CurrrentStepps = 0;
 
+// ---- Шаговый мотор: состояние, от которого зависят pause_withdrawal() и V13 ----
+static bool stepperRunning = false;
+static float stepperMaxSpeed = 0.0f;
+static int32_t stepperCurrent = 0;
+static int32_t stepperTarget = 0;
+bool stepper_safe_get_state() { return stepperRunning; }
+int32_t stepper_safe_get_target() { return stepperTarget; }
+int32_t stepper_safe_get_current() { return stepperCurrent; }
+float stepper_safe_get_speed() { return stepperRunning ? stepperMaxSpeed : 0.0f; }
+void stepper_safe_set_max_speed(float speed) { stepperMaxSpeed = speed; }
+void stepper_safe_set_current(int32_t current) { stepperCurrent = current; }
+void stepper_safe_set_target(int32_t target) { stepperTarget = target; }
+void stepper_safe_stop() { stepperRunning = false; }
 static int stopServiceCalls = 0;
-void stopService() { stopServiceCalls++; }
+void stopService() { stopServiceCalls++; stepperRunning = false; }
+void startService() { stepperRunning = stepperTarget > stepperCurrent; }
 
-static int setPumpSpeedCalls = 0;
-static float lastPumpSpeed = -1.0f;
-static bool lastContinueProcess = false;
+// ---- Второй (I2C) насос строки голов ----
+static bool rectSecondPumpHeadsRow = false;
+static bool rectSecondPumpRunning = false;
+static bool secondPumpStopOk = true;
+bool rect_pause_second_i2c_pump() {
+  if (!rectSecondPumpRunning) return true;
+  if (!secondPumpStopOk) return false;
+  rectSecondPumpRunning = false;
+  return true;
+}
+bool rect_resume_second_i2c_pump() {
+  if (rectSecondPumpHeadsRow) rectSecondPumpRunning = true;
+  return true;
+}
+static int rectFailCalls = 0;
+void rect_fail_second_i2c_pump(const char*) { rectFailCalls++; }
+
+enum MESSAGE_TYPE { ALARM_MSG, WARNING_MSG, NOTIFY_MSG };
+template <typename T> void SendMsg(const T&, MESSAGE_TYPE) {}
+enum UiWaitReason { UI_WAIT_MANUAL_RECT, UI_WAIT_MANUAL_BEER };
+enum RuntimePairOutcome { RUNTIME_PAIR_RESUMED };
+static int pairBeginCalls = 0;
+static int pairEndCalls = 0;
+void runtime_pair_begin(UiWaitReason, const char*, MESSAGE_TYPE) { pairBeginCalls++; }
+void runtime_pair_end(UiWaitReason, RuntimePairOutcome, const char*, MESSAGE_TYPE) { pairEndCalls++; }
+char current_program_type() { return 'B'; }
+
+// set_pump_speed() (logic.h): на крутящемся моторе меняет его скорость, на стоящем -
+// только запоминает её для возобновления, мотор не запускает.
 enum UiControlSource { UI_CONTROL_SOURCE_UNKNOWN = 0, UI_CONTROL_SOURCE_MANUAL = 2 };
-static uint8_t lastSource = UI_CONTROL_SOURCE_UNKNOWN;
-void ui_note_withdrawal_control_source(uint8_t source) { lastSource = source; }
-void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true,
-                    UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN) {
-  (void)updateBase;
+static int setPumpSpeedCalls = 0;
+void set_pump_speed(float pumpspeed, bool, bool = true,
+                    UiControlSource = UI_CONTROL_SOURCE_UNKNOWN) {
   setPumpSpeedCalls++;
-  lastPumpSpeed = pumpspeed;
-  lastContinueProcess = continue_process;
-  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL ||
-      SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE ||
-      SamovarStatusInt == SAMOVAR_STATUS_PAUSED) lastSource = source;
+  CurrrentStepperSpeed = (uint16_t)pumpspeed;
+  if (stepperRunning) stepperMaxSpeed = pumpspeed;
 }
 
 static int reportErrorCalls = 0;
 static uint8_t lastReportPin = 0;
-static NumericParseError lastReportError = NUMERIC_PARSE_OK;
-void report_blynk_numeric_error(uint8_t virtualPin, NumericParseResult result) {
+void report_blynk_numeric_error(uint8_t virtualPin, NumericParseResult) {
   reportErrorCalls++;
   lastReportPin = virtualPin;
-  lastReportError = result.error;
 }
 
 struct BlynkParamMock {
@@ -118,10 +140,22 @@ struct BlynkParamMock {
   const char* asStr() const { return text; }
 };
 
-// ---- Реальное тело BLYNK_WRITE(V17) (Blynk.ino) под тестом ----
-static void run_v17_handler(const char* input) {
+// ---- Настоящий код под тестом ----
+void pause_withdrawal(bool Pause) {
+@PAUSE_WITHDRAWAL@
+}
+void enter_manual_pause() {
+@ENTER_MANUAL_PAUSE@
+}
+void resume_from_pause() { pause_withdrawal(false); program_Wait = false; }
+
+static void run_v17(const char* input) {
   BlynkParamMock param{input};
-@BODY@
+@V17@
+}
+static void run_v13(const char* input) {
+  BlynkParamMock param{input};
+@V13@
 }
 
 static int failures = 0;
@@ -134,106 +168,153 @@ static void check(bool condition, const char* message) {
 
 static void reset_fixture() {
   modeSwitchInProgressStub = false;
+  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+  Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+  startval = 0;
+  PauseOn = false;
+  PowerOn = true;
+  alarm_event = false;
+  program_Wait = false;
+  program_Pause = false;
+  beerManualPause = false;
+  rectManualPauseActive = false;
+  CurrrentStepperSpeed = 0;
+  TargetStepps = 0;
+  CurrrentStepps = 0;
+  stepperRunning = false;
+  stepperMaxSpeed = 0.0f;
+  stepperCurrent = 0;
+  stepperTarget = 0;
   stopServiceCalls = 0;
+  rectSecondPumpHeadsRow = false;
+  rectSecondPumpRunning = false;
+  secondPumpStopOk = true;
+  rectFailCalls = 0;
+  pairBeginCalls = 0;
+  pairEndCalls = 0;
   setPumpSpeedCalls = 0;
-  lastPumpSpeed = -1.0f;
-  lastContinueProcess = false;
-  lastSource = UI_CONTROL_SOURCE_UNKNOWN;
   reportErrorCalls = 0;
   lastReportPin = 0;
-  lastReportError = NUMERIC_PARSE_OK;
-  SamSetup.StepperStepMl = 1000;
-  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
-  // Ненулевые метки - чтобы "не тронуто" и "обнулено" различались в проверках.
-  CurrrentStepperSpeed = 42;
-  ActualVolumePerHour = 99.0f;
+}
+
+static void start_withdrawal(uint16_t speed, int32_t current, int32_t target) {
+  reset_fixture();
+  SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
+  CurrrentStepperSpeed = speed;
+  stepperMaxSpeed = speed;
+  stepperCurrent = current;
+  stepperTarget = target;
+  stepperRunning = true;
+}
+
+// Ноль -> пауза -> снятие паузы кнопкой: мотор продолжает с той же скорости и шага.
+static void zero_then_resume(uint16_t speed, int32_t current, int32_t target) {
+  start_withdrawal(speed, current, target);
+  run_v17("0");
+  check(!stepperRunning, "0/withdrawal: мотор обязан остановиться");
+  check(PauseOn, "0/withdrawal: ноль обязан поставить паузу (PauseOn)");
+  check(rectManualPauseActive && pairBeginCalls == 1,
+        "0/withdrawal: пауза обязана быть ручной (одна пара событий)");
+  check(CurrrentStepperSpeed == speed, "0/withdrawal: скорость отбора не обнуляется");
+  check(setPumpSpeedCalls == 0 && reportErrorCalls == 0,
+        "0/withdrawal: ноль не идёт ни в set_pump_speed(), ни в ошибку разбора");
+
+  // Статус ещё не пересчитан (WITHDRAWAL), а пауза уже стоит: повторный ноль - пусто.
+  run_v17("0");
+  check(pairBeginCalls == 1, "повторный 0 на паузе: вторая пара событий не открывается");
+  SamovarStatusInt = SAMOVAR_STATUS_PAUSED;
+  run_v17("0");
+  check(pairBeginCalls == 1 && PauseOn, "0 на статусе PAUSED: ничего не меняется");
+
+  run_v13("0");
+  check(!PauseOn, "V13=0 после V17=0: пауза снимается");
+  check(stepperRunning, "V13=0 после V17=0: отбор обязан возобновиться (мотор крутится)");
+  check(stepperMaxSpeed == (float)speed, "V13=0 после V17=0: прежняя скорость мотора");
+  check(stepperCurrent == current && stepperTarget == target,
+        "V13=0 после V17=0: прежние пройденные шаги и цель");
+  check(pairEndCalls == 1 && !rectManualPauseActive, "V13=0: ручная пауза закрыта");
 }
 
 int main() {
-  // Сценарий 1а: "0" при статусе отбора (RECT_WITHDRAWAL) - штатная остановка
-  // БЕЗ пересчёта скорости, со сбросом CurrrentStepperSpeed/ActualVolumePerHour
-  // (главная проверка правки + [Ревью] замечание 2).
+  zero_then_resume(42, 100, 500);
+  zero_then_resume(77, 2000, 9000);
+
+  // Скорость, заданная на паузе, применяется при возобновлении.
+  start_withdrawal(42, 100, 500);
+  run_v17("0");
+  SamovarStatusInt = SAMOVAR_STATUS_PAUSED;
+  run_v17("5");
+  check(!stepperRunning, "5 на паузе: стоящий мотор не запускается");
+  const uint16_t pausedSpeed = CurrrentStepperSpeed;
+  check(pausedSpeed != 42 && pausedSpeed > 0, "5 на паузе: новая скорость запомнена");
+  run_v13("0");
+  check(stepperRunning && stepperMaxSpeed == (float)pausedSpeed,
+        "V13=0: отбор продолжается со скоростью, заданной на паузе");
+
+  // Головы со вторым насосом: ноль останавливает I2C-насос, кнопка паузы его запускает.
   reset_fixture();
   SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
-  run_v17_handler("0");
-  check(stopServiceCalls == 1, "0/withdrawal: stopService() должен быть вызван ровно один раз");
-  check(setPumpSpeedCalls == 0, "0/withdrawal: set_pump_speed() не должен вызываться при нулевом входе");
-  check(reportErrorCalls == 0, "0/withdrawal: нулевой вход валиден, ошибка не репортится");
-  check(CurrrentStepperSpeed == 0, "0/withdrawal: CurrrentStepperSpeed должен быть обнулён");
-  check(ActualVolumePerHour == 0.0f, "0/withdrawal: ActualVolumePerHour должен быть обнулён");
-  check(lastSource == UI_CONTROL_SOURCE_MANUAL, "0/withdrawal: источник принятой остановки — оператор");
+  rectSecondPumpHeadsRow = true;
+  rectSecondPumpRunning = true;
+  run_v17("0");
+  check(PauseOn && !rectSecondPumpRunning, "0/heads: I2C-насос на паузе");
+  check(rectFailCalls == 0, "0/heads: успешная остановка - не авария");
+  run_v13("0");
+  check(!PauseOn && rectSecondPumpRunning, "V13=0/heads: I2C-насос снова качает");
+  check(!stepperRunning, "V13=0/heads: встроенный мотор на головах не запускается");
 
-  // Сценарий 1б: "0" вне отбора (IDLE/разгон) - обработчик не должен трогать
-  // посторонний шаговый (калибровку насоса, HopStepperStep(), самотест) -
-  // [Ревью] замечание 1. Ничего не вызывается, ничего не меняется.
+  reset_fixture();
+  SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
+  rectSecondPumpHeadsRow = true;
+  rectSecondPumpRunning = true;
+  secondPumpStopOk = false;
+  run_v17("0");
+  check(rectFailCalls == 1, "0/heads: отказ остановки I2C-насоса обязан стать аварией");
+
+  // Автопауза по датчику: пауза уже стоит, ручной она от нуля не становится.
+  start_withdrawal(42, 100, 500);
+  SamovarStatusInt = SAMOVAR_STATUS_RECT_AUTOPAUSE;
+  stepperRunning = false;
+  PauseOn = true;
+  program_Wait = true;
+  run_v17("0");
+  check(pairBeginCalls == 0 && !rectManualPauseActive, "0/autopause: ничего не меняется");
+
+  // Вне отбора тот же мотор крутит калибровка насоса - ноль её не трогает.
   reset_fixture();
   SamovarStatusInt = SAMOVAR_STATUS_IDLE;
-  run_v17_handler("0");
-  check(stopServiceCalls == 0, "0/idle: stopService() не должен вызываться вне отбора");
-  check(setPumpSpeedCalls == 0, "0/idle: set_pump_speed() не должен вызываться при нулевом входе");
-  check(reportErrorCalls == 0, "0/idle: нулевой вход валиден, ошибка не репортится");
-  check(CurrrentStepperSpeed == 42, "0/idle: CurrrentStepperSpeed не должен меняться");
-  check(ActualVolumePerHour == 99.0f, "0/idle: ActualVolumePerHour не должен меняться");
-  check(lastSource == UI_CONTROL_SOURCE_UNKNOWN, "0/idle: непринятая остановка не меняет источник");
+  stepperRunning = true;
+  stepperTarget = 999999999;
+  CurrrentStepperSpeed = 33;
+  run_v17("0");
+  check(stepperRunning && !PauseOn, "0/idle: калибровка насоса не останавливается");
+  check(CurrrentStepperSpeed == 33 && reportErrorCalls == 0, "0/idle: ничего не меняется");
 
   reset_fixture();
-  SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
-  run_v17_handler("0");
-  check(stopServiceCalls == 0, "0/accel: stopService() не должен вызываться во время разгона");
-  check(CurrrentStepperSpeed == 42, "0/accel: CurrrentStepperSpeed не должен меняться");
-  check(ActualVolumePerHour == 99.0f, "0/accel: ActualVolumePerHour не должен меняться");
+  run_v17("abc");
+  check(reportErrorCalls == 1 && lastReportPin == 17, "abc: одна ошибка разбора на пин 17");
+  check(setPumpSpeedCalls == 0 && !PauseOn, "abc: без побочных эффектов");
 
-  // Сценарии 2 и 3: "5" и "10" - разные ненулевые расходы обязаны давать
-  // РАЗНЫЕ скорости насоса (ловит мутацию "всегда одна и та же скорость").
-  reset_fixture();
-  SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
-  run_v17_handler("5");
-  check(stopServiceCalls == 0, "5: stopService() не должен вызываться при ненулевом входе");
-  check(setPumpSpeedCalls == 1, "5: set_pump_speed() должен быть вызван ровно один раз");
-  check(lastContinueProcess == true, "5: continue_process должен быть true");
-  check(lastPumpSpeed > 0.0f, "5: скорость должна быть положительной");
-  check(lastSource == UI_CONTROL_SOURCE_MANUAL, "5: источник принятой скорости — оператор");
-  float speedFor5 = lastPumpSpeed;
-
-  reset_fixture();
-  SamovarStatusInt = SAMOVAR_STATUS_RECT_AUTOPAUSE;
-  run_v17_handler("10");
-  check(lastSource == UI_CONTROL_SOURCE_MANUAL, "10: источник принятой скорости — оператор");
-  check(setPumpSpeedCalls == 1, "10: set_pump_speed() должен быть вызван ровно один раз");
-  check(lastPumpSpeed > 0.0f, "10: скорость должна быть положительной");
-  float speedFor10 = lastPumpSpeed;
-  check(speedFor5 != speedFor10, "5 л/ч и 10 л/ч должны давать РАЗНУЮ скорость насоса");
-
-  // Сценарий 4: невалидная строка - штатная ошибка разбора, без побочных
-  // эффектов (ни stopService, ни set_pump_speed).
-  reset_fixture();
-  run_v17_handler("abc");
-  check(reportErrorCalls == 1, "abc: должна быть ровно одна ошибка разбора");
-  check(lastReportPin == 17, "abc: ошибка должна репортиться на пин 17");
-  check(lastReportError != NUMERIC_PARSE_OK, "abc: код ошибки не должен быть NUMERIC_PARSE_OK");
-  check(stopServiceCalls == 0, "abc: stopService() не должен вызываться при ошибке разбора");
-  check(setPumpSpeedCalls == 0, "abc: set_pump_speed() не должен вызываться при ошибке разбора");
-
-  // Сценарий 5: mode_switch_in_progress() - обработчик обязан выйти сразу,
-  // не трогая ни один внешний вызов.
-  reset_fixture();
+  start_withdrawal(42, 100, 500);
   modeSwitchInProgressStub = true;
-  run_v17_handler("5");
-  check(stopServiceCalls == 0 && setPumpSpeedCalls == 0 && reportErrorCalls == 0,
-        "mode_switch_in_progress(): обработчик не должен вызывать побочные эффекты");
+  run_v17("0");
+  check(stepperRunning && !PauseOn, "mode_switch_in_progress(): обработчик выходит сразу");
 
   if (failures != 0) return 1;
-  std::cout << "BLYNK_WRITE(V17) zero-stop behaviour checks passed\n";
+  std::cout << "BLYNK_WRITE(V17) zero-pause behaviour checks passed\n";
   return 0;
 }
 '''
 
 
-def build_harness(body: str) -> str:
-    return HARNESS_TEMPLATE.replace("@BODY@", body)
+def build_harness(bodies: dict) -> str:
+    harness = HARNESS_TEMPLATE
+    for key, body in bodies.items():
+        harness = harness.replace(f"@{key}@", body)
+    return harness
 
 
-def compile_and_run(harness: str, emit: bool) -> int:
+def compile_and_run(harness: str, emit: bool) -> tuple[int, str]:
     with tempfile.TemporaryDirectory(prefix="samovar-blynk-v17-") as temp_dir:
         temp = Path(temp_dir)
         source = temp / "blynk_v17_test.cpp"
@@ -246,54 +327,76 @@ def compile_and_run(harness: str, emit: bool) -> int:
                 "-I", str(ROOT / "libraries/I2CStepperProtocol/src"),
                 str(source), "-o", str(binary),
             ],
-            capture_output=True,
-            text=True,
-            check=False,
+            capture_output=True, text=True, check=False,
         )
         if compile_result.returncode != 0:
-            if emit:
-                sys.stderr.write(compile_result.stdout)
-                sys.stderr.write(compile_result.stderr)
-            return compile_result.returncode
+            sys.stderr.write(compile_result.stdout)
+            sys.stderr.write(compile_result.stderr)
+            return 2, ""
         run_result = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
         if emit:
             sys.stdout.write(run_result.stdout)
             sys.stderr.write(run_result.stderr)
-        return run_result.returncode
+        return run_result.returncode, run_result.stderr
 
 
 def main() -> int:
-    source = (ROOT / "Blynk.ino").read_text(encoding="utf-8")
+    blynk = (ROOT / "Blynk.ino").read_text(encoding="utf-8")
+    logic = (ROOT / "logic.h").read_text(encoding="utf-8")
     try:
-        body = extract_function_body(source, SIGNATURE)
+        bodies = {
+            "V17": extract_function_body(blynk, "BLYNK_WRITE(V17)"),
+            "V13": extract_function_body(blynk, "BLYNK_WRITE(V13)"),
+            "PAUSE_WITHDRAWAL": extract_function_body(logic, "void pause_withdrawal(bool Pause)"),
+            "ENTER_MANUAL_PAUSE": extract_function_body(logic, "void enter_manual_pause()"),
+        }
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    if ZERO_STOP_BRANCH not in body:
-        print("FAIL: BLYNK_WRITE(V17) zero-stop anchor not found - has the fix been reworded?",
-              file=sys.stderr)
+    if bodies["V17"].count(ZERO_PAUSE_LINE) != 1:
+        print("FAIL: BLYNK_WRITE(V17) zero-pause anchor not found", file=sys.stderr)
         return 1
 
-    if compile_and_run(build_harness(body), True) != 0:
+    code, _ = compile_and_run(build_harness(bodies), True)
+    if code != 0:
         return 1
 
-    # Мутация: вырезаем ветку "rate==0 -> stopService()" целиком - имитация
-    # регресса к поведению до правки (ноль снова уходит в строгий парсер).
-    mutated = body.replace(ZERO_STOP_BRANCH, "", 1)
-    if mutated == body:
-        print("FAIL: zero-stop mutation anchor missing", file=sys.stderr)
-        return 1
-    if compile_and_run(build_harness(mutated), False) == 0:
-        print("FAIL: zero-stop mutation survived (test does not actually check the fix)",
-              file=sys.stderr)
-        return 1
-
-    source_mutant = body.replace("UI_CONTROL_SOURCE_MANUAL", "UI_CONTROL_SOURCE_UNKNOWN")
-    if compile_and_run(build_harness(source_mutant), True) == 0:
-        print("FAIL: V17 manual source mutation survived", file=sys.stderr)
-        return 1
-    print("BLYNK_WRITE(V17) zero-stop smoke check passed (behaviour + mutation)")
+    # Каждая мутация обязана упасть на своём assert-е (ожидаемый фрагмент текста).
+    mutants = {
+        "zero branch removed": (
+            "  if (result.ok() && rate == 0.0f) {\n" + ZERO_PAUSE_LINE + "    return;\n  }\n",
+            "",
+            "0/withdrawal: ноль обязан поставить паузу",
+        ),
+        "old direct stopService": (
+            "enter_manual_pause();\n", "stopService();\n",
+            "V13=0 после V17=0: отбор обязан возобновиться",
+        ),
+        "PauseOn guard removed": (
+            "if (!PauseOn && SamovarStatusInt", "if (SamovarStatusInt",
+            "повторный 0 на паузе: вторая пара событий не открывается",
+        ),
+        "status guard removed": (
+            "!PauseOn && SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL",
+            "!PauseOn",
+            "0/idle: калибровка насоса не останавливается",
+        ),
+    }
+    for name, (anchor, replacement, expected) in mutants.items():
+        if bodies["V17"].count(anchor) != 1:
+            print(f"FAIL: mutation anchor missing: {name}", file=sys.stderr)
+            return 1
+        mutated = dict(bodies, V17=bodies["V17"].replace(anchor, replacement, 1))
+        code, stderr = compile_and_run(build_harness(mutated), False)
+        if code == 2:
+            print(f"FAIL: mutation '{name}' broke compilation instead of an assert", file=sys.stderr)
+            return 1
+        if code == 0 or expected not in stderr:
+            print(f"FAIL: mutation '{name}' not caught by '{expected}'; stderr:\n{stderr}",
+                  file=sys.stderr)
+            return 1
+    print("BLYNK_WRITE(V17) zero-pause smoke check passed (behaviour + mutation)")
     return 0
 
 

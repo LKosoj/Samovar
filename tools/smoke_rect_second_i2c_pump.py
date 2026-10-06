@@ -122,6 +122,71 @@ require("rect_apply_second_pump_for_row(program[num])" in run_program,
 require("rect_fail_second_i2c_pump" in run_program,
         "command failure remains visible to the process")
 
+# Головы со вторым насосом: объём и цель строки берутся у I2C-насоса,
+# встроенный шаговик стоит (его текущие шаги и цель - не про эту строку).
+run_program_tail = [line for line in run_program.strip().splitlines() if line.strip()][-1].strip()
+require("TargetStepps" in run_program_tail,
+        "run_program must finish by taking the row target")
+volume = body(LOGIC, "int get_liquid_volume()")
+VOLUME_HARNESS = r"""
+#include <cstdint>
+#include <cstdio>
+bool rectSecondPumpHeadsRow = false;
+uint32_t rectSecondPumpTargetSteps = 0;
+uint32_t pumpRemaining = 0;
+uint32_t pumpTarget = 0;
+float builtinCurrent = 0;
+unsigned builtinTarget = 0;
+unsigned TargetStepps = 0;
+uint32_t rect_current_withdrawal_steps() { return pumpTarget - pumpRemaining; }
+float i2c_get_liquid_volume_by_step(uint32_t steps) { return steps / 10.0f; }
+float get_liquid_volume_by_step(float steps) { return steps / 4.0f; }
+float stepper_safe_get_current() { return builtinCurrent; }
+unsigned stepper_safe_get_target() { return builtinTarget; }
+int get_liquid_volume() { @VOLUME@ }
+void run_program_tail() { @TAIL@ }
+bool check(bool ok, const char* message) {
+  if (!ok) std::fprintf(stderr, "FAIL: %s\n", message);
+  return ok;
+}
+int main() {
+  bool ok = true;
+  builtinCurrent = 400;
+  builtinTarget = 0;
+  rectSecondPumpHeadsRow = true;
+  rectSecondPumpTargetSteps = pumpTarget = 5000;
+  pumpRemaining = 3000;
+  ok &= check(get_liquid_volume() == 200, "heads with second pump must report I2C pump volume (2000 steps -> 200 ml)");
+  pumpRemaining = 1000;
+  ok &= check(get_liquid_volume() == 400, "heads with second pump must follow I2C pump progress (4000 steps -> 400 ml)");
+  rectSecondPumpHeadsRow = false;
+  ok &= check(get_liquid_volume() == 100, "row without second pump must report built-in stepper volume");
+  TargetStepps = 5000;
+  rectSecondPumpHeadsRow = true;
+  run_program_tail();
+  ok &= check(TargetStepps == 5000, "heads with second pump: stopped built-in stepper must not overwrite I2C target");
+  rectSecondPumpHeadsRow = false;
+  builtinTarget = 777;
+  run_program_tail();
+  ok &= check(TargetStepps == 777, "row without second pump must take built-in stepper target");
+  return ok ? 0 : 1;
+}
+"""
+with tempfile.TemporaryDirectory(prefix="samovar-rect-v3-volume-") as temp_dir:
+  temp = Path(temp_dir)
+  cpp = temp / "volume.cpp"
+  binary = temp / "volume"
+  cpp.write_text(VOLUME_HARNESS.replace("@VOLUME@", volume)
+                 .replace("@TAIL@", run_program_tail), encoding="utf-8")
+  compiled = subprocess.run(
+      ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(binary)],
+      capture_output=True, text=True, check=False)
+  if compiled.returncode:
+    raise AssertionError("heads volume harness compile failed: " + compiled.stderr)
+  checked = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
+  if checked.returncode:
+    raise AssertionError("heads with second pump: " + checked.stderr.strip())
+
 require(SAMOVAR.index('#include "I2CStepper.h"') <
         SAMOVAR.index('#include "logic.h"'),
         "v3 declarations must precede rectification helpers")

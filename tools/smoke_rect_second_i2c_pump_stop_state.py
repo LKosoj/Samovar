@@ -19,6 +19,9 @@ ENABLED_BODY = extract_function_body(
 STOP_BODY = extract_function_body(
     LOGIC, "inline bool rect_stop_second_i2c_pump_if_running()"
 )
+STEPS_BODY = extract_function_body(
+    LOGIC, "inline uint32_t rect_current_withdrawal_steps()"
+)
 APPLY_BODY = extract_function_body(
     LOGIC, "inline bool rect_apply_second_pump_for_row(const WProgram& row)"
 )
@@ -39,12 +42,16 @@ struct WProgram {
 };
 
 struct I2CStepperV3Config { uint32_t stepsPerMl; };
+struct I2CStepperV3Status { uint32_t remainingSteps; };
 struct I2CStepperDevice {
   uint8_t address;
   bool present;
   I2CStepperV3Config config;
+  I2CStepperV3Status status;
 };
-static I2CStepperDevice selectedPump = {2, true, {100}};
+static I2CStepperDevice selectedPump = {2, true, {100}, {0}};
+static uint32_t builtinCurrent = 0;
+uint32_t stepper_safe_get_current() { return builtinCurrent; }
 I2CStepperDevice* i2c_stepper_selected_pump() {
   return selectedPump.present ? &selectedPump : nullptr;
 }
@@ -85,6 +92,10 @@ inline bool rect_second_i2c_pump_enabled() {
 
 inline bool rect_stop_second_i2c_pump_if_running() {
 @STOP_BODY@
+}
+
+inline uint32_t rect_current_withdrawal_steps() {
+@STEPS_BODY@
 }
 
 inline bool rect_apply_second_pump_for_row(const WProgram& row) {
@@ -142,6 +153,21 @@ int main() {
   check(startCalls == 0,
         "disabled setting must never restart the pump while stopping it");
 
+  // Пройденные шаги голов: на паузе насос обнулил счётчики, остаток берём из запомненного.
+  rectSecondPumpHeadsRow = true;
+  rectSecondPumpTargetSteps = 10000;
+  rectSecondPumpPaused = false;
+  selectedPump.status.remainingSteps = 7000;
+  check(rect_current_withdrawal_steps() == 3000, "running heads pump: done = target - remaining");
+  selectedPump.status.remainingSteps = 0;
+  const uint32_t pausedCases[2] = {6000, 2500};
+  for (uint32_t pausedRemaining : pausedCases) {
+    rectSecondPumpPaused = true;
+    rectSecondPumpPausedVolume = pausedRemaining;
+    check(rect_current_withdrawal_steps() == 10000 - pausedRemaining,
+          "paused heads pump: done must come from the remembered remainder, not the zeroed pump");
+  }
+
   if (failures != 0) return 1;
   std::cout << "rect second I2C pump stop-state checks passed\n";
   return 0;
@@ -155,7 +181,7 @@ def compile_and_run(
     source = (
         HARNESS.replace("@ENABLED_BODY@", ENABLED_BODY)
         .replace("@STOP_BODY@", stop_body)
-        .replace("@APPLY_BODY@", apply_body)
+        .replace("@STEPS_BODY@", STEPS_BODY).replace("@APPLY_BODY@", apply_body)
     )
     source_path = directory / f"{name}.cpp"
     binary_path = directory / name

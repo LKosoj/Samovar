@@ -235,6 +235,8 @@
 #define LANG_LOGIC_PUMP_CAL_NOT_SAVED_TAIL ". 结果已丢失, 请重新校准."
 #define LANG_LOGIC_ACTION_PAUSE "暂停"
 #define LANG_LOGIC_ACTION_RESUME "继续"
+#define LANG_LOGIC_ACTION_SPEED "速度"
+#define LANG_LOGIC_I2C_PUMP_SPEED_RANGE "I2C 泵: 速度超出其范围, 保持原速度."
 #define LANG_LOGIC_MANUAL_PAUSE_TAKEOFF "手动采出暂停"
 #define LANG_LOGIC_MANUAL_PAUSE_MASH "手动糖化暂停"
 #define LANG_LOGIC_MASH_PAUSE_NEXT_STEP "暂停将在下一个糖化步骤生效."

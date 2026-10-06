@@ -59,11 +59,6 @@ float get_speed_from_rate(float volume_per_hour) {
 
 #include "alarm.h"
 
-// Получить объем жидкости
-int get_liquid_volume() {
-  return get_liquid_volume_by_step(stepper_safe_get_current());
-}
-
 // [П3-6] Момент постановки статуса "программа завершена, работа на себя" (0 - неактивно).
 volatile unsigned long program_done_hold_since = 0;
 bool rectProgramCommandFailed = false;
@@ -156,16 +151,42 @@ inline bool rect_resume_second_i2c_pump() {
   return rectSecondPumpRunning;
 }
 
+// Новая скорость I2C-насоса на головах: её показываем оператору, по ней же считаем время строки.
+inline void rect_note_heads_pump_rate(float rate) {
+  ActualVolumePerHour = rate;
+  CurrrentStepperSpeed = (uint16_t)i2c_stepper_steps_from_rate(rate);
+  program[ProgramNum].Time = program[ProgramNum].Volume / rate / 1000;
+}
+
 inline uint32_t rect_current_withdrawal_steps() {
   if (!rectSecondPumpHeadsRow || rectSecondPumpTargetSteps == 0) {
     return stepper_safe_get_current();
   }
-  I2CStepperDevice* pump = i2c_stepper_selected_pump();
-  if (!pump || !pump->present) return 0;
-  const uint32_t remaining = pump->status.remainingSteps;
+  // Остановленный насос обнуляет свои счётчики, остаток на паузе помним сами.
+  uint32_t remaining = rectSecondPumpPausedVolume;
+  if (!rectSecondPumpPaused) {
+    I2CStepperDevice* pump = i2c_stepper_selected_pump();
+    if (!pump || !pump->present) return 0;
+    remaining = pump->status.remainingSteps;
+  }
   return remaining < rectSecondPumpTargetSteps
       ? rectSecondPumpTargetSteps - remaining
       : 0;
+}
+
+// Скорость, о которой сообщает I2C-насос голов (шагов/с).
+inline uint32_t rect_heads_pump_speed() {
+  I2CStepperDevice* pump = i2c_stepper_selected_pump();
+  return pump && pump->present ? pump->status.currentSpeedStepsPerSec : 0;
+}
+
+// Получить объем жидкости, отобранной на текущей строке. Головы со вторым насосом
+// качает I2C-насос, встроенный шаговик на этой строке стоит.
+int get_liquid_volume() {
+  if (rectSecondPumpHeadsRow && rectSecondPumpTargetSteps != 0) {
+    return int(i2c_get_liquid_volume_by_step(rect_current_withdrawal_steps()));
+  }
+  return get_liquid_volume_by_step(stepper_safe_get_current());
 }
 
 inline bool rect_row_transition_requested(
@@ -441,8 +462,12 @@ void pause_withdrawal(bool Pause) {
   if (!Pause && (!PowerOn || alarm_event)) return;
   PauseOn = Pause;
   if (Pause) {
-    TargetStepps = stepper_safe_get_target();
-    CurrrentStepps = stepper_safe_get_current();
+    // Головы со вторым насосом: цель и пройденные шаги принадлежат I2C-насосу,
+    // встроенный шаговик стоит, и его нули затёрли бы цель строки.
+    if (!rectSecondPumpHeadsRow) {
+      TargetStepps = stepper_safe_get_target();
+      CurrrentStepps = stepper_safe_get_current();
+    }
     if (CurrrentStepperSpeed < 1) CurrrentStepperSpeed = (uint16_t)max(1, (int)abs((int)stepper_safe_get_speed()));
     stopService();
     stepper_safe_stop();
@@ -457,6 +482,8 @@ void pause_withdrawal(bool Pause) {
     runtime_pair_end(UI_WAIT_MANUAL_RECT, RUNTIME_PAIR_RESUMED,
                      TR(LOGIC_TAKEOFF_RESUMED, "Отбор возобновлён"), NOTIFY_MSG);
     rectManualPauseActive = false;
+    // Цель I2C-насоса, переданная встроенному шаговику, погнала бы его на головах.
+    if (rectSecondPumpHeadsRow) return;
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
     stepper_safe_set_current(CurrrentStepps);
     stepper_safe_set_target(TargetStepps);
@@ -516,6 +543,25 @@ void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase,
                     UiControlSource source) {
   if (pumpspeed < 1) return;
   if (!(SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED)) return;
+
+  // Головы со вторым насосом: отбор ведёт I2C-насос, встроенный шаговик стоит. Детектор
+  // на головах только наблюдает, поэтому сюда приходит лишь команда оператора.
+  if (rectSecondPumpHeadsRow) {
+    const float rate = get_liquid_rate_by_step(pumpspeed);
+    const float i2cSpeed = i2c_stepper_steps_from_rate(rate);
+    if (i2cSpeed < 1.0f || i2cSpeed > I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC) {
+      SendMsg(TR(LOGIC_I2C_PUMP_SPEED_RANGE, "I2C-насос: скорость вне его пределов, оставлена прежняя."), WARNING_MSG);
+      return;
+    }
+    if (!i2c_stepper_override_pump_rate(rate, i2cStepperPumpDirOverride)) {
+      rect_fail_second_i2c_pump(TR(LOGIC_ACTION_SPEED, "скорость"));
+      return;
+    }
+    rect_note_heads_pump_rate(rate);
+    if (updateBase) CurrentBaseSpeedRate = rate;
+    ui_note_withdrawal_control_source(source);
+    return;
+  }
 
   bool cp = continue_process;
   if (!stepper_safe_get_state()) cp = false;
@@ -829,7 +875,8 @@ String tick_status_fsm() {
         runtime_state_unlock(true);
       }
     }
-    local += TR(LOGIC_LEFT, "; Осталось:") + localWtS + "|" + localWtAllS;
+    // Пусто, когда время строки неизвестно (строка L, строка без цели по объёму).
+    if (localWtS.length() > 0) local += TR(LOGIC_LEFT, "; Осталось:") + localWtS + "|" + localWtAllS;
   }
   if (SteamSensor.BodyTemp > 0) {
     local += TR(LOGIC_BODY_T_STEAM, ";Т тела пар:") + format_float(SteamSensor.BodyTemp, 3) + TR(LOGIC_BODY_T_PIPE, ";Т тела царга:") + format_float(PipeSensor.BodyTemp, 3);
@@ -1007,6 +1054,7 @@ void run_program(uint8_t num) {
   if (program[num].WType == 'L') {
     stopService();
     stepper_safe_stop_reset();
+    TargetStepps = stepper_safe_get_target();
 #ifdef USE_LUA
     if (!lua_sequence_stage_begin(num, millis())) {
       SendMsg(TR(LOGIC_LUA_LINE_SCRIPT_NOT_STARTED, "Ошибка Lua: скрипт строки не запущен"), ALARM_MSG);
@@ -1184,7 +1232,8 @@ void run_program(uint8_t num) {
     SendMsg(p_s, NOTIFY_MSG);
   }
 
-  TargetStepps = stepper_safe_get_target();
+  // Головы со вторым насосом: цель уже взята у I2C-насоса, встроенный шаговик сброшен в 0.
+  if (!rectSecondPumpHeadsRow) TargetStepps = stepper_safe_get_target();
 }
 
 // Установить температуру тела

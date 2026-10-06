@@ -645,8 +645,22 @@ UPLOAD_TRIGGER = r'''async page => {
   const handler = __HANDLER__;
   const kind = __KIND__;
 __BOOTSTRAP_READY_HELPER__
+  // На brewxml.htm загрузка рецепта живёт в карточке каталога, а она видна только в
+  // режиме «Пиво» (mode 2). Остальные проверки страницы держат карточку скрытой (mode 1),
+  // поэтому режим 2 отдаём один раз - на эту загрузку страницы.
+  if (file === "brewxml.htm") {
+    await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({
+      status:200, contentType:"application/json", body:JSON.stringify({mode:2})
+    }), {times:1});
+    await page.route("https://www.samovar-tool.ru/beerxml/v1/**", route => route.fulfill({
+      status:200, contentType:"application/json", body:JSON.stringify({families:[], items:[], total:0})
+    }));
+  }
   await page.goto(baseUrl + "/" + file, {waitUntil:"load"});
   await waitForBootstrapReady(file);
+  if (file === "brewxml.htm") {
+    await page.waitForFunction(() => !document.getElementById("beerRecipesCard").hidden);
+  }
   await page.evaluate(() => {
     const input = document.getElementById("fileToLoad");
     const panel = input && input.closest(".tabcontent");

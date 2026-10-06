@@ -57,24 +57,18 @@ BLYNK_WRITE(V16) {
 
 BLYNK_WRITE(V17) {
   if (mode_switch_in_progress()) return;
-  // Ноль останавливает отбор напрямую через stopService(), в обход set_pump_speed():
-  // get_speed_from_rate(0) зажимает результат до 1 (минимальная скорость мотора), а
-  // set_pump_speed(1, true) внутри себя зовёт stopService() и тут же startService() -
-  // насос не останавливается, а ползёт на минимальной скорости. Нулевой вход разбираем
-  // ДО строгого парсера, который rate<=0 просто отвергает как недопустимое значение.
-  // Тот же статус, что проверяет set_pump_speed() (logic.h) - шаговый мотор ещё
-  // используют калибровка насоса, HopStepperStep() и самотест, V17=0 не должен
-  // обрывать их вне отбора. После остановки обнуляем скорость/производительность,
-  // как и другие точки остановки отбора (WebServer.ino, alarm.h, I2CStepper.h).
+  // Ноль ставит отбор на ручную паузу - ту же, что кнопка паузы (V13), и снимается она
+  // так же: кнопкой паузы или главной кнопкой. Прямой stopService() оставлял мотор
+  // стоять без PauseOn, и отбор было нечем возобновить. set_pump_speed() здесь не
+  // годится: get_speed_from_rate(0) зажимает результат до 1, и насос пополз бы на
+  // минимальной скорости. Нулевой вход разбираем ДО строгого парсера, который rate<=0
+  // отвергает как недопустимое значение. Вне отбора (калибровка насоса, самотест) и на
+  // уже стоящей паузе V17=0 ничего не делает. Скорость не обнуляем: после снятия
+  // паузы отбор продолжится с прежней (или заданной на паузе) скоростью.
   float rate = 0.0f;
   NumericParseResult result = parse_finite_float(param.asStr(), rate);
   if (result.ok() && rate == 0.0f) {
-    if (SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED) {
-      stopService();
-      CurrrentStepperSpeed = 0;
-      ActualVolumePerHour = 0;
-      ui_note_withdrawal_control_source(UI_CONTROL_SOURCE_MANUAL);
-    }
+    if (!PauseOn && SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL) enter_manual_pause();
     return;
   }
   uint16_t stepSpeed = 0;
@@ -923,7 +917,8 @@ static void blynk_push_strings() {
   String statusCopy;
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (locked) {
-    timesCopy = WthdrwTimeS + "; " + WthdrwTimeAllS;
+    // Время строки неизвестно (строка L, режим без расчёта времени) - пусто, а не "; ".
+    if (WthdrwTimeS.length() > 0) timesCopy = WthdrwTimeS + "; " + WthdrwTimeAllS;
     strCrtCopy = StrCrt;
     statusCopy = SamovarStatus;
     runtime_state_unlock(true);

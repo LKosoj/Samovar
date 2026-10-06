@@ -227,7 +227,26 @@ static void test_beer_lua_row_timeout_in_seconds() {
         "REGRESS: остаток программы со строкой L 600 с через 5 мин должен быть 5 мин");
 }
 
+// (6) В ректификации Time строк - часы, а у строки L там тайм-аут в секундах.
+// Текущая строка M 1 ч пройдена наполовину (0.5 ч) + L 3600 с (1 ч) + H 2 ч = 3.5 ч.
+static void test_rect_lua_row_timeout_in_seconds() {
+  reset_fixture();
+  ProgramLen = 3;
+  program[0].WType = 'M';
+  program[0].Time = 1;  // час
+  program[1].WType = 'L';
+  program[1].Time = 3600;  // секунд
+  program[2].WType = 'H';
+  program[2].Time = 2;  // часа
+  TargetStepps = 100;
+  CurrrentStepps = 50;
+  tick_update_withdrawal_progress('M');
+  check(WthdrwTimeAll > 3.49f && WthdrwTimeAll < 3.51f,
+        "REGRESS: тайм-аут строки L в ректификации должен переводиться из секунд в часы (3.5 ч)");
+}
+
 int main() {
+  test_rect_lua_row_timeout_in_seconds();
   test_overshoot_steps_clamped_to_one();
   test_zero_steps_unchanged();
   test_overdue_pause_clamped();
@@ -252,7 +271,9 @@ def build_harness() -> str:
     row_time_body = extract_function_body(source, "static float row_time_minutes(const WProgram& row) {")
     row_time_fn = "static float row_time_minutes(const WProgram& row) {" + row_time_body + "}"
     harness = HARNESS_TEMPLATE.replace("@BEER_STAGE_ELAPSED_MS_BODY@", elapsed_fn)
-    harness = harness.replace("@ROW_TIME_MINUTES@", row_time_fn)
+    rect_row_time_body = extract_function_body(source, "static float rect_row_time_hours(const WProgram& row) {")
+    rect_row_time_fn = "static float rect_row_time_hours(const WProgram& row) {" + rect_row_time_body + "}"
+    harness = harness.replace("@ROW_TIME_MINUTES@", row_time_fn + "\n" + rect_row_time_fn)
     return harness.replace("@BODY@", body)
 
 

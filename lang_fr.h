@@ -235,6 +235,8 @@
 #define LANG_LOGIC_PUMP_CAL_NOT_SAVED_TAIL ". Résultat perdu, recommencez l’étalonnage."
 #define LANG_LOGIC_ACTION_PAUSE "pause"
 #define LANG_LOGIC_ACTION_RESUME "reprise"
+#define LANG_LOGIC_ACTION_SPEED "vitesse"
+#define LANG_LOGIC_I2C_PUMP_SPEED_RANGE "Pompe I2C : vitesse hors de ses limites, précédente conservée."
 #define LANG_LOGIC_MANUAL_PAUSE_TAKEOFF "Pause manuelle du soutirage"
 #define LANG_LOGIC_MANUAL_PAUSE_MASH "Pause manuelle de l’empâtage"
 #define LANG_LOGIC_MASH_PAUSE_NEXT_STEP "La pause sera appliquée à la prochaine étape d’empâtage."

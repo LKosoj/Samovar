@@ -103,6 +103,15 @@ static void startService() {}
 static void stepper_safe_set_max_speed(uint16_t) {}
 static uint32_t stepper_safe_get_target() { return 0; }
 static void stepper_safe_set_target(uint32_t) {}
+// Ветка голов со вторым насосом здесь не участвует (политика паузы - строки тела),
+// её поведение проверяет smoke_withdrawal_pause_resume.py.
+#define I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC 18000UL
+static const bool rectSecondPumpHeadsRow = false;
+static const uint8_t i2cStepperPumpDirOverride = 0;
+static float i2c_stepper_steps_from_rate(float rate) { return rate; }
+static bool i2c_stepper_override_pump_rate(float, uint8_t) { return false; }
+static void rect_fail_second_i2c_pump(const char*) {}
+static void rect_note_heads_pump_rate(float) {}
 
 static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase, UiControlSource source = UI_CONTROL_SOURCE_UNKNOWN);
 

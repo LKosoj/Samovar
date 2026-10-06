@@ -234,13 +234,17 @@ int main() {{
 
 
 def run_session_v35_harness(session_body: str, snapshot_body: str, log_body: str) -> tuple[int, str]:
+    return run_cpp_harness(session_v35_harness(session_body, snapshot_body, log_body))
+
+
+def run_cpp_harness(code: str) -> tuple[int, str]:
     compiler = shutil.which("g++")
     if compiler is None:
-        return 1, "g++ is required for V35 ordering harness"
-    with tempfile.TemporaryDirectory(prefix="samovar-v35-order-") as directory:
+        return 1, "g++ is required for Blynk push harness"
+    with tempfile.TemporaryDirectory(prefix="samovar-blynk-push-") as directory:
         source = Path(directory) / "harness.cpp"
         binary = Path(directory) / "harness"
-        source.write_text(session_v35_harness(session_body, snapshot_body, log_body), encoding="utf-8")
+        source.write_text(code, encoding="utf-8")
         build = subprocess.run(
             [compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
             capture_output=True,
@@ -251,6 +255,47 @@ def run_session_v35_harness(session_body: str, snapshot_body: str, log_body: str
         run = subprocess.run([str(binary)], capture_output=True, text=True)
         return run.returncode, run.stdout + run.stderr
 
+
+# V10 - время строки и всего. Неизвестное время строки (строка L, режим без расчёта)
+# уходит пустой строкой: клиенты выводят V10 как есть, и "; " показалось бы им временем.
+V10_HARNESS = r"""
+#include <cstdio>
+#include <map>
+#include <string>
+struct String {
+  std::string v;
+  String() {}
+  String(const char* s) : v(s) {}
+  unsigned length() const { return v.size(); }
+  String& operator+=(const String& o) { v += o.v; return *this; }
+};
+String operator+(String a, const String& b) { a += b; return a; }
+enum { V10 = 10, V11 = 11, V14 = 14 };
+#define pdMS_TO_TICKS(x) (x)
+static String WthdrwTimeS, WthdrwTimeAllS, StrCrt, SamovarStatus;
+static std::map<int, std::string> written;
+static bool runtime_state_lock(int) { return true; }
+static void runtime_state_unlock(bool) {}
+struct { void virtualWrite(int pin, const String& value) { written[pin] = value.v; } } Blynk;
+static void blynk_push_strings() { @BODY@ }
+static bool check(const std::string& got, const char* expected, const char* message) {
+  if (got == expected) return true;
+  std::fprintf(stderr, "FAIL: %s: got [%s]\n", message, got.c_str());
+  return false;
+}
+int main() {
+  bool ok = true;
+  WthdrwTimeS = "01:30";
+  WthdrwTimeAllS = "02:45";
+  blynk_push_strings();
+  ok &= check(written[V10], "01:30; 02:45", "known row time goes to V10 with total");
+  WthdrwTimeS = "";
+  WthdrwTimeAllS = "";
+  blynk_push_strings();
+  ok &= check(written[V10], "", "unknown row time must go to V10 as empty string, not \"; \"");
+  return ok ? 0 : 1;
+}
+"""
 
 blynk = strip_cpp_comments(read_text("Blynk.ino"))
 samovar = strip_cpp_comments(read_text("Samovar.ino"))
@@ -296,6 +341,10 @@ if blynk:
     )
     if strings_body.count("runtime_state_lock(") != 1:
         errors.append("blynk_push_strings must take runtime_state_lock exactly once")
+    if strings_body:
+        returncode, output = run_cpp_harness(V10_HARNESS.replace("@BODY@", strings_body))
+        if returncode:
+            errors.append("blynk_push_strings V10 harness failed: " + output.strip())
 
     table_start = blynk.find("static const BlynkPushFn kBlynkFastPush[] = {")
     table = blynk[table_start: blynk.find("};", table_start)] if table_start >= 0 else ""

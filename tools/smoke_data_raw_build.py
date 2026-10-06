@@ -25,6 +25,7 @@ from build_web_assets import (
     check_no_placeholders,
     render,
     resolve_includes,
+    stamp_app_version,
 )
 
 GZIP_PAGES = (
@@ -76,6 +77,7 @@ def main() -> int:
         return 1
 
     sources = {p.name for p in SOURCE.iterdir() if p.is_file()}
+    version = (SOURCE / "version.txt").read_bytes() if "version.txt" in sources else b""
     built = {p.name for p in TARGET.iterdir() if p.is_file()}
 
     for name in GZIP_PAGES:
@@ -97,7 +99,7 @@ def main() -> int:
 
     for name in sorted(sources):
         try:
-            source = resolve_includes(name, (SOURCE / name).read_bytes())
+            source = stamp_app_version(name, resolve_includes(name, (SOURCE / name).read_bytes()), version)
         except ValueError as exc:
             errors.append(str(exc))
             continue
@@ -125,7 +127,7 @@ def main() -> int:
     resolved = {}
     for name in sorted(sources):
         try:
-            resolved[name] = resolve_includes(name, (SOURCE / name).read_bytes())
+            resolved[name] = stamp_app_version(name, resolve_includes(name, (SOURCE / name).read_bytes()), version)
         except ValueError:
             pass  # про сломанный include уже сказано выше
     check_i18n_build(resolved, errors)

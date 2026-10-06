@@ -13,6 +13,8 @@ from smoke_helpers import extract_function_body
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
 SIGNATURE = "static bool apply_i2c_speed_command"
+NOTE_SIGNATURE = "inline void rect_note_heads_pump_rate(float rate)"
+NOTE_BODY = extract_function_body((ROOT / "logic.h").read_text(encoding="utf-8"), NOTE_SIGNATURE)
 PROTOCOL = ROOT / "libraries" / "I2CStepperProtocol" / "src"
 
 HARNESS = r'''
@@ -49,6 +51,14 @@ bool i2c_stepper_start_finite(I2CStepperDevice&) { finiteStarts++; return linkOk
 bool i2c_stepper_start_continuous(I2CStepperDevice&) { continuous++; return linkOk; }
 bool i2c_stepper_override_mixer_rpm(uint16_t, uint8_t direction) { mixerOverrides++; lastOverrideDirection = direction; return true; }
 bool i2c_stepper_override_pump_rate(float rate, uint8_t direction) { pumpOverrides++; lastOverrideDirection = direction; i2cStepperPumpRateOverride = rate; return true; }
+// Пересчёт строки голов берётся из logic.h; шаги считаются по калибровке насоса.
+struct WProgram { uint16_t Volume; float Time; };
+WProgram program[2] = {};
+uint8_t ProgramNum = 0;
+uint16_t CurrrentStepperSpeed = 0;
+uint16_t pumpStepsPerMl = 100;
+float i2c_stepper_steps_from_rate(float rate) { return rate * 1000.0f * pumpStepsPerMl / 3600.0f; }
+@NOTE_BODY@
 static bool apply_i2c_speed_command(I2CStepperDevice& device, const I2CStepperV3Config& config,
                                     uint8_t direction) {@BODY@}
 
@@ -124,10 +134,18 @@ int main() {
   check(!apply_i2c_speed_command(pump, pumpRequest, 1) && pumpOverrides == 0,
         "manual pump speed must be rejected while NBK owns the pump");
   SamovarStatusInt = 0;
+  program[0].Volume = 900;
+  program[0].Time = 7.0f;
   check(apply_i2c_speed_command(pump, pumpRequest, 1) && pumpOverrides == 1 && lastOverrideDirection == 1 &&
         finiteStarts == 1 &&
         continuous == 1 && ActualVolumePerHour == 1.8f,
         "pump owned by a process must get the speed through the program override");
+  check(std::fabs(program[0].Time - 0.5f) < 1e-5f && CurrrentStepperSpeed == 50,
+        "heads row time must follow the new I2C pump speed (1.8 l/h)");
+  pumpRequest.pumpMlHour = 3600;
+  check(apply_i2c_speed_command(pump, pumpRequest, 0) && std::fabs(program[0].Time - 0.25f) < 1e-5f &&
+        CurrrentStepperSpeed == 100 && ActualVolumePerHour == 3.6f,
+        "heads row time must follow the new I2C pump speed (3.6 l/h)");
   if (failures) return 1;
   std::cout << "I2C speed command checks passed\n";
   return 0;
@@ -139,7 +157,8 @@ def run(body: str, quiet: bool = False) -> int:
   with tempfile.TemporaryDirectory(prefix="samovar-i2c-speed-command-") as temp:
     cpp = Path(temp) / "test.cpp"
     binary = Path(temp) / "test"
-    cpp.write_text(HARNESS.replace("@BODY@", body), encoding="utf-8")
+    harness = HARNESS.replace("@NOTE_BODY@", "void rect_note_heads_pump_rate(float rate) {" + NOTE_BODY + "}")
+    cpp.write_text(harness.replace("@BODY@", body), encoding="utf-8")
     result = subprocess.run(
         ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I", str(PROTOCOL),
          str(cpp), "-o", str(binary)], capture_output=True, text=True, check=False)

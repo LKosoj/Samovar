@@ -1088,6 +1088,11 @@ static float row_time_minutes(const WProgram& row) {
   return row.WType == 'L' ? row.Time / 60.0f : row.Time;
 }
 
+// Время строки ректификации в часах; у строки L в поле Time - тайм-аут в секундах.
+static float rect_row_time_hours(const WProgram& row) {
+  return row.WType == 'L' ? row.Time / 3600.0f : row.Time;
+}
+
 static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
   //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
   if (Samovar_Mode == SAMOVAR_BEER_MODE ||
@@ -1183,7 +1188,7 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
     WthdrwTimeAll = WthdrwTime;
 
     for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
-      WthdrwTimeAll += program[i].Time;
+      WthdrwTimeAll += rect_row_time_hours(program[i]);
     }
 
     // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
@@ -1515,7 +1520,7 @@ static bool apply_i2c_speed_command(I2CStepperDevice& device, const I2CStepperV3
     if (SamovarStatusInt == SAMOVAR_STATUS_NBK && i2c_stepper_session_active()) return false;
     if (!i2c_stepper_override_pump_rate(config.pumpMlHour / 1000.0f, direction)) return false;
     // На головах отбор ведёт I2C-насос: показываем оператору новую скорость, а не программную.
-    if (rectSecondPumpHeadsRow) ActualVolumePerHour = i2cStepperPumpRateOverride;
+    if (rectSecondPumpHeadsRow) rect_note_heads_pump_rate(i2cStepperPumpRateOverride);
     return true;
   } else {
     const float speed = roundf(config.pumpMlHour * float(device.config.stepsPerMl) / 3600.0f);
@@ -4511,11 +4516,13 @@ enum UiStagePhase : uint8_t {
   UI_PHASE_FINISHING,
   UI_PHASE_ERROR,
   UI_PHASE_UNKNOWN,
+  UI_PHASE_HEADS,
 };
 
 enum UiEndKind : uint8_t {
   UI_END_SENSOR_THRESHOLD = 1,
   UI_END_ALCOHOL = 3,
+  UI_END_RATIO = 4,
   UI_END_ELAPSED = 5,
   UI_END_ACTUATOR_DONE = 6,
   UI_END_OPERATOR = 7,
@@ -4694,15 +4701,18 @@ static UiStateDescriptor build_ui_state_from_loop() {
       value.waits[value.waitCount++] = {UI_WAIT_RECT_PROGRAM_PAUSE, UI_CONTINUATION_AUTO};
       value.phase = UI_PHASE_HOLD;
     }
-    if (currentType == 'H') value.phase = UI_PHASE_HEATING;
+    // В ректификации H - головы, а не нагрев (нагрев H - у пива, сыра и НБК).
+    if (currentType == 'H' && value.phase == UI_PHASE_ROW) value.phase = UI_PHASE_HEADS;
     if (currentType == 'P') {
+      // Длительность паузы P в секундах лежит в Volume; Time - она же в часах.
       value.phase = UI_PHASE_HOLD;
       value.end = {true, UI_END_ELAPSED, UI_END_SOURCE_TIMER, UI_END_OPERATION_ELAPSED,
-          true, program[ProgramNum].Time, UI_UNIT_S, false, 0};
-    } else if ((currentType == 'B' || currentType == 'C') && program[ProgramNum].Temp > 0) {
-      value.end = {true, UI_END_SENSOR_THRESHOLD,
-          currentType == 'B' ? UI_END_SOURCE_STEAM : UI_END_SOURCE_PIPE,
-          UI_END_OPERATION_GE, true, program[ProgramNum].Temp, UI_UNIT_C, false, 0};
+          true, static_cast<float>(program[ProgramNum].Volume), UI_UNIT_S, false, 0};
+    } else if (program_type_one_of(currentType, "HBTC") && program[ProgramNum].Temp > 0) {
+      // Тот же порог, что в rect_row_transition_requested(): по пару, до 20 - прирост к старту строки.
+      const float temp = program[ProgramNum].Temp;
+      value.end = {true, UI_END_SENSOR_THRESHOLD, UI_END_SOURCE_STEAM, UI_END_OPERATION_GE, true,
+          temp < 20 ? SteamSensor.StartProgTemp + temp : temp, UI_UNIT_C, false, 0};
     } else if (currentType == 'L') {
       value.phase = UI_PHASE_UNKNOWN;
     }
@@ -4718,10 +4728,13 @@ static UiStateDescriptor build_ui_state_from_loop() {
     if (currentType == 'L') value.phase = UI_PHASE_UNKNOWN;
     else if (currentType == 'T') value.end = {true, UI_END_SENSOR_THRESHOLD,
         UI_END_SOURCE_TANK, UI_END_OPERATION_GE, true, row.Speed, UI_UNIT_C, false, 0};
+    // A/S считаются по спиртуозности в кубе, P/R - по спиртуозности пара (program_threshold_row_done()).
     else if (currentType == 'A' || currentType == 'P') value.end = {true, UI_END_ALCOHOL,
-        UI_END_SOURCE_TANK, UI_END_OPERATION_LE, true, row.Speed, UI_UNIT_PCT, false, 0};
-    else if (currentType == 'S' || currentType == 'R') value.end = {true, UI_END_ALCOHOL,
-        UI_END_SOURCE_TANK, UI_END_OPERATION_LE, true, row.Speed * 100.0f, UI_UNIT_PCT, false, 0};
+        currentType == 'A' ? UI_END_SOURCE_TANK : UI_END_SOURCE_STEAM, UI_END_OPERATION_LE,
+        true, row.Speed, UI_UNIT_PCT, false, 0};
+    else if (currentType == 'S' || currentType == 'R') value.end = {true, UI_END_RATIO,
+        currentType == 'S' ? UI_END_SOURCE_TANK : UI_END_SOURCE_STEAM, UI_END_OPERATION_LE,
+        true, row.Speed * 100.0f, UI_UNIT_PCT, false, 0};
     if (mode == SAMOVAR_BK_MODE && bk_work_power_pending) {
       value.waits[value.waitCount++] = {UI_WAIT_NBK_TRANSITION, UI_CONTINUATION_ACTUATOR};
       value.phase = UI_PHASE_ACTUATOR_WAIT;
@@ -5347,11 +5360,12 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.pauseOn = PauseOn;
   snapshot.beerPaused = beerManualPause;  // [Пиво 02.09 C2]
   snapshot.withdrawalProgress = WthdrwlProgress;
-  snapshot.targetSteps = stepper_safe_get_target();
-  snapshot.currentSteps = stepper_safe_get_current();
+  // На головах со вторым насосом качает I2C-насос, встроенный мотор стоит - показываем насос.
+  snapshot.targetSteps = rectSecondPumpHeadsRow ? (int32_t)rectSecondPumpTargetSteps : stepper_safe_get_target();
+  snapshot.currentSteps = rect_current_withdrawal_steps();
   snapshot.withdrawalStatus = startval;
   snapshot.programIndex = ProgramNum;
-  snapshot.currentSpeed = round(
+  snapshot.currentSpeed = rectSecondPumpHeadsRow ? rect_heads_pump_speed() : round(
       stepper_safe_get_speed() * (uint8_t)stepper_safe_get_state());
   snapshot.useBrowserBuzzer = SamSetup.UseBBuzzer;
   snapshot.stepperStepMl = SamSetup.StepperStepMl;

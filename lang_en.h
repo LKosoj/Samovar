@@ -235,6 +235,8 @@
 #define LANG_LOGIC_PUMP_CAL_NOT_SAVED_TAIL ". Result lost, repeat the calibration."
 #define LANG_LOGIC_ACTION_PAUSE "pause"
 #define LANG_LOGIC_ACTION_RESUME "resume"
+#define LANG_LOGIC_ACTION_SPEED "speed"
+#define LANG_LOGIC_I2C_PUMP_SPEED_RANGE "I2C pump: speed outside its limits, previous one kept."
 #define LANG_LOGIC_MANUAL_PAUSE_TAKEOFF "Manual take-off pause"
 #define LANG_LOGIC_MANUAL_PAUSE_MASH "Manual mashing pause"
 #define LANG_LOGIC_MASH_PAUSE_NEXT_STEP "Pause will be applied at the next mashing step."

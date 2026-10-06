@@ -407,6 +407,8 @@ static bool rectManualPauseActive = false;
 static bool PowerOn = true;
 static bool alarm_event = false;
 static bool rectSecondPumpRunning = false;
+// Головы со вторым насосом: цель строки у I2C-насоса, встроенный шаговик стоит.
+static bool rectSecondPumpHeadsRow = false;
 
 static unsigned long fake_millis_value = 100000;
 static unsigned long millis() { return fake_millis_value; }
@@ -448,9 +450,13 @@ static void menu_samovar_start() { menuSamovarStartCalls++; }
 // (чтение + запись).
 static bool stepperState = false;
 static bool stepper_safe_get_state() { return stepperState; }
-static uint32_t stepper_safe_get_current() { return CurrrentStepps; }
+// Встроенный шаговик - отдельное от TargetStepps/CurrrentStepps состояние: на головах
+// со вторым насосом он стоит с нулями, а цель строки принадлежит I2C-насосу.
+static uint32_t localStepperCurrent = 0;
+static uint32_t localStepperTarget = 0;
+static uint32_t stepper_safe_get_current() { return localStepperCurrent; }
 static uint32_t rect_current_withdrawal_steps() { return stepper_safe_get_current(); }
-static uint32_t stepper_safe_get_target() { return TargetStepps; }
+static uint32_t stepper_safe_get_target() { return localStepperTarget; }
 static float stepper_safe_get_speed() { return 100.0f; }
 static void stopService() {}
 static bool rect_pause_second_i2c_pump() { return true; }
@@ -511,6 +517,10 @@ static void reset_fixture() {
   PowerOn = true;
   alarm_event = false;
   rectTransitionRequestedFixture = false;
+  rectSecondPumpRunning = false;
+  rectSecondPumpHeadsRow = false;
+  localStepperCurrent = 0;
+  localStepperTarget = 0;
   processImpurityDetectorCalls = 0;
   menuSamovarStartCalls = 0;
   stepperState = false;
@@ -617,8 +627,36 @@ static void test_pause_withdrawal_pause_allowed_during_emergency() {
   check(stepperStopCalls == 1, "pause_withdrawal(true) должна останавливать стэппер при PowerOn=false");
 }
 
+// Пауза строки голов со вторым насосом не должна затирать цель I2C-насоса нулями
+// встроенного шаговика, а возобновление - отдавать эту цель встроенному шаговику.
+static void test_pause_withdrawal_second_pump_heads_keeps_target() {
+  reset_fixture();
+  rectSecondPumpRunning = true;
+  rectSecondPumpHeadsRow = true;
+  TargetStepps = 50000;
+  CurrrentStepps = 1200;
+  pause_withdrawal(true);
+  check(PauseOn, "пауза голов со вторым насосом должна ставиться");
+  check(TargetStepps == 50000 && CurrrentStepps == 1200,
+        "пауза голов со вторым насосом не должна брать цель и шаги у стоящего шаговика");
+  pause_withdrawal(false);
+  check(!PauseOn, "возобновление голов со вторым насосом должно снять паузу");
+  check(startServiceCalls == 0 && stepperSetTargetCalls == 0 && stepperSetCurrentCalls == 0,
+        "возобновление голов со вторым насосом не должно запускать встроенный шаговик");
+
+  // Та же пауза на строке со встроенным шаговиком берёт его состояние.
+  reset_fixture();
+  stepperState = true;
+  localStepperTarget = 7000;
+  localStepperCurrent = 300;
+  pause_withdrawal(true);
+  check(TargetStepps == 7000 && CurrrentStepps == 300,
+        "пауза строки со встроенным шаговиком должна запомнить его цель и шаги");
+}
+
 int main() {
   test_withdrawal_normal_reaches_detector();
+  test_pause_withdrawal_second_pump_heads_keeps_target();
   test_withdrawal_noop_during_emergency();
   test_pause_withdrawal_resume_normal();
   test_pause_withdrawal_resume_blocked_by_emergency();

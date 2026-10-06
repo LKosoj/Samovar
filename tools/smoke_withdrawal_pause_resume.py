@@ -39,6 +39,7 @@ SIGNATURES = {
         "logic.h",
     ),
     "withdrawal": ("void withdrawal(void)", "logic.h"),
+    "rect_note_heads_pump_rate": ("inline void rect_note_heads_pump_rate(float rate)", "logic.h"),
     "program_type_at": ("inline ProgramType program_type_at(uint8_t index)", "runtime_helpers.h"),
     "program_type_one_of": (
         "inline bool program_type_one_of(ProgramType type, const char *allowedTypes)",
@@ -256,8 +257,31 @@ static uint32_t rect_current_withdrawal_steps() { return stepper_safe_get_curren
 static uint32_t stepper_safe_get_target() { return TargetStepps; }
 static void stepper_safe_set_max_speed(uint16_t) {}
 static void stepper_safe_set_target(uint32_t) {}
-static void stopService() {}
+static int stopServiceCalls = 0;
+static void stopService() { stopServiceCalls++; }
 static void startService() {}
+
+// ---- Второй (I2C) насос на строке голов ----
+// Шаги I2C-насоса считаются от его собственной калибровки, а не от StepperStepMl.
+#define I2CSTEPPER_V3_MAX_SPEED_STEPS_PER_SEC 18000UL
+static bool rectSecondPumpHeadsRow = false;
+static uint8_t i2cStepperPumpDirOverride = 0;
+static float i2cStepsPerMlFixture = 100.0f;
+static float i2c_stepper_steps_from_rate(float litersPerHour) {
+  return litersPerHour * 1000.0f * i2cStepsPerMlFixture / 3600.0f;
+}
+static bool i2cOverrideResult = true;
+static int i2cOverrideCalls = 0;
+static float i2cOverrideRate = 0;
+static bool i2c_stepper_override_pump_rate(float rate, uint8_t) {
+  i2cOverrideCalls++;
+  if (!i2cOverrideResult) return false;
+  i2cOverrideRate = rate;
+  return true;
+}
+static int rectFailSecondPumpCalls = 0;
+static void rect_fail_second_i2c_pump(const char*) { rectFailSecondPumpCalls++; }
+@RECT_NOTE_HEADS_PUMP_RATE_BODY@
 
 // Прототип с дефолтным аргументом (как в samovar_api.h) - нужен, потому что
 // реальное тело withdrawal() вызывает set_pump_speed() двухаргументно,
@@ -328,6 +352,13 @@ static void reset_fixture() {
   detectorTriggersWait = false;
   detectorTriggersPause = false;
   detectorMutatesEndpointInputs = false;
+  stopServiceCalls = 0;
+  rectSecondPumpHeadsRow = false;
+  i2cStepsPerMlFixture = 100.0f;
+  i2cOverrideResult = true;
+  i2cOverrideCalls = 0;
+  i2cOverrideRate = 0;
+  rectFailSecondPumpCalls = 0;
 }
 
 // [П3-3] Гистерезис резюме: два разных SetTemp, каждый раз проверяем и "мёртвую
@@ -739,7 +770,65 @@ static void test_endpoint_inputs_are_snapshotted_before_detector() {
         "температурный endpoint должен использовать temperature/start snapshot");
 }
 
+// Головы со вторым насосом: скорость оператора уходит I2C-насосу, время строки считается
+// по ней же, встроенный шаговик не трогается. Два значения - чтобы хардкод не прошёл.
+static void test_heads_second_pump_speed_for(uint16_t stepperSpeed) {
+  reset_fixture();
+  rectSecondPumpHeadsRow = true;
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Time = 7.0f;
+  CurrrentStepperSpeed = 55;
+  const float rate = get_liquid_rate_by_step(stepperSpeed);
+  set_pump_speed(stepperSpeed, true, true);
+  check(i2cOverrideCalls == 1, "головы: скорость обязана уйти I2C-насосу");
+  check(std::fabs(i2cOverrideRate - rate) < 1e-4f, "головы: I2C-насос получил не ту скорость в л/ч");
+  check(stopServiceCalls == 0, "головы: встроенный шаговик трогать нельзя");
+  check(std::fabs(ActualVolumePerHour - rate) < 1e-4f, "головы: показанная скорость не от I2C-насоса");
+  check(CurrrentStepperSpeed == (uint16_t)i2c_stepper_steps_from_rate(rate),
+        "головы: CurrrentStepperSpeed обязан быть в шагах I2C-насоса");
+  check(std::fabs(program[0].Time - 500.0f / rate / 1000.0f) < 1e-4f,
+        "головы: время строки обязано пересчитаться по новой скорости I2C-насоса");
+  check(std::fabs(CurrentBaseSpeedRate - rate) < 1e-4f, "головы: команда оператора обновляет базу");
+}
+
+static void test_heads_second_pump_speed_rejects() {
+  // Скорость за пределом I2C-насоса: предупреждение, ничего не меняется.
+  reset_fixture();
+  rectSecondPumpHeadsRow = true;
+  program[0].Volume = 500;
+  program[0].Time = 7.0f;
+  ActualVolumePerHour = 0.3f;
+  i2cStepsPerMlFixture = 100000.0f;
+  set_pump_speed(500, true, true);
+  check(i2cOverrideCalls == 0, "головы: скорость вне пределов I2C-насоса нельзя отправлять");
+  check(sendMsgCalls == 1, "головы: о скорости вне пределов надо предупредить");
+  check(program[0].Time == 7.0f && ActualVolumePerHour == 0.3f, "головы: отказ по пределу ничего не меняет");
+  check(rectFailSecondPumpCalls == 0, "головы: предел - не авария");
+
+  // Насос не подтвердил команду: авария второго насоса, время не трогаем.
+  reset_fixture();
+  rectSecondPumpHeadsRow = true;
+  program[0].Volume = 500;
+  program[0].Time = 7.0f;
+  i2cOverrideResult = false;
+  set_pump_speed(500, true, false);
+  check(rectFailSecondPumpCalls == 1, "головы: отказ I2C-насоса обязан остановить отбор аварийно");
+  check(program[0].Time == 7.0f, "головы: при отказе насоса время строки не меняется");
+
+  // updateBase=false базу не трогает.
+  reset_fixture();
+  rectSecondPumpHeadsRow = true;
+  program[0].Volume = 500;
+  CurrentBaseSpeedRate = 0.25f;
+  set_pump_speed(500, true, false);
+  check(i2cOverrideCalls == 1 && CurrentBaseSpeedRate == 0.25f, "головы: updateBase=false не меняет базу");
+}
+
 int main() {
+  test_heads_second_pump_speed_for(500);
+  test_heads_second_pump_speed_for(1200);
+  test_heads_second_pump_speed_rejects();
   test_hysteresis_for_set_temp(0.5f);
   test_hysteresis_for_set_temp(1.0f);
   test_sensor_resume_updates_base_not_program_speed();
@@ -823,6 +912,10 @@ def build_harness() -> str:
     harness = harness.replace(
         "@DETECTOR_TREND_SETTLED_BODY@",
         wrap("detector_trend_settled", "static bool detector_trend_settled() "),
+    )
+    harness = harness.replace(
+        "@RECT_NOTE_HEADS_PUMP_RATE_BODY@",
+        wrap("rect_note_heads_pump_rate", "static void rect_note_heads_pump_rate(float rate) "),
     )
     harness = harness.replace(
         "@SET_PUMP_SPEED_BODY@",
