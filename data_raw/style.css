@@ -655,6 +655,12 @@ form.mode-form {
   overflow-wrap: break-word;
 }
 
+#flowsensor > .dvcs {
+  display: block;
+  padding: 0;
+  margin: 0;
+}
+
 /* ==================== Сообщения ==================== */
 .messages_box,
 .message-box {

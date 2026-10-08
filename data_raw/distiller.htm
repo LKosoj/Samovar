@@ -43,7 +43,7 @@
           document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
           document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3);
           document.getElementById('Status').textContent = myObj.Status;
-          document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
+          document.getElementById('WFtotalMl').innerHTML = (myObj.WFtotalMl / 1000).toFixed(2);
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
           document.getElementById('alc').innerHTML = alcoholText(myObj.alc, 1);
           document.getElementById('stm_alc').innerHTML = alcoholText(myObj.stm_alc, 2);
@@ -250,10 +250,7 @@
               <div><div class="k">Атмосферное</div><div class="v"><span id='bme_pressure'></span><u>мм рт.ст.</u></div></div>
               <div><div class="k">В начале</div><div class="v"><span id='start_pressure'></span><u>мм рт.ст.</u></div></div>
             </div>
-            <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
-              <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
-              <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-            </div>
+<!--#include flowsensor_readout.htm-->
           </section>
 
 <!--#include ui_sys_line.htm-->

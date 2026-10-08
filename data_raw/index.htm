@@ -271,7 +271,7 @@
               getProgram();
             }
           }
-          document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl / 1000;
+          document.getElementById('WFtotalMl').innerHTML = (myObj.WFtotalMl / 1000).toFixed(2);
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
 
           let importantStatus = myObj.Status;
@@ -844,10 +844,7 @@
         <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
         <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
       </div>
-      <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
-        <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> л</span>
-        <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-      </div>
+<!--#include flowsensor_readout.htm-->
 
 <!--#include lua_field.htm-->
     </div>

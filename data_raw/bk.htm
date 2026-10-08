@@ -65,7 +65,7 @@
             myObj.BoilingEvidence === 1 || myObj.BoilingEvidence === 2
               ? 'precise'
               : 'estimated';
-          document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
+          document.getElementById('WFtotalMl').innerHTML = (myObj.WFtotalMl / 1000).toFixed(2);
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
 
           var dt = myObj.PipeTemp - myObj.SteamTemp;

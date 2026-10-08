@@ -183,7 +183,7 @@
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(1);
           document.getElementById('Status').textContent = myObj.Status;
           document.getElementById('opt_power_volt').innerHTML = myObj.current_power_volt;
-          document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
+          document.getElementById('WFtotalMl').innerHTML = (myObj.WFtotalMl / 1000).toFixed(2);
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
           const feedControl = myObj.ui && Array.isArray(myObj.ui.c)
             ? myObj.ui.c.find(control => control.k === 6 && control.u === 3 && Number.isFinite(control.a))
