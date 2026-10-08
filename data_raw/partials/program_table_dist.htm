@@ -128,7 +128,7 @@
     l.dataset.programType = t;
     color += "color: #17212B; border-color: #17212B;";
     l.setAttribute("style", color);
-    var e = l.childNodes;
+    var e = l.querySelectorAll(".prglabel, select, input, .program-row-action");
     for (q = 0; q < e.length; q++) {
       if (q == 2) {
         e[q].setAttribute("style", color + "width:85");
@@ -147,11 +147,10 @@
   function calc_program () {
     var t = document.getElementsByClassName("prgline");
     var k, s;
-    var fieldEnd = PROGRAM_STEAM_COLUMN ? 6 : 5;
     s = "";
     for (i = 1; i < t.length; i++) {
-      k = t[i].childNodes;
-      for (j = 1; j < fieldEnd; j++) {
+      k = t[i].querySelectorAll("select, input");
+      for (j = 0; j < k.length; j++) {
         s = s + k[j].value + ";";
       }
       s = s.slice(0, -1);

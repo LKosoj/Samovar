@@ -57,7 +57,7 @@ FIXTURE_BASE = r'''{
     alc: 0, stm_alc: 0, ISspd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0, sessionId: 'test-session'
   }'''
 
 BROWSER_TEST = r'''async page => {
@@ -94,6 +94,21 @@ BROWSER_TEST = r'''async page => {
   await page.goto(baseUrl + '/distiller.htm', { waitUntil: 'load' });
   await page.waitForFunction(() => document.getElementById('Status') &&
     document.getElementById('Status').textContent === 'Готов', null, { timeout: 10000 });
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const layout = await page.locator('#sec-scheme svg').evaluate(svg => {
+      const cube = svg.querySelector('rect.metal[x="60"]').getBoundingClientRect();
+      const water = new DOMPoint(440, 420).matrixTransform(svg.getScreenCTM());
+      return Array.from(svg.querySelectorAll('[data-jar] .jar')).map(jar => {
+        const box = jar.getBoundingClientRect();
+        return { left: box.left, right: box.right, cubeRight: cube.right, waterLeft: water.x };
+      });
+    });
+    if (layout.length !== 3 || layout.some(box => box.left <= box.cubeRight || box.right >= box.waterLeft)) {
+      fail('distiller.htm width=' + width + ' ёмкости перекрываются с кубом/водой: ' + JSON.stringify(layout));
+    }
+    if (width === 390) await page.locator('#sec-scheme').screenshot({ path: '/tmp/samovar-dist-scheme.png' });
+  }
   await page.click('input.tablinks[value="Программа"]');
   await page.evaluate(() => {
     document.getElementById('WProgram').value = 'T;90;1;0';
@@ -115,6 +130,26 @@ BROWSER_TEST = r'''async page => {
   const distProgram = await page.evaluate(() => document.getElementById('WProgram').value.trim());
   if (distProgram !== 'T;90;1;123') {
     fail('distiller.htm сериализовал строку не из 4 полей: ' + JSON.stringify(distProgram));
+  }
+
+  // Подписи мобильной таблицы не должны попадать в текст программы.
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(200);
+    const edited = await page.evaluate(() => {
+      document.getElementById('ptype0').value = 'A';
+      set_bgcolor(0);
+      document.getElementById('ptemp0').value = '80.0';
+      document.getElementById('pnum0').value = '2';
+      document.getElementById('ppower0').value = '190';
+      calc_program();
+      addLine('prgln0', 'T;97;3;0');
+      return document.getElementById('WProgram').value.trim();
+    });
+    if (edited !== 'A;80.0;2;190\nT;97;3;0') {
+      fail('distiller.htm width=' + width + ' неверная программа после редактирования: ' + edited);
+    }
+    await page.evaluate(() => removeLine(document.querySelectorAll('#prg .prgline')[2].id));
   }
 
   // --- 2. bk.htm: 5 колонок, есть "Т пара" ---
@@ -155,6 +190,18 @@ BROWSER_TEST = r'''async page => {
   if (bkProgram !== 'T;93;1;190;65') {
     fail('bk.htm сериализовал строку не из 5 полей: ' + JSON.stringify(bkProgram));
   }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(200);
+  const mobileBk = await page.evaluate(() => {
+    document.getElementById('ptemp0').value = '95';
+    document.getElementById('pnum0').value = '2';
+    document.getElementById('psteam0').value = '72';
+    calc_program();
+    return document.getElementById('WProgram').value.trim();
+  });
+  if (mobileBk !== 'T;95;2;190;72') fail('bk.htm mobile неверная программа: ' + mobileBk);
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   // Бейдж/кнопка "Автомат" живут на вкладке "Режим БК" (WaterH2) - клик по
   // кнопке ниже требует реальной видимости элемента, а не только computed style.
