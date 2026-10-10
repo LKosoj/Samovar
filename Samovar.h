@@ -10,7 +10,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("7.00")
+#define SAMOVAR_VERSION F("7.01")
 
 //#define __SAMOVAR_DEBUG
 // При включении: эмуляция DS18B20 (адреса + рост температур при нагреве)
