@@ -35,7 +35,7 @@ BROWSER_TEST = r'''async page => {
     ISspd:0, wp_spd:0, i2c_pump_present:0, i2c_pump_running:0,
     i2c_pump_remaining_ml:0, i2c_pump_speed:0, PowerOn:0,
     heaterAlarmLatched:0, heaterAlarmReason:"", latestMessageSequence:0,
-    BeerBrewOrder:"allinone"
+    BeerBrewOrder:"allinone", sessionId:1
   };
   let current = {...bootstrap};
   const problems = [];
@@ -77,6 +77,29 @@ BROWSER_TEST = r'''async page => {
         expect(result.gridColumns === expectedColumns,
           width + "px " + name + " expected " + expectedColumns + " columns: " + JSON.stringify(result));
       }
+    }
+  }
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({width, height:900});
+    for (const cap of [2, 1, 0, 7]) {
+      current = {...bootstrap, mode:1, hideProcessScheme:false, program:"T;80;0;190\nT;92;1;0\nT;97;2;0"};
+      Object.assign(ajax, {ProgramNum:1, currentCapacity:cap, PowerOn:1, valve:1, Status:"Дистилляция"});
+      await page.goto(baseUrl + "/distiller.htm");
+      await page.waitForSelector('[data-jar].is-on .jar-num');
+      expect(await page.locator('[data-jar].is-on .jar-num').textContent() === String(cap),
+        'подсветка должна следовать фактической ёмкости ' + cap);
+      expect(await page.locator('[data-jar].is-on').count() === 1, 'должна быть ровно одна фактическая ёмкость');
+    }
+    for (const [name, mode] of [["index.htm",0],["bk.htm",3],["nbk.htm",4]]) {
+      current = {...bootstrap, mode, hideProcessScheme:false};
+      await page.goto(baseUrl + "/" + name);
+      await page.waitForSelector('.flow.is-on');
+      const flows = await page.locator('.flow.is-on').evaluateAll(nodes => nodes.map(node => ({
+        direction:getComputedStyle(node).animationDirection,
+        endOffset:node.getAnimations()[0]?.effect.getKeyframes().at(-1).strokeDashoffset
+      })));
+      expect(flows.length === 2 && flows.every(f => f.direction === 'normal' && parseFloat(f.endOffset) === -14),
+        name + ': вода должна двигаться по направлению каждой трубы ' + JSON.stringify(flows));
     }
   }
   expect(problems.length === 0, "console/page errors: " + problems.join("; "));

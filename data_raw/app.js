@@ -2305,11 +2305,11 @@
     bk: { T: 'по Т куба', S: 'куб, отн.', A: 'куб, абс.', P: 'пар, абс.', R: 'пар, отн.' }
   };
 
-  // Окно из трёх банок вокруг ёмкости текущей строки: предыдущая, текущая, следующая.
+  // Окно из трёх банок вокруг фактической ёмкости: предыдущая, текущая, следующая.
   // У края окно сдвигается, чтобы банок было три. Банки — разные ёмкости программы в порядке
   // первого упоминания, подпись — тип первой строки с этой ёмкостью (у текущей — тип текущей строки).
-  // Без программы или без текущей ёмкости показываем банки 0–2 без подсветки (ёмкости нумеруются с 0).
-  function jarWindow(kind, lines, lineNum) {
+  // Без программы показываем банки 0–2; без фактической ёмкости сохраняем выбор по строке.
+  function jarWindow(kind, lines, lineNum, currentCapacity) {
     const names = JAR_TYPE_NAMES[kind] || {};
     const jars = [];
     lines.forEach(function (line) {
@@ -2318,10 +2318,17 @@
         jars.push({ num: row.capacity, type: names[row.type] || row.type, active: false });
       }
     });
-    if (!jars.length) return [0, 1, 2].map(function (n) { return { num: n, type: '', active: false }; });
+    if (!jars.length) [0, 1, 2].forEach(function (n) { jars.push({ num: n, type: '', active: false }); });
     const row = lineNum ? parseProgramLine(kind, lines[lineNum - 1]) : null;
-    let idx = row && row.capacity !== null ? jars.findIndex(function (j) { return j.num === row.capacity; }) : -1;
-    if (idx >= 0) { jars[idx].active = true; jars[idx].type = names[row.type] || row.type; }
+    const selected = currentCapacity != null ? currentCapacity : row && row.capacity;
+    if (selected != null && !jars.some(function (j) { return j.num === selected; })) {
+      jars.push({ num: selected, type: '', active: false });
+    }
+    let idx = selected != null ? jars.findIndex(function (j) { return j.num === selected; }) : -1;
+    if (idx >= 0) {
+      jars[idx].active = true;
+      if (row && row.capacity === selected) jars[idx].type = names[row.type] || row.type;
+    }
     const start = Math.max(0, Math.min(idx < 0 ? 0 : idx - 1, jars.length - 3));
     return jars.slice(start, start + 3);
   }
@@ -2403,7 +2410,7 @@
     v._lineType = row ? row.type : '';
     v._lineName = row ? row.name : (lines.length ? 'ожидание' : 'нет программы');
     v._lineCap = row && row.capacity !== null ? row.capacity : null;
-    v._jars = jarWindow(kind, lines, v._lineNum);
+    v._jars = jarWindow(kind, lines, v._lineNum, num(data.currentCapacity));
     v._lineCapText = v._lineCap !== null ? 'ёмкость ' + v._lineCap : '';
     v._lineVolume = row ? row.volume : null;
     v._lineSpeed = row ? row.speed : null;

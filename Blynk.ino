@@ -156,6 +156,7 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   out.print('{');
   jsonFieldRaw(out, first, "st", s.statusInt);
   jsonFieldRaw(out, first, "pn", s.programIndex + 1);
+  jsonFieldRaw(out, first, "cap", s.currentCapacity);
   jsonFieldString(out, first, "pt", s.programType);
   if (s.hasAlcohol) {
     jsonFieldFloat(out, first, "alc", s.alcohol, 2);

@@ -465,7 +465,6 @@ a { color: var(--accent); }
 .scheme .pipe-thin { fill: none; stroke: var(--border-dashed); stroke-width: 3; stroke-linecap: round; }
 .scheme .flow { fill: none; stroke: var(--water); stroke-width: 3; stroke-dasharray: 6 8; stroke-linecap: round; opacity: 0.35; }
 .scheme .flow.is-on { opacity: 1; animation: flow 1.2s linear infinite; }
-.scheme .flow.reverse.is-on { animation-direction: reverse; }
 .scheme .feed { fill: none; stroke: var(--copper-soft); stroke-width: 3; stroke-dasharray: 5 7; stroke-linecap: round; opacity: 0.35; }
 .scheme .feed.is-on { opacity: 1; animation: flow 1.4s linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -14; } }

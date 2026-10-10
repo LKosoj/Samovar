@@ -172,7 +172,8 @@ static bool program_threshold_row_done(const WProgram&) { return false; }
 
 
 
-#define vTaskDelay(x) do { (void)(x); } while (0)
+static int delayTicks = 0;
+#define vTaskDelay(x) do { delayTicks += (x); } while (0)
 #define portTICK_PERIOD_MS 1
 
 @DISTILLER_PROC_BODY@
@@ -287,6 +288,17 @@ int main() {
   check(processSensorFailedCalls == 0,
         "PowerOn==false, датчик валиден: process_sensor_failed не должен вызываться");
 
+  // Обычный проход не должен задерживать опрос энкодера в loop().
+  for (float temp : {80.0f, 92.0f}) {
+    reset_all();
+    PowerOn = true;
+    tankSensorValid = true;
+    TankSensor.avgTemp = temp;
+    SamSetup.DistTemp = 99.0f;
+    delayTicks = 0;
+    distiller_proc();
+    check(delayTicks == 0, "дистилляция не должна задерживать следующий опрос энкодера");
+  }
   if (failures != 0) return 1;
   std::cout << "distiller_proc start-refusal (PowerOn-gated sensor guard) checks passed\n";
   return 0;

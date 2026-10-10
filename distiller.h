@@ -235,8 +235,6 @@ void distiller_proc() {
   if (dist_plateau_finish_due()) {
     distiller_finish();
   }
-
-  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void distiller_finish() {

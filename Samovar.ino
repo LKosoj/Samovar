@@ -5262,6 +5262,7 @@ struct AjaxTelemetrySnapshot {
   uint8_t boilingEvidence;
   uint8_t withdrawalProgress;
   uint8_t programIndex;
+  uint8_t currentCapacity;
   uint8_t beerBrewOrder;
   bool useAutoSpeed;
   bool useDetector;
@@ -5365,6 +5366,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.currentSteps = rect_current_withdrawal_steps();
   snapshot.withdrawalStatus = startval;
   snapshot.programIndex = ProgramNum;
+  snapshot.currentCapacity = capacity_num;
   snapshot.currentSpeed = rectSecondPumpHeadsRow ? rect_heads_pump_speed() : round(
       stepper_safe_get_speed() * (uint8_t)stepper_safe_get_state());
   snapshot.useBrowserBuzzer = SamSetup.UseBBuzzer;
@@ -5523,6 +5525,7 @@ static void writeAjaxTelemetryFields(
   jsonFieldRaw(out, first, "SamovarStatusInt", snapshot.statusInt);
   jsonFieldRaw(out, first, "ProgramNum", snapshot.programIndex + 1);
   jsonFieldRaw(out, first, "ProgramIndex", snapshot.programIndex);
+  jsonFieldRaw(out, first, "currentCapacity", snapshot.currentCapacity);
   jsonFieldRaw(out, first, "CurrrentSpeed", snapshot.currentSpeed);
   jsonFieldBool(out, first, "UseBBuzzer", snapshot.useBrowserBuzzer);
   jsonFieldRaw(out, first, "StepperStepMl", snapshot.stepperStepMl);

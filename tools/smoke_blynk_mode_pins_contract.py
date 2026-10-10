@@ -69,7 +69,7 @@ writer_body = function_body(
     blynk, "static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s)"
 )
 EXPECTED_KEYS = [
-    "st", "pn", "pt", "alc", "salc", "rpa", "ppa", "tr", "rtt", "ptr", "tt",
+    "st", "pn", "cap", "pt", "alc", "salc", "rpa", "ppa", "tr", "rtt", "ptr", "tt",
     "det", "dtr", "di", "dwl", "dws", "ud", "ua", "boil", "bev", "bps", "wauto", "wsp", "wpwm", "wf", "wft",
     "prvl", "isspd", "sp", "spr", "bpause", "order", "mixer", "ph", "phv",
 ]
