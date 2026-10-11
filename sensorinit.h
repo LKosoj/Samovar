@@ -446,8 +446,11 @@ void scan_ds_adress() {
   Serial.println();
 #endif
 
-  sensors.setWaitForConversion(false);  // работаем в асинхронном режиме
+  // До первого измерения DS18B20 хранит 85°C: не даём проверке охлаждения
+  // принять это стартовое значение за горячую ТСА и открыть воду без нагрева.
+  sensors.setWaitForConversion(true);
   sensors.requestTemperatures();
+  sensors.setWaitForConversion(false);  // дальше работаем в асинхронном режиме
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
