@@ -145,6 +145,43 @@
       });
     }
 
+    async function refreshSensorTemperatures() {
+      var button = document.getElementById('refreshSensorTemperaturesButton');
+      var status = document.getElementById('sensorTemperaturesStatus');
+      button.disabled = true;
+      status.textContent = 'Leyendo temperaturas…';
+      try {
+        var deadline = Date.now() + 10000;
+        var url = '/sensor-temperatures?refresh=1';
+        while (true) {
+          var response = await fetch(url, {cache: 'no-store'});
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          var data = await response.json();
+          if (!data.pending) break;
+          if (Date.now() >= deadline) throw new Error('El dispositivo no respondió a tiempo');
+          await new Promise(function(resolve) { setTimeout(resolve, 300); });
+          url = '/sensor-temperatures';
+        }
+        ['SteamAddr', 'PipeAddr', 'WaterAddr', 'TankAddr', 'ACPAddr'].forEach(function(id) {
+          Array.from(document.getElementById(id).options).forEach(function(option) {
+            if (option.value === '-1') return;
+            var address = option.dataset.address || option.textContent;
+            option.dataset.address = address;
+            var sensor = data.sensors.find(function(item) { return item.address === address; });
+            option.textContent = address + ' — ' + (sensor && Number.isFinite(sensor.temperature)
+              ? sensor.temperature.toFixed(2) + ' °C' : 'sin lectura');
+          });
+        });
+        status.textContent = 'Lecturas sin corrección. Caliente el sensor con la mano y actualice las temperaturas para identificar su dirección.';
+      } catch (error) {
+        status.textContent = 'No se pudieron leer las temperaturas: ' + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', refreshSensorTemperatures);
+
     const setupNumericSchema = [
       { name: 'mode', integer: true, min: 0, max: 7 },
       { name: 'DistTemp', min: 30, max: 150 },
@@ -699,9 +736,12 @@
       <div
         style="border: 1px dashed #bbb; display: flex; flex-direction: column; margin-bottom: 1em;  margin-top: 1em; padding: 1em; align-items: center;"
         >
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5em;">
         <input id='selftest' type='button' name='selftest' value='Autotest' onclick='confirmSelfTest()' class="button"
           title="Se encenderá la bomba de agua (o se abrirá la válvula), se pondrá en marcha la bomba peristáltica de extracción, el servo recorrerá 5 posiciones."
         >
+        <input type="button" value="Comprobación individual de dispositivos" class="button" onclick="if (confirmLeaveIfDirty()) location.href='device-test.htm'">
+        </div>
         <p style="margin: 0.5em 0 0; font-size: 0.85em; color: var(--text-main); text-align: center;">
           Atención: se activará el suministro de agua (bomba o válvula), se pondrá en marcha la bomba peristáltica de extracción, el servo recorrerá las 5 posiciones de los recipientes.
         </p>
@@ -709,6 +749,8 @@
     </div>
 
     <div id="Temp" class="tabcontent" aria-hidden="true">
+      <p id="sensorTemperaturesStatus" role="status"></p>
+      <button id="refreshSensorTemperaturesButton" type="button" class="button" onclick="refreshSensorTemperatures()">Actualizar temperaturas</button>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <div style="color: %SteamColor%; text-decoration-line: underline; text-decoration-color: %SteamColor%;">
           <h2>
@@ -817,9 +859,13 @@
         </select>
       </h2>
       <h2>Coeficientes del PID del regulador de calentamiento:</h2>
+      <p>El controlador PID modifica la calefacción para mantener la temperatura establecida. Primero use el ajuste automático en modo Cerveza. Al ajustar manualmente, cambie un coeficiente cada vez y observe la temperatura en el gráfico.</p>
       <h2><label for="Kp">Kp:</label> <input id="Kp" name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
+      <p>Kp — reacción a la desviación de la temperatura establecida. Un valor bajo calienta despacio; uno alto provoca sobrepaso y oscilaciones.</p>
       <h2><label for="Ki">Ki:</label> <input id="Ki" name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>
+      <p>Ki — corrección de un calentamiento insuficiente prolongado. Un valor demasiado alto provoca sobrepaso y oscilaciones lentas.</p>
       <h2><label for="Kd">Kd:</label> <input id="Kd" name='Kd' type='text' inputmode='decimal' value='%Kd%'></h2>
+      <p>Kd — freno de la calefacción cuando la temperatura sube rápido. Un valor demasiado alto amplifica la reacción al ruido del sensor.</p>
       <div id='VoltH2' style=''>
         <h2><label for="StbVoltage">Tens./potencia del regulador en modo de mantenimiento de temp.:</label> <input name='StbVoltage' id='StbVoltage' type='text' inputmode='decimal' value='%StbVoltage%'> V</h2>
       </div>

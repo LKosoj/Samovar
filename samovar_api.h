@@ -223,7 +223,7 @@ inline bool alcohol_estimate_valid(float value);
 void set_boiling();
 bool check_boiling();
 inline bool self_test_active();
-inline void start_self_test(void);
+inline void start_self_test(uint8_t device = 0);
 inline void tick_self_test(void);
 inline void stop_self_test(void);
 inline void request_emergency_stop(const String& reason);

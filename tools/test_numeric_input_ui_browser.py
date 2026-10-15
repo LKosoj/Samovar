@@ -967,6 +967,9 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
     (target / "ui-bootstrap").write_text(
         json.dumps(UI_BOOTSTRAP_FIXTURE), encoding="utf-8"
     )
+    (target / "sensor-temperatures").write_text(
+        json.dumps({"pending": False, "sensors": []}), encoding="utf-8"
+    )
     color_tokens = color_tokens or {}
     replacements = {
         "pwr_unit": "V",

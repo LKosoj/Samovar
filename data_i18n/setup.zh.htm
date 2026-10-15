@@ -145,6 +145,43 @@
       });
     }
 
+    async function refreshSensorTemperatures() {
+      var button = document.getElementById('refreshSensorTemperaturesButton');
+      var status = document.getElementById('sensorTemperaturesStatus');
+      button.disabled = true;
+      status.textContent = '正在读取温度…';
+      try {
+        var deadline = Date.now() + 10000;
+        var url = '/sensor-temperatures?refresh=1';
+        while (true) {
+          var response = await fetch(url, {cache: 'no-store'});
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          var data = await response.json();
+          if (!data.pending) break;
+          if (Date.now() >= deadline) throw new Error('设备未及时响应');
+          await new Promise(function(resolve) { setTimeout(resolve, 300); });
+          url = '/sensor-temperatures';
+        }
+        ['SteamAddr', 'PipeAddr', 'WaterAddr', 'TankAddr', 'ACPAddr'].forEach(function(id) {
+          Array.from(document.getElementById(id).options).forEach(function(option) {
+            if (option.value === '-1') return;
+            var address = option.dataset.address || option.textContent;
+            option.dataset.address = address;
+            var sensor = data.sensors.find(function(item) { return item.address === address; });
+            option.textContent = address + ' — ' + (sensor && Number.isFinite(sensor.temperature)
+              ? sensor.temperature.toFixed(2) + ' °C' : '无读数');
+          });
+        });
+        status.textContent = '读数未校正。用手温暖传感器并刷新温度，以确定其地址.';
+      } catch (error) {
+        status.textContent = '无法读取温度: ' + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', refreshSensorTemperatures);
+
     const setupNumericSchema = [
       { name: 'mode', integer: true, min: 0, max: 7 },
       { name: 'DistTemp', min: 30, max: 150 },
@@ -699,9 +736,12 @@
       <div
         style="border: 1px dashed #bbb; display: flex; flex-direction: column; margin-bottom: 1em;  margin-top: 1em; padding: 1em; align-items: center;"
         >
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5em;">
         <input id='selftest' type='button' name='selftest' value='自检' onclick='confirmSelfTest()' class="button"
           title="将开启水泵（或打开阀），启动采出蠕动泵，伺服将经过5个位置."
         >
+        <input type="button" value="单独检查设备" class="button" onclick="if (confirmLeaveIfDirty()) location.href='device-test.htm'">
+        </div>
         <p style="margin: 0.5em 0 0; font-size: 0.85em; color: var(--text-main); text-align: center;">
           注意：将开启供水（泵或阀），启动采出蠕动泵，伺服将经过5个容器位置.
         </p>
@@ -709,6 +749,8 @@
     </div>
 
     <div id="Temp" class="tabcontent" aria-hidden="true">
+      <p id="sensorTemperaturesStatus" role="status"></p>
+      <button id="refreshSensorTemperaturesButton" type="button" class="button" onclick="refreshSensorTemperatures()">刷新温度</button>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <div style="color: %SteamColor%; text-decoration-line: underline; text-decoration-color: %SteamColor%;">
           <h2>
@@ -817,9 +859,13 @@
         </select>
       </h2>
       <h2>加热调压器的PID系数:</h2>
+      <p>PID 控制器会调节加热以保持设定温度。请先在酿酒模式中使用自动调节。手动调节时一次只改变一个系数，并观察图表中的温度.</p>
       <h2><label for="Kp">Kp:</label> <input id="Kp" name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
+      <p>Kp — 对设定温度偏差的响应。数值过小会导致加热缓慢；过大会导致超调和振荡.</p>
       <h2><label for="Ki">Ki:</label> <input id="Ki" name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>
+      <p>Ki — 消除持续欠热。数值过大会导致超调和缓慢振荡.</p>
       <h2><label for="Kd">Kd:</label> <input id="Kd" name='Kd' type='text' inputmode='decimal' value='%Kd%'></h2>
+      <p>Kd — 温度快速上升时抑制加热。数值过大会放大对传感器噪声的响应.</p>
       <div id='VoltH2' style=''>
         <h2><label for="StbVoltage">温度保持模式下调压器的电压/功率.:</label> <input name='StbVoltage' id='StbVoltage' type='text' inputmode='decimal' value='%StbVoltage%'> V</h2>
       </div>

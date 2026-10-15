@@ -1078,6 +1078,87 @@ static bool capture_ui_bootstrap_snapshot(UiBootstrapSnapshot& snapshot);
 static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snapshot);
 
 void WebServerInit(void) {
+  server.on("/sensor-temperatures", HTTP_GET, [](AsyncWebServerRequest *request) {
+    DSTemperatureSnapshot snapshot;
+    const bool refresh = request->hasParam("refresh");
+    portENTER_CRITICAL(&dsAddressMux);
+    if (refresh) dsTemperatureSnapshot.pending = true;
+    snapshot = dsTemperatureSnapshot;
+    portEXIT_CRITICAL(&dsAddressMux);
+    String json = String("{\"pending\":") + (snapshot.pending ? "true" : "false") + ",\"sensors\":[";
+    for (uint8_t i = 0; i < snapshot.addresses.count; i++) {
+      if (i) json += ',';
+      const float temperature = snapshot.temperature[i];
+      json += "{\"address\":\"" + getDSAddress(snapshot.addresses.addr[i]) + "\",\"temperature\":";
+      json += isfinite(temperature) && temperature >= -55 && temperature <= 125
+        ? String(temperature, 2) : String("null");
+      json += '}';
+    }
+    json += "]}";
+    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
+  });
+
+  server.on("/device-test", HTTP_GET, [](AsyncWebServerRequest *request) {
+    const SelfTestSnapshot snapshot = copy_self_test_snapshot();
+    String json = String("{\"active\":") + (snapshot.active ? "true" : "false") +
+      ",\"device\":" + String(snapshot.device) + ",\"waterPump\":";
+#ifdef USE_WATER_PUMP
+    json += "true";
+#else
+    json += "false";
+#endif
+    json += ",\"capacity\":";
+#if defined(SERVO_PIN) || USER_SERVO
+    json += "true";
+#else
+    json += "false";
+#endif
+    json += '}';
+    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
+  });
+  server.on("/device-test", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (!request->hasParam("device", true)) {
+      request->send(400, "text/plain", "INVALID_DEVICE");
+      return;
+    }
+    const String device = request->getParam("device", true)->value();
+    if (device == "stop") {
+      const bool queued = queue_pending_flag(pending_stop_self_test_flag);
+      request->send(queued ? 202 : 503, "text/plain", queued ? "STOP" : "BUSY");
+      return;
+    }
+    SamovarCommands command = SAMOVAR_NONE;
+    if (device == "valve") command = SAMOVAR_TEST_VALVE;
+#ifdef USE_WATER_PUMP
+    else if (device == "waterPump") command = SAMOVAR_TEST_WATER_PUMP;
+#endif
+    else if (device == "stepper") command = SAMOVAR_TEST_STEPPER;
+#if defined(SERVO_PIN) || USER_SERVO
+    else if (device == "capacity") command = SAMOVAR_TEST_CAPACITY;
+#endif
+    if (command == SAMOVAR_NONE) {
+      request->send(400, "text/plain", "INVALID_DEVICE");
+      return;
+    }
+    if (samovar_process_active() || copy_self_test_snapshot().active || mode_switch_in_progress() ||
+        !samovar_command_queue_idle()) {
+      request->send(409, "text/plain", "BUSY");
+      return;
+    }
+    portENTER_CRITICAL(&configMux);
+    const uint16_t stepsPerMl = SamSetup.StepperStepMl;
+    portEXIT_CRITICAL(&configMux);
+    if (command == SAMOVAR_TEST_STEPPER && stepsPerMl == 0) {
+      request->send(409, "text/plain", "NOT_CALIBRATED");
+      return;
+    }
+    const bool queued = queue_samovar_command(command);
+    request->send(queued ? 202 : 503, "text/plain", queued ? "QUEUED" : "BUSY");
+  });
   FS_register_web_handlers();
 
   server.on("/", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
@@ -1115,6 +1196,7 @@ void WebServerInit(void) {
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
   server.serveStatic("/calibrate_ph.htm", SPIFFS, "/calibrate_ph.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
+  server.serveStatic("/device-test.htm", SPIFFS, "/device-test.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
   server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
   server.on("/pong.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -3257,7 +3339,7 @@ void get_web_interface() {
         "style.css.gz", "app.js.gz", "chart.js.gz",
         "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz",
         "bk.htm.gz", "nbk.htm.gz", "chart.htm.gz", "program.htm.gz", "cheese-recipes.htm.gz",
-        "calibrate.htm.gz", "calibrate_ph.htm.gz", "brewxml.htm.gz",
+        "calibrate.htm.gz", "calibrate_ph.htm.gz", "device-test.htm.gz", "brewxml.htm.gz",
         "i2cstepper.htm.gz", "edit.htm.gz", "setup.htm",
     };
     static const size_t kWebOverrideFileCount = sizeof(kWebOverrideFiles) / sizeof(kWebOverrideFiles[0]);

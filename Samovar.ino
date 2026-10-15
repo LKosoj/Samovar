@@ -2351,6 +2351,12 @@ void triggerSysTicker(void *parameter) {
       get_current_power();
 #endif
 
+      bool readDsTemperatures = false;
+      portENTER_CRITICAL(&dsAddressMux);
+      readDsTemperatures = dsTemperatureSnapshot.pending;
+      portEXIT_CRITICAL(&dsAddressMux);
+      if (readDsTemperatures) refresh_ds_address_temperatures();
+
       bool rescanDs = false;
       {
         PendingCommandLockGuard guard;
@@ -4434,6 +4440,18 @@ void loop() {
         break;
       case SAMOVAR_SELF_TEST:
         start_self_test();
+        break;
+      case SAMOVAR_TEST_VALVE:
+        start_self_test(SELF_TEST_VALVE);
+        break;
+      case SAMOVAR_TEST_WATER_PUMP:
+        start_self_test(SELF_TEST_WATER_PUMP);
+        break;
+      case SAMOVAR_TEST_STEPPER:
+        start_self_test(SELF_TEST_STEPPER);
+        break;
+      case SAMOVAR_TEST_CAPACITY:
+        start_self_test(SELF_TEST_CAPACITY);
         break;
       case SAMOVAR_NONE:
         break;

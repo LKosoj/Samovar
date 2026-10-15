@@ -139,6 +139,14 @@ struct DSAddressSnapshot {
   uint8_t count;
 };
 
+struct DSTemperatureSnapshot {
+  DSAddressSnapshot addresses;
+  float temperature[SAMOVAR_DS_ADDRESS_MAX];
+  bool pending;
+};
+
+static DSTemperatureSnapshot dsTemperatureSnapshot = {};
+
 extern portMUX_TYPE dsAddressMux;
 
 inline void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress) {
@@ -173,6 +181,17 @@ inline void copy_ds_address_snapshot(DSAddressSnapshot& snapshot) {
   for (uint8_t i = 0; i < count; i++) {
     CopyDSAddress(DSAddr[i], snapshot.addr[i]);
   }
+  portEXIT_CRITICAL(&dsAddressMux);
+}
+
+inline void refresh_ds_address_temperatures() {
+  DSTemperatureSnapshot snapshot = {};
+  copy_ds_address_snapshot(snapshot.addresses);
+  for (uint8_t i = 0; i < snapshot.addresses.count; i++) {
+    snapshot.temperature[i] = sensors.getTempC(snapshot.addresses.addr[i]);
+  }
+  portENTER_CRITICAL(&dsAddressMux);
+  dsTemperatureSnapshot = snapshot;
   portEXIT_CRITICAL(&dsAddressMux);
 }
 

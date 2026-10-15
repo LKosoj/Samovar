@@ -145,6 +145,43 @@
       });
     }
 
+    async function refreshSensorTemperatures() {
+      var button = document.getElementById('refreshSensorTemperaturesButton');
+      var status = document.getElementById('sensorTemperaturesStatus');
+      button.disabled = true;
+      status.textContent = 'Reading temperatures…';
+      try {
+        var deadline = Date.now() + 10000;
+        var url = '/sensor-temperatures?refresh=1';
+        while (true) {
+          var response = await fetch(url, {cache: 'no-store'});
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          var data = await response.json();
+          if (!data.pending) break;
+          if (Date.now() >= deadline) throw new Error('The device did not respond in time');
+          await new Promise(function(resolve) { setTimeout(resolve, 300); });
+          url = '/sensor-temperatures';
+        }
+        ['SteamAddr', 'PipeAddr', 'WaterAddr', 'TankAddr', 'ACPAddr'].forEach(function(id) {
+          Array.from(document.getElementById(id).options).forEach(function(option) {
+            if (option.value === '-1') return;
+            var address = option.dataset.address || option.textContent;
+            option.dataset.address = address;
+            var sensor = data.sensors.find(function(item) { return item.address === address; });
+            option.textContent = address + ' — ' + (sensor && Number.isFinite(sensor.temperature)
+              ? sensor.temperature.toFixed(2) + ' °C' : 'no reading');
+          });
+        });
+        status.textContent = 'Uncorrected readings. Warm the sensor by hand and refresh the temperatures to identify its address.';
+      } catch (error) {
+        status.textContent = 'Failed to read temperatures: ' + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', refreshSensorTemperatures);
+
     const setupNumericSchema = [
       { name: 'mode', integer: true, min: 0, max: 7 },
       { name: 'DistTemp', min: 30, max: 150 },
@@ -699,9 +736,12 @@
       <div
         style="border: 1px dashed #bbb; display: flex; flex-direction: column; margin-bottom: 1em;  margin-top: 1em; padding: 1em; align-items: center;"
         >
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5em;">
         <input id='selftest' type='button' name='selftest' value='Self-test' onclick='confirmSelfTest()' class="button"
           title="The water pump will turn on (or the valve will open), the peristaltic take-off pump will start, the servo will move through 5 positions."
         >
+        <input type="button" value="Individual device check" class="button" onclick="if (confirmLeaveIfDirty()) location.href='device-test.htm'">
+        </div>
         <p style="margin: 0.5em 0 0; font-size: 0.85em; color: var(--text-main); text-align: center;">
           Attention: water supply will turn on (pump or valve), the peristaltic take-off pump will start, the servo will move through 5 container positions.
         </p>
@@ -709,6 +749,8 @@
     </div>
 
     <div id="Temp" class="tabcontent" aria-hidden="true">
+      <p id="sensorTemperaturesStatus" role="status"></p>
+      <button id="refreshSensorTemperaturesButton" type="button" class="button" onclick="refreshSensorTemperatures()">Refresh temperatures</button>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <div style="color: %SteamColor%; text-decoration-line: underline; text-decoration-color: %SteamColor%;">
           <h2>
@@ -817,9 +859,13 @@
         </select>
       </h2>
       <h2>PID coefficients of the heating regulator:</h2>
+      <p>The PID controller changes heating to maintain the set temperature. First use autotune in Brewing mode. When tuning manually, change one coefficient at a time and watch the temperature on the graph.</p>
       <h2><label for="Kp">Kp:</label> <input id="Kp" name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
+      <p>Kp — response to deviation from the set temperature. Too little means slow heating; too much causes overshoot and oscillation.</p>
       <h2><label for="Ki">Ki:</label> <input id="Ki" name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>
+      <p>Ki — eliminating prolonged underheating. Too large a value causes overshoot and slow oscillations.</p>
       <h2><label for="Kd">Kd:</label> <input id="Kd" name='Kd' type='text' inputmode='decimal' value='%Kd%'></h2>
+      <p>Kd — slowing heating when the temperature rises quickly. Too large a value amplifies the response to sensor noise.</p>
       <div id='VoltH2' style=''>
         <h2><label for="StbVoltage">Regulator voltage/power in temp. hold mode.:</label> <input name='StbVoltage' id='StbVoltage' type='text' inputmode='decimal' value='%StbVoltage%'> V</h2>
       </div>

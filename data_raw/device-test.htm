@@ -1,0 +1,102 @@
+<!--#include head_boilerplate.htm-->
+<link rel="stylesheet" href="style.css?v=7.00u9">
+<title>Самовар — проверка устройств</title>
+<style>.device-test .button { min-height: 44px; }</style>
+<script src="app.js"></script>
+<script>
+  var testNames = ['Самотестирование', 'Клапан воды', 'Насос воды', 'Локальный насос отбора', 'Переключатель ёмкостей'];
+  var testIds = {valve: 1, waterPump: 2, stepper: 3, capacity: 4};
+  var waitingForTest = null;
+  var testRequestBusy = false;
+  var testPollBusy = false;
+  var testStatusKnown = false;
+  var testError = '';
+
+  function setTestButtons(active, data) {
+    document.querySelectorAll('[data-test-device]').forEach(function(button) {
+      var device = button.dataset.testDevice;
+      if (device === 'waterPump' && typeof data.waterPump === 'boolean') button.hidden = !data.waterPump;
+      if (device === 'capacity' && typeof data.capacity === 'boolean') button.hidden = !data.capacity;
+      button.disabled = active || !testStatusKnown || testRequestBusy || button.hidden;
+    });
+  }
+
+  async function pollDeviceTest() {
+    if (testPollBusy) return;
+    testPollBusy = true;
+    try {
+      var response = await fetch('/device-test', {cache: 'no-store'});
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var data = await response.json();
+      testStatusKnown = true;
+      if (waitingForTest && data.active && data.device === waitingForTest.device) waitingForTest = null;
+      if (waitingForTest && Date.now() > waitingForTest.deadline) {
+        waitingForTest = null;
+        throw new Error('Проверка не запустилась. Проверьте сообщения устройства.');
+      }
+      document.getElementById('testStatus').textContent = waitingForTest ? 'Ожидание запуска…'
+        : data.active ? 'Выполняется: ' + testNames[data.device]
+        : testError || 'Устройства готовы к проверке.';
+      setTestButtons(data.active || !!waitingForTest, data);
+      document.getElementById('testStop').disabled = !data.active && !waitingForTest;
+    } catch (error) {
+      testStatusKnown = false;
+      setTestButtons(true, {});
+      testError = 'Ошибка проверки: ' + error.message;
+      document.getElementById('testStatus').textContent = testError;
+    } finally {
+      testPollBusy = false;
+    }
+  }
+
+  async function runDeviceTest(device) {
+    if (testRequestBusy) return;
+    testRequestBusy = true;
+    testError = '';
+    setTestButtons(true, {});
+    try {
+      var response = await fetch('/device-test', {
+        method: 'POST', body: new URLSearchParams({device: device})
+      });
+      if (!response.ok) {
+        var reason = await response.text();
+        throw new Error(reason === 'BUSY' ? 'Идёт процесс или другая проверка.'
+          : reason === 'NOT_CALIBRATED' ? 'Сначала откалибруйте насос отбора.' : 'HTTP ' + response.status);
+      }
+      waitingForTest = device === 'stop' ? null : {device: testIds[device], deadline: Date.now() + 10000};
+    } catch (error) {
+      testError = 'Ошибка проверки: ' + error.message;
+      document.getElementById('testStatus').textContent = testError;
+    } finally {
+      testRequestBusy = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', async function() {
+    SamovarApp.initTheme({implicitSystemTheme: true});
+    if (!await SamovarApp.loadUiBootstrap(function(data) { SamovarApp.applyModeNavigation(data.mode); })) return;
+    pollDeviceTest();
+    setInterval(pollDeviceTest, 1000);
+  });
+</script>
+</head>
+<body>
+<!--#include ui_page_header.htm-->
+  <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+</header>
+<main class="card device-test" style="max-width: 760px; margin: 1em auto; padding: 1em;">
+  <h1>Проверка отдельных устройств</h1>
+  <p>Проверяйте устройства по одному при остановленном процессе. Нагрев не включается. Насосы должны быть подготовлены к работе с жидкостью.</p>
+  <p>Клапан и насосы проверяются до 15 секунд. Насос отбора работает со скоростью 1 л/ч, не более 100 мл. Переключатель проходит пять положений и возвращается в исходное.</p>
+  <div class="actions" style="display: flex; flex-wrap: wrap; gap: 0.75em;">
+    <button type="button" class="button" data-test-device="valve" onclick="runDeviceTest('valve')" disabled>Клапан воды</button>
+    <button type="button" class="button" data-test-device="waterPump" onclick="runDeviceTest('waterPump')" disabled>Насос воды</button>
+    <button type="button" class="button" data-test-device="stepper" onclick="runDeviceTest('stepper')" disabled>Локальный насос отбора</button>
+    <button type="button" class="button" data-test-device="capacity" onclick="runDeviceTest('capacity')" disabled>Переключатель ёмкостей</button>
+  </div>
+  <p id="testStatus" role="status">Подключение к устройству…</p>
+  <button id="testStop" type="button" class="button" onclick="runDeviceTest('stop')">Остановить проверку</button>
+  <p><a href="setup.htm">Вернуться в настройки</a></p>
+</main>
+</body>
+</html>
