@@ -36,6 +36,8 @@ class asyncHTTPrequest;
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
+static String build_current_log_base_line();
+
 #include <esp_wifi.h>
 
 #if defined(ARDUINO_ESP32S3_DEV)
