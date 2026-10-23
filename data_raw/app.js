@@ -894,6 +894,7 @@
 
   function onLockedPageInput(event) {
     if (!document.documentElement.classList.contains('connection-lost')) return;
+    if (event.target.closest('#connectionLostDialog')) return;
     event.preventDefault();
     event.stopPropagation();
   }
@@ -918,6 +919,7 @@
   function applyStaleVisuals(offline) {
     const clock = byId('crnt_tm');
     const root = document.documentElement;
+    let dialog = byId('connectionLostDialog');
     if (offline) {
       if (clockStale) return;
       clockStale = true;
@@ -930,10 +932,20 @@
       if (active && active !== document.body && typeof active.blur === 'function') {
         active.blur();
       }
+      if (!dialog) {
+        dialog = document.createElement('dialog');
+        dialog.id = 'connectionLostDialog';
+        dialog.innerHTML = '<p>Обрыв связи!</p><button type="button" onclick="SamovarApp.setSoundEnabled(false); this.disabled = true;">Отключить звук</button>';
+        dialog.addEventListener('cancel', function (event) { event.preventDefault(); });
+        document.body.appendChild(dialog);
+      }
+      dialog.querySelector('button').disabled = false;
+      dialog.showModal();
     } else {
       clockStale = false;
       root.classList.remove('connection-lost');
       document.body.inert = false;
+      if (dialog && dialog.open) dialog.close();
     }
   }
 

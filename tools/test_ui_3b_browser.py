@@ -53,7 +53,7 @@ BROWSER_TEST = r'''async page => {
     RowPredictionReason:0, ProcessPredictionReason:0, current_power_volt:0, target_power_volt:0, current_power_mode:'0', current_power_p:0,
     bme_temp:24, heap:200000, rssi:-50, fr_bt:300000, UseBBuzzer:false, Lstatus:'', wp_spd:0,
     i2c_pump_present:0, i2c_pump_running:0, i2c_pump_remaining_ml:0, i2c_pump_speed:0, PowerOn:0,
-    heaterAlarmLatched:0, heaterAlarmReason:'', latestMessageSequence:0, events:[],
+    heaterAlarmLatched:0, heaterAlarmReason:'', latestMessageSequence:0, sessionId:0, events:[],
     BoilingEvidence:0, BoilingPrecisionSensorConfigured:false, bk_water_auto:false, bk_steam_setpoint:0,
     prvl:0, ISspd:0, ProgramNum:1
   };
@@ -63,6 +63,7 @@ BROWSER_TEST = r'''async page => {
     if (plan.path === '/nbk.htm') data.ui = {m:4, p:1, c:plan.kind === 'no-feed' ? [] : [{k:6, u:3, s:1, a:plan.index ? 12.5 : 5.001}]};
     if (plan.kind === 'no-pressure') delete data.prvl;
     if (plan.kind === 'disconnected-pressure') data.prvl = -1;
+    if (plan.kind === 'negative-pressure') data.prvl = plan.index ? -0.2 : -0.1;
     return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(data)});
   });
   await page.route('**/command', route => { commands.push(route.request().postData() || ''); return route.fulfill({status:200, body:'OK'}); });
@@ -188,6 +189,16 @@ BROWSER_TEST = r'''async page => {
   await open('/nbk.htm', {kind:'no-feed', index:0});
   expect(await page.locator('#nbkFeedRate').textContent() === '—', 'NBK invented feed without applied control');
   expect(await page.locator('#nbkSchemeFeedRate').textContent() === '—', 'NBK scheme invented feed without applied control');
+  for (const index of [0, 1]) {
+    await open('/nbk.htm', {kind:'negative-pressure', index});
+    const pressure = page.locator('.sec-sensors #Pressure');
+    expect(await pressure.isVisible(), 'NBK negative pressure hidden on mobile');
+    expect(await pressure.locator('#pressure_value').textContent() === (index ? '-0.2' : '-0.1'),
+      'NBK negative pressure reading missing');
+    await page.setViewportSize({width:1280,height:800});
+    expect(await pressure.isVisible(), 'NBK negative pressure hidden on desktop');
+    await page.setViewportSize({width:390,height:844});
+  }
   await open('/nbk.htm', {kind:'no-pressure', index:0});
   expect(await page.locator('.sec-sensors').isHidden(), 'NBK sensor card shown on mobile without pressure');
   expect(await page.locator('.sec-sensors #Pressure').evaluate(element => getComputedStyle(element).display === 'none'),

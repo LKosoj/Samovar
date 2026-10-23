@@ -7,6 +7,7 @@
   ".toFixed(1).replace('.', ',')": ".toFixed(1)"
  },
  "segments": {
+  "Отключить звук": "Mute alarm",
   "Устройство занято. Команда не принята": "Device busy. Command not accepted",
   "Команда проигнорирована": "Command ignored",
   "Нагрев выключен. Команда не принята": "Heating is off. Command not accepted",

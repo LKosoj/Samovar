@@ -6,6 +6,7 @@
   "get('lang') === 'en' ? 'en' : 'ru'": "get('lang') === 'en' ? 'en' : 'fr'"
  },
  "segments": {
+  "Отключить звук": "Couper le son",
   "Устройство занято. Команда не принята": "Appareil occupé. Commande refusée",
   "Команда проигнорирована": "Commande ignorée",
   "Нагрев выключен. Команда не принята": "Chauffe coupée. Commande refusée",

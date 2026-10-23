@@ -177,6 +177,16 @@ html.connection-lost {
   opacity: 0.4;
 }
 
+#connectionLostDialog {
+  pointer-events: auto;
+  color: var(--text-main);
+  background: var(--bg-form);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+#connectionLostDialog button { margin-top: 12px; }
+
 h1 {
   text-align: left;
   margin-top: 0 !important;

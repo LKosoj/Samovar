@@ -42,12 +42,12 @@ FIXTURE_ON = r'''{
     DetectorTrend: 0, DetectorStatus: 0, useautospeed: false,
     current_power_volt: 0, target_power_volt: 0, current_power_mode: '0',
     current_power_p: 0, WFtotalMl: 0, WFflowRate: 0, bme_temp: 24,
-    heap: 200000, rssi: -50, fr_bt: 300000, UseBBuzzer: false, PauseOn: 0,
+    heap: 200000, rssi: -50, fr_bt: 300000, UseBBuzzer: true, PauseOn: 0,
     PrgType: '', Status: 'Готов', Lstatus: '', TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 1, StepperStepMl: 111,
-    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0, sessionId: 0
   }'''
 # Тот же снимок, но нагрев уже выключен - именно это должна показать кнопка
 # ПОСЛЕ восстановления связи (доказывает, что после реконнекта состояние не
@@ -76,8 +76,8 @@ BROWSER_TEST = r'''async page => {
       this.loop = false;
       this.preload = '';
       this.autoplay = false;
-      this.play = function () { return Promise.resolve(); };
-      this.pause = function () {};
+      this.play = function () { window.__alarmPlaying = true; return Promise.resolve(); };
+      this.pause = function () { window.__alarmPlaying = false; };
     };
   });
 
@@ -162,6 +162,21 @@ BROWSER_TEST = r'''async page => {
     throw new Error('sendCommand must throw while offline');
   }
 
+  const dialog = page.locator('#connectionLostDialog');
+  const mute = dialog.getByRole('button', { name: 'Отключить звук' });
+  if (!(await dialog.isVisible()) || !(await page.evaluate(() => window.__alarmPlaying))) {
+    throw new Error('connection alarm must sound with a visible mute dialog');
+  }
+  await mute.click();
+  if (await page.evaluate(() => window.__alarmPlaying)) {
+    throw new Error('mouse mute must stop connection alarm while page stays locked');
+  }
+  if (!(await page.evaluate(() => document.body.inert))) {
+    throw new Error('muting alarm must not unlock device controls');
+  }
+  await page.keyboard.press('Escape');
+  if (!(await dialog.isVisible())) throw new Error('Escape must keep offline mute dialog visible');
+
   // --- (c) связь восстановлена - замок снимается, кнопка
   // обновляется на актуальное (новое) состояние, а не остаётся "залипшей" ---
   phase = 'recovered';
@@ -178,6 +193,20 @@ BROWSER_TEST = r'''async page => {
   }
   if (after.powerLabel !== 'Включить нагрев') {
     throw new Error('power button must reflect the fresh (recovered) heating-OFF state, got ' + JSON.stringify(after.powerLabel));
+  }
+
+  if (await dialog.isVisible()) throw new Error('connection dialog must close after reconnect');
+
+  // Повторный обрыв: кнопка снова доступна, работает и с клавиатуры.
+  phase = 'offline';
+  await page.waitForFunction(() => document.getElementById('connectionLostDialog').open, null, { timeout: 25000 });
+  if (!(await page.evaluate(() => window.__alarmPlaying)) || !(await mute.isEnabled())) {
+    throw new Error('second disconnect must sound again and enable mute');
+  }
+  await mute.focus();
+  await page.keyboard.press('Enter');
+  if (await page.evaluate(() => window.__alarmPlaying)) {
+    throw new Error('keyboard mute must stop connection alarm');
   }
 
   if (errors.length > 0) throw new Error(errors.join('\n'));

@@ -3749,6 +3749,7 @@ static void tick_check_systicker_liveness() {
 
   if (millis() - lastChangeMs > 10000) {
     request_emergency_stop(TR(MAIN_EMERGENCY_SYSTICKER_HUNG, "Аварийное отключение! Задача надзора SysTicker зависла"));
+    perform_emergency_stop();
     SendMsg(TR(MAIN_SYSTICKER_HUNG_REBOOT, "Задача надзора SysTicker зависла. Перезагрузка"), ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();

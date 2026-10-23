@@ -11,7 +11,7 @@ I2C или внутри DS_getvalue()), проверки молча перест
 
 Тест берёт РЕАЛЬНОЕ тело tick_check_systicker_liveness() (через extract_function_body -
 без переписывания логики) и подставляет его в минимальный host-харнесс, подменяя
-millis()/sysTickerHeartbeat/request_emergency_stop()/SendMsg()/vTaskDelay()/ESP.restart().
+millis()/sysTickerHeartbeat/request_emergency_stop()/perform_emergency_stop()/SendMsg()/vTaskDelay()/ESP.restart().
 Единый непрерывный таймлайн вызовов (как это реально происходит из loop()):
 пульс растёт -> пульс замирает, но порог не достигнут -> порог превышен.
 """
@@ -50,11 +50,22 @@ static unsigned long millis() { return mockMillis; }
 // внешнего while(true) в triggerSysTicker().
 static volatile uint32_t sysTickerHeartbeat = 0;
 
+static bool pendingStop = false;
+static float feedRate = 22;
+static bool stoppedBeforeDelay = true;
 static int emergencyStopCalls = 0;
 static std::string lastReason;
 static void request_emergency_stop(const String& reason) {
+  pendingStop = true;
   emergencyStopCalls++;
   lastReason = reason.c_str();
+}
+
+void perform_emergency_stop() {
+  if (pendingStop) {
+    feedRate = 0;
+    pendingStop = false;
+  }
 }
 
 static int sendMsgAlarmCalls = 0;
@@ -66,6 +77,7 @@ static void SendMsg(const String& text, uint8_t level) {
 static int vTaskDelayCalls = 0;
 static void vTaskDelay(unsigned long ms) {
   (void)ms;
+  stoppedBeforeDelay = stoppedBeforeDelay && feedRate == 0 && !pendingStop;
   vTaskDelayCalls++;
 }
 
@@ -120,6 +132,19 @@ int main() {
   check(sendMsgAlarmCalls == 1, "SendMsg(..., ALARM_MSG) не вызван при зависании SysTicker");
   check(vTaskDelayCalls == 1, "vTaskDelay не вызван при зависании SysTicker");
   check(espRestartCalls == 1, "ESP.restart не вызван при зависании SysTicker");
+
+  check(stoppedBeforeDelay && feedRate == 0,
+        "подача должна остановиться ДО ожидания перезагрузки");
+
+  // Повторная авария с другой подачей: первый останов не должен маскировать пропуск.
+  sysTickerHeartbeat++;
+  tick_check_systicker_liveness();
+  feedRate = 7.5f;
+  mockMillis += 11000;
+  tick_check_systicker_liveness();
+  check(stoppedBeforeDelay && feedRate == 0 && !pendingStop,
+        "повторная авария должна остановить новую подачу ДО ожидания");
+  check(espRestartCalls == 2, "повторная авария должна перезагрузить контроллер");
 
   if (failures != 0) return 1;
   std::cout << "SysTicker liveness watchdog behaviour checks passed\n";

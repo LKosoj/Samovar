@@ -6,6 +6,7 @@
   "get('lang') === 'en' ? 'en' : 'ru'": "get('lang') === 'en' ? 'en' : 'es'"
  },
  "segments": {
+  "Отключить звук": "Silenciar alarma",
   "Устройство занято. Команда не принята": "Dispositivo ocupado. Comando no aceptado",
   "Команда проигнорирована": "Comando ignorado",
   "Нагрев выключен. Команда не принята": "El calentamiento está apagado. Comando no aceptado",

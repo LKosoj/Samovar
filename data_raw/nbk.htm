@@ -192,7 +192,7 @@
           document.getElementById('nbkFeedRate').textContent = feedRate;
           document.getElementById('nbkSchemeFeedRate').textContent = feedRate;
           document.getElementById('opt_ISspd').textContent = feedRate;
-          const pressureAvailable = typeof myObj.prvl === 'number' && Number.isFinite(myObj.prvl) && myObj.prvl >= 0;
+          const pressureAvailable = typeof myObj.prvl === 'number' && Number.isFinite(myObj.prvl) && myObj.prvl !== -1;
           document.body.classList.toggle('pressure-available', pressureAvailable);
           if (pressureAvailable) {
             document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);

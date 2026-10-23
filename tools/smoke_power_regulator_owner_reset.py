@@ -11,15 +11,16 @@ SamovarStatusInt остаётся активным статусом владел
 lazy_start_owner_status(status) - true для статусов, которые реально стартуют
 через эту "ленивую" машинерию (DISTILLATION/BK/NBK); ректификация и пиво в неё
 не входят. fail_close_regulator_locked теперь возвращает true, если статус был
-статусом владельца (и она сбросила SamovarStatusInt/startval в IDLE) - false,
+статусом владельца (SamovarStatusInt сброшен в IDLE; startval НБК
+сохранён до останова подачи) - false,
 если нет (тогда состояние НЕ трогается вовсе - ректификация/пиво сами
 разбираются со своим состоянием при отказе регулятора).
 
 Тест вытаскивает РЕАЛЬНЫЕ тела lazy_start_owner_status и
 fail_close_regulator_locked из power_regulator.h, реальный SafetyTransition/
 safety_transition_advance из safety_transition.h (через -I ROOT), реальную
-структуру PowerTransitionState - и мокает единственную истинно внешнюю
-зависимость force_heater_output_off_locked (не-static, со счётчиком вызовов).
+структуру PowerTransitionState и stop_active_process_for_mode из mode_switch.h.
+Аппаратные операции моделируются изменением состояния нагрева и подачи.
 
 [P7 F6] Дополнительно (текстовая проверка, статические пины): 4 отчётных
 блока в power_regulator.h ("Сессия прервана: отказ регулятора нагрева...")
@@ -75,11 +76,31 @@ static PowerTransitionState powerTransition = {
 // --- Глобальное состояние, которым управляют сценарии ---
 int16_t SamovarStatusInt = SAMOVAR_STATUS_IDLE;
 int16_t startval = SAMOVAR_STARTVAL_IDLE;
+int ProgramNum = 0;
+int Samovar_Mode = SAMOVAR_STATUS_NBK;
+bool heaterOn = true;
+float feedRate = 0;
+bool heater_power_on() { return heaterOn; }
+bool self_test_active() { return false; }
+void stop_self_test() {}
+void set_power(bool on) { heaterOn = on; }
+struct ModeOps { void (*stopProcess)(); };
+void finishMode() {
+  feedRate = 0;
+  startval = SAMOVAR_STARTVAL_IDLE;
+  ProgramNum = 0;
+}
+const ModeOps* mode_ops_by_mode(int mode) {
+  static const ModeOps nbk = {finishMode};
+  return mode == SAMOVAR_STATUS_NBK ? &nbk : nullptr;
+}
+@STOP_FUNCTION@
 
-// --- Мок единственной истинно внешней зависимости (не-static) ---
+// --- Отключение нагрева ---
 static int forceHeaterOffCalls = 0;
 static bool lastForceHeaterOffArg = false;
 void force_heater_output_off_locked(bool requestSleep) {
+  heaterOn = false;
   forceHeaterOffCalls++;
   lastForceHeaterOffArg = requestSleep;
 }
@@ -98,6 +119,7 @@ static void check(bool condition, const char* message) {
 static void reset_fixture(int16_t status) {
   SamovarStatusInt = status;
   startval = status;
+  heaterOn = true;
   powerTransition.transition.phase = SAFETY_TRANSITION_IDLE;
   powerTransition.transition.deadline = 0;
   powerTransition.enqueueResetCommand = false;
@@ -119,14 +141,15 @@ int main() {
   check(lazy_start_owner_status(SAMOVAR_STATUS_IDLE) == false, "owner: IDLE не должен быть владельцем");
 
   // fail_close_regulator_locked для каждого статуса-владельца: возвращает
-  // true, сбрасывает SamovarStatusInt/startval в IDLE, реле гасит, помечает
+  // true, сбрасывает статус в IDLE, сохраняет startval НБК до останова, помечает
   // enqueueResetCommand, переводит переход в OFF_REGULATOR_WAIT.
   for (int16_t ownerStatus : {SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_NBK}) {
     reset_fixture(ownerStatus);
     bool result = fail_close_regulator_locked(12345, true);
     check(result == true, "owner-status: fail_close_regulator_locked должен вернуть true");
     check(SamovarStatusInt == SAMOVAR_STATUS_IDLE, "owner-status: SamovarStatusInt должен сброситься в IDLE");
-    check(startval == SAMOVAR_STARTVAL_IDLE, "owner-status: startval должен сброситься в IDLE");
+    check(startval == (ownerStatus == SAMOVAR_STATUS_NBK ? ownerStatus : SAMOVAR_STARTVAL_IDLE),
+          "owner-status: startval НБК должен сохраняться до останова подачи");
     check(forceHeaterOffCalls == 1 && lastForceHeaterOffArg == true, "owner-status: реле должны быть погашены (true)");
     check(powerTransition.enqueueResetCommand == true, "owner-status: enqueueResetCommand должен быть выставлен");
     check(powerTransition.transition.phase == POWER_TRANSITION_OFF_REGULATOR_WAIT, "owner-status: переход должен уйти в OFF_REGULATOR_WAIT");
@@ -142,6 +165,21 @@ int main() {
     check(SamovarStatusInt == SAMOVAR_STATUS_BEER, "non-owner: SamovarStatusInt НЕ должен измениться для BEER");
     check(startval == SAMOVAR_STATUS_BEER, "non-owner: startval НЕ должен измениться для BEER");
     check(forceHeaterOffCalls == 1, "non-owner: реле всё равно должны быть погашены");
+  }
+
+  for (int row : {0, 2}) {
+    reset_fixture(SAMOVAR_STATUS_NBK);
+    ProgramNum = row;
+    startval += row;
+    const int16_t nbkStartval = startval;
+    feedRate = row == 0 ? 22.0f : 7.5f;
+    fail_close_regulator_locked(12345, true);
+    check(!heaterOn && SamovarStatusInt == SAMOVAR_STATUS_IDLE,
+          "отказ РМ должен сразу снять нагрев и запретить выполнение режима");
+    check(startval == nbkStartval, "отказ РМ не должен терять признак незавершённой НБК");
+    stop_active_process_for_mode();
+    check(feedRate == 0, "сброс после отказа РМ обязан остановить I2C-подачу даже на первой строке");
+    check(startval == SAMOVAR_STARTVAL_IDLE, "после завершения подачи startval должен стать IDLE");
   }
 
   if (failures != 0) return 1;
@@ -209,7 +247,11 @@ def build_harness(source: str) -> str:
         body = extract_function_body(code, signature)
         bodies.append(f"{signature} {{{body}}}")
 
+    stop_body = extract_function_body(
+        (ROOT / "mode_switch.h").read_text(encoding="utf-8"),
+        "void stop_active_process_for_mode()")
     harness = HARNESS_TEMPLATE.replace("@STRUCT@", struct_text)
+    harness = harness.replace("@STOP_FUNCTION@", "void stop_active_process_for_mode() {" + stop_body + "}")
     harness = harness.replace("@FUNCTIONS@", "\n\n".join(bodies))
     return harness
 

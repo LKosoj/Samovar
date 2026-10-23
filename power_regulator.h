@@ -304,8 +304,9 @@ inline void finish_power_off_transition(bool enqueueResetCommand) {
 // защищены "ленивым" стартом (mode_begin_heating_session/mode_run_heating_start,
 // одноразовый флаг modeHeatingStartRequested - см. mode_common.h). NBK эту машинерию
 // НЕ использует (nbk.h зовёт set_power() напрямую, минуя mode_begin_heating_session) -
-// для него единственная защита - сброс SamovarStatusInt/startval в IDLE ниже, в
-// fail_close_regulator_locked. Ректификация и пиво сюда не входят вовсе - у них нет
+// для него защита - сброс SamovarStatusInt в IDLE ниже, в fail_close_regulator_locked.
+// startval НБК сохраняем до завершения: иначе reset пропустит останов насоса на строке 0.
+// Ректификация и пиво сюда не входят вовсе - у них нет
 // статуса-владельца в этом списке.
 inline bool lazy_start_owner_status(int16_t status) {
   return status == SAMOVAR_STATUS_DISTILLATION || status == SAMOVAR_STATUS_BK || status == SAMOVAR_STATUS_NBK;
@@ -324,8 +325,8 @@ inline bool fail_close_regulator_locked(uint32_t now, bool enqueueResetCommand) 
   );
   const bool ownerReset = lazy_start_owner_status(SamovarStatusInt);
   if (ownerReset) {
+    if (SamovarStatusInt != SAMOVAR_STATUS_NBK) startval = SAMOVAR_STARTVAL_IDLE;
     SamovarStatusInt = SAMOVAR_STATUS_IDLE;
-    startval = SAMOVAR_STARTVAL_IDLE;
   }
   return ownerReset;
 }
@@ -758,7 +759,7 @@ void check_power_error() {
 
     // 2) Проверим, что заданное напряжение/мощность не сильно отличается от реального
     // (наличие связи с регулятором, пробой семистора и т.п.)
-    if (current_power_mode_is(POWER_WORK_MODE) && current_power_volt > 0 && target_power_volt > 0 &&
+    if (current_power_mode_is(POWER_WORK_MODE) && current_power_volt >= 0 && target_power_volt > 0 &&
         abs((current_power_volt - target_power_volt) / target_power_volt) > 0.2f) {
       power_err_cnt++;
       //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
