@@ -728,6 +728,7 @@
   "Адрес датчика воды": "Adresse du capteur d’eau",
   "Корректировка датчика воды": "Correction du capteur d’eau",
   "Уставка датчика воды": "Consigne du capteur d’eau",
+  "Гистерезис датчика воды": "Hystérésis du capteur d’eau",
   "В перегонных режимах — температура, которую держит охлаждение. В режимах Пиво и Сыр это же число — допуск вокруг заданной температуры строки: от 0,3 до": "En modes de distillation — la température maintenue par le refroidissement. En modes Bière et Fromage, ce même nombre est la tolérance autour de la température réglée de la ligne : de 0,3 à",
   "Задержка срабатывания при выходе Т воды за уставку": "Délai de réaction quand T eau dépasse la consigne",
   "Адрес датчика в кубе": "Adresse du capteur du bouilleur",

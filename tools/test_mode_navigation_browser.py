@@ -56,6 +56,14 @@ BROWSER_TEST = r'''async page => {
     if (message.type() === "error" || message.type() === "warning") problems.push(message.type() + ": " + message.text());
   });
   page.on("pageerror", error => problems.push("pageerror: " + error.message));
+  await page.route("**/setup.htm", async route => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      /(<select id="mode" name="mode">)([\s\S]*?)(<\/select>)/,
+      (_, start, options, end) => start + options.replace(/\sselected/g, "")
+        .replace('<option value="' + mode + '"', '<option selected value="' + mode + '"') + end);
+    await route.fulfill({response, body});
+  });
   await page.route("**/cheese-recipes-bootstrap", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({mode: mode, i2cMixer: false, blynkToken: ""})
   }));
@@ -99,6 +107,12 @@ BROWSER_TEST = r'''async page => {
       pageName + " bootstrap request count for mode " + currentMode);
     expect(ownRequests.filter(path => path === "/ui-bootstrap" || path === "/cheese-recipes-bootstrap").length === 1,
       pageName + " issued an additional bootstrap request for mode " + currentMode);
+    if (pageName === "setup.htm") {
+      const expectedLabel = currentMode === 2 || currentMode === 7
+        ? "Гистерезис датчика воды:" : "Уставка датчика воды:";
+      expect(await page.locator("#waterTempLabel").textContent() === expectedLabel,
+        "initial water sensor label for mode " + currentMode);
+    }
     if (!target) {
       expect(actual.current === null, pageName + " hidden slot keeps aria-current for mode " + currentMode);
       return;
@@ -165,6 +179,37 @@ BROWSER_TEST = r'''async page => {
     await expectSlot("cheese-recipes.htm", mode);
   }
   mode = 2;
+  await page.goto(baseUrl + "/setup.htm", {waitUntil: "load"});
+  const waterValue = await page.locator("#SetWaterTemp").inputValue();
+  const waterTooltip = await page.locator('label[for="SetWaterTemp"] .tooltiptext').textContent();
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({width, height: 900});
+    for (const selectedMode of ["0", "2", "1", "7", "3", "4", "2"]) {
+      await page.selectOption("#mode", selectedMode);
+      await page.locator('.tablinks[onclick*="Temp"]').click();
+      const expected = selectedMode === "2" || selectedMode === "7"
+        ? "Гистерезис датчика воды:" : "Уставка датчика воды:";
+      expect(await page.locator("#waterTempLabel").textContent() === expected,
+        "water sensor label after selecting mode " + selectedMode);
+      expect(await page.locator("#SetWaterTemp").inputValue() === waterValue,
+        "water sensor label change modified the setting");
+      expect(await page.locator('label[for="SetWaterTemp"] .tooltiptext').textContent() === waterTooltip,
+        "water sensor label change modified the tooltip");
+      const fits = await page.locator("#waterTempLabel").evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= 0 && rect.right <= innerWidth;
+      });
+      expect(fits, "water sensor label exceeds viewport at width " + width);
+      await page.locator('.tablinks[onclick*="Main"]').click();
+    }
+  }
+  await page.evaluate(() => mapJson({mode: "7"}));
+  expect(await page.locator("#waterTempLabel").textContent() === "Гистерезис датчика воды:",
+    "water sensor label after importing cheese settings");
+  await page.evaluate(() => mapJson({mode: "0"}));
+  expect(await page.locator("#waterTempLabel").textContent() === "Уставка датчика воды:",
+    "water sensor label after importing rectification settings");
+  await page.evaluate(() => { document.getElementById('setupform').dataset.dirty = 'false'; });
   await page.goto(baseUrl + "/beer.htm", {waitUntil: "load"});
   await page.waitForFunction(() => document.getElementById("beerRecipesTab"));
   let beforeNavigation = requests.length;

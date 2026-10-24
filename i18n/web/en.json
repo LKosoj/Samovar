@@ -729,6 +729,7 @@
   "Адрес датчика воды": "Water sensor address",
   "Корректировка датчика воды": "Water sensor correction",
   "Уставка датчика воды": "Water sensor setpoint",
+  "Гистерезис датчика воды": "Water sensor hysteresis",
   "В перегонных режимах — температура, которую держит охлаждение. В режимах Пиво и Сыр это же число — допуск вокруг заданной температуры строки: от 0,3 до": "In distillation modes — the temperature held by cooling. In Beer and Cheese modes the same number is the tolerance around the line set temperature: from 0.3 to",
   "Задержка срабатывания при выходе Т воды за уставку": "Response delay when water T exceeds the setpoint",
   "Адрес датчика в кубе": "Boiler sensor address",

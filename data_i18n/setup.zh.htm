@@ -118,7 +118,14 @@
         var result = SamovarApp.validateNumericInput(rule.name, rule);
         if (!result.ok) errors.push(result.error);
       });
+      syncWaterTempLabel();
       return errors;
+    }
+
+    function syncWaterTempLabel() {
+      var mode = document.getElementById('mode').value;
+      document.getElementById('waterTempLabel').textContent = mode === '2' || mode === '7'
+        ? '水传感器回差:' : '水传感器设定值:';
     }
 
     function SaveFormToFile (form) {
@@ -495,6 +502,8 @@
       setupForm.dataset.dirty = 'false';
       setupForm.dataset.editRevision = '0';
       setupForm.addEventListener('submit', submitSetupForm);
+      document.getElementById('mode').addEventListener('change', syncWaterTempLabel);
+      syncWaterTempLabel();
       function markSetupDirty(event) {
         // Сам выбор файла в <input type="file" id="fileToLoad"> тоже порождает
         // 'change' на форме, но это ещё не правка настроек - реальные поля
@@ -792,7 +801,7 @@
             </div>
           </h2>
           <h2><label for="DeltaWaterTemp">水传感器修正:</label> <input id="DeltaWaterTemp" name='DeltaWaterTemp' type='text' inputmode='decimal' value='%DeltaWaterTemp%'>&#176;C</h2>
-          <h2><label for="SetWaterTemp" class="tooltip">水传感器设定值:<span class="tooltiptext">在蒸馏类模式中为冷却维持的温度。在啤酒和奶酪模式中，同一个数值是围绕该行设定温度的容差：从0.3到 3&#176;C.</span></label> <input id="SetWaterTemp" name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2><label for="SetWaterTemp" class="tooltip"><span id="waterTempLabel">水传感器设定值:</span><span class="tooltiptext">在蒸馏类模式中为冷却维持的温度。在啤酒和奶酪模式中，同一个数值是围绕该行设定温度的容差：从0.3到 3&#176;C.</span></label> <input id="SetWaterTemp" name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
           <h2><label for="WaterDelay">水温超出设定值时的响应延迟:</label> <input id="WaterDelay" name='WaterDelay' type='text' inputmode='decimal' value='%WaterDelay%'> s</h2>
         </div>
       </div>

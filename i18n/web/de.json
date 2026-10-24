@@ -728,6 +728,7 @@
   "Адрес датчика воды": "Adresse des Wassersensors",
   "Корректировка датчика воды": "Korrektur des Wassersensors",
   "Уставка датчика воды": "Sollwert des Wassersensors",
+  "Гистерезис датчика воды": "Hysterese des Wassersensors",
   "В перегонных режимах — температура, которую держит охлаждение. В режимах Пиво и Сыр это же число — допуск вокруг заданной температуры строки: от 0,3 до": "In den Brennmodi — die Temperatur, die die Kühlung hält. In den Modi Bier und Käse ist dieselbe Zahl die Toleranz um die eingestellte Zeilentemperatur: von 0,3 bis",
   "Задержка срабатывания при выходе Т воды за уставку": "Ansprechverzögerung bei Überschreitung des Wasser-T-Sollwerts",
   "Адрес датчика в кубе": "Adresse des Kesselsensors",

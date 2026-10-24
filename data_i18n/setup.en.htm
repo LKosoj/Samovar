@@ -118,7 +118,14 @@
         var result = SamovarApp.validateNumericInput(rule.name, rule);
         if (!result.ok) errors.push(result.error);
       });
+      syncWaterTempLabel();
       return errors;
+    }
+
+    function syncWaterTempLabel() {
+      var mode = document.getElementById('mode').value;
+      document.getElementById('waterTempLabel').textContent = mode === '2' || mode === '7'
+        ? 'Water sensor hysteresis:' : 'Water sensor setpoint:';
     }
 
     function SaveFormToFile (form) {
@@ -495,6 +502,8 @@
       setupForm.dataset.dirty = 'false';
       setupForm.dataset.editRevision = '0';
       setupForm.addEventListener('submit', submitSetupForm);
+      document.getElementById('mode').addEventListener('change', syncWaterTempLabel);
+      syncWaterTempLabel();
       function markSetupDirty(event) {
         // Сам выбор файла в <input type="file" id="fileToLoad"> тоже порождает
         // 'change' на форме, но это ещё не правка настроек - реальные поля
@@ -792,7 +801,7 @@
             </div>
           </h2>
           <h2><label for="DeltaWaterTemp">Water sensor correction:</label> <input id="DeltaWaterTemp" name='DeltaWaterTemp' type='text' inputmode='decimal' value='%DeltaWaterTemp%'>&#176;C</h2>
-          <h2><label for="SetWaterTemp" class="tooltip">Water sensor setpoint:<span class="tooltiptext">In distillation modes — the temperature held by cooling. In Beer and Cheese modes the same number is the tolerance around the line set temperature: from 0.3 to 3&#176;C.</span></label> <input id="SetWaterTemp" name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2><label for="SetWaterTemp" class="tooltip"><span id="waterTempLabel">Water sensor setpoint:</span><span class="tooltiptext">In distillation modes — the temperature held by cooling. In Beer and Cheese modes the same number is the tolerance around the line set temperature: from 0.3 to 3&#176;C.</span></label> <input id="SetWaterTemp" name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
           <h2><label for="WaterDelay">Response delay when water T exceeds the setpoint:</label> <input id="WaterDelay" name='WaterDelay' type='text' inputmode='decimal' value='%WaterDelay%'> s</h2>
         </div>
       </div>

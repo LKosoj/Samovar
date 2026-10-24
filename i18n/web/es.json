@@ -728,6 +728,7 @@
   "Адрес датчика воды": "Dirección del sensor de agua",
   "Корректировка датчика воды": "Corrección del sensor de agua",
   "Уставка датчика воды": "Consigna del sensor de agua",
+  "Гистерезис датчика воды": "Histéresis del sensor de agua",
   "В перегонных режимах — температура, которую держит охлаждение. В режимах Пиво и Сыр это же число — допуск вокруг заданной температуры строки: от 0,3 до": "En los modos de destilación, la temperatura que mantiene la refrigeración. En los modos Cerveza y Queso este mismo número es la tolerancia en torno a la temperatura fijada de la línea: de 0,3 a",
   "Задержка срабатывания при выходе Т воды за уставку": "Retardo de actuación cuando la T del agua supera la consigna",
   "Адрес датчика в кубе": "Dirección del sensor del calderín",
