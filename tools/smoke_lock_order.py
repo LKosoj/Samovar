@@ -499,6 +499,8 @@ CONFIGMUX_SITES = [
      "snapshot.setup = SamSetup;"),
     ("WebServer.ino", "void WebServerInit(void)",
      "memcpy(token, SamSetup.blynkauth, sizeof(token));"),
+    ("WebServer.ino", "void WebServerInit(void)",
+     "const uint16_t stepsPerMl = SamSetup.StepperStepMl;"),
     ("beer.h", "void FinishAutoTune()",
      "SamSetup = profileCandidate;"),
     ("logic.h", "PumpCalibrationResult pump_calibrate(int stpspeed)",

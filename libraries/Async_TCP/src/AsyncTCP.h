@@ -277,6 +277,7 @@ protected:
 
   tcp_pcb *_pcb;
   lwip_tcp_event_packet_t *_error_event{nullptr};
+  bool *_recv_alive{nullptr};
 
   AcConnectHandler _connect_cb;
   void *_connect_cb_arg;

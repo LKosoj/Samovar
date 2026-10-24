@@ -114,6 +114,7 @@ public:
   void *_connect_cb_arg = nullptr;
   AcConnectHandler _discard_cb = nullptr;
   void *_discard_cb_arg = nullptr;
+  bool *_recv_alive = nullptr;
   AcErrorHandler _error_cb = nullptr;
   void *_error_cb_arg = nullptr;
   uint32_t _rx_last_packet = 0;

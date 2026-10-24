@@ -789,6 +789,9 @@ AsyncClient::AsyncClient(tcp_pcb *pcb)
 }
 
 AsyncClient::~AsyncClient() {
+  if (_recv_alive) {
+    *_recv_alive = false;
+  }
   if (_pcb) {
     _close();
   } else if (_async_queue_mutex) {
@@ -1102,6 +1105,11 @@ int8_t AsyncClient::_sent(tcp_pcb *pcb, uint16_t len) {
 }
 
 int8_t AsyncClient::_recv(tcp_pcb *pcb, pbuf *pb, int8_t err) {
+  // onData/onPacket may synchronously close and delete this client.
+  bool alive = true;
+  bool *const previousAlive = _recv_alive;
+  bool *const receiveAlive = previousAlive ? previousAlive : &alive;
+  _recv_alive = receiveAlive;
   while (pb != NULL) {
     _rx_last_packet = millis();
     // we should not ack before we assimilate the data
@@ -1109,12 +1117,19 @@ int8_t AsyncClient::_recv(tcp_pcb *pcb, pbuf *pb, int8_t err) {
     pbuf *b = pb;
     pb = b->next;
     b->next = NULL;
-    if (_pb_cb) {
+    const bool packetCallback = _pb_cb != nullptr;
+    if (packetCallback) {
       async_tcp_log_elapsed("onPacket", _pb_cb(_pb_cb_arg, this, b));
-    } else {
-      if (_recv_cb) {
-        async_tcp_log_elapsed("onData", _recv_cb(_recv_cb_arg, this, b->payload, b->len));
-      }
+    } else if (_recv_cb) {
+      async_tcp_log_elapsed("onData", _recv_cb(_recv_cb_arg, this, b->payload, b->len));
+    }
+    if (!*receiveAlive || !_pcb) {
+      if (*receiveAlive) _recv_alive = previousAlive;
+      if (!packetCallback) pbuf_free(b);
+      if (pb) pbuf_free(pb);
+      return ERR_OK;
+    }
+    if (!packetCallback) {
       if (!_ack_pcb) {
         _rx_ack_len += b->len;
       } else if (_pcb) {
@@ -1123,6 +1138,7 @@ int8_t AsyncClient::_recv(tcp_pcb *pcb, pbuf *pb, int8_t err) {
       pbuf_free(b);
     }
   }
+  _recv_alive = previousAlive;
   return ERR_OK;
 }
 
