@@ -333,7 +333,7 @@ CHOICE_VALUE_SPECS = (
 )
 
 
-DEVICE_CONFIG_SCHEMA_VERSION = 1
+DEVICE_CONFIG_SCHEMA_VERSION = 2
 FIRMWARE_BOARD_TOKENS = {
     "DEVKIT": "ESP32 DevKit",
     "LILYGO": "LILYGO",
@@ -369,6 +369,7 @@ def _device_config_fields() -> Tuple[DeviceConfigField, ...]:
         DeviceConfigField("servoDelta", "servo"),
     ]
     fields.extend(DeviceConfigField(spec.macro, "value") for spec in VALUE_SPECS)
+    fields.append(DeviceConfigField("PUMP_PWM_FREQ", "value", since=2))
     fields.extend(DeviceConfigField(spec.macro, "bool") for spec in BOOL_SPECS)
     fields.extend(DeviceConfigField(spec.macro, "optional") for spec in OPTIONAL_SPECS)
     fields.extend(DeviceConfigField(spec.macro, "choice_value") for spec in CHOICE_VALUE_SPECS)
@@ -1172,7 +1173,7 @@ def parse_device_config(payload: str) -> DeviceConfig:
     if required - actual:
         raise _device_config_error_keys(tr("В ответе настроек отсутствуют обязательные поля"), required - actual)
 
-    value_specs = {spec.macro: spec for spec in VALUE_SPECS}
+    value_specs = {spec.macro: spec for spec in VALUE_SPECS + LOCAL_VALUE_SPECS}
     optional_specs = {spec.macro: spec for spec in OPTIONAL_SPECS}
     choice_value_specs = {spec.macro: spec for spec in CHOICE_VALUE_SPECS}
     mapped = {}

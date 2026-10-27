@@ -311,7 +311,7 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.parse_device_config(json.dumps(response))
 
         response = json.loads(payload)
-        response["schema"] = 2
+        response["schema"] = 3
         with self.assertRaisesRegex(configurator.ConfigError, "новее"):
             configurator.parse_device_config(json.dumps(response))
         response = json.loads(payload)
@@ -320,6 +320,24 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.parse_device_config(json.dumps(response))
         with self.assertRaisesRegex(configurator.ConfigError, "некорректный JSON"):
             configurator.parse_device_config("{")
+
+    def test_device_config_v2_pump_frequency_is_applied_and_saved(self) -> None:
+        for frequency in (450, 1000):
+            with self.subTest(frequency=frequency):
+                window, _ = self.make_device_window()
+                response = json.loads(self.device_config_payload())
+                response["schema"] = 2
+                response["settings"]["PUMP_PWM_FREQ"] = frequency
+                parsed = configurator.parse_device_config(json.dumps(response))
+                window._apply_device_config(parsed.settings)
+                self.assertEqual(window.value_vars["PUMP_PWM_FREQ"].get(), str(frequency))
+                model = configurator.SamovarConfig(Path(self.temporary.name))
+                model.save(window._state())
+                self.assertEqual(model.load()["PUMP_PWM_FREQ"], str(frequency))
+
+        del response["settings"]["PUMP_PWM_FREQ"]
+        with self.assertRaisesRegex(configurator.ConfigError, "PUMP_PWM_FREQ"):
+            configurator.parse_device_config(json.dumps(response))
 
     def test_device_config_v1_preserves_future_field_and_v2_requires_it(self) -> None:
         fields = list(configurator.DEVICE_CONFIG_FIELDS)

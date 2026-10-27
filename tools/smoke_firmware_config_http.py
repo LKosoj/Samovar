@@ -52,7 +52,7 @@ def writer_errors(source: str) -> list[str]:
         body,
         [
             '"type", "samovar_firmware_config"',
-            '"schema", 1',
+            '"schema", 2',
             '"settings"',
             '"wifi_ssid"',
             '"wifi_password"',
@@ -100,8 +100,8 @@ def main() -> int:
         (
             report,
             "inline bool write_firmware_config_json(Print& out)",
-            '"schema", 1',
             '"schema", 2',
+            '"schema", 3',
             writer_errors,
             "schema version",
         ),

@@ -78,7 +78,7 @@ inline bool write_firmware_config_json(Print& out) {
   if (!firmware_config_write_char(out, '{') ||
       !firmware_config_write_string_field(
           out, first, "type", "samovar_firmware_config") ||
-      !firmware_config_write_long_field(out, first, "schema", 1) ||
+      !firmware_config_write_long_field(out, first, "schema", 2) ||
       !firmware_config_write_firmware_version_field(out, first) ||
       !firmware_config_write_key(out, first, "settings") ||
       !firmware_config_write_char(out, '{')) return false;
@@ -104,6 +104,7 @@ inline bool write_firmware_config_json(Print& out) {
       !firmware_config_write_long_field(out, first, "DELTA_T_CLOSE_VALVE", DELTA_T_CLOSE_VALVE) ||
       !firmware_config_write_long_field(out, first, "PWM_LOW_VALUE", PWM_LOW_VALUE) ||
       !firmware_config_write_long_field(out, first, "PWM_START_VALUE", PWM_START_VALUE) ||
+      !firmware_config_write_long_field(out, first, "PUMP_PWM_FREQ", PUMP_PWM_FREQ) ||
       !firmware_config_write_long_field(out, first, "HEAT_DELTA", HEAT_DELTA) ||
       !firmware_config_write_long_field(out, first, "ACCELERATION_HEATER_DELTA", ACCELERATION_HEATER_DELTA) ||
       !firmware_config_write_float_field(out, first, "BOILING_TEMP", BOILING_TEMP) ||

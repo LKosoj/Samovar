@@ -26,7 +26,7 @@ USB_SIGNATURE = "inline void tick_usb_serial_command()"
 ESCAPE_SIGNATURE = "inline bool json_write_escaped(Print& out, const char* text, size_t length)"
 EXPECTED_SETTING_KEYS = {
     "board", "regulator", "atmospheric_sensor", "column_pressure_sensor", "servoDelta",
-    "wifi_ssid", "wifi_password",
+    "wifi_ssid", "wifi_password", "PUMP_PWM_FREQ",
     *(spec.macro for spec in configurator.VALUE_SPECS),
     *(spec.macro for spec in configurator.BOOL_SPECS),
     *(spec.macro for spec in configurator.OPTIONAL_SPECS),
@@ -107,6 +107,7 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
     if name == "sem_s3":
         return common + r'''
 #define BOARD ESP32S3
+#define PUMP_PWM_FREQ 450
 #define SAMOVAR_USE_SEM_AVR
 #define SAMOVAR_USE_RMVK
 #define USE_LUA
@@ -135,6 +136,9 @@ def harness(usb_body: str, header_source: str, matrix: str) -> str:
     header = header_source.replace("#pragma once", "").replace("#include <Arduino.h>", "").replace(
         '#include "string_utils.h"', ""
     )
+    samovar = (ROOT / "Samovar.h").read_text(encoding="utf-8")
+    start = samovar.index("#ifndef PUMP_PWM_FREQ")
+    pump_config = samovar[start:samovar.index("#endif", start) + len("#endif")]
     return r'''
 #include <cstddef>
 #include <cstdint>
@@ -296,7 +300,7 @@ int main() {
 }
 '''.replace("@ESCAPED_BODY@", escaped_body()).replace(
         "@JSON_STRING_PRINT@", json_string_print_source()
-    ).replace("@MATRIX@", matrix_defines(matrix)).replace(
+    ).replace("@MATRIX@", matrix_defines(matrix) + "\n" + pump_config).replace(
         "@HEADER@", header
     ).replace("@USB_BODY@", usb_body)
 
@@ -335,8 +339,8 @@ def check_matrix(matrix: str, parsed: dict) -> list[str]:
     settings = parsed.get("settings")
     if parsed.get("type") != "samovar_firmware_config":
         return [f"{matrix}: неверный маркер type"]
-    if parsed.get("schema") != 1:
-        return [f"{matrix}: schema должен быть 1"]
+    if parsed.get("schema") != 2:
+        return [f"{matrix}: schema должен быть 2"]
     if parsed.get("firmwareVersion") != "7.00":
         return [f"{matrix}: неверная версия прошивки"]
     if not isinstance(settings, dict):
@@ -365,7 +369,7 @@ def check_matrix(matrix: str, parsed: dict) -> list[str]:
         errors.append(f"{matrix}: не экспортирован servoDelta")
     if matrix == "default":
         expected = {
-            "board": "DEVKIT", "regulator": "kvic", "atmospheric_sensor": "bme680",
+            "PUMP_PWM_FREQ": 15, "board": "DEVKIT", "regulator": "kvic", "atmospheric_sensor": "bme680",
             "column_pressure_sensor": "none", "SAMOVAR_USE_BLYNK": True,
             "USE_ADAPTIVE_PID": True, "USE_WATER_PUMP": True,
             "USE_LUA": False, "USE_EXPANDER": None,
@@ -373,7 +377,7 @@ def check_matrix(matrix: str, parsed: dict) -> list[str]:
         }
     else:
         expected = {
-            "board": "ESP32S3", "regulator": "sem_avr", "atmospheric_sensor": "bmp280_alt",
+            "PUMP_PWM_FREQ": 450, "board": "ESP32S3", "regulator": "sem_avr", "atmospheric_sensor": "bmp280_alt",
             "column_pressure_sensor": "onewire", "SAMOVAR_USE_BLYNK": False,
             "USE_ADAPTIVE_PID": False, "USE_WATER_PUMP": False,
             "USE_LUA": True, "USE_EXPANDER": "0x20",
@@ -421,6 +425,8 @@ def check_ui_config(matrix: str, response: dict) -> list[str]:
                 errors.append(
                     f"{matrix}: UI {spec.macro} expected string {str(value)!r}, got {ui.get(spec.macro)!r}"
                 )
+    if ui.get("PUMP_PWM_FREQ") != str(settings["PUMP_PWM_FREQ"]):
+        errors.append(f"{matrix}: UI PUMP_PWM_FREQ does not match firmware")
     servo = ", ".join(str(value) for value in settings["servoDelta"])
     if ui.get("servoDelta") != servo:
         errors.append(f"{matrix}: UI servoDelta expected {servo!r}, got {ui.get('servoDelta')!r}")
@@ -468,7 +474,8 @@ def main() -> int:
             "            Serial.write(\n                reinterpret_cast<const uint8_t*>(configJson.c_str() + 1), configJson.length() - 1);",
         ),
         ("report type", "header", '"samovar_firmware_config"', '"broken_config"'),
-        ("schema", "header", '"schema", 1', '"schema", 2'),
+        ("schema", "header", '"schema", 2', '"schema", 3'),
+        ("pump frequency", "header", '"PUMP_PWM_FREQ", PUMP_PWM_FREQ', '"PUMP_PWM_FREQ", 15'),
         ("password key", "header", '"wifi_password", SAMOVAR_WIFI_PASSWORD', '"broken_password", SAMOVAR_WIFI_PASSWORD'),
         ("water valve token", "header", '"USE_WATER_VALVE", "LOW"', '"USE_WATER_VALVE", "BROKEN"'),
     )
@@ -480,6 +487,12 @@ def main() -> int:
         mutated_usb = usb_body.replace(old, new) if target == "usb" else usb_body
         mutated_header = HEADER_SOURCE.replace(old, new) if target == "header" else HEADER_SOURCE
         result = compile_and_run(mutated_usb, mutated_header, "sem_s3", "mutant")
+        if label == "pump frequency":
+            parsed = parse_config(result, "mutant")
+            if not any("PUMP_PWM_FREQ expected 450, got 15" in error
+                       for error in check_matrix("sem_s3", parsed)):
+                errors.append("pump frequency mutation did not fail the value assertion")
+            continue
         if label == "IP snapshot":
             if result.returncode == 0 or "IP response" not in result.stderr:
                 errors.append("mutation was not rejected by the IP response assertion")

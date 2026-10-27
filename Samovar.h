@@ -55,6 +55,12 @@
 #include "user_config_override.h"
 #endif
 
+#ifndef PUMP_PWM_FREQ
+#define PUMP_PWM_FREQ 15
+#else
+#pragma message ("CUSTOM PUMP_PWM_FREQ")
+#endif
+
 #include "i18n.h"
 
 #ifdef USE_MQTT

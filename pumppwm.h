@@ -6,12 +6,6 @@
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
 
-#ifndef PUMP_PWM_FREQ
-#define PUMP_PWM_FREQ 15
-#else
-#pragma message ("CUSTOM PUMP_PWM_FREQ")
-#endif
-
 static ESP32PWM pump_pwm;
 static GyverPID pump_regulator(6.5, 0.3, 30, 1023);
 
