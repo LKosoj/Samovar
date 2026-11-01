@@ -94,19 +94,14 @@ def main() -> int:
             "WebServer.ino: остался send_index_template_response - рабочая страница "
             "может снова получить шаблонизатор вместо статического gzip-ответа"
         )
-    for signature in (
-        "void send_index_page(AsyncWebServerRequest *request)",
-        "void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode)",
-    ):
-        try:
-            body = strip_cpp_comments(extract_function_body(source, signature))
-        except ValueError:
-            continue
-        if "nullptr" not in body or "setTemplateProcessor" in body:
-            errors.append(
-                f"WebServer.ino: {signature.split('(')[0]} должен отдавать "
-                "страницу без template processor"
-            )
+    page_signature = "void send_mode_page(AsyncWebServerRequest *request, const char *spiffsPath)"
+    try:
+        body = strip_cpp_comments(extract_function_body(source, page_signature))
+    except ValueError as exc:
+        errors.append(f"WebServer.ino: не найдено тело: {exc}")
+    else:
+        if '"text/html", false, nullptr' not in body or "setTemplateProcessor" in body:
+            errors.append("WebServer.ino: send_mode_page должен отдавать страницу без template processor")
 
     static_routes = (
         'server.serveStatic("/program.htm", SPIFFS, "/program.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);',

@@ -2073,6 +2073,9 @@ static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;
 static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;
 static constexpr uint8_t WIFI_DISCONNECT_EVENT_CAPACITY = 8;
 static volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
+// Уровень сигнала читает только tick_wifi_reconnect(): обработчик /ajax работает в async_tcp,
+// и обращаться к Wi-Fi оттуда нельзя, он берёт готовое значение.
+static volatile int8_t wifiRssi = 0;
 
 struct WifiDisconnectEvent {
   uint32_t atMillis;
@@ -2636,6 +2639,7 @@ static void tick_wifi_reconnect() {
   lastCheckAt = now;
 
   const wl_status_t status = WiFi.status();
+  wifiRssi = status == WL_CONNECTED ? WiFi.RSSI() : 0;
   if (ota_running || wifiAP || status == WL_CONNECTED) {
     if (!ota_running && !wifiAP && status == WL_CONNECTED && disconnectConfirmed) {
       const String ip = WiFi.localIP().toString();
@@ -5418,7 +5422,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   }
 
   snapshot.freeHeap = ESP.getFreeHeap();
-  snapshot.rssi = WiFi.RSSI();
+  snapshot.rssi = wifiRssi;
   snapshot.freeFsBytes = total_byte - used_byte;
 
   const SAMOVAR_MODE mode = Samovar_Mode;

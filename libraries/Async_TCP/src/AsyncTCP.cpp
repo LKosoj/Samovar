@@ -1159,7 +1159,10 @@ int8_t AsyncClient::_poll(tcp_pcb *pcb) {
   // ACK Timeout
   if (_ack_timeout) {
     const uint32_t one_day = 86400000;
-    bool last_tx_is_after_last_ack = (_rx_last_ack - _tx_last_packet + one_day) < one_day;
+    // _rx_last_ack == 0 means nothing was acknowledged yet, so sent data is still waiting:
+    // the distance below stops covering that case once millis() passes one day.
+    bool last_tx_is_after_last_ack =
+      _tx_last_packet != 0 && (_rx_last_ack == 0 || (_rx_last_ack - _tx_last_packet + one_day) < one_day);
     if (last_tx_is_after_last_ack && (now - _tx_last_packet) >= _ack_timeout) {
       async_tcp_log_d("ack timeout %d", pcb->state);
       if (_timeout_cb) {

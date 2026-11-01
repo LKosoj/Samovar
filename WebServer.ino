@@ -1006,15 +1006,35 @@ const char* get_index_page_path() {
   return mode_page_path(Samovar_Mode);
 }
 
+// Браузер хранит страницу режима, но перед показом сверяет её с платой: если файл тот же,
+// уходит короткий ответ 304 вместо всей страницы, и она открывается даже при плохой связи.
+// ETag (контрольную сумму из .gz) выставляет сам AsyncFileResponse. Смена режима меняет
+// файл за адресом /index.htm, а с ним и ETag, поэтому чужая страница из кэша не покажется.
+void send_mode_page(AsyncWebServerRequest *request, const char *spiffsPath) {
+  AsyncWebServerResponse *response = request->beginResponse(
+      SPIFFS, spiffsPath, "text/html", false, nullptr);
+  if (response == nullptr) {
+    request->send(404);
+    return;
+  }
+  response->addHeader("Cache-Control", "no-cache");
+  const AsyncWebHeader *etag = response->getHeader("ETag");
+  if (etag != nullptr && request->header("If-None-Match") == etag->value()) {
+    AsyncWebServerResponse *notModified = request->beginResponse(304);
+    notModified->addHeader("ETag", etag->value());
+    notModified->addHeader("Cache-Control", "no-cache");
+    delete response;
+    response = notModified;
+  }
+  request->send(response);
+}
+
 void send_index_page(AsyncWebServerRequest *request) {
   // [WP7 п.5] Раньше здесь Samovar_Mode принудительно перезаписывался значением
   // SamSetup.Mode на каждой отдаче страницы - см. change_samovar_mode() (mode_switch.h)
   // про причину удаления и куда перенесена синхронизация. Живой Samovar_Mode уже корректен без этой
   // записи: страница просто показывает текущий активный режим как есть.
-  AsyncWebServerResponse *response = request->beginResponse(
-      SPIFFS, get_index_page_path(), "text/html", false, nullptr);
-  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  request->send(response);
+  send_mode_page(request, get_index_page_path());
 }
 
 void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode) {
@@ -1025,10 +1045,7 @@ void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPa
     request->redirect("/index.htm");
     return;
   }
-  AsyncWebServerResponse *response = request->beginResponse(
-      SPIFFS, spiffsPath, "text/html", false, nullptr);
-  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  request->send(response);
+  send_mode_page(request, spiffsPath);
 }
 
 struct CachedStaticFile {

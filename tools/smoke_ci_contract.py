@@ -547,6 +547,7 @@ class BrowserTestRunnerTests(unittest.TestCase):
             "test_lua_program_modal_browser.py",
             "test_mode_bootstrap_ui_browser.py",
             "test_mode_logic_ui_browser.py",
+            "test_mode_page_cache_browser.py",
             "test_mode_navigation_browser.py",
             "test_numeric_input_ui_browser.py",
             "test_p03_runtime_pairs_browser.py",

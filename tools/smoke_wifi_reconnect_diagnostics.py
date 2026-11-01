@@ -38,6 +38,13 @@ def policy_errors(source: str) -> list[str]:
     samovar_header = (ROOT / "Samovar.h").read_text(encoding="utf-8")
     setup_body = extract_function_body(source, "static void setup_wifi_stack_defaults()")
     trigger_body = extract_function_body(source, "void triggerGetClock(void *parameter)")
+    ajax_snapshot_body = extract_function_body(
+        source, "static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot("
+    )
+    if "WiFi.RSSI()" in ajax_snapshot_body:
+        errors.append("/ajax snapshot calls WiFi.RSSI() from async_tcp")
+    if "snapshot.rssi = wifiRssi;" not in ajax_snapshot_body:
+        errors.append("/ajax snapshot does not use the cached wifiRssi")
     if "struct WifiDisconnectEvent;" not in source[:source.find("#include <Arduino.h>")]:
         errors.append("WifiDisconnectEvent forward declaration must precede Arduino prototypes")
     try:
@@ -170,8 +177,11 @@ struct FakeWiFi {{
   wl_status_t state = WL_CONNECTED;
   int reconnectCalls = 0;
   bool reconnectAccepted = true;
+  int8_t signal = 0;
+  int rssiCalls = 0;
 
   wl_status_t status() const {{ return state; }}
+  int8_t RSSI() {{ rssiCalls++; return state == WL_CONNECTED ? signal : 0; }}
   bool reconnect() {{ reconnectCalls++; return reconnectAccepted; }}
   FakeIP localIP() const {{ return FakeIP{{}}; }}
   const char* disconnectReasonName(wifi_err_reason_t reason) const {{
@@ -188,6 +198,7 @@ static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;
 static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;
 static constexpr uint8_t WIFI_DISCONNECT_EVENT_CAPACITY = 8;
 volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
+volatile int8_t wifiRssi = 0;
 bool ota_running = false;
 bool wifiAP = false;
 uint32_t currentMillis = 0;
@@ -292,10 +303,15 @@ int main() {{
   check(hasSerial("WiFi disconnected at_ms=200 reason=2(AUTH_EXPIRE)"),
         "second immediate system disconnect diagnostic is missing");
 
+  WiFi.signal = -61;
   tickAt(1000);
+  check(wifiRssi == -61, "connected tick did not cache RSSI");
   captureWifiDisconnectReason(&authExpire);
   WiFi.state = WL_IDLE_STATUS;
+  const int rssiCallsBeforeOutage = WiFi.rssiCalls;
   for (uint32_t at = 2000; at <= 6000; at += 1000) tickAt(at);
+  check(WiFi.rssiCalls == rssiCallsBeforeOutage, "RSSI was read without WiFi connection");
+  check(wifiRssi == 0, "outage kept the old RSSI value");
   check(WiFi.reconnectCalls == 0, "short or unconfirmed outage triggered reconnect");
 
   tickAt(6500);
@@ -313,7 +329,9 @@ int main() {{
   check(WiFi.reconnectCalls == 2, "ten-second reconnect retry is missing");
 
   WiFi.state = WL_CONNECTED;
+  WiFi.signal = -47;
   tickAt(18000);
+  check(wifiRssi == -47, "restored connection did not refresh RSSI");
   check(hasLog("WiFi restored ip=192.168.1.77 outage_ms=16000"),
         "recovery diagnostic or outage duration is missing");
 
@@ -506,7 +524,7 @@ def main() -> int:
             "WIFI_RECONNECT_INTERVAL_MS", "WIFI_DISCONNECT_CONFIRM_MS", 1
         ),
         reconnect_body.replace("WiFi.reconnect()", "true", 1),
-        reconnect_body.replace("status == WL_CONNECTED", "false", 1),
+        reconnect_body.replace("wifiAP || status == WL_CONNECTED", "wifiAP || false", 1),
     )
     for mutant in reconnect_mutants:
         returncode, output = compile_and_run(
@@ -521,6 +539,43 @@ def main() -> int:
         )
         if returncode == 0 or "FAIL:" not in output:
             print("FAIL: WiFi reconnect behavior mutation survived", file=sys.stderr)
+            return 1
+
+    rssi_line = "wifiRssi = status == WL_CONNECTED ? WiFi.RSSI() : 0;"
+    for replacement, expected_failure in (
+        ("wifiRssi = WiFi.RSSI();", "RSSI was read without WiFi connection"),
+        ("if (status == WL_CONNECTED) wifiRssi = WiFi.RSSI();", "outage kept the old RSSI value"),
+        ("wifiRssi = 0;", "connected tick did not cache RSSI"),
+    ):
+        mutant = reconnect_body.replace(rssi_line, replacement, 1)
+        if mutant == reconnect_body:
+            print("FAIL: could not create RSSI mutation", file=sys.stderr)
+            return 1
+        returncode, output = compile_and_run(
+            build_reconnect_harness(
+                mutant,
+                disconnect_body,
+                store_disconnect_body,
+                take_disconnect_body,
+                diagnostics_body,
+            ),
+            False,
+        )
+        if returncode == 0 or expected_failure not in output:
+            print("FAIL: RSSI mutation survived or failed for the wrong reason", file=sys.stderr)
+            return 1
+    for mutant, expected_error in (
+        (
+            source.replace("snapshot.rssi = wifiRssi;", "snapshot.rssi = WiFi.RSSI();", 1),
+            "/ajax snapshot calls WiFi.RSSI() from async_tcp",
+        ),
+        (
+            source.replace("snapshot.rssi = wifiRssi;", "snapshot.rssi = 0;", 1),
+            "/ajax snapshot does not use the cached wifiRssi",
+        ),
+    ):
+        if expected_error not in policy_errors(mutant):
+            print(f"FAIL: /ajax RSSI mutation survived: {expected_error}", file=sys.stderr)
             return 1
 
     timestamp_mutant = store_disconnect_body.replace(

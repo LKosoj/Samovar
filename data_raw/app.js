@@ -1,6 +1,15 @@
 (function () {
   'use strict';
 
+  // Кнопки «Назад»/«Вперёд» показывают страницу режима из кэша браузера без сверки с платой.
+  // За это время режим мог смениться, поэтому такую страницу загружаем заново: если файл
+  // тот же, плата ответит коротким 304.
+  window.addEventListener('pageshow', function (event) {
+    if (!/^\/(index|distiller|beer|cheese|bk|nbk)\.htm$/.test(location.pathname)) return;
+    const navigation = performance.getEntriesByType('navigation')[0];
+    if (event.persisted || (navigation && navigation.type === 'back_forward')) location.reload();
+  });
+
   // На телефоне полоса вкладок в шапке прокручивается по горизонтали; при
   // переходе по Tab фокус не должен уезжать за край экрана.
   document.addEventListener('focusin', function (event) {

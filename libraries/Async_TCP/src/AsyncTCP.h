@@ -49,7 +49,7 @@ extern "C" {
 #endif
 
 #ifndef CONFIG_ASYNC_TCP_MAX_ACK_TIME
-#define CONFIG_ASYNC_TCP_MAX_ACK_TIME 3000  // Уменьшили timeout
+#define CONFIG_ASYNC_TCP_MAX_ACK_TIME 10000  // Больше начальной задержки повтора lwIP (3 с), иначе потеря пакета обрывает файл
 #endif
 
 #ifndef CONFIG_ASYNC_TCP_RUNNING_CORE

@@ -1,6 +1,6 @@
 diff -ruN tcp-3.5.0/src/AsyncTCP.cpp samovar/src/AsyncTCP.cpp
---- tcp-3.5.0/src/AsyncTCP.cpp	2026-11-01 10:21:34.634500200 +0300
-+++ samovar/src/AsyncTCP.cpp	2026-11-01 10:26:46.341027486 +0300
+--- tcp-3.5.0/src/AsyncTCP.cpp	2026-11-01 21:28:06.177307974 +0300
++++ samovar/src/AsyncTCP.cpp	2026-11-01 21:29:34.751242207 +0300
 @@ -276,12 +276,12 @@
    }
  }
@@ -146,7 +146,19 @@ diff -ruN tcp-3.5.0/src/AsyncTCP.cpp samovar/src/AsyncTCP.cpp
    return ERR_OK;
  }
  
-@@ -1589,8 +1630,10 @@
+@@ -1118,7 +1159,10 @@
+   // ACK Timeout
+   if (_ack_timeout) {
+     const uint32_t one_day = 86400000;
+-    bool last_tx_is_after_last_ack = (_rx_last_ack - _tx_last_packet + one_day) < one_day;
++    // _rx_last_ack == 0 means nothing was acknowledged yet, so sent data is still waiting:
++    // the distance below stops covering that case once millis() passes one day.
++    bool last_tx_is_after_last_ack =
++      _tx_last_packet != 0 && (_rx_last_ack == 0 || (_rx_last_ack - _tx_last_packet + one_day) < one_day);
+     if (last_tx_is_after_last_ack && (now - _tx_last_packet) >= _ack_timeout) {
+       async_tcp_log_d("ack timeout %d", pcb->state);
+       if (_timeout_cb) {
+@@ -1589,8 +1633,10 @@
  
        // Couldn't allocate accept event
        // We can't let the client object call in to close, as we're on the LWIP thread; it could deadlock trying to RPC to itself
@@ -158,8 +170,8 @@ diff -ruN tcp-3.5.0/src/AsyncTCP.cpp samovar/src/AsyncTCP.cpp
        return ERR_ABRT;
      }
 diff -ruN tcp-3.5.0/src/AsyncTCP.h samovar/src/AsyncTCP.h
---- tcp-3.5.0/src/AsyncTCP.h	2026-11-01 10:21:34.634500200 +0300
-+++ samovar/src/AsyncTCP.h	2026-10-24 02:33:14.474669739 +0300
+--- tcp-3.5.0/src/AsyncTCP.h	2026-11-01 21:28:06.177307974 +0300
++++ samovar/src/AsyncTCP.h	2026-11-01 21:28:06.168307873 +0300
 @@ -32,30 +32,32 @@
  }
  #endif
@@ -191,7 +203,7 @@ diff -ruN tcp-3.5.0/src/AsyncTCP.h samovar/src/AsyncTCP.h
 -#ifndef CONFIG_ASYNC_TCP_PRIORITY
 -#define CONFIG_ASYNC_TCP_PRIORITY 10
 +#ifndef CONFIG_ASYNC_TCP_MAX_ACK_TIME
-+#define CONFIG_ASYNC_TCP_MAX_ACK_TIME 3000  // Уменьшили timeout
++#define CONFIG_ASYNC_TCP_MAX_ACK_TIME 10000  // Больше начальной задержки повтора lwIP (3 с), иначе потеря пакета обрывает файл
  #endif
  
 -#ifndef CONFIG_ASYNC_TCP_QUEUE_SIZE
