@@ -141,6 +141,7 @@
   "Не найден шаблон user_config_override.example.h": "Template user_config_override.example.h not found",
   "В Samovar_ini.h не найден массив servoDelta[11]": "The servoDelta[11] array was not found in Samovar_ini.h",
   "Частота насоса должна быть целым положительным числом": "Pump frequency must be a positive integer",
+  "Предупреждение по воде ({}) должно быть ниже аварийной температуры ({})": "Water warning ({}) must be below the emergency temperature ({})",
   "SSID Wi-Fi не должен превышать 32 байта": "Wi-Fi SSID must not exceed 32 bytes",
   "Пароль Wi-Fi должен содержать от 8 до 64 байт или быть пустым": "Wi-Fi password must be 8 to 64 bytes long or empty",
   "Нельзя указать пароль Wi-Fi без SSID": "A Wi-Fi password cannot be set without an SSID",

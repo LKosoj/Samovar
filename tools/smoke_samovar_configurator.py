@@ -203,6 +203,29 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(model.ini_path.read_bytes(), before_ini)
         self.assertEqual(model.override_path.read_bytes(), before_override)
 
+    def test_water_warning_must_be_below_emergency_temperature(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({"wifi_ssid": "Workshop", "wifi_password": "correct-pass"})
+        before_ini = model.ini_path.read_bytes()
+        before_override = model.override_path.read_bytes()
+        for alarm, maximum in (("75", "75"), ("80.5", "75"), ("0x50", "75.5")):
+            state.update({"ALARM_WATER_TEMP": alarm, "MAX_WATER_TEMP": maximum})
+            expected = r"Предупреждение по воде \({}\) должно быть ниже аварийной температуры \({}\)".format(
+                alarm, maximum
+            )
+            with self.assertRaisesRegex(configurator.ConfigError, expected):
+                model.save(state)
+            self.assertEqual(model.ini_path.read_bytes(), before_ini)
+            self.assertEqual(model.override_path.read_bytes(), before_override)
+
+        state.update({"ALARM_WATER_TEMP": "74.9", "MAX_WATER_TEMP": "75"})
+        model.save(state)
+        loaded = model.load()
+        self.assertEqual(loaded["ALARM_WATER_TEMP"], "74.9")
+        self.assertEqual(loaded["MAX_WATER_TEMP"], "75")
+
     def test_mqtt_settings_live_only_in_user_override(self) -> None:
         root = self.make_project()
         model = configurator.SamovarConfig(root)

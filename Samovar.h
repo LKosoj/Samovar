@@ -63,6 +63,10 @@
 
 #include "i18n.h"
 
+// Иначе авария по воде сработает раньше снижения мощности. Стоит после
+// user_config_override.h, чтобы проверялись и значения из него.
+static_assert(ALARM_WATER_TEMP < MAX_WATER_TEMP, "ALARM_WATER_TEMP must be below MAX_WATER_TEMP");
+
 #ifdef USE_MQTT
 #ifndef MQTT_SERVER
 #error USE_MQTT requires MQTT_SERVER

@@ -533,6 +533,11 @@ def numeric_value_for_ui(value: str) -> str:
     return match.group("number") if match is not None else value
 
 
+def numeric_source_value(value: str) -> float:
+    number = NUMERIC_RE.fullmatch(value.strip()).group("number")
+    return float(int(number, 16)) if "x" in number.lower() else float(number)
+
+
 def numeric_value_for_source(value: str, current: str) -> str:
     value_match = NUMERIC_RE.fullmatch(value.strip())
     current_match = NUMERIC_RE.fullmatch(current.strip())
@@ -742,6 +747,14 @@ class SamovarConfig:
                 cpp_string_encode(value)
                 if spec.kind == "text"
                 else numeric_value_for_source(value, current.value),
+            )
+        alarm_water_temp = str(state["ALARM_WATER_TEMP"]).strip()
+        max_water_temp = str(state["MAX_WATER_TEMP"]).strip()
+        if numeric_source_value(alarm_water_temp) >= numeric_source_value(max_water_temp):
+            raise ConfigError(
+                tr("Предупреждение по воде ({}) должно быть ниже аварийной температуры ({})").format(
+                    alarm_water_temp, max_water_temp
+                )
             )
         pump_frequency = str(state["PUMP_PWM_FREQ"]).strip()
         if not re.fullmatch(r"[0-9]+", pump_frequency) or int(pump_frequency) < 1:

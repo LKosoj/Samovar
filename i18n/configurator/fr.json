@@ -141,6 +141,7 @@
   "Не найден шаблон user_config_override.example.h": "Modèle user_config_override.example.h introuvable",
   "В Samovar_ini.h не найден массив servoDelta[11]": "Le tableau servoDelta[11] est introuvable dans Samovar_ini.h",
   "Частота насоса должна быть целым положительным числом": "La fréquence de la pompe doit être un entier positif",
+  "Предупреждение по воде ({}) должно быть ниже аварийной температуры ({})": "L’avertissement de l’eau ({}) doit être inférieur à la température d’urgence ({})",
   "SSID Wi-Fi не должен превышать 32 байта": "Le SSID Wi-Fi ne doit pas dépasser 32 octets",
   "Пароль Wi-Fi должен содержать от 8 до 64 байт или быть пустым": "Le mot de passe Wi-Fi doit contenir de 8 à 64 octets ou être vide",
   "Нельзя указать пароль Wi-Fi без SSID": "Impossible de définir un mot de passe Wi-Fi sans SSID",
