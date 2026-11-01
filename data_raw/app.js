@@ -1257,7 +1257,6 @@
     renderUiDetails(myObj);
   }
 
-  const UI_PHASE_NAMES = ['Простой', 'Строка программы', 'Нагрев', 'Стабилизация', 'Выдержка', 'Охлаждение', 'Ожидание оператора', 'Подтверждение привода', 'Безопасное ожидание', 'Известная Lua-операция', 'Завершение', 'Ошибка', 'Неизвестная Lua-фаза', 'Отбор голов'];
   const UI_END_NAMES = ['', 'порог датчика', 'объём', 'спиртуозность', 'соотношение', 'время', 'результат привода', 'действие оператора', 'конец программы', 'результат Lua-операции', 'плато температуры'];
   const UI_END_SOURCE_NAMES = ['', 'по пару', 'по царге', 'по воде', 'по кубу', 'по ТСА', 'по pH', 'по таймеру', 'по объёму', 'по приводу'];
   const UI_END_OPERATOR_NAMES = ['', 'не ниже', 'не выше', 'по истечении времени', 'после подтверждения', 'вручную'];
@@ -1362,8 +1361,9 @@
       renderUiControls(null);
       return;
     }
-    const lines = ['Этап: ' + UI_PHASE_NAMES[ui.p]];
-    if (Number.isInteger(ui.r)) lines.push('Строка: ' + ui.r);
+    // Этап, номер строки и «далее» уже есть в шапке и в карточке «Текущая строка».
+    // Здесь остаётся только то, чего сверху нет: чем строка кончится, почему ждём, Lua.
+    const lines = [];
     if (ui.e !== undefined) lines.push('Завершение: ' + formatUiCondition(ui));
     if (ui.g && ui.g.length) lines.push('Процесс: ' + ui.g.map(formatUiCondition).join('; '));
     if (Array.isArray(ui.w) && ui.w.length) {
@@ -1371,10 +1371,9 @@
         return uiWaitReasonName(wait.q) + '; ' + UI_CONTINUATION_NAMES[wait.co];
       }).join('; '));
     }
-    if (Number.isInteger(ui.n)) lines.push('Далее: строка ' + ui.n);
     if (ui.m === 6 && typeof ui.ls === 'string') lines.push('Lua: ' + ui.ls);
     block.textContent = lines.join(' · ');
-    block.style.display = '';
+    block.style.display = lines.length ? '' : 'none';
     renderUiControls(ui.c);
   }
 

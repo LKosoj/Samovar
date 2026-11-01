@@ -181,7 +181,8 @@ BROWSER_TEST = r'''async page => {
     }, {mode, telemetry:telemetry(null)});
     expect(rendered.detail && rendered.detail.includes('Завершение: порог датчика: не ниже 0 °C по пару') &&
       rendered.detail.includes('Процесс: время: по истечении времени 30 с по таймеру') &&
-      rendered.detail.includes('Ожидание: Ожидание температуры пара; автоматически') && rendered.detail.includes('Далее: строка 2'),
+      rendered.detail.includes('Ожидание: Ожидание температуры пара; автоматически') &&
+      !rendered.detail.includes('Этап:') && !rendered.detail.includes('Строка:') && !rendered.detail.includes('Далее:'),
       "stage explanation is incomplete for mode " + mode + ": " + JSON.stringify(rendered));
     expect(rendered.controls && rendered.controls.includes('нагрев: задано выкл, применяется вкл (источник неизвестен)') &&
       rendered.controls.includes('отбор: задано 2 л/ч, применяется 1 л/ч (по программе)'),
@@ -200,10 +201,15 @@ BROWSER_TEST = r'''async page => {
       return document.getElementById('ui_details').textContent;
     });
     SamovarApp.renderUiDetails({ui:{m:6,p:12,ls:'настоящий Lua'}});
-    return {old, malformed, outsideLua, lua:document.getElementById('ui_details').textContent};
+    const lua = document.getElementById('ui_details').textContent;
+    SamovarApp.renderUiDetails({ui:{m:0,p:13,r:3,n:4}});
+    const vignette = document.getElementById('ui_details');
+    return {old, malformed, outsideLua, lua, vignette: vignette.textContent, hidden: vignette.style.display};
   });
   expect(unavailable.old.includes('отсутствуют или некорректны') && unavailable.malformed.includes('отсутствуют или некорректны'),
     "old or malformed ui is not explicitly unavailable: " + JSON.stringify(unavailable));
+  expect(unavailable.vignette === '' && unavailable.hidden === 'none',
+    "stage, row and next-row line is still shown: " + JSON.stringify(unavailable));
   expect(unavailable.outsideLua.every(text => text.includes('отсутствуют или некорректны')) &&
     unavailable.lua.includes('Lua: настоящий Lua'),
     "Lua status outside Lua was accepted or valid Lua status was lost: " + JSON.stringify(unavailable));
