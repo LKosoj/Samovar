@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#if defined(ESP32) || defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350) || defined(LIBRETINY)
+#if defined(ESP32) || defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350) || defined(LIBRETINY) || defined(HOST)
 #include <WiFi.h>
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
@@ -155,7 +155,7 @@ AsyncCallbackWebHandler &AsyncWebServer::on(
 ) {
   AsyncCallbackWebHandler *handler = new AsyncCallbackWebHandler();
   handler->setUri(std::move(uri));
-  handler->setMethod(method);
+  handler->setMethod(std::move(method));
   handler->onRequest(onRequest);
   handler->onUpload(onUpload);
   handler->onBody(onBody);
@@ -166,7 +166,7 @@ AsyncCallbackWebHandler &AsyncWebServer::on(
 #if ASYNC_JSON_SUPPORT == 1
 AsyncCallbackJsonWebHandler &AsyncWebServer::on(AsyncURIMatcher uri, WebRequestMethodComposite method, ArJsonRequestHandlerFunction onBody) {
   AsyncCallbackJsonWebHandler *handler = new AsyncCallbackJsonWebHandler(std::move(uri), onBody);
-  handler->setMethod(method);
+  handler->setMethod(std::move(method));
   addHandler(handler);
   return *handler;
 }

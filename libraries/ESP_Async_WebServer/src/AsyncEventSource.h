@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #pragma once
 
 #include <Arduino.h>
 
-#if defined(ESP32) || defined(LIBRETINY)
+#if defined(ESP32) || defined(LIBRETINY) || defined(HOST)
 #include <AsyncTCP.h>
 #ifdef LIBRETINY
 #ifdef round
@@ -136,9 +136,7 @@ private:
   size_t _inflight{0};                    // num of unacknowledged bytes that has been written to socket buffer
   size_t _max_inflight{SSE_MAX_INFLIGH};  // max num of unacknowledged bytes that could be written to socket buffer
   std::list<AsyncEventSourceMessage> _messageQueue;
-#ifdef ESP32
-  mutable std::recursive_mutex _lockmq;
-#endif
+  mutable asyncsrv::mutex_type _lockmq;
   bool _queueMessage(const char *message, size_t len);
   bool _queueMessage(AsyncEvent_SharedData_t &&msg);
   void _runQueue();
@@ -146,12 +144,13 @@ private:
 public:
   /**
    * @brief Construct a new Async Event Source Client object
-   * @note constructor would take the ownership of of AsyncTCP's client pointer from `request` parameter and call delete on it!
+   * @note constructor is normally passed a client object from AsyncWebServerRequest::releaseClient(); see AsyncEventSourceResponse::_respond()
    *
-   * @param request
+   * @param client
    * @param server
+   * @param lastId
    */
-  AsyncEventSourceClient(AsyncWebServerRequest *request, AsyncEventSource *server);
+  AsyncEventSourceClient(AsyncClient *client, AsyncEventSource *server, uint32_t lastId = 0);
   ~AsyncEventSourceClient();
 
   /**
@@ -205,6 +204,7 @@ public:
     return _lastId;
   }
   size_t packetsWaiting() const {
+    asyncsrv::lock_guard_type lock(_lockmq);
     return _messageQueue.size();
   };
 
@@ -242,11 +242,9 @@ class AsyncEventSource : public AsyncWebHandler {
 private:
   String _url;
   std::list<std::unique_ptr<AsyncEventSourceClient>> _clients;
-#ifdef ESP32
   // Same as for individual messages, protect mutations of _clients list
   // since simultaneous access from different tasks is possible
-  mutable std::recursive_mutex _client_queue_lock;
-#endif
+  mutable asyncsrv::mutex_type _client_queue_lock;
   ArEventHandlerFunction _connectcb = nullptr;
   ArEventHandlerFunction _disconnectcb = nullptr;
 
@@ -322,17 +320,14 @@ public:
 class AsyncEventSourceResponse : public AsyncWebServerResponse {
 private:
   AsyncEventSource *_server;
-  AsyncWebServerRequest *_request;
-  // this call back will switch AsyncTCP client to SSE
-  void _switchClient();
 
 public:
   AsyncEventSourceResponse(AsyncEventSource *server);
-  void _respond(AsyncWebServerRequest *request);
+  void _respond(AsyncWebServerRequest *request) override;
   size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) override {
     return 0;
   };
-  bool _sourceValid() const {
+  bool _sourceValid() const override {
     return true;
   }
 };

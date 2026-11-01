@@ -10,6 +10,7 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "libraries/Async_TCP/src/AsyncTCP.cpp"
+REMOVE_EVENTS = "static size_t _remove_events_for_client(AsyncClient *client, bool keepAccept = false)"
 
 
 def parts() -> dict[str, str]:
@@ -24,6 +25,7 @@ def parts() -> dict[str, str]:
         "void AsyncTCP_detail::handle_async_event(lwip_tcp_event_packet_t *e)",
         "static void _free_event(lwip_tcp_event_packet_t *evpkt)",
         "static void _reset_tcp_callbacks(tcp_pcb *pcb, AsyncClient *client)",
+        REMOVE_EVENTS,
     )
     methods = {signature: extract_function_body(source, signature) for signature in signatures}
     for signature, boundary in (
@@ -157,6 +159,7 @@ def harness(methods: dict[str, str]) -> str:
         "handle": methods["void AsyncTCP_detail::handle_async_event(lwip_tcp_event_packet_t *e)"],
         "free_event": methods["static void _free_event(lwip_tcp_event_packet_t *evpkt)"],
         "reset": methods["static void _reset_tcp_callbacks(tcp_pcb *pcb, AsyncClient *client)"],
+        "remove_events": methods[REMOVE_EVENTS],
     }
     definitions = (
         MIN_CLASSES
@@ -168,12 +171,18 @@ def harness(methods: dict[str, str]) -> str:
           "void push_back(lwip_tcp_event_packet_t *e){e->next=nullptr;if(tail)tail->next=e;else head=e;tail=e;} "
           "void push_front(lwip_tcp_event_packet_t *e){e->next=head;head=e;if(!tail)tail=e;} "
           "lwip_tcp_event_packet_t *pop_front(){auto e=head;if(e){head=e->next;if(!head)tail=nullptr;}return e;} "
-          "size_t size()const{size_t n=0;for(auto e=head;e;e=e->next)++n;return n;} }; "
+          "size_t size()const{size_t n=0;for(auto e=head;e;e=e->next)++n;return n;} "
+          "template<typename F> lwip_tcp_event_packet_t *remove_if(F pred){lwip_tcp_event_packet_t *removed=nullptr,*removedTail=nullptr,*kept=head;head=tail=nullptr;"
+          "while(kept){auto e=kept;kept=e->next;if(pred(*e)){e->next=nullptr;if(removedTail)removedTail->next=e;else removed=e;removedTail=e;}else push_back(e);}return removed;} }; "
           "static EventQueue _async_queue; "
           "static void _send_async_event(lwip_tcp_event_packet_t *e){if(e){_async_queue.push_back(e);xTaskNotifyGive(_async_service_task_handle);}} "
           "static void _prepend_async_event(lwip_tcp_event_packet_t *e){if(e){_async_queue.push_front(e);xTaskNotifyGive(_async_service_task_handle);}} "
           "class queue_mutex_guard{public:queue_mutex_guard(){xSemaphoreTake(_async_queue_mutex,portMAX_DELAY);}~queue_mutex_guard(){xSemaphoreGive(_async_queue_mutex);}operator bool()const{return true;}}; "
-          "static size_t _remove_events_for_client(AsyncClient *client){size_t n=0;lwip_tcp_event_packet_t *keep=nullptr,*tail=nullptr;while(auto e=_async_queue.pop_front()){if(e->client==client){delete e;++n;}else{e->next=nullptr;if(tail)tail->next=e;else keep=e;tail=e;}}while(keep){auto e=keep;keep=keep->next;_async_queue.push_back(e);}return n;}\n"
+          ""
+        + REMOVE_EVENTS
+        + "{"
+        + body["remove_events"]
+        + "}\n"
         + "AsyncClient::AsyncClient(tcp_pcb *pcb){"
         + body["constructor"]
         + "}\nAsyncClient::~AsyncClient(){"
@@ -213,6 +222,44 @@ static void on_disconnect(void *, AsyncClient *c) {
 }
 static void drain() {
   while (auto e = _async_queue.pop_front()) AsyncTCP_detail::handle_async_event(e);
+}
+static int accept_callbacks = 0, lost_index = 0;
+static void on_lost_accept(void *, AsyncClient *c) {
+  ++accept_callbacks;
+  accepted = c;
+  c->_error_cb = on_error;
+  c->_error_cb_arg = &lost_index;
+  c->_discard_cb = on_disconnect;
+}
+static int lost_before_accept(int8_t err) {
+  reset_alloc();
+  accepted = nullptr;
+  accept_callbacks = error_callbacks = disconnect_callbacks = observed[0] = 0;
+  AsyncServer server(0);
+  server._connect_cb = on_lost_accept;
+  tcp_pcb pcb;
+  if (AsyncTCP_detail::tcp_accept(&server, &pcb, 0) != ERR_OK) return fail("lost connection: accept failed");
+  auto client = static_cast<AsyncClient *>(pcb.arg);
+  _send_async_event(new lwip_tcp_event_packet_t{LWIP_TCP_POLL, client});
+  in_lwip = true;
+  AsyncTCP_detail::tcp_error(client, err);
+  in_lwip = false;
+  if (_async_queue.size() < 2) return fail("lost connection dropped queued accept: client has no owner and leaks");
+  if (_async_queue.size() > 2) return fail("lost connection kept stale poll event");
+  drain();
+  if (accept_callbacks != 1 || accepted != client) return fail("lost connection did not reach onClient");
+  if (error_callbacks != 1 || disconnect_callbacks != 1 || observed[0] != err)
+    return fail("lost connection skipped owner cleanup or lost error code");
+  if (live_count != 0) return fail("lost connection leaked accepted client");
+
+  reset_alloc();
+  tcp_pcb deleted_pcb;
+  if (AsyncTCP_detail::tcp_accept(&server, &deleted_pcb, 0) != ERR_OK) return fail("deleted client: accept failed");
+  auto deleted = static_cast<AsyncClient *>(deleted_pcb.arg);
+  AsyncTCP_detail::tcp_error(deleted, err);
+  delete deleted;
+  if (_async_queue.size() != 0) return fail("deleted client retained queued accept");
+  return 0;
 }
 static int scenario() {
   _start_async_task();
@@ -273,6 +320,9 @@ static int scenario() {
   AsyncTCP_detail::tcp_error(pending, -6);
   delete pending;
   if (_async_queue.size() || live_count) return fail("deleted client retained queued error");
+  for (int8_t err : {int8_t(-14), int8_t(-9)}) {
+    if (int rc = lost_before_accept(err)) return rc;
+  }
   return 0;
 }
 int main() { try { return scenario(); } catch (const std::bad_alloc &) { return fail("allocation escaped cleanup path"); } }
@@ -311,6 +361,9 @@ def main() -> int:
         ("outgoing IP reserve bypassed", "bool AsyncClient::connect(ip_addr_t", "if (!_reserve_error_event())", "if (false)"),
         ("outgoing DNS reserve bypassed", "bool AsyncClient::connect(const char", "if (!_reserve_error_event())", "if (false)"),
         ("pending cleanup removed", "AsyncClient::~AsyncClient", "_remove_events_for_client(this);", "(void)0;"),
+        ("accept dropped on lost connection", "void AsyncTCP_detail::tcp_error", "_remove_events_for_client(client, true);", "_remove_events_for_client(client);"),
+        ("accept kept by default", "static size_t _remove_events_for_client", "(keepAccept && pkt.event == LWIP_TCP_ACCEPT)", "(pkt.event == LWIP_TCP_ACCEPT)"),
+        ("all events kept on lost connection", "static size_t _remove_events_for_client", "(keepAccept && pkt.event == LWIP_TCP_ACCEPT)", "keepAccept"),
     )
     for name, prefix, old, new in mutations:
         mutated = dict(methods)

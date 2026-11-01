@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #pragma once
 
@@ -10,9 +10,9 @@ extern "C" {
 /** Major version number (X.x.x) */
 #define ASYNCWEBSERVER_VERSION_MAJOR 3
 /** Minor version number (x.X.x) */
-#define ASYNCWEBSERVER_VERSION_MINOR 9
+#define ASYNCWEBSERVER_VERSION_MINOR 12
 /** Patch version number (x.x.X) */
-#define ASYNCWEBSERVER_VERSION_PATCH 2
+#define ASYNCWEBSERVER_VERSION_PATCH 1
 
 /**
  * Macro to convert version number into an integer

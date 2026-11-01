@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #pragma once
 
@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include <string>
+#include <utility>
 
 class AsyncStaticWebHandler : public AsyncWebHandler {
   using File = fs::File;
@@ -62,10 +63,10 @@ protected:
   bool _isRegex;
 
 public:
-  AsyncCallbackWebHandler() : _uri(), _method(HTTP_ANY), _onRequest(NULL), _onUpload(NULL), _onBody(NULL), _isRegex(false) {}
+  AsyncCallbackWebHandler() : _uri(), _method(AsyncWebRequestMethod::HTTP_ALL), _onRequest(NULL), _onUpload(NULL), _onBody(NULL), _isRegex(false) {}
   void setUri(AsyncURIMatcher uri);
   void setMethod(WebRequestMethodComposite method) {
-    _method = method;
+    _method = std::move(method);
   }
   void onRequest(ArRequestHandlerFunction fn) {
     _onRequest = fn;

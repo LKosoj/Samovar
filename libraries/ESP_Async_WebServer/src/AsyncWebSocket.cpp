@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #include "AsyncWebSocket.h"
 #include "AsyncWebServerLogging.h"
@@ -17,6 +17,11 @@
 #include <Hash.h>
 #elif defined(LIBRETINY)
 #include <mbedtls/sha1.h>
+#elif defined(HOST)
+#include "BackPort_SHA1Builder.h"
+#ifndef FPSTR
+#define FPSTR (const char *)
+#endif
 #endif
 
 #include <algorithm>
@@ -24,10 +29,23 @@
 #include <cstring>
 #include <memory>
 #include <utility>
+#include <cstdarg>
+
+#define STATE_FRAME_START 0
+#define STATE_FRAME_MASK  1
+#define STATE_FRAME_DATA  2
 
 using namespace asyncsrv;
 
-size_t webSocketSendFrameWindow(AsyncClient *client) {
+static AsyncWebSocketSharedBuffer makeSharedBuffer(const uint8_t *message, size_t len) {
+  if (message) {
+    return std::make_shared<std::vector<uint8_t>>(message, message + len);
+  } else {
+    return std::make_shared<std::vector<uint8_t>>(len);
+  }
+}
+
+static size_t webSocketSendFrameWindow(AsyncClient *client) {
   if (!client || !client->canSend()) {
     return 0;
   }
@@ -38,93 +56,82 @@ size_t webSocketSendFrameWindow(AsyncClient *client) {
   return space - 8;
 }
 
-size_t webSocketSendFrame(AsyncClient *client, bool final, uint8_t opcode, bool mask, uint8_t *data, size_t len) {
-  if (!client || !client->canSend()) {
-    // Serial.println("SF 1");
-    return 0;
-  }
-  size_t space = client->space();
-  if (space < 2) {
-    // Serial.println("SF 2");
-    return 0;
-  }
-  uint8_t mbuf[4] = {0, 0, 0, 0};
-  uint8_t headLen = 2;
-  if (len && mask) {
-    headLen += 4;
-    mbuf[0] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
-    mbuf[1] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
-    mbuf[2] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
-    mbuf[3] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
-  }
-  if (len > 125) {
-    headLen += 2;
-  }
-  if (space < headLen) {
-    // Serial.println("SF 2");
-    return 0;
-  }
-  space -= headLen;
-
-  if (len > space) {
-    len = space;
-  }
-
-  uint8_t *buf = (uint8_t *)malloc(headLen);
-  if (buf == NULL) {
-    async_ws_log_e("Failed to allocate");
-    client->abort();
-    return 0;
-  }
-
-  buf[0] = opcode & 0x0F;
-  if (final) {
-    buf[0] |= 0x80;
-  }
-  if (len < 126) {
-    buf[1] = len & 0x7F;
-  } else {
-    buf[1] = 126;
-    buf[2] = (uint8_t)((len >> 8) & 0xFF);
-    buf[3] = (uint8_t)(len & 0xFF);
-  }
-  if (len && mask) {
-    buf[1] |= 0x80;
-    memcpy(buf + (headLen - 4), mbuf, 4);
-  }
-  if (client->add((const char *)buf, headLen) != headLen) {
-    // os_printf("error adding %lu header bytes\n", headLen);
-    free(buf);
-    // Serial.println("SF 4");
-    return 0;
-  }
-  free(buf);
-
-  if (len) {
-    if (len && mask) {
-      size_t i;
-      for (i = 0; i < len; i++) {
-        data[i] = data[i] ^ mbuf[i % 4];
-      }
-    }
-    if (client->add((const char *)data, len) != len) {
-      // os_printf("error adding %lu data bytes\n", len);
-      //  Serial.println("SF 5");
-      return 0;
-    }
-  }
-  if (!client->send()) {
-    // os_printf("error sending frame: %lu\n", headLen+len);
-    //  Serial.println("SF 6");
-    return 0;
-  }
-  // Serial.println("SF");
-  return len;
+// wire header length for a frame with this payload length/masking -- pure
+// function of RFC 6455 framing rules, cheap enough to recompute on demand
+// rather than cache
+static uint8_t webSocketFrameHeaderLen(size_t payloadLen, bool mask) {
+  return 2 + (mask ? 4 : 0) + ((payloadLen > 125) ? 2 : 0);
 }
 
-size_t AsyncWebSocketControl::send(AsyncClient *client) {
-  _finished = true;
-  return webSocketSendFrame(client, true, _opcode & 0x0F, _mask, _data, _len);
+// Stack-allocated chunk size for masking payload data
+static constexpr size_t WS_MASK_CHUNK_SIZE = 128;
+
+// Commits any not-yet-committed bytes of one WS frame (header+payload) to
+// the client, resuming from `frameSent` bytes already committed by a prior
+// call for this exact frame. final/opcode/mask/maskKey/data/len must stay
+// identical across calls for the same frame -- once any header byte is
+// committed those values are fixed on the wire and can't change. Returns
+// the number of *additional* bytes committed by this call (0 if none);
+// never assumes an add() fully succeeds, since some AsyncClient backends
+// (e.g. SSL) can commit a genuine partial amount.
+static size_t
+  webSocketAddFrame(AsyncClient *client, bool final, uint8_t opcode, bool mask, const uint8_t maskKey[4], const uint8_t *data, size_t len, size_t frameSent) {
+  if (!client || !client->canSend()) {
+    return 0;
+  }
+
+  size_t committed = 0;
+
+  const uint8_t headLen = webSocketFrameHeaderLen(len, mask);
+  if (frameSent < headLen) {
+    uint8_t hdr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    hdr[0] = (opcode & 0x0F) | (final ? 0x80 : 0);
+    if (len < 126) {
+      hdr[1] = len & 0x7F;
+    } else {
+      hdr[1] = 126;
+      hdr[2] = (uint8_t)((len >> 8) & 0xFF);
+      hdr[3] = (uint8_t)(len & 0xFF);
+    }
+    if (mask) {
+      hdr[1] |= 0x80;
+      memcpy(hdr + (headLen - 4), maskKey, 4);
+    }
+
+    size_t added = client->add((const char *)(hdr + frameSent), headLen - frameSent, ASYNC_WRITE_FLAG_COPY | ((len > 0) ? ASYNC_WRITE_FLAG_MORE : 0));
+    committed += added;
+    frameSent += added;
+    if (frameSent < headLen) {
+      return committed;
+    }
+  }
+
+  size_t payloadSent = frameSent - headLen;
+  if (payloadSent < len) {
+    size_t remaining = len - payloadSent;
+    if (mask) {
+      // The data buffer is shared, but each client masks with its own random key.
+      // Mask in to a scratch buffer one chunk at a time to avoid malloc overhead.
+      uint8_t masked_data[WS_MASK_CHUNK_SIZE];
+      while (remaining > 0) {
+        const size_t chunk = std::min(remaining, sizeof(masked_data));
+        for (size_t i = 0; i < chunk; i++) {
+          masked_data[i] = data[payloadSent + i] ^ maskKey[(payloadSent + i) % 4];
+        }
+        const size_t added = client->add((const char *)masked_data, chunk, ASYNC_WRITE_FLAG_COPY | ((chunk == remaining) ? 0 : ASYNC_WRITE_FLAG_MORE));
+        committed += added;
+        if (added < chunk) {
+          break;  // out of space (or partial commit) -- resume here next time
+        }
+        payloadSent += added;
+        remaining -= added;
+      }
+    } else {
+      committed += client->add((const char *)(data + payloadSent), remaining, ASYNC_WRITE_FLAG_COPY);
+    }
+  }
+
+  return committed;
 }
 
 /*
@@ -154,80 +161,14 @@ bool AsyncWebSocketMessageBuffer::reserve(size_t size) {
 }
 
 /*
- * AsyncWebSocketMessage Message
- */
-
-AsyncWebSocketMessage::AsyncWebSocketMessage(AsyncWebSocketSharedBuffer buffer, uint8_t opcode, bool mask)
-  : _WSbuffer{buffer}, _opcode(opcode & 0x07), _mask{mask}, _status{_WSbuffer ? WS_MSG_SENDING : WS_MSG_ERROR} {}
-
-void AsyncWebSocketMessage::ack(size_t len, uint32_t time) {
-  (void)time;
-  _acked += len;
-  if (_sent >= _WSbuffer->size() && _acked >= _ack) {
-    _status = WS_MSG_SENT;
-  }
-  // ets_printf("A: %u\n", len);
-}
-
-size_t AsyncWebSocketMessage::send(AsyncClient *client) {
-  if (!client) {
-    return 0;
-  }
-
-  if (_status != WS_MSG_SENDING) {
-    return 0;
-  }
-  if (_acked < _ack) {
-    return 0;
-  }
-  if (_sent == _WSbuffer->size()) {
-    if (_acked == _ack) {
-      _status = WS_MSG_SENT;
-    }
-    return 0;
-  }
-  if (_sent > _WSbuffer->size()) {
-    _status = WS_MSG_ERROR;
-    // ets_printf("E: %u > %u\n", _sent, _WSbuffer->length());
-    return 0;
-  }
-
-  size_t toSend = _WSbuffer->size() - _sent;
-  size_t window = webSocketSendFrameWindow(client);
-
-  if (window < toSend) {
-    toSend = window;
-  }
-
-  _sent += toSend;
-  _ack += toSend + ((toSend < 126) ? 2 : 4) + (_mask * 4);
-
-  // ets_printf("W: %u %u\n", _sent - toSend, toSend);
-
-  bool final = (_sent == _WSbuffer->size());
-  uint8_t *dPtr = (uint8_t *)(_WSbuffer->data() + (_sent - toSend));
-  uint8_t opCode = (toSend && _sent == toSend) ? _opcode : (uint8_t)WS_CONTINUATION;
-
-  size_t sent = webSocketSendFrame(client, final, opCode, _mask, dPtr, toSend);
-  _status = WS_MSG_SENDING;
-  if (toSend && sent != toSend) {
-    // ets_printf("E: %u != %u\n", toSend, sent);
-    _sent -= (toSend - sent);
-    _ack -= (toSend - sent);
-  }
-  // ets_printf("S: %u %u\n", _sent, sent);
-  return sent;
-}
-
-/*
  * Async WebSocket Client
  */
 const char *AWSC_PING_PAYLOAD = "ESPAsyncWebServer-PING";
 const size_t AWSC_PING_PAYLOAD_LEN = 22;
 
 AsyncWebSocketClient::AsyncWebSocketClient(AsyncClient *client, AsyncWebSocket *server)
-  : _client(client), _server(server), _clientId(_server->_getNextId()), _status(WS_CONNECTED), _pstate(0), _lastMessageTime(millis()), _keepAlivePeriod(0),
-    _tempObject(NULL) {
+  : _client(client), _server(server), _clientId(_server->_getNextId()), _status(WS_CONNECTED), _pstate(STATE_FRAME_START), _lastMessageTime(millis()),
+    _keepAlivePeriod(0), _tempObject(NULL) {
 
   _client->setRxTimeout(0);
   _client->onError(
@@ -277,172 +218,211 @@ AsyncWebSocketClient::AsyncWebSocketClient(AsyncClient *client, AsyncWebSocket *
 
 AsyncWebSocketClient::~AsyncWebSocketClient() {
   {
-#ifdef ESP32
-    std::lock_guard<std::recursive_mutex> lock(_lock);
-#endif
+    asyncsrv::lock_guard_type lock(_queue_lock);
     _messageQueue.clear();
     _controlQueue.clear();
   }
   _server->_handleEvent(this, WS_EVT_DISCONNECT, NULL, NULL, 0);
 }
 
-void AsyncWebSocketClient::_clearQueue() {
-  while (!_messageQueue.empty() && _messageQueue.front().finished()) {
-    _messageQueue.pop_front();
-  }
-}
-
 void AsyncWebSocketClient::_onAck(size_t len, uint32_t time) {
+  (void)time;
   _lastMessageTime = millis();
 
-#ifdef ESP32
-  std::unique_lock<std::recursive_mutex> lock(_lock);
-#endif
+  asyncsrv::unique_lock_type lock(_queue_lock);
 
-  if (!_controlQueue.empty()) {
-    auto &head = _controlQueue.front();
-    if (head.finished()) {
-      len -= head.len();
-      if (_status == WS_DISCONNECTING && head.opcode() == WS_DISCONNECT) {
-        _controlQueue.pop_front();
-        _status = WS_DISCONNECTED;
-        if (_client) {
-#ifdef ESP32
-          /*
-            Unlocking has to be called before return execution otherwise std::unique_lock ::~unique_lock() will get an exception pthread_mutex_unlock.
-            Due to _client->close() shall call the callback function _onDisconnect()
-            The calling flow _onDisconnect() --> _handleDisconnect() --> ~AsyncWebSocketClient()
-          */
-          lock.unlock();
-#endif
-          _client->close();
-        }
-        return;
-      }
-      _controlQueue.pop_front();
-    }
-  }
+  async_ws_log_v("[%s][%" PRIu32 "] ACK(%u)", _server->url(), _clientId, len);
 
-  if (len && !_messageQueue.empty()) {
-    _messageQueue.front().ack(len, time);
-  }
-
-  _clearQueue();
-
-  _runQueue();
+  // Messages are dequeued as soon as they're fully add()'ed, not on ack --
+  // an ack only ever matters here as a sign that space() may have grown.
+  _runQueue(lock);
 }
 
 void AsyncWebSocketClient::_onPoll() {
+  asyncsrv::unique_lock_type lock(_queue_lock);
+
   if (!_client) {
     return;
   }
 
-#ifdef ESP32
-  std::unique_lock<std::recursive_mutex> lock(_lock);
-#endif
   if (_client && _client->canSend() && (!_controlQueue.empty() || !_messageQueue.empty())) {
-    _runQueue();
+    _runQueue(lock);
   } else if (_keepAlivePeriod > 0 && (millis() - _lastMessageTime) >= _keepAlivePeriod && (_controlQueue.empty() && _messageQueue.empty())) {
-#ifdef ESP32
     lock.unlock();
-#endif
     ping((uint8_t *)AWSC_PING_PAYLOAD, AWSC_PING_PAYLOAD_LEN);
   }
 }
 
-void AsyncWebSocketClient::_runQueue() {
-  // all calls to this method MUST be protected by a mutex lock!
+void AsyncWebSocketClient::_runQueue(asyncsrv::unique_lock_type &lock) {
+  // all calls to this method MUST be protected by a mutex lock, passed in as `lock`
   if (!_client) {
     return;
   }
 
-  _clearQueue();
+  bool needs_send = false;
+  while (true) {
+    if (_frameSent == 0) {
+      // idle: pick the next target by priority (control first)
+      if (!_controlQueue.empty()) {
+        _sendingControl = true;
+      } else if (!_messageQueue.empty()) {
+        _sendingControl = false;
+      } else {
+        break;  // nothing queued
+      }
 
-  if (!_controlQueue.empty() && (_messageQueue.empty() || _messageQueue.front().betweenFrames())
-      && webSocketSendFrameWindow(_client) > (size_t)(_controlQueue.front().len() - 1)) {
-    _controlQueue.front().send(_client);
-  } else if (!_messageQueue.empty() && _messageQueue.front().betweenFrames() && webSocketSendFrameWindow(_client)) {
-    _messageQueue.front().send(_client);
+      AsyncWebSocketMessage &target = _sendingControl ? _controlQueue.front() : _messageQueue.front();
+      if (_sendingControl) {
+        _framePayloadLen = target.size();
+      } else {
+        const size_t window = webSocketSendFrameWindow(_client);
+        if (!window) {
+          break;  // no space to send right now
+        }
+        const size_t remaining = target.size() - _sent;
+        _framePayloadLen = std::min(remaining, window);
+      }
+      if (target.mask()) {
+        _maskKey[0] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
+        _maskKey[1] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
+        _maskKey[2] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
+        _maskKey[3] = rand() % 0xFF;  // NOLINT(runtime/threadsafe_fn)
+      }
+    }
+
+    AsyncWebSocketMessage &target = _sendingControl ? _controlQueue.front() : _messageQueue.front();
+    const bool final = _sendingControl || (_sent + _framePayloadLen == target.size());
+    const uint8_t frameOpcode = (_sendingControl || _sent == 0) ? target.opcode() : (uint8_t)WS_CONTINUATION;
+    uint8_t *payload = target.data();
+
+    // Avoid UB pointer arithmetic if payload is nullptr
+    if (payload && !_sendingControl) {
+      payload += _sent;
+    }
+
+    const size_t added = webSocketAddFrame(_client, final, frameOpcode, target.mask(), _maskKey, payload, _framePayloadLen, _frameSent);
+
+    async_ws_log_v(
+      "[%s][%" PRIu32 "][%" PRIu8 "] SEND ctrl:%d %u/%u added %u", _server->url(), _clientId, frameOpcode, _sendingControl, _frameSent,
+      webSocketFrameHeaderLen(_framePayloadLen, target.mask()) + _framePayloadLen, added
+    );
+
+    _frameSent += added;
+    needs_send |= (added > 0);
+
+    const size_t frameLen = webSocketFrameHeaderLen(_framePayloadLen, target.mask()) + _framePayloadLen;
+    if (_frameSent < frameLen) {
+      break;  // stalled; resume on the next trigger
+    }
+
+    // frame fully committed to TCP -- done with it, regardless of ack
+    _frameSent = 0;
+    const size_t framePayloadLen = _framePayloadLen;
+    _framePayloadLen = 0;
+
+    if (_sendingControl) {
+      const uint8_t opcode = target.opcode();
+      _controlQueue.pop_front();
+      if (opcode == WS_DISCONNECT && _status == WS_DISCONNECTING) {
+        _status = WS_DISCONNECTED;
+        async_ws_log_v("[%s][%" PRIu32 "] DISCONNECT SENT", _server->url(), _clientId);
+        // Capture _client before unlocking: close() may synchronously run
+        // _onDisconnect() -> AsyncWebSocket::_handleDisconnect() -> list::erase(),
+        // destroying *this -- nothing after unlock() may touch any member.
+        // close() itself (not abort()) hands the pcb to lwIP's graceful
+        // close, which flushes/retransmits already-add()'ed data (this
+        // close frame included) independent of our lifetime from here on.
+        AsyncClient *c = _client;
+        lock.unlock();
+        c->send();  // Needed on some backends (e.g. SSL) to flush the close frame out before closing
+        c->close();
+        return;
+      }
+    } else {
+      _sent += framePayloadLen;
+      if (_sent >= target.size()) {
+        _messageQueue.pop_front();
+        _sent = 0;
+      }
+    }
+  }
+
+  if (needs_send) {
+    _client->send();
   }
 }
 
 bool AsyncWebSocketClient::queueIsFull() const {
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_queue_lock);
   return (_messageQueue.size() >= WS_MAX_QUEUED_MESSAGES) || (_status != WS_CONNECTED);
 }
 
 size_t AsyncWebSocketClient::queueLen() const {
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_queue_lock);
   return _messageQueue.size();
 }
 
 bool AsyncWebSocketClient::canSend() const {
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_queue_lock);
   return _messageQueue.size() < WS_MAX_QUEUED_MESSAGES;
 }
 
 bool AsyncWebSocketClient::_queueControl(uint8_t opcode, const uint8_t *data, size_t len, bool mask) {
+  asyncsrv::unique_lock_type lock(_queue_lock);
+
   if (!_client) {
     return false;
   }
 
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_lock);
-#endif
-
-  _controlQueue.emplace_back(opcode, data, len, mask);
+  if (!data) {
+    len = 0;
+  } else if (len > 125) {
+    len = 125;
+  }
+  AsyncWebSocketSharedBuffer buffer = len ? makeSharedBuffer(data, len) : AsyncWebSocketSharedBuffer{};
+  _controlQueue.emplace_back(buffer, opcode, len && mask);
+  async_ws_log_v("[%s][%" PRIu32 "] QUEUE CTRL (%u) << %" PRIu8, _server->url(), _clientId, _controlQueue.size(), opcode);
 
   if (_client && _client->canSend()) {
-    _runQueue();
+    _runQueue(lock);
   }
 
   return true;
 }
 
 bool AsyncWebSocketClient::_queueMessage(AsyncWebSocketSharedBuffer buffer, uint8_t opcode, bool mask) {
-  if (!_client || buffer->size() == 0 || _status != WS_CONNECTED) {
+  asyncsrv::unique_lock_type lock(_queue_lock);
+
+  if (!_client || !buffer || buffer->empty() || _status != WS_CONNECTED) {
     return false;
   }
 
-#ifdef ESP32
-  std::unique_lock<std::recursive_mutex> lock(_lock);
-#endif
-
   if (_messageQueue.size() >= WS_MAX_QUEUED_MESSAGES) {
-    if (closeWhenFull) {
+    if (_closeWhenFull) {
       _status = WS_DISCONNECTED;
 
-      if (_client) {
-#ifdef ESP32
-        /*
-          Unlocking has to be called before return execution otherwise std::unique_lock ::~unique_lock() will get an exception pthread_mutex_unlock.
-          Due to _client->close() shall call the callback function _onDisconnect()
-          The calling flow _onDisconnect() --> _handleDisconnect() --> ~AsyncWebSocketClient()
-        */
+      async_ws_log_w("[%s][%" PRIu32 "] Too many messages queued: closing connection", _server->url(), _clientId);
+
+      // Capture _client before unlocking: _client->close() triggers the _onDisconnect() --> _handleDisconnect() --> ~AsyncWebSocketClient() chain,
+      // so we must not access any member after unlock.
+      AsyncClient *c = _client;
+      if (c) {
         lock.unlock();
-#endif
-        _client->close();
+        c->close();
       }
 
-      async_ws_log_e("Too many messages queued: closing connection");
-
     } else {
-      async_ws_log_e("Too many messages queued: discarding new message");
+      async_ws_log_w("[%s][%" PRIu32 "] Too many messages queued: discarding new message", _server->url(), _clientId);
     }
 
     return false;
   }
 
   _messageQueue.emplace_back(buffer, opcode, mask);
+  async_ws_log_v("[%s][%" PRIu32 "] QUEUE MSG (%u/%u) << %" PRIu8, _server->url(), _clientId, _messageQueue.size(), WS_MAX_QUEUED_MESSAGES, opcode);
 
   if (_client && _client->canSend()) {
-    _runQueue();
+    _runQueue(lock);
   }
 
   return true;
@@ -452,6 +432,8 @@ void AsyncWebSocketClient::close(uint16_t code, const char *message) {
   if (_status != WS_CONNECTED) {
     return;
   }
+
+  async_ws_log_w("[%s][%" PRIu32 "] CLOSE", _server->url(), _clientId);
 
   _status = WS_DISCONNECTING;
 
@@ -476,7 +458,15 @@ void AsyncWebSocketClient::close(uint16_t code, const char *message) {
       return;
     } else {
       async_ws_log_e("Failed to allocate");
-      _client->abort();
+      // Reads _client, then dereference it without any lock.
+      // A concurrent _onDisconnect could null + delete the client between the check and the use.
+      // Local capture ensures the pointer is read exactly once, eliminating the null-dereference.
+      // (TOCTOU)
+      AsyncClient *c = _client;
+      if (c) {
+        c->abort();
+      }
+      return;
     }
   }
   _queueControl(WS_DISCONNECT);
@@ -486,41 +476,53 @@ bool AsyncWebSocketClient::ping(const uint8_t *data, size_t len) {
   return _status == WS_CONNECTED && _queueControl(WS_PING, data, len);
 }
 
-void AsyncWebSocketClient::_onError(int8_t) {
-  // Serial.println("onErr");
+void AsyncWebSocketClient::_onError(int8_t err) {
+  async_ws_log_v("[%s][%" PRIu32 "] ERROR %" PRIi8, _server->url(), _clientId, static_cast<int8_t>(err));
 }
 
 void AsyncWebSocketClient::_onTimeout(uint32_t time) {
-  if (!_client) {
+  // Reads _client, then dereference it without any lock.
+  // A concurrent _onDisconnect could null + delete the client between the check and the use.
+  // Local capture ensures the pointer is read exactly once, eliminating the null-dereference.
+  // (TOCTOU)
+  AsyncClient *c = _client;
+  if (!c) {
     return;
   }
-  // Serial.println("onTime");
-  (void)time;
-  _client->close();
+  async_ws_log_v("[%s][%" PRIu32 "] TIMEOUT %" PRIu32, _server->url(), _clientId, time);
+  c->close();
 }
 
 void AsyncWebSocketClient::_onDisconnect() {
-  // Serial.println("onDis");
-  _client = nullptr;
+  async_ws_log_v("[%s][%" PRIu32 "] DISCONNECT", _server->url(), _clientId);
+  _status = WS_DISCONNECTED;
+  {
+    // Every queue method (_queueControl, _queueMessage, _runQueue, _onPoll, _onAck) reads _client while holding _queue_lock.
+    // For those guarded reads to be meaningful, the write must also be synchronized. This doesn't change _queue_lock's purpose — it still guards queue integrity — but ensures the "is client alive?" checks that protect queue operations see a consistent value.
+    asyncsrv::lock_guard_type lock(_queue_lock);
+    _client = nullptr;
+  }
   _server->_handleDisconnect(this);
 }
 
 void AsyncWebSocketClient::_onData(void *pbuf, size_t plen) {
   _lastMessageTime = millis();
   uint8_t *data = (uint8_t *)pbuf;
+
   while (plen > 0) {
-    if (!_pstate) {
+    async_ws_log_v(
+      "[%s][%" PRIu32 "] DATA plen: %" PRIu32 ", _pstate: %" PRIu8 ", _status: %" PRIu8, _server->url(), _clientId, static_cast<uint32_t>(plen), _pstate,
+      static_cast<uint8_t>(_status)
+    );
+
+    if (_pstate == STATE_FRAME_START) {
       const uint8_t *fdata = data;
 
       _pinfo.index = 0;
       _pinfo.final = (fdata[0] & 0x80) != 0;
       _pinfo.opcode = fdata[0] & 0x0F;
-      _pinfo.masked = (fdata[1] & 0x80) != 0;
+      _pinfo.masked = ((fdata[1] & 0x80) != 0) ? 1 : 0;
       _pinfo.len = fdata[1] & 0x7F;
-
-      // async_ws_log_d("WS[%" PRIu32 "]: _onData: %" PRIu32, _clientId, plen);
-      // async_ws_log_d("WS[%" PRIu32 "]: _status = %" PRIu32, _clientId, _status);
-      // async_ws_log_d("WS[%" PRIu32 "]: _pinfo: index: %" PRIu64 ", final: %" PRIu8 ", opcode: %" PRIu8 ", masked: %" PRIu8 ", len: %" PRIu64, _clientId, _pinfo.index, _pinfo.final, _pinfo.opcode, _pinfo.masked, _pinfo.len);
 
       data += 2;
       plen -= 2;
@@ -536,17 +538,53 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen) {
         data += 8;
         plen -= 8;
       }
+    }
 
-      if (_pinfo.masked
-          && plen >= 4) {  // if ws.close() is called, Safari sends a close frame with plen 2 and masked bit set. We must not decrement plen which is already 0.
-        memcpy(_pinfo.mask, data, 4);
-        data += 4;
-        plen -= 4;
+    async_ws_log_v(
+      "[%s][%" PRIu32 "] DATA _pinfo: index: %" PRIu64 ", final: %" PRIu8 ", opcode: %" PRIu8 ", masked: %" PRIu8 ", len: %" PRIu64, _server->url(), _clientId,
+      _pinfo.index, _pinfo.final, _pinfo.opcode, _pinfo.masked, _pinfo.len
+    );
+
+    // Handle fragmented mask data - Safari may split the 4-byte mask across multiple packets
+    // _pinfo.masked is 1 if we need to start reading mask bytes
+    // _pinfo.masked is 2, 3, or 4 if we have partially read the mask
+    // _pinfo.masked is 5 if the mask is complete
+    while (_pinfo.masked && _pstate <= STATE_FRAME_MASK && _pinfo.masked < 5) {
+      // check if we have some data
+      if (plen == 0) {
+        // Safari close frame edge case: masked bit set but no mask data
+        if (_pinfo.opcode == WS_DISCONNECT) {
+          async_ws_log_v("[%s][%" PRIu32 "] DATA close frame with incomplete mask, treating as unmasked", _server->url(), _clientId);
+          _pinfo.masked = 0;
+          _pinfo.index = 0;
+          _pinfo.len = 0;
+          _pstate = STATE_FRAME_START;
+          break;
+        }
+
+        // wait for more data
+        _pstate = STATE_FRAME_MASK;
+        async_ws_log_v("[%s][%" PRIu32 "] DATA waiting for more mask data: read: %" PRIu8 "/4", _server->url(), _clientId, _pinfo.masked - 1);
+        return;
       }
+
+      // accumulate mask bytes
+      _pinfo.mask[_pinfo.masked - 1] = data[0];
+      data += 1;
+      plen -= 1;
+      _pinfo.masked++;
+    }
+
+    // all mask bytes read if we were reading them
+    _pstate = STATE_FRAME_DATA;
+
+    // restore masked to 1 for backward compatibility
+    if (_pinfo.masked >= 5) {
+      async_ws_log_v("[%s][%" PRIu32 "] DATA mask read complete", _server->url(), _clientId);
+      _pinfo.masked = 1;
     }
 
     const size_t datalen = std::min((size_t)(_pinfo.len - _pinfo.index), plen);
-    const auto datalast = data[datalen];
 
     if (_pinfo.masked) {
       for (size_t i = 0; i < datalen; i++) {
@@ -554,23 +592,40 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen) {
       }
     }
 
-    if ((datalen + _pinfo.index) < _pinfo.len) {
-      _pstate = 1;
+    if (_pinfo.index == 0) {  // first fragment of the frame
+      // init message_opcode for this frame
+      // note: For next WS_CONTINUATION frames, they have opcode 0, so message_opcode will stay like the first frame
+      if (_pinfo.opcode == WS_TEXT || _pinfo.opcode == WS_BINARY) {
+        _pinfo.message_opcode = _pinfo.opcode;
+      }
+      // init frame number to 0 if only 1 frame or if this is the first frame of a fragmented message
+      if (_pinfo.final || datalen < _pinfo.len) {
+        _pinfo.num = 0;
+      }
+    }
 
-      if (_pinfo.index == 0) {
-        if (_pinfo.opcode) {
-          _pinfo.message_opcode = _pinfo.opcode;
-          _pinfo.num = 0;
+    if ((datalen + _pinfo.index) < _pinfo.len) {  // more fragments to read for this frame
+      _pstate = STATE_FRAME_DATA;
+
+      if (datalen > 0) {
+        async_ws_log_v(
+          "[%s][%" PRIu32 "] DATA processing next fragment of %s frame %" PRIu32 ", index: %" PRIu64 ", len: %" PRIu32 "", _server->url(), _clientId,
+          (_pinfo.message_opcode == WS_TEXT) ? "text" : "binary", _pinfo.num, _pinfo.index, (uint32_t)datalen
+        );
+        if (!_handleDataEvent(data, datalen, datalen == plen)) {  // datalen == plen means that we are processing the last part of the current TCP packet
+          return;                                                 // stop processing on failure
         }
       }
-      if (datalen > 0) {
-        _server->_handleEvent(this, WS_EVT_DATA, (void *)&_pinfo, data, datalen);
-      }
 
+      // track index for next fragment
       _pinfo.index += datalen;
-    } else if ((datalen + _pinfo.index) == _pinfo.len) {
-      _pstate = 0;
+
+    } else if ((datalen + _pinfo.index) == _pinfo.len) {  // this is the last fragment for this frame
+      _pstate = STATE_FRAME_START;
+
       if (_pinfo.opcode == WS_DISCONNECT) {
+        async_ws_log_v("[%s][%" PRIu32 "] DATA WS_DISCONNECT", _server->url(), _clientId);
+
         if (datalen) {
           uint16_t reasonCode = (uint16_t)(data[0] << 8) + data[1];
           char *reasonString = (char *)(data + 2);
@@ -583,6 +638,7 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen) {
           if (_client) {
             _client->close();
           }
+          return;  // our object is now destroyed, so we must return immediately to avoid accessing any member
         } else {
           _status = WS_DISCONNECTING;
           if (_client) {
@@ -590,35 +646,103 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen) {
           }
           _queueControl(WS_DISCONNECT, data, datalen);
         }
+
       } else if (_pinfo.opcode == WS_PING) {
+        async_ws_log_v("[%s][%" PRIu32 "] DATA PING", _server->url(), _clientId);
         _server->_handleEvent(this, WS_EVT_PING, NULL, NULL, 0);
         _queueControl(WS_PONG, data, datalen);
+
       } else if (_pinfo.opcode == WS_PONG) {
+        async_ws_log_v("[%s][%" PRIu32 "] DATA PONG", _server->url(), _clientId);
         if (datalen != AWSC_PING_PAYLOAD_LEN || memcmp(AWSC_PING_PAYLOAD, data, AWSC_PING_PAYLOAD_LEN) != 0) {
-          _server->_handleEvent(this, WS_EVT_PONG, NULL, NULL, 0);
+          _server->_handleEvent(this, WS_EVT_PONG, NULL, data, datalen);
         }
+
       } else if (_pinfo.opcode < WS_DISCONNECT) {  // continuation or text/binary frame
-        _server->_handleEvent(this, WS_EVT_DATA, (void *)&_pinfo, data, datalen);
+        async_ws_log_v(
+          "[%s][%" PRIu32 "] DATA processing final fragment of %s frame %" PRIu32 ", index: %" PRIu64 ", len: %" PRIu32 "", _server->url(), _clientId,
+          (_pinfo.message_opcode == WS_TEXT) ? "text" : "binary", _pinfo.num, _pinfo.index, (uint32_t)datalen
+        );
+
+        if (!_handleDataEvent(data, datalen, datalen == plen)) {  // datalen == plen means that we are processing the last part of the current TCP packet
+          return;                                                 // stop processing on failure
+        }
+
         if (_pinfo.final) {
           _pinfo.num = 0;
         } else {
           _pinfo.num += 1;
         }
       }
-    } else {
-      // os_printf("frame error: len: %u, index: %llu, total: %llu\n", datalen, _pinfo.index, _pinfo.len);
-      // what should we do?
-      break;
-    }
 
-    // restore byte as _handleEvent may have added a null terminator i.e., data[len] = 0;
-    if (datalen) {
-      data[datalen] = datalast;
+    } else {
+      // unexpected frame error, close connection
+      _pstate = STATE_FRAME_START;
+
+      async_ws_log_v(
+        "[%s][%" PRIu32 "] DATA frame error: len: %u, index: %" PRIu64 ", total: %" PRIu64 "\n", _server->url(), _clientId, datalen, _pinfo.index, _pinfo.len
+      );
+
+      _status = WS_DISCONNECTING;
+      if (_client) {
+        _client->ackLater();
+      }
+      _queueControl(WS_DISCONNECT, data, datalen);
+      break;
     }
 
     data += datalen;
     plen -= datalen;
   }
+}
+
+bool AsyncWebSocketClient::_handleDataEvent(uint8_t *data, size_t len, bool endOfPaquet) {
+  // ------------------------------------------------------------
+  // Issue 384: https://github.com/ESP32Async/ESPAsyncWebServer/issues/384
+  // Discussion: https://github.com/ESP32Async/ESPAsyncWebServer/pull/383#discussion_r2760425739
+  // The initial design of the library was doing a backup of the byte following the data buffer because the client code
+  // was allowed and documented to do something like data[len] = 0; to facilitate null-terminated string handling.
+  // This was a bit hacky but it was working and it was documented, although completely incorrect because it was modifying a byte outside of the data buffer.
+  // So to fix this behavior and to avoid breaking existing client code that may be relying on this behavior, we now have to copy the data to a temporary buffer that has an extra byte for the null terminator.
+  // ------------------------------------------------------------
+  //
+  // Optimization notes:
+  //
+  // 1) opcodes
+  //
+  // - info->opcode stores the current WS frame type (binary, text, continuation)
+  // - info->message_opcode stores the WS frame type of the first frame of the message, which is used for fragmented messages to know the message type when processing subsequent frame with opcode 0 (continuation)
+  // So we can use info->message_opcode to avoid copying the data for non-text frames, and only copy the data for text frames when we need to add a null terminator for client code convenience.
+  //
+  // 2) data copy vs data backup/restore
+  // - endOfPaquet: is true when datalen == plen. plen is the remaining bytes in the current TCP packet, so if datalen == plen, it means that we are processing the last part of the current TCP packet.
+  // In that case, we have to copy since we cannot backup/restore the byte after the data buffer.
+  // Otherwise we can backup the byte and restore since we know that the byte after is owned by the current TCP packet (same pointer).
+  if (_pinfo.message_opcode == WS_TEXT) {
+    if (endOfPaquet) {
+      std::unique_ptr<uint8_t[]> copy(new (std::nothrow) uint8_t[len + 1]());
+      if (copy) {
+        memcpy(copy.get(), data, len);
+        copy[len] = 0;
+        _server->_handleEvent(this, WS_EVT_DATA, (void *)&_pinfo, copy.get(), len);
+      } else {
+        async_ws_log_e("Failed to allocate");
+        AsyncClient *c = _client;
+        if (c) {
+          c->abort();
+        }
+        return false;  // failure!
+      }
+    } else {
+      uint8_t backup = data[len];
+      data[len] = 0;
+      _server->_handleEvent(this, WS_EVT_DATA, (void *)&_pinfo, data, len);
+      data[len] = backup;
+    }
+  } else {
+    _server->_handleEvent(this, WS_EVT_DATA, (void *)&_pinfo, data, len);
+  }
+  return true;
 }
 
 size_t AsyncWebSocketClient::printf(const char *format, ...) {
@@ -672,14 +796,6 @@ size_t AsyncWebSocketClient::printf_P(PGM_P formatP, ...) {
   return enqueued ? len : 0;
 }
 #endif
-
-namespace {
-AsyncWebSocketSharedBuffer makeSharedBuffer(const uint8_t *message, size_t len) {
-  auto buffer = std::make_shared<std::vector<uint8_t>>(len);
-  std::memcpy(buffer->data(), message, len);
-  return buffer;
-}
-}  // namespace
 
 bool AsyncWebSocketClient::text(AsyncWebSocketMessageBuffer *buffer) {
   bool enqueued = false;
@@ -778,19 +894,27 @@ bool AsyncWebSocketClient::binary(const __FlashStringHelper *data, size_t len) {
 #endif
 
 IPAddress AsyncWebSocketClient::remoteIP() const {
-  if (!_client) {
+  // Reads _client, then dereference it without any lock.
+  // A concurrent _onDisconnect could null + delete the client between the check and the use.
+  // Local capture ensures the pointer is read exactly once, eliminating the null-dereference.
+  // (TOCTOU)
+  AsyncClient *c = _client;
+  if (!c) {
     return IPAddress((uint32_t)0U);
   }
-
-  return _client->remoteIP();
+  return c->remoteIP();
 }
 
 uint16_t AsyncWebSocketClient::remotePort() const {
-  if (!_client) {
+  // Reads _client, then dereference it without any lock.
+  // A concurrent _onDisconnect could null + delete the client between the check and the use.
+  // Local capture ensures the pointer is read exactly once, eliminating the null-dereference.
+  // (TOCTOU)
+  AsyncClient *c = _client;
+  if (!c) {
     return 0;
   }
-
-  return _client->remotePort();
+  return c->remotePort();
 }
 
 /*
@@ -804,15 +928,19 @@ void AsyncWebSocket::_handleEvent(AsyncWebSocketClient *client, AwsEventType typ
 }
 
 AsyncWebSocketClient *AsyncWebSocket::_newClient(AsyncWebServerRequest *request) {
-  _clients.emplace_back(request, this);
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
+  // Hold the request in scope for the user callback to inspect
+  std::shared_ptr<AsyncWebServerRequest> req_lock = request->shared_from_this();
+  // Adopt the client object from the request
+  _clients.emplace_back(request->clientRelease(), this);
   // we've just detached AsyncTCP client from AsyncWebServerRequest
   _handleEvent(&_clients.back(), WS_EVT_CONNECT, request, NULL, 0);
-  // after user code completed CONNECT event callback we can delete req/response objects
-  delete request;
+  // req_lock releases the request object at the end of this function scope
   return &_clients.back();
 }
 
 void AsyncWebSocket::_handleDisconnect(AsyncWebSocketClient *client) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   const auto client_id = client->id();
   const auto iter = std::find_if(std::begin(_clients), std::end(_clients), [client_id](const AsyncWebSocketClient &c) {
     return c.id() == client_id;
@@ -823,12 +951,14 @@ void AsyncWebSocket::_handleDisconnect(AsyncWebSocketClient *client) {
 }
 
 bool AsyncWebSocket::availableForWriteAll() {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   return std::none_of(std::begin(_clients), std::end(_clients), [](const AsyncWebSocketClient &c) {
     return c.queueIsFull();
   });
 }
 
 bool AsyncWebSocket::availableForWrite(uint32_t id) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   const auto iter = std::find_if(std::begin(_clients), std::end(_clients), [id](const AsyncWebSocketClient &c) {
     return c.id() == id;
   });
@@ -839,12 +969,14 @@ bool AsyncWebSocket::availableForWrite(uint32_t id) {
 }
 
 size_t AsyncWebSocket::count() const {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   return std::count_if(std::begin(_clients), std::end(_clients), [](const AsyncWebSocketClient &c) {
     return c.status() == WS_CONNECTED;
   });
 }
 
 AsyncWebSocketClient *AsyncWebSocket::client(uint32_t id) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   const auto iter = std::find_if(_clients.begin(), _clients.end(), [id](const AsyncWebSocketClient &c) {
     return c.id() == id && c.status() == WS_CONNECTED;
   });
@@ -856,12 +988,14 @@ AsyncWebSocketClient *AsyncWebSocket::client(uint32_t id) {
 }
 
 void AsyncWebSocket::close(uint32_t id, uint16_t code, const char *message) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   if (AsyncWebSocketClient *c = client(id)) {
     c->close(code, message);
   }
 }
 
 void AsyncWebSocket::closeAll(uint16_t code, const char *message) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   for (auto &c : _clients) {
     if (c.status() == WS_CONNECTED) {
       c.close(code, message);
@@ -870,7 +1004,10 @@ void AsyncWebSocket::closeAll(uint16_t code, const char *message) {
 }
 
 void AsyncWebSocket::cleanupClients(uint16_t maxClients) {
-  if (count() > maxClients) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
+  const size_t c = count();
+  if (c > maxClients) {
+    async_ws_log_v("[%s] CLEANUP %" PRIu32 " (%u/%" PRIu16 ")", _url.c_str(), _clients.front().id(), c, maxClients);
     _clients.front().close();
   }
 
@@ -883,11 +1020,13 @@ void AsyncWebSocket::cleanupClients(uint16_t maxClients) {
 }
 
 bool AsyncWebSocket::ping(uint32_t id, const uint8_t *data, size_t len) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   AsyncWebSocketClient *c = client(id);
   return c && c->ping(data, len);
 }
 
 AsyncWebSocket::SendStatus AsyncWebSocket::pingAll(const uint8_t *data, size_t len) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   size_t hit = 0;
   size_t miss = 0;
   for (auto &c : _clients) {
@@ -901,6 +1040,7 @@ AsyncWebSocket::SendStatus AsyncWebSocket::pingAll(const uint8_t *data, size_t l
 }
 
 bool AsyncWebSocket::text(uint32_t id, const uint8_t *message, size_t len) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   AsyncWebSocketClient *c = client(id);
   return c && c->text(makeSharedBuffer(message, len));
 }
@@ -947,6 +1087,7 @@ bool AsyncWebSocket::text(uint32_t id, AsyncWebSocketMessageBuffer *buffer) {
   return enqueued;
 }
 bool AsyncWebSocket::text(uint32_t id, AsyncWebSocketSharedBuffer buffer) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   AsyncWebSocketClient *c = client(id);
   return c && c->text(buffer);
 }
@@ -996,6 +1137,7 @@ AsyncWebSocket::SendStatus AsyncWebSocket::textAll(AsyncWebSocketMessageBuffer *
 }
 
 AsyncWebSocket::SendStatus AsyncWebSocket::textAll(AsyncWebSocketSharedBuffer buffer) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   size_t hit = 0;
   size_t miss = 0;
   for (auto &c : _clients) {
@@ -1009,6 +1151,7 @@ AsyncWebSocket::SendStatus AsyncWebSocket::textAll(AsyncWebSocketSharedBuffer bu
 }
 
 bool AsyncWebSocket::binary(uint32_t id, const uint8_t *message, size_t len) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   AsyncWebSocketClient *c = client(id);
   return c && c->binary(makeSharedBuffer(message, len));
 }
@@ -1045,6 +1188,7 @@ bool AsyncWebSocket::binary(uint32_t id, AsyncWebSocketMessageBuffer *buffer) {
   return enqueued;
 }
 bool AsyncWebSocket::binary(uint32_t id, AsyncWebSocketSharedBuffer buffer) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   AsyncWebSocketClient *c = client(id);
   return c && c->binary(buffer);
 }
@@ -1085,6 +1229,7 @@ AsyncWebSocket::SendStatus AsyncWebSocket::binaryAll(AsyncWebSocketMessageBuffer
   return status;
 }
 AsyncWebSocket::SendStatus AsyncWebSocket::binaryAll(AsyncWebSocketSharedBuffer buffer) {
+  asyncsrv::lock_guard_type lock(_ws_clients_lock);
   size_t hit = 0;
   size_t miss = 0;
   for (auto &c : _clients) {

@@ -276,12 +276,12 @@ static inline lwip_tcp_event_packet_t *_get_async_event() {
   }
 }
 
-static size_t _remove_events_for_client(AsyncClient *client) {
+static size_t _remove_events_for_client(AsyncClient *client, bool keepAccept = false) {
   lwip_tcp_event_packet_t *removed_event_chain;
   {
     queue_mutex_guard guard;
     removed_event_chain = _async_queue.remove_if([=](lwip_tcp_event_packet_t &pkt) {
-      return pkt.client == client;
+      return pkt.client == client && !(keepAccept && pkt.event == LWIP_TCP_ACCEPT);
     });
   }
 
@@ -511,7 +511,9 @@ void AsyncTCP_detail::tcp_error(void *arg, int8_t err) {
   }
   if (client->_pcb) {
     // The pcb has already been freed by LwIP; do not attempt to clear the callbacks!
-    _remove_events_for_client(client);
+    // A queued ACCEPT stays: nobody owns this client until it is delivered, and the
+    // ERROR event queued below can only reach the owner's cleanup callbacks after it.
+    _remove_events_for_client(client, true);
     client->_pcb = nullptr;
   }
 

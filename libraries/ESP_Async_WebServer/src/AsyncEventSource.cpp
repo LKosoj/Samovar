@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #include "AsyncEventSource.h"
 #include "AsyncWebServerLogging.h"
@@ -27,7 +27,7 @@ static String generateEventMessage(const char *message, const char *event, uint3
 
   if (!str.reserve(len)) {
     async_ws_log_e("Failed to allocate");
-    return emptyString;
+    return asyncsrv::emptyString;
   }
 
   if (reconnect) {
@@ -147,11 +147,8 @@ size_t AsyncEventSourceMessage::send(AsyncClient *client) {
 
 // Client
 
-AsyncEventSourceClient::AsyncEventSourceClient(AsyncWebServerRequest *request, AsyncEventSource *server) : _client(request->clientRelease()), _server(server) {
-
-  if (request->hasHeader(T_Last_Event_ID)) {
-    _lastId = atoi(request->getHeader(T_Last_Event_ID)->value().c_str());
-  }
+AsyncEventSourceClient::AsyncEventSourceClient(AsyncClient *client, AsyncEventSource *server, uint32_t lastId)
+  : _client(client), _server(server), _lastId(lastId) {
 
   _client->setRxTimeout(0);
   _client->onError(NULL, NULL);
@@ -186,30 +183,30 @@ AsyncEventSourceClient::AsyncEventSourceClient(AsyncWebServerRequest *request, A
 
   _server->_addClient(this);
   _client->setNoDelay(true);
-  // delete AsyncWebServerRequest object (and bound response) since we have the ownership on client connection now
-  delete request;
 }
 
 AsyncEventSourceClient::~AsyncEventSourceClient() {
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_lockmq);
-#endif
+  // Protect message queue access (size checks and modifications) which is not thread-safe.
+  asyncsrv::lock_guard_type lock(_lockmq);
   _messageQueue.clear();
   close();
 }
 
 bool AsyncEventSourceClient::_queueMessage(const char *message, size_t len) {
+  // Protect message queue access (size checks and modifications) which is not thread-safe.
+  asyncsrv::lock_guard_type lock(_lockmq);
+
   if (_messageQueue.size() >= SSE_MAX_QUEUED_MESSAGES) {
-    async_ws_log_e("Event message queue overflow: discard message");
+    async_ws_log_w("Event message queue overflow: discard message");
     return false;
   }
 
-#ifdef ESP32
-  // length() is not thread-safe, thus acquiring the lock before this call..
-  std::lock_guard<std::recursive_mutex> lock(_lockmq);
-#endif
-
-  _messageQueue.emplace_back(message, len);
+  if (_client) {
+    _messageQueue.emplace_back(message, len);
+  } else {
+    _messageQueue.clear();
+    return false;
+  }
 
   /*
     throttle queue run
@@ -217,7 +214,7 @@ bool AsyncEventSourceClient::_queueMessage(const char *message, size_t len) {
     forcing Q run will only eat more heap ram and blow the buffer, let's just keep data in our own queue
     the queue will be processed at least on each onAck()/onPoll() call from AsyncTCP
   */
-  if (_messageQueue.size() < SSE_MAX_QUEUED_MESSAGES >> 2 && _client->canSend()) {
+  if (_client && _client->canSend() && _messageQueue.size() < SSE_MAX_QUEUED_MESSAGES >> 2) {
     _runQueue();
   }
 
@@ -225,17 +222,20 @@ bool AsyncEventSourceClient::_queueMessage(const char *message, size_t len) {
 }
 
 bool AsyncEventSourceClient::_queueMessage(AsyncEvent_SharedData_t &&msg) {
+  // Protect message queue access (size checks and modifications) which is not thread-safe.
+  asyncsrv::lock_guard_type lock(_lockmq);
+
   if (_messageQueue.size() >= SSE_MAX_QUEUED_MESSAGES) {
-    async_ws_log_e("Event message queue overflow: discard message");
+    async_ws_log_w("Event message queue overflow: discard message");
     return false;
   }
 
-#ifdef ESP32
-  // length() is not thread-safe, thus acquiring the lock before this call..
-  std::lock_guard<std::recursive_mutex> lock(_lockmq);
-#endif
-
-  _messageQueue.emplace_back(std::move(msg));
+  if (_client) {
+    _messageQueue.emplace_back(std::move(msg));
+  } else {
+    _messageQueue.clear();
+    return false;
+  }
 
   /*
     throttle queue run
@@ -243,17 +243,15 @@ bool AsyncEventSourceClient::_queueMessage(AsyncEvent_SharedData_t &&msg) {
     forcing Q run will only eat more heap ram and blow the buffer, let's just keep data in our own queue
     the queue will be processed at least on each onAck()/onPoll() call from AsyncTCP
   */
-  if (_messageQueue.size() < SSE_MAX_QUEUED_MESSAGES >> 2 && _client->canSend()) {
+  if (_client && _client->canSend() && _messageQueue.size() < SSE_MAX_QUEUED_MESSAGES >> 2) {
     _runQueue();
   }
   return true;
 }
 
 void AsyncEventSourceClient::_onAck(size_t len __attribute__((unused)), uint32_t time __attribute__((unused))) {
-#ifdef ESP32
-  // Same here, acquiring the lock early
-  std::lock_guard<std::recursive_mutex> lock(_lockmq);
-#endif
+  // Protect message queue access (size checks and modifications) which is not thread-safe.
+  asyncsrv::lock_guard_type lock(_lockmq);
 
   // adjust in-flight len
   if (len < _inflight) {
@@ -278,11 +276,9 @@ void AsyncEventSourceClient::_onAck(size_t len __attribute__((unused)), uint32_t
 }
 
 void AsyncEventSourceClient::_onPoll() {
+  // Protect message queue access (size checks and modifications) which is not thread-safe.
+  asyncsrv::lock_guard_type lock(_lockmq);
   if (_messageQueue.size()) {
-#ifdef ESP32
-    // Same here, acquiring the lock early
-    std::lock_guard<std::recursive_mutex> lock(_lockmq);
-#endif
     _runQueue();
   }
 }
@@ -334,7 +330,7 @@ void AsyncEventSourceClient::_runQueue() {
   }
 
   // flush socket
-  if (total_bytes_written) {
+  if (_client && total_bytes_written) {
     _client->send();
   }
 }
@@ -357,13 +353,13 @@ void AsyncEventSource::_addClient(AsyncEventSourceClient *client) {
   if (!client) {
     return;
   }
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_client_queue_lock);
-#endif
-  _clients.emplace_back(client);
+
   if (_connectcb) {
     _connectcb(client);
   }
+
+  asyncsrv::lock_guard_type lock(_client_queue_lock);
+  _clients.emplace_back(client);
 
   _adjust_inflight_window();
 }
@@ -372,9 +368,7 @@ void AsyncEventSource::_handleDisconnect(AsyncEventSourceClient *client) {
   if (_disconnectcb) {
     _disconnectcb(client);
   }
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_client_queue_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_client_queue_lock);
   for (auto i = _clients.begin(); i != _clients.end(); ++i) {
     if (i->get() == client) {
       _clients.erase(i);
@@ -388,9 +382,7 @@ void AsyncEventSource::close() {
   // While the whole loop is not done, the linked list is locked and so the
   // iterator should remain valid even when AsyncEventSource::_handleDisconnect()
   // is called very early
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_client_queue_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_client_queue_lock);
   for (const auto &c : _clients) {
     if (c->connected()) {
       /**
@@ -407,43 +399,35 @@ void AsyncEventSource::close() {
 size_t AsyncEventSource::avgPacketsWaiting() const {
   size_t aql = 0;
   uint32_t nConnectedClients = 0;
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_client_queue_lock);
-#endif
-  if (!_clients.size()) {
-    return 0;
-  }
-
+  asyncsrv::lock_guard_type lock(_client_queue_lock);
   for (const auto &c : _clients) {
     if (c->connected()) {
       aql += c->packetsWaiting();
       ++nConnectedClients;
     }
   }
-  return ((aql) + (nConnectedClients / 2)) / (nConnectedClients);  // round up
+  return nConnectedClients == 0 ? 0 : ((aql) + (nConnectedClients / 2)) / (nConnectedClients);  // round up
 }
 
 AsyncEventSource::SendStatus AsyncEventSource::send(const char *message, const char *event, uint32_t id, uint32_t reconnect) {
   AsyncEvent_SharedData_t shared_msg = std::make_shared<String>(generateEventMessage(message, event, id, reconnect));
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_client_queue_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_client_queue_lock);
   size_t hits = 0;
   size_t miss = 0;
   for (const auto &c : _clients) {
-    if (c->write(shared_msg)) {
-      ++hits;
-    } else {
-      ++miss;
+    if (c->connected()) {
+      if (c->write(shared_msg)) {
+        ++hits;
+      } else {
+        ++miss;
+      }
     }
   }
   return hits == 0 ? DISCARDED : (miss == 0 ? ENQUEUED : PARTIALLY_ENQUEUED);
 }
 
 size_t AsyncEventSource::count() const {
-#ifdef ESP32
-  std::lock_guard<std::recursive_mutex> lock(_client_queue_lock);
-#endif
+  asyncsrv::lock_guard_type lock(_client_queue_lock);
   size_t n_clients{0};
   for (const auto &i : _clients) {
     if (i->connected()) {
@@ -462,11 +446,15 @@ void AsyncEventSource::handleRequest(AsyncWebServerRequest *request) {
   request->send(new AsyncEventSourceResponse(this));
 }
 
+// list iteration protected by caller's lock
 void AsyncEventSource::_adjust_inflight_window() {
-  if (_clients.size()) {
-    size_t inflight = SSE_MAX_INFLIGH / _clients.size();
+  const size_t clientCount = count();
+  if (clientCount) {
+    size_t inflight = SSE_MAX_INFLIGH / clientCount;
     for (const auto &c : _clients) {
-      c->set_max_inflight_bytes(inflight);
+      if (c->connected()) {
+        c->set_max_inflight_bytes(inflight);
+      }
     }
     // Serial.printf("adjusted inflight to: %u\n", inflight);
   }
@@ -485,24 +473,12 @@ AsyncEventSourceResponse::AsyncEventSourceResponse(AsyncEventSource *server) : _
 void AsyncEventSourceResponse::_respond(AsyncWebServerRequest *request) {
   String out;
   _assembleHead(out, request->version());
-  // unbind client's onAck callback from AsyncWebServerRequest's, we will destroy it on next callback and steal the client,
-  // can't do it now 'cause now we are in AsyncWebServerRequest::_onAck 's stack actually
-  // here we are loosing time on one RTT delay, but with current design we can't get rid of Req/Resp objects other way
-  _request = request;
-  request->client()->onAck(
-    [](void *r, AsyncClient *c, size_t len, uint32_t time) {
-      if (len) {
-        static_cast<AsyncEventSourceResponse *>(r)->_switchClient();
-      }
-    },
-    this
-  );
+  uint32_t lastId = 0;
+  if (request->hasHeader(T_Last_Event_ID)) {
+    lastId = strtoul(request->getHeader(T_Last_Event_ID)->value().c_str(), nullptr, 10);
+  }
   request->client()->write(out.c_str(), _headLength);
-  _state = RESPONSE_WAIT_ACK;
+  // Add a new AsyncEventSourceClient to the server's list of clients
+  // This adopts the ownership of the AsyncTCP's client pointer from `request` parameter
+  new AsyncEventSourceClient(request->clientRelease(), _server, lastId);
 }
-
-void AsyncEventSourceResponse::_switchClient() {
-  // AsyncEventSourceClient c-tor will take the ownership of AsyncTCP's client connection
-  new AsyncEventSourceClient(_request, _server);
-  // AsyncEventSourceClient c-tor would also delete _request and *this
-};

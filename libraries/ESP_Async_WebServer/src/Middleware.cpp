@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #include "WebAuthentication.h"
 #include <ESPAsyncWebServer.h>
@@ -249,7 +249,7 @@ void AsyncCorsMiddleware::run(AsyncWebServerRequest *request, ArMiddlewareNext n
   // Origin header ? => CORS handling
   if (request->hasHeader(asyncsrv::T_CORS_O)) {
     // check if this is a preflight request => handle it and return
-    if (request->method() == HTTP_OPTIONS) {
+    if (request->method() == AsyncWebRequestMethod::HTTP_OPTIONS) {
       AsyncWebServerResponse *response = request->beginResponse(200);
       addCORSHeaders(request, response);
       request->send(response);

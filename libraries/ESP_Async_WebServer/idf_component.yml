@@ -5,8 +5,6 @@ tags:
   - arduino
 files:
   exclude:
-    - "idf_component_examples/"
-    - "idf_component_examples/**/*"
     - "docs/"
     - "docs/*"
     - "examples/"
@@ -29,12 +27,12 @@ dependencies:
     version: "^3.1.1"
     require: public
   esp32async/asynctcp:
-    version: "^3.4.9"
+    version: "^3.5.0"
     require: public
   bblanchon/arduinojson:
-    version: "^7.4.2"
+    version: "^7.4.3"
     require: public
 examples:
-  - path: ./idf_component_examples/catchall
-  - path: ./idf_component_examples/serversentevents
-  - path: ./idf_component_examples/websocket
+  - path: ./examples/idf_component/catchall
+  - path: ./examples/idf_component/serversentevents
+  - path: ./examples/idf_component/websocket

@@ -58,6 +58,7 @@ constexpr int ERR_CONN = -11;
 #define async_tcp_log_elapsed(name, expression) (expression)
 #define async_tcp_log_d(...) ((void)0)
 #define async_ws_log_d(...) ((void)0)
+#define async_ws_log_v(...) ((void)0)
 
 class AsyncClient;
 class AsyncWebServer {};

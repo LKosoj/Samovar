@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #pragma once
 
@@ -35,7 +35,7 @@ private:
 
 public:
   explicit AsyncBasicResponse(int code, const char *contentType = asyncsrv::empty, const char *content = asyncsrv::empty);
-  AsyncBasicResponse(int code, const String &contentType, const String &content = emptyString)
+  AsyncBasicResponse(int code, const String &contentType, const String &content = asyncsrv::emptyString)
     : AsyncBasicResponse(code, contentType.c_str(), content.c_str()) {}
   void _respond(AsyncWebServerRequest *request) final;
   size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) final {

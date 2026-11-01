@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
+// Copyright 2016-2026 Hristo Gochkov, Mathieu Carbou, Emil Muratov, Will Miles
 
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
@@ -103,7 +103,7 @@ AsyncStaticWebHandler &AsyncStaticWebHandler::setLastModified() {
 }
 
 bool AsyncStaticWebHandler::canHandle(AsyncWebServerRequest *request) const {
-  return request->isHTTP() && request->method() == HTTP_GET && request->url().startsWith(_uri) && _getFile(request);
+  return request->isHTTP() && request->method() == AsyncWebRequestMethod::HTTP_GET && request->url().startsWith(_uri) && _getFile(request);
 }
 
 bool AsyncStaticWebHandler::_getFile(AsyncWebServerRequest *request) const {
@@ -178,8 +178,8 @@ bool AsyncStaticWebHandler::_searchFile(AsyncWebServerRequest *request, const St
     char *_tempPath = (char *)malloc(pathLen + 1);
     if (_tempPath == NULL) {
       async_ws_log_e("Failed to allocate");
-      request->abort();
       request->_tempFile.close();
+      request->abort();
       return false;
     }
     snprintf_P(_tempPath, pathLen + 1, PSTR("%s"), path.c_str());
@@ -210,7 +210,7 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request) {
   }
 
   // Get server ETag. If file is not GZ and we have a Template Processor, ETag is set to an empty string
-  char etag[9];
+  char etag[11];
   const char *tempFileName = request->_tempFile.name();
   const size_t lenFilename = strlen(tempFileName);
 
@@ -218,7 +218,7 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request) {
     //File is a gz, get etag from CRC in trailer
     if (!AsyncWebServerRequest::_getEtag(request->_tempFile, etag)) {
       // File is corrupted or invalid
-      async_ws_log_e("File is corrupted or invalid: %s", tempFileName);
+      async_ws_log_w("File is corrupted or invalid: %s", tempFileName);
       request->send(404);
       return;
     }
@@ -237,11 +237,8 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request) {
       size_t fileSize = request->_tempFile.size();
       etagValue = static_cast<uint32_t>(fileSize);
     }
-#ifndef ESP8266
-    snprintf(etag, sizeof(etag), "%08lx", etagValue);
-#else
-    snprintf(etag, sizeof(etag), "%08x", etagValue);
-#endif
+    // RFC9110 Section-8.8.3: Value of the ETag response must be enclosed in double quotes
+    snprintf(etag, sizeof(etag), "\"%08" PRIx32 "\"", etagValue);
   } else {
     etag[0] = '\0';
   }
@@ -263,7 +260,7 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request) {
     request->_tempFile.close();
     response = new AsyncBasicResponse(304);  // Not modified
   } else {
-    response = new AsyncFileResponse(request->_tempFile, filename, emptyString, false, _callback);
+    response = new AsyncFileResponse(request->_tempFile, filename, asyncsrv::emptyString, false, _callback);
   }
 
   if (!response) {
@@ -303,7 +300,7 @@ void AsyncCallbackWebHandler::setUri(AsyncURIMatcher uri) {
 }
 
 bool AsyncCallbackWebHandler::canHandle(AsyncWebServerRequest *request) const {
-  if (!_onRequest || !request->isHTTP() || !(_method & request->method())) {
+  if (!_onRequest || !request->isHTTP() || !_method.matches(request->method())) {
     return false;
   }
   return _uri.matches(request);
