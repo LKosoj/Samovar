@@ -171,7 +171,7 @@ uint16_t RMVK_get_store_out_voltge() {
 uint16_t RMVK_set_out_voltge(uint16_t voltge, uint64_t powerGeneration) {
   uint16_t ret;
   char cmd[20];
-  if (!rmvk.on && RMVK_set_on(1, powerGeneration) == RMVK_ERROR) return RMVK_ERROR;
+  if (!rmvk.on) RMVK_set_on(1, powerGeneration);
   if (voltge > MAX_VOLTAGE)voltge = MAX_VOLTAGE;
   snprintf(cmd, sizeof(cmd), "AT+VS=%03d", voltge);
   ret = RMVK_cmd(cmd, RMVK_INT, true, powerGeneration);

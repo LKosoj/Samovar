@@ -26,7 +26,8 @@ void triggerPowerStatus(void *parameter) {
 inline bool apply_regulator_voltage_blocking(float Volt, uint64_t powerGeneration) {
   POWER_DEBUG_LOG(WriteConsoleLog("Set current power =" + (String)Volt));
   vTaskDelay(100 / portTICK_PERIOD_MS);
-  if (RMVK_set_out_voltge(Volt, powerGeneration) == RMVK_ERROR) return false;
+  // Как в 6.26: ответ на команду не прерывает нагрев; связь проверяет check_power_error().
+  RMVK_set_out_voltge(Volt, powerGeneration);
   target_power_volt = Volt;
   return true;
 }
@@ -36,12 +37,12 @@ inline bool apply_regulator_mode_blocking(SafetyRegulatorMode mode, uint64_t pow
   if (Mode.length() == 0) return false;
   vTaskDelay(50 / portTICK_PERIOD_MS);
   if (mode == SAFETY_REGULATOR_MODE_SLEEP) {
-    if (RMVK_set_on(0, 0) == RMVK_ERROR) return false;
+    RMVK_set_on(0, 0);
   } else if (mode == SAFETY_REGULATOR_MODE_SPEED) {
     POWER_DEBUG_LOG(WriteConsoleLog("Set power mode=" + Mode));
-    if (RMVK_set_on(1, powerGeneration) == RMVK_ERROR) return false;
+    RMVK_set_on(1, powerGeneration);
     vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-    if (RMVK_set_out_voltge(MAX_VOLTAGE, powerGeneration) == RMVK_ERROR) return false;
+    RMVK_set_out_voltge(MAX_VOLTAGE, powerGeneration);
     vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
   }
   // [T14 п.29] Занятый лок -> false, но железо команду уже приняло: это не
