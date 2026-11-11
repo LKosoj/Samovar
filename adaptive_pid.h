@@ -22,7 +22,8 @@ inline bool adaptive_pid_deadline_reached(uint32_t nowMs, uint32_t deadlineMs) {
 // резкого снятия мощности температура растёт ещё на (скорость в момент снятия) * выбег.
 // Выбег измеряется заново на каждом таком снятии, поэтому смена котла или мешалки
 // переучивается за одну-две паузы.
-static const float ADAPTIVE_HEATER_HORIZON_DEFAULT_S = 60.0f;
+// До первого замера начинаем торможение заранее, в том числе у инерционного котла.
+static const float ADAPTIVE_HEATER_HORIZON_DEFAULT_S = 300.0f;
 static const float ADAPTIVE_HEATER_HORIZON_MIN_S = 15.0f;
 static const float ADAPTIVE_HEATER_HORIZON_MAX_S = 900.0f;
 
@@ -229,7 +230,8 @@ inline AdaptiveHeaterResult adaptive_heater_step(
       state.filteredRate * state.predictionHorizonSeconds / 60.0f;
   const float actualError = boostTarget - temp;
   boostCutoff = adaptive_pid_clamp(boostCutoff, 0.0f, 100.0f);
-  if (actualError <= boostCutoff) state.boostAllowed = false;
+  if (actualError <= boostCutoff ||
+      state.predictedTemp >= boostTarget - boostCutoff) state.boostAllowed = false;
 
   const float error = setpoint - state.predictedTemp;
   const float desiredRate = adaptive_pid_clamp(error * 0.35f, 0.0f, 3.0f);
@@ -242,9 +244,12 @@ inline AdaptiveHeaterResult adaptive_heater_step(
   if (sampleReady) {
     const float dtMinutes = elapsedMs / 60000.0f;
     const float integralChange = 0.06f * error * dtMinutes;
-    if ((output > 0.0f && output < 1.0f) ||
+    // Добавку для удержания накапливаем только у цели, а не во время разгона.
+    // Уже накопленную добавку разрешено уменьшать и на подходе.
+    if ((error < 0.0f || fabsf(setpoint - temp) <= 0.5f) &&
+        ((output > 0.0f && output < 1.0f) ||
         (output <= 0.0f && integralChange > 0.0f) ||
-        (output >= 1.0f && integralChange < 0.0f)) {
+        (output >= 1.0f && integralChange < 0.0f))) {
       state.integral = adaptive_pid_clamp(
           state.integral + integralChange, 0.0f, 1.0f);
       output = adaptive_pid_clamp(

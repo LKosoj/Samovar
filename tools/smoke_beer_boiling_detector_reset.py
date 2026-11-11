@@ -199,6 +199,9 @@ void SendMsg(const String&, MESSAGE_TYPE) { sendMsgCalls++; }
 static int setBuzzerCalls = 0;
 void set_buzzer(bool) { setBuzzerCalls++; }
 
+static bool heaterOutput = true;
+void setHeaterPosition(bool state) { heaterOutput = state; }
+
 static ProgramType program_type_at(uint8_t index) {
 @PROGRAM_TYPE_AT_BODY@
 }

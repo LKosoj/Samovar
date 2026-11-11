@@ -1082,6 +1082,7 @@ void run_program(uint8_t num) {
   String p_tag = program_line_start_tag(num);
   // [Ф3][Ф4] Новая строка - новая опора автоподъёма Т тела и никакого ожидающего захвата.
   body_temp_row_base = 0;
+  body_temp_pipe_row_base = 0;
   body_temp_capture_deadline = 0;
   // [Б5] Если новая строка не 'C' - гасим весь тракт "охоты" за предзахлёбом:
   // alarm_c_min, alarm_c_low_min, prev_target_power_volt, alarm_h_min (решение
@@ -1247,7 +1248,10 @@ void set_body_temp() {
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
     TankSensor.BodyTemp = TankSensor.avgTemp;
     // [Ф4] Первый захват в строке - опора предела автоподъёма BODY_TEMP_AUTOSET_MAX_RISE.
-    if (body_temp_row_base <= 0.0f) body_temp_row_base = SteamSensor.BodyTemp;
+    if (body_temp_row_base <= 0.0f) {
+      body_temp_row_base = SteamSensor.BodyTemp;
+      body_temp_pipe_row_base = PipeSensor.BodyTemp;
+    }
     SendMsg(TR(LOGIC_NEW_BODY_T_STEAM, "Новые Т тела: пар = ") + String(SteamSensor.BodyTemp) + TR(LOGIC_COMMA_PIPE_EQ, ", царга = ") + String(PipeSensor.BodyTemp), WARNING_MSG);
   } else {
     SendMsg((TR(LOGIC_BODY_T_SET_FAIL, "Не возможно установить Т тела.")), WARNING_MSG);

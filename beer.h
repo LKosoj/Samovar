@@ -565,6 +565,10 @@ void run_beer_program(uint8_t num) {
 
   if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
 
+  if (program_type_at(ProgramNum) == 'B' && program[targetProgram].WType != 'B') {
+    setHeaterPosition(false);
+  }
+
   beerSkipConfirmProgramNum = 0xFF;
 
   // [Пиво 02.09 A3] Повторный вход на строку 'M' тоже взводит подэтап нагрева,
@@ -1123,9 +1127,10 @@ void beer_stage_tick() {
       set_heater(constrain(SamSetup.BVolt, 0.0f, 100.0f) / 100.0);
 #endif
       if (SamSetup.UseST) {
-        heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
+        acceleration_heater = heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
       } else {
         heater_boost_output_off();
+        acceleration_heater = false;
       }
     }
 
@@ -1399,9 +1404,9 @@ void set_heater_state(float setpoint, float temp, float boostTarget) {
   if (!isfinite(boostTarget)) boostTarget = setpoint;
 #ifdef SAMOVAR_USE_POWER
   adaptiveHeaterState.lastCommandApplied =
-      adaptiveHeaterPowerGeneration != 0 &&
-      current_power_command_status(adaptiveHeaterPowerGeneration) ==
-          ACTUATOR_COMMAND_APPLIED;
+      adaptiveHeaterPowerGeneration != 0
+          ? current_power_command_status(adaptiveHeaterPowerGeneration) == ACTUATOR_COMMAND_APPLIED
+          : current_power_mode_is(POWER_SLEEP_MODE);
 #endif
   const AdaptiveHeaterResult adaptiveResult = adaptive_heater_step(
       adaptiveHeaterState, setpoint, boostTarget, temp,
@@ -1575,6 +1580,8 @@ void setHeaterPosition(bool state) {
     vTaskDelay(50 / portTICK_PERIOD_MS);
 #endif
   } else {
+    heater_boost_output_off();
+    acceleration_heater = false;
 #ifdef SAMOVAR_USE_POWER
     if (!current_power_mode_is(POWER_SLEEP_MODE)) {
       set_power_mode(POWER_SLEEP_MODE);
@@ -1582,7 +1589,6 @@ void setHeaterPosition(bool state) {
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-    heater_boost_output_off();
 #endif
   }
 }

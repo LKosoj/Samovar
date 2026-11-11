@@ -231,7 +231,7 @@ int main() {
         "heater prediction must reduce power while temperature is rising");
 
   AdaptiveHeaterState learnedHeater{};
-  adaptive_heater_reset(learnedHeater, 0.0f);
+  adaptive_heater_reset(learnedHeater, 60.0f);
   adaptive_heater_step(learnedHeater, 70.0f, 70.0f, 68.0f, 4.0f, 0);
   learnedHeater.lastCommandApplied = true;
   for (int second = 1; second <= 16; ++second) {
@@ -244,7 +244,7 @@ int main() {
         "heater must learn observed power per heating rate");
 
   AdaptiveHeaterState boostLearningHeater{};
-  adaptive_heater_reset(boostLearningHeater, 0.0f);
+  adaptive_heater_reset(boostLearningHeater, 60.0f);
   adaptive_heater_step(boostLearningHeater, 80.0f, 80.0f, 60.0f, 4.0f, 0);
   boostLearningHeater.lastCommandApplied = true;
   boostLearningHeater.learningBlockedUntilMs = 0;
@@ -286,8 +286,8 @@ int main() {
   // Горизонт предсказания учится по выбегу котла после снятия мощности (01.10.2026).
   AdaptiveHeaterState horizonHeater{};
   adaptive_heater_reset(horizonHeater, 0.0f);
-  check(std::fabs(horizonHeater.predictionHorizonSeconds - 60.0f) < 0.001f,
-        "unlearned horizon must start from sixty seconds");
+  check(std::fabs(horizonHeater.predictionHorizonSeconds - 300.0f) < 0.001f,
+        "unlearned horizon must start from five minutes");
   adaptive_heater_reset(horizonHeater, 200.0f);
   check(std::fabs(horizonHeater.predictionHorizonSeconds - 200.0f) < 0.001f,
         "stored horizon must be restored on reset");

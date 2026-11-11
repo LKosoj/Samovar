@@ -166,12 +166,19 @@ static uint32_t body_temp_capture_deadline = 0;
 // [Ф4] Т тела первого захвата в текущей строке - опора для предела автоподъёма
 // BODY_TEMP_AUTOSET_MAX_RISE. Обнуляется при старте строки и ручной установке Т тела.
 static float body_temp_row_base = 0.0f;
+static float body_temp_pipe_row_base = 0.0f;
 
-// [Ф4] Разрешён ли ещё автоподъём Т тела в этой строке: пар не ушёл выше опоры
-// больше, чем на BODY_TEMP_AUTOSET_MAX_RISE. Без опоры (0) - не разрешён.
+// [Ф4] Разрешён ли ещё автоподъём Т тела в этой строке: ни пар, ни царга не ушли
+// выше своей опоры больше, чем на BODY_TEMP_AUTOSET_MAX_RISE. Без опор - не разрешён.
 inline bool body_temp_autoset_allowed() {
+#ifdef USE_BODY_TEMP_AUTOSET
   return body_temp_row_base > 0.0f &&
-         SteamSensor.avgTemp <= body_temp_row_base + BODY_TEMP_AUTOSET_MAX_RISE;
+         body_temp_pipe_row_base > 0.0f &&
+         SteamSensor.avgTemp <= body_temp_row_base + BODY_TEMP_AUTOSET_MAX_RISE &&
+         PipeSensor.avgTemp <= body_temp_pipe_row_base + BODY_TEMP_AUTOSET_MAX_RISE;
+#else
+  return false;
+#endif
 }
 
 // Сброс накопителя усреднения и замера фона. Оба привязаны к истории: если история
