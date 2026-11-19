@@ -651,6 +651,7 @@
 #define LANG_MAIN_EMERGENCY_BUTTON_TRIGGERED "Arrêt d’urgence ! Entrée du bouton d’urgence déclenchée (bouton ou capteur qui lui est relié)."
 #define LANG_MAIN_ACP_TEMP_LABEL " Température TCA "
 #define LANG_MAIN_PRESSURE_LIMIT_EXCEEDED "Pression limite dépassée !"
+#define LANG_DS_ADDRESS_NOT_FOUND "introuvable lors du scan"
 #define LANG_MAIN_SENSOR_SCAN_REJECTED "Scan des capteurs refusé : processus actif."
 #define LANG_MAIN_UNFINISHED_SESSION_MODE "Session inachevée détectée, mode "
 #define LANG_MAIN_PROGRAM_NUM ", programme n°"

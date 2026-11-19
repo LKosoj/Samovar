@@ -1849,7 +1849,7 @@ String setupKeyProcessor(const String &var) {
     if (var == f.var) return (SamSetup.*f.member == f.expected) ? "selected" : "";
   }
   for (const GetDsAddrField &f : kGetDsAddrFields) {
-    if (var == f.var) return get_DSAddressList(getDSAddress(SamSetup.*f.member));
+    if (var == f.var) return get_DSAddressList(SamSetup.*f.member);
   }
   for (const GetColorField &f : kGetColorFields) {
     if (var == f.var) {
@@ -2112,7 +2112,8 @@ static bool apply_save_ds_addr_arg(
     uint8_t& resetMask) {
   if (!request->hasArg(name)) return true;
   long idx = 0;
-  if (!parse_save_long_arg(request, name, -1, SAMOVAR_DS_ADDRESS_MAX - 1, idx)) return false;
+  if (!parse_save_long_arg(request, name, DS_KEEP_SAVED_ADDRESS, SAMOVAR_DS_ADDRESS_MAX - 1, idx)) return false;
+  if (idx == DS_KEEP_SAVED_ADDRESS) return true;
   DeviceAddress selectedAddress;
   if (idx == -1) {
     set_invalid_ds_address(selectedAddress);

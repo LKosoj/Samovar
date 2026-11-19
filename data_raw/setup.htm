@@ -164,7 +164,7 @@
         }
         ['SteamAddr', 'PipeAddr', 'WaterAddr', 'TankAddr', 'ACPAddr'].forEach(function(id) {
           Array.from(document.getElementById(id).options).forEach(function(option) {
-            if (option.value === '-1') return;
+            if (Number(option.value) < 0) return;
             var address = option.dataset.address || option.textContent;
             option.dataset.address = address;
             var sensor = data.sensors.find(function(item) { return item.address === address; });
@@ -208,11 +208,11 @@
       { name: 'DeltaACPTemp', min: -1000, max: 1000 },
       { name: 'SetACPTemp', min: 0, max: 150 },
       { name: 'ACPDelay', integer: true, min: 0, max: 65535 },
-      { name: 'SteamAddr', integer: true, min: -1, max: 255 },
-      { name: 'PipeAddr', integer: true, min: -1, max: 255 },
-      { name: 'WaterAddr', integer: true, min: -1, max: 255 },
-      { name: 'TankAddr', integer: true, min: -1, max: 255 },
-      { name: 'ACPAddr', integer: true, min: -1, max: 255 },
+      { name: 'SteamAddr', integer: true, min: -2, max: 255 },
+      { name: 'PipeAddr', integer: true, min: -2, max: 255 },
+      { name: 'WaterAddr', integer: true, min: -2, max: 255 },
+      { name: 'TankAddr', integer: true, min: -2, max: 255 },
+      { name: 'ACPAddr', integer: true, min: -2, max: 255 },
       { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
       { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
       { name: 'Kp', min: 0, max: 100000 },

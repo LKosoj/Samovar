@@ -651,6 +651,7 @@
 #define LANG_MAIN_EMERGENCY_BUTTON_TRIGGERED "紧急关机! 紧急按钮输入被触发(按钮或与其相连的传感器)."
 #define LANG_MAIN_ACP_TEMP_LABEL " ACP 温度 "
 #define LANG_MAIN_PRESSURE_LIMIT_EXCEEDED "超过压力上限!"
+#define LANG_DS_ADDRESS_NOT_FOUND "扫描时未找到"
 #define LANG_MAIN_SENSOR_SCAN_REJECTED "传感器扫描被拒绝: 流程正在运行."
 #define LANG_MAIN_UNFINISHED_SESSION_MODE "检测到未结束的会话, 模式 "
 #define LANG_MAIN_PROGRAM_NUM ", 程序 #"

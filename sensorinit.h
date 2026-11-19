@@ -795,16 +795,24 @@ String getDSAddress(DeviceAddress deviceAddress) {
   return dsaddr;
 }
 
-String get_DSAddressList(String Address) {
+constexpr long DS_KEEP_SAVED_ADDRESS = -2;
+
+String get_DSAddressList(DeviceAddress address) {
   DSAddressSnapshot snapshot;
   copy_ds_address_snapshot(snapshot);
   String s = "<option value='-1'>NONE</option>";
-  String dsaddr = "";
+  bool found = false;
   for (uint8_t i = 0; i != snapshot.count; i++) {
-    dsaddr = getDSAddress(snapshot.addr[i]);
     s += "<option value='" + String(i) + "'";
-    if (Address == dsaddr) s = s + " " + "selected";
-    s = s + ">" + dsaddr + "</option>";
+    if (ds_address_equal(address, snapshot.addr[i])) {
+      s += " selected";
+      found = true;
+    }
+    s += ">" + getDSAddress(snapshot.addr[i]) + "</option>";
+  }
+  if (!found && address[0] != 0xFF) {
+    s += "<option value='" + String(DS_KEEP_SAVED_ADDRESS) + "' selected>" +
+         getDSAddress(address) + " — " + TR(DS_ADDRESS_NOT_FOUND, "не найден при сканировании") + "</option>";
   }
   return s;
 }

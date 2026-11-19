@@ -835,6 +835,7 @@ form.mode-form {
 .setup-long-input { max-width: 100%; }
 
 #Main select[name="mode"] { max-width: 100%; box-sizing: border-box; }
+#Temp select { max-width: 100%; box-sizing: border-box; text-overflow: ellipsis; }
 
 .setup-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; max-width: 668px; margin: 0 auto; box-sizing: border-box; gap: 8px; }
 .setup-actions .button, .setup-actions input[type="submit"], .setup-actions input[type="button"] { min-height: 44px; margin: 0; width: auto; min-width: 160px; }

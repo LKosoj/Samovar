@@ -651,6 +651,7 @@
 #define LANG_MAIN_EMERGENCY_BUTTON_TRIGGERED "Emergency shutdown! Emergency button input triggered (button or a sensor connected to it)."
 #define LANG_MAIN_ACP_TEMP_LABEL " ACP temperature "
 #define LANG_MAIN_PRESSURE_LIMIT_EXCEEDED "Pressure limit exceeded!"
+#define LANG_DS_ADDRESS_NOT_FOUND "not found during scan"
 #define LANG_MAIN_SENSOR_SCAN_REJECTED "Sensor scan rejected: process is active."
 #define LANG_MAIN_UNFINISHED_SESSION_MODE "Unfinished session detected, mode "
 #define LANG_MAIN_PROGRAM_NUM ", program #"

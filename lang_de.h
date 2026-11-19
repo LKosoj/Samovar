@@ -651,6 +651,7 @@
 #define LANG_MAIN_EMERGENCY_BUTTON_TRIGGERED "Notabschaltung! Eingang der Notfalltaste ausgelöst (Taste oder daran angeschlossener Sensor)."
 #define LANG_MAIN_ACP_TEMP_LABEL " ADR-Temperatur "
 #define LANG_MAIN_PRESSURE_LIMIT_EXCEEDED "Druckgrenze überschritten!"
+#define LANG_DS_ADDRESS_NOT_FOUND "beim Scan nicht gefunden"
 #define LANG_MAIN_SENSOR_SCAN_REJECTED "Sensorsuche abgelehnt: Prozess aktiv."
 #define LANG_MAIN_UNFINISHED_SESSION_MODE "Unfertige Sitzung erkannt, Modus "
 #define LANG_MAIN_PROGRAM_NUM ", Programm #"

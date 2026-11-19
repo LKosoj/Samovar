@@ -341,7 +341,7 @@ void reset_process_state(void);
 void reset_sensor_counter(void);
 void printAddress(DeviceAddress deviceAddress);
 String getDSAddress(DeviceAddress deviceAddress);
-String get_DSAddressList(String Address);
+String get_DSAddressList(DeviceAddress address);
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
 void get_task_stack_usage();
 void init_pump_pwm(uint8_t pin, int freq);

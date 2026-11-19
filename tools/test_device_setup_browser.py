@@ -17,7 +17,15 @@ ROOT = Path(__file__).resolve().parents[1]
 BROWSER_TEST = r'''async page => {
   const base = __BASE_URL__;
   const errors = [];
+  const saves = [];
   page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/save', async route => {
+    const payload = route.request().postData();
+    saves.push(Object.fromEntries(Array.from(
+      payload.matchAll(/name="([^"]+)"\r\n\r\n([^\r\n]*)/g), match => [match[1], match[2]]
+    )));
+    await route.fulfill({status: 400, body: 'Test response'});
+  });
   let sensorPending = true, sensorFailure = false;
   let temperatures = [21.25, 37.75];
   await page.route('**/sensor-temperatures*', async route => {
@@ -51,6 +59,13 @@ BROWSER_TEST = r'''async page => {
   }
   const initial = await page.locator('#PipeAddr option[value="1"]').textContent();
   if (!initial.includes('37.75')) throw new Error('physical address must show its own temperature');
+  for (const [field, address] of [['TankAddr', '28cc001122334477'], ['ACPAddr', '28dd001122334488']]) {
+    const selected = page.locator('#' + field + ' option:checked');
+    if (await selected.getAttribute('value') !== '-2' ||
+        await selected.textContent() !== address + ' — не найден при сканировании') {
+      throw new Error('temperature refresh must keep the missing address selected with its scan status');
+    }
+  }
   await page.evaluate(() => {
     document.getElementById('SteamAddr').value = '1';
     document.getElementById('Kp').value = '2.75';
@@ -87,6 +102,25 @@ BROWSER_TEST = r'''async page => {
   await page.setViewportSize({width: 390, height: 844});
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
     throw new Error('physical sensor addresses and readings overflow the mobile viewport');
+  }
+  await page.evaluate(() => {
+    const form = document.getElementById('setupform');
+    for (const rule of setupNumericSchema) {
+      const input = form.elements[rule.name];
+      if (input && input.tagName !== 'SELECT') input.value = rule.min ?? (rule.exclusiveMin + 1);
+    }
+    form.elements.Kp.value = '2.75';
+  });
+  const submit = () => page.evaluate(() =>
+    submitSetupForm({preventDefault() {}, currentTarget: document.getElementById('setupform')}));
+  await submit();
+  if (saves[0]?.TankAddr !== '-2' || saves[0]?.ACPAddr !== '-2' || saves[0]?.Kp !== '2.75') {
+    throw new Error('saving another setting must preserve both missing sensor assignments');
+  }
+  await page.locator('#TankAddr').selectOption('-1');
+  await submit();
+  if (saves[1]?.TankAddr !== '-1' || saves[1]?.ACPAddr !== '-2') {
+    throw new Error('explicit NONE must clear only the selected sensor assignment');
   }
   await page.screenshot({path: __ARTIFACT_DIR__ + '/setup-sensors-mobile.png', fullPage: true});
   await page.locator('[onclick*="openTab(event, \'Beer\')"]').click();
@@ -156,6 +190,12 @@ def main():
         original_setup = setup_path.read_text()
         setup = original_setup.replace('<option value="-1" selected>-</option>',
             '<option value="-1">NONE</option><option value="0" selected>28aa001122334455</option><option value="1">28bb001122334466</option>')
+        for field, address in [('TankAddr', '28cc001122334477'), ('ACPAddr', '28dd001122334488')]:
+            start = setup.index('id="' + field + '"')
+            end = setup.index('</select>', start)
+            options = setup[start:end].replace('value="0" selected', 'value="0"')
+            setup = (setup[:start] + options +
+                     f'<option value="-2" selected>{address} — не найден при сканировании</option>' + setup[end:])
         setup_path.write_text(setup)
         handler = functools.partial(QuietHandler, directory=str(site))
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
@@ -170,17 +210,24 @@ def main():
             run_cli(cli, session, ['open', f'--config={config}'], temp, 30)
             run_cli(cli, session, ['run-code', code], temp, 120)
             # A real source mutation must fail on the address-specific reading assertion.
-            mutated = setup.replace('sensor.temperature.toFixed(2)', '(25).toFixed(2)')
-            if mutated == setup:
-                raise AssertionError('physical temperature mutation anchor missing')
-            setup_path.write_text(mutated)
-            try:
-                run_cli(cli, session, ['run-code', code], temp, 120)
-            except RuntimeError as error:
-                if 'physical address must show its own temperature' not in str(error).split('### Ran Playwright code', 1)[0]:
-                    raise
-            else:
-                raise AssertionError('physical temperature UI mutation was not rejected')
+            for original, replacement, expected in [
+                ('sensor.temperature.toFixed(2)', '(25).toFixed(2)', 'physical address must show its own temperature'),
+                ('Number(option.value) < 0', "option.value === '-1'",
+                 'temperature refresh must keep the missing address selected'),
+                ("name: 'TankAddr', integer: true, min: -2", "name: 'TankAddr', integer: true, min: -1",
+                 'saving another setting must preserve both missing sensor assignments'),
+            ]:
+                mutated = setup.replace(original, replacement)
+                if mutated == setup:
+                    raise AssertionError(f'UI mutation anchor missing: {original}')
+                setup_path.write_text(mutated)
+                try:
+                    run_cli(cli, session, ['run-code', code], temp, 120)
+                except RuntimeError as error:
+                    if expected not in str(error).split('### Ran Playwright code', 1)[0]:
+                        raise
+                else:
+                    raise AssertionError(f'UI mutation was not rejected: {original}')
         finally:
             problems = cleanup(cli, session, server, thread)
             if problems:

@@ -140,7 +140,7 @@ if address_list_body:
 
 setup_body = functions.get("String setupKeyProcessor", "")
 if setup_body:
-    if "get_DSAddressList(getDSAddress(SamSetup.*f.member))" not in setup_body:
+    if "get_DSAddressList(SamSetup.*f.member)" not in setup_body:
         errors.append("setupKeyProcessor persisted DS addresses: table-driven lookup not found")
     for var_name, member in (
         ("SteamAddr", "SteamAdress"), ("PipeAddr", "PipeAdress"),
@@ -164,7 +164,7 @@ if apply_save_ds_body:
     for token in ("const DSAddressSnapshot& snapshot", "uint8_t resetBit", "uint8_t& resetMask"):
         require_token("apply_save_ds_addr_arg snapshot signature", web_text, token)
     for token in [
-        "parse_save_long_arg(request, name, -1, SAMOVAR_DS_ADDRESS_MAX - 1, idx)",
+        "parse_save_long_arg(request, name, DS_KEEP_SAVED_ADDRESS, SAMOVAR_DS_ADDRESS_MAX - 1, idx)",
         "DeviceAddress selectedAddress;",
         "set_invalid_ds_address(selectedAddress);",
         "idx >= snapshot.count",

@@ -651,6 +651,7 @@
 #define LANG_MAIN_EMERGENCY_BUTTON_TRIGGERED "¡Apagado de emergencia! Se activó la entrada del botón de emergencia (botón o sensor conectado a él)."
 #define LANG_MAIN_ACP_TEMP_LABEL " Temperatura TCA "
 #define LANG_MAIN_PRESSURE_LIMIT_EXCEEDED "¡Superada la presión límite!"
+#define LANG_DS_ADDRESS_NOT_FOUND "no encontrado en el escaneo"
 #define LANG_MAIN_SENSOR_SCAN_REJECTED "Escaneo de sensores rechazado: proceso activo."
 #define LANG_MAIN_UNFINISHED_SESSION_MODE "Sesión sin terminar detectada, modo "
 #define LANG_MAIN_PROGRAM_NUM ", programa n.º"

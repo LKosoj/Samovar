@@ -4,19 +4,19 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 HARNESS = r'''
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 #include "safety_transition.h"
-#define TR(key, text) text
 #define NOTIFY_MSG 0
 #define WARNING_MSG 1
 #define PWM_START_VALUE 100
@@ -74,7 +74,17 @@ struct SensorsStub {
 } sensors;
 void refresh_ds_address_temperatures() {@READINGS@}
 
-using String = std::string;
+struct String : std::string {
+  using std::string::string;
+  String(long value) : std::string(std::to_string(value)) {}
+};
+@DS_KEEP_SAVED_ADDRESS@
+String getDSAddress(DeviceAddress address) {
+  char text[17];
+  for (uint8_t i = 0; i < 8; ++i) std::snprintf(text + i * 2, 3, "%02x", unsigned(address[i]));
+  return text;
+}
+@ADDRESS_FUNCTIONS@
 @COMMAND_ENUM@
 void apply_test_command(SamovarCommands command) {
   switch (command) { @DISPATCH@ default: break; }
@@ -88,6 +98,20 @@ struct AsyncWebServerRequest {
   Param* getParam(const char*, bool) { return &param; }
   void send(int code, const char*, const char*) { status = code; }
 };
+struct SaveRequest {
+  long value;
+  bool hasArg(const char*) const { return true; }
+};
+bool parse_save_long_arg(SaveRequest* request, const char*, long min, long max, long& value) {
+  value = request->value;
+  return value >= min && value <= max;
+}
+constexpr int NUMERIC_PARSE_OUT_OF_RANGE = 1;
+void send_save_parse_error(SaveRequest*, const char*, int) {}
+static bool apply_save_ds_addr_arg(SaveRequest* request, const char* name,
+    const DSAddressSnapshot& snapshot, uint8_t (&target)[8], uint8_t resetBit, uint8_t& resetMask) {
+  @SAVE_ADDRESS@
+}
 static bool pending_stop_self_test_flag = false, queueAvailable = true, queueIdle = true;
 static SamovarCommands queuedCommand = SAMOVAR_NONE;
 bool queue_pending_flag(bool& flag) { if (!queueAvailable) return false; flag = true; return true; }
@@ -123,6 +147,29 @@ int main() {
   refresh_ds_address_temperatures();
   check(dsTemperatureSnapshot.temperature[0] == -127 && dsTemperatureSnapshot.addresses.addr[0][0] == 1,
         "a changed physical registry must not reuse a previous address or reading");
+
+  DeviceAddress savedAddresses[] = {{0x28, 0xab}, {0x28, 0xcd}};
+  for (auto& saved : savedAddresses) {
+    const std::string address = getDSAddress(saved);
+    const auto missing = get_DSAddressList(saved);
+    check(missing.find("value='-2' selected>" + address) != std::string::npos,
+          "missing address must remain selected under its own address");
+    uint8_t resetMask = 0;
+    SaveRequest request{-2};
+    check(apply_save_ds_addr_arg(&request, "TankAddr", registry, saved, 1, resetMask) &&
+          getDSAddress(saved) == address && resetMask == 0,
+          "saving with a missing address must preserve the stored address and readings");
+    CopyDSAddress(saved, registry.addr[1]);
+    const auto found = get_DSAddressList(saved);
+    check(found.find("value='1' selected>" + address) != std::string::npos &&
+          found.find("value='-2'") == std::string::npos,
+          "rescanning the returned address must select the detected option");
+    request.value = -1;
+    check(apply_save_ds_addr_arg(&request, "TankAddr", registry, saved, 1, resetMask) &&
+          getDSAddress(saved) == "ffffffffffffffff" && resetMask == 1 &&
+          get_DSAddressList(saved).find(" selected") == std::string::npos,
+          "explicit NONE must clear the assignment and reset readings");
+  }
 
   for (uint8_t device = SELF_TEST_VALVE; device <= SELF_TEST_CAPACITY; device++) {
     calls.clear(); nowMs = 0;
@@ -236,8 +283,18 @@ def main():
         signature = selftest[selftest.index(token):selftest.index('{', selftest.index(token))]
         actual += signature + '{' + extract_function_body(selftest, token) + '}\n'
     readings = extract_function_body(sensor, 'inline void refresh_ds_address_temperatures')
-    source = HARNESS.replace('@SELFTEST@', actual).replace('@READINGS@', readings)
+    source = (I18N_INCLUDE + "\n" + HARNESS).replace('@SELFTEST@', actual).replace('@READINGS@', readings)
+    address_functions = []
+    for token in ['inline void CopyDSAddress', 'inline void set_invalid_ds_address',
+                  'inline bool ds_address_equal', 'String get_DSAddressList']:
+        start = sensor.index(token)
+        signature = sensor[start:sensor.index('{', start)]
+        address_functions.append(signature + '{' + extract_function_body(sensor, token) + '}')
+    source = source.replace('@ADDRESS_FUNCTIONS@', '\n'.join(address_functions))
+    start = sensor.index('constexpr long DS_KEEP_SAVED_ADDRESS')
+    source = source.replace('@DS_KEEP_SAVED_ADDRESS@', sensor[start:sensor.index(';', start) + 1])
     web = (ROOT / 'WebServer.ino').read_text()
+    source = source.replace('@SAVE_ADDRESS@', extract_function_body(web, 'static bool apply_save_ds_addr_arg'))
     source = source.replace('@WEB_COMMAND@', extract_braced_block_after(web, 'server.on("/device-test", HTTP_POST')[0])
     header = (ROOT / 'Samovar.h').read_text()
     start = header.index('enum SamovarCommands')
@@ -254,6 +311,11 @@ def main():
         ('loop dispatch', source.replace('case SAMOVAR_TEST_WATER_PUMP:\n        start_self_test(SELF_TEST_WATER_PUMP);',
                                          'case SAMOVAR_TEST_WATER_PUMP:\n        start_self_test(SELF_TEST_VALVE);'),
          'queued command must start the selected physical device in loop'),
+        ('missing option', source.replace("' selected>\" +\n", "'>\" +\n"),
+         'missing address must remain selected under its own address'),
+        ('preserve missing address', source.replace('if (idx == DS_KEEP_SAVED_ADDRESS) return true;',
+         'if (idx == DS_KEEP_SAVED_ADDRESS) idx = -1;'),
+         'saving with a missing address must preserve the stored address and readings'),
     ]
     with tempfile.TemporaryDirectory(prefix='samovar-device-setup-') as temp:
         cpp, exe = Path(temp) / 'test.cpp', Path(temp) / 'test'
@@ -267,7 +329,7 @@ def main():
                 if result.returncode: raise AssertionError(result.stderr)
             elif result.returncode == 0 or expected not in result.stderr:
                 raise AssertionError(f'{label}: mutation missed meaningful assertion: {result.stderr}')
-    print('device setup smoke passed (including three mutations)')
+    print('device setup smoke passed (including five mutations)')
 
 
 if __name__ == '__main__':
