@@ -154,6 +154,8 @@ BLYNK_WRITE(V4) {
 static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   bool first = true;
   out.print('{');
+  jsonFieldRaw(out, first, "rb", s.rebootBootId);
+  jsonFieldBool(out, first, "ra", s.rebootAllowed);
   jsonFieldRaw(out, first, "st", s.statusInt);
   jsonFieldRaw(out, first, "pn", s.programIndex + 1);
   jsonFieldRaw(out, first, "cap", s.currentCapacity);
@@ -889,6 +891,15 @@ BLYNK_WRITE(V37) {
     report_blynk_i2c_v37_refusal(address, queueError == OPERATION_ERROR_LOCK_BUSY
         ? "BUSY" : operation_error_code(queueError));
   }
+}
+
+// V39 принимает идентификатор текущей загрузки и передаёт запрос в loop().
+BLYNK_WRITE(V39) {
+  uint32_t bootId = 0;
+  if (!parse_bounded_uint32(param.asStr(), 0, UINT32_MAX, bootId).ok() ||
+      bootId != runtimePairState.bootId) return;
+  PendingCommandLockGuard guard;
+  if (guard) pending_blynk_reboot = true;
 }
 
 // V33: «отправь все пины заново». Приложение шлёт при запуске и сразу после синхронизации

@@ -303,7 +303,7 @@ inline bool reset_lua_message_cursor(TickType_t timeout = pdMS_TO_TICKS(50)) {
   return true;
 }
 
-constexpr size_t LUA_STATUS_V27_ESCAPED_MAX = 361;
+constexpr size_t LUA_STATUS_V27_ESCAPED_MAX = 328;
 
 inline bool lua_status_v27_fits(const String& status) {
   return json_escaped_length(status.c_str(), status.length()) <= LUA_STATUS_V27_ESCAPED_MAX;

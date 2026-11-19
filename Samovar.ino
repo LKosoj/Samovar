@@ -3877,7 +3877,35 @@ static void tick_mqtt() {
 }
 #endif
 
+#ifdef SAMOVAR_USE_BLYNK
+static bool pending_blynk_reboot = false;
+
+static bool blynk_reboot_allowed() {
+  return !PowerOn && !heater_state && !valve_status && !is_self_test
+#ifdef USE_LUA
+      && !lua_heater_channel_raised()
+#endif
+#ifdef USE_WATER_PUMP
+      && water_pump_speed == 0
+#endif
+#ifdef USE_WATER_VALVE
+      && digitalRead(WATER_PUMP_PIN) != USE_WATER_VALVE
+#endif
+      && !mode_switch_in_progress();
+}
+#endif
+
 static void tick_process_recovery_commands() {
+#ifdef SAMOVAR_USE_BLYNK
+  {
+    PendingCommandLockGuard guard;
+    if (guard && pending_blynk_reboot) {
+      pending_blynk_reboot = false;
+      guard.release();
+      if (blynk_reboot_allowed()) ESP.restart();
+    }
+  }
+#endif
   {
     bool hasPendingResetWifi = false;
     PendingCommandLockGuard guard;
@@ -5206,6 +5234,8 @@ static bool sendRuntimeEventResponse(
 }
 
 struct AjaxTelemetrySnapshot {
+  uint32_t rebootBootId;
+  bool rebootAllowed;
   String crt;
   String uptime;
   String programType;
@@ -5344,6 +5374,10 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   } else {
     snapshot.heaterAlarmReason = "";
   }
+#ifdef SAMOVAR_USE_BLYNK
+  snapshot.rebootBootId = runtimePairState.bootId;
+  snapshot.rebootAllowed = blynk_reboot_allowed();
+#endif
   snapshot.sessionId = currentSessionId;
   snapshot.bmeTemp = bme_temp;
   snapshot.bmePressure = bme_pressure;

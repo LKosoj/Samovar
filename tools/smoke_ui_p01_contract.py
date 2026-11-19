@@ -9,7 +9,7 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 V27_JSON_MAX = 1017
-EXPECTED_LUA_STATUS_ESCAPED_MAX = 361
+EXPECTED_LUA_STATUS_ESCAPED_MAX = 328
 
 
 def read(name: str) -> str:
@@ -134,6 +134,7 @@ static void writeUiStateJson(Print& out, bool& first, const UiStateDescriptor& v
 }}
 
 struct AjaxTelemetrySnapshot {{
+  uint32_t rebootBootId; bool rebootAllowed; uint8_t currentCapacity;
   int16_t statusInt; uint8_t programIndex; String programType; bool hasAlcohol; float alcohol; float steamAlcohol;
   bool hasTimePrediction; bool rowPredictionAvailable; bool processPredictionAvailable; int timeRemaining;
   int rowPredictedTotalTime; int processRemainingTime; int totalTime; uint8_t detectorStatus; float detectorTrend;
@@ -154,6 +155,7 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {{
 int main() {{
   AjaxTelemetrySnapshot s{{}};
   s.statusInt = -32768; s.programIndex = 254; s.programType = "L";
+  s.rebootBootId = 4294967295U; s.rebootAllowed = false; s.currentCapacity = 255;
   s.detectorStatus = 255; s.detectorTrend = -99999.0f; s.detectorIdle = DETECTOR_IDLE_STEAM_WAIT;
   s.detectorWaitLeftSec = 65535; s.detectorWaitSpan = -99999.0f; s.useDetector = true; s.useAutoSpeed = true;
   s.boilingDetected = true; s.boilingEvidence = 255; s.boilingPrecisionSensorConfigured = true; s.bkWaterAuto = true;
@@ -172,14 +174,14 @@ int main() {{
   if (emptyLength >= {V27_JSON_MAX} || cap != {EXPECTED_LUA_STATUS_ESCAPED_MAX}) {{
     std::cerr << "empty=" << emptyLength << " cap=" << cap << "\\n"; return 1;
   }}
-  std::string atLimit(50, '<');
+  std::string atLimit(44, '<');
   atLimit += std::string(10, '"');
   atLimit += std::string(10, '\\n');
   for (uint8_t index = 0; index < 10; index++) {{
     atLimit.push_back(static_cast<char>(0xD0));
     atLimit.push_back(static_cast<char>(0x96));
   }}
-  atLimit.push_back('x');
+  atLimit.append(4, 'x');
   const std::string overLimit = atLimit + "x";
   const char escapedSample[] = {{'<', '"', '\\n', static_cast<char>(0xD0), static_cast<char>(0x96)}};
   if (json_escaped_length(atLimit.c_str(), atLimit.size()) != {EXPECTED_LUA_STATUS_ESCAPED_MAX} ||

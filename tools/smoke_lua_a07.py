@@ -593,7 +593,7 @@ bool set_lua_status_value(const String& value) {
   return luaStatusSetResult;
 }
 
-bool lua_status_v27_fits(const String& value) { return value.length() <= 361; }
+bool lua_status_v27_fits(const String& value) { return value.length() <= 328; }
 
 int vTaskDelayCalls = 0;
 TickType_t lastDelayTicks = 0;
@@ -1495,7 +1495,7 @@ void test_string_callbacks(lua_State* state) {
   check_strings_destroyed("Lua_status busy retained Arduino String");
 
   const int luaStatusCallsBeforeLong = luaStatusSetCalls;
-  run_chunk(state, "setLuaStatus('" + std::string(362, 'x') + "')", false);
+  run_chunk(state, "setLuaStatus('" + std::string(329, 'x') + "')", false);
   check_last_error_contains("Lua_status too long for V27", "long Lua_status error text");
   check(luaStatusSetCalls == luaStatusCallsBeforeLong,
         "long Lua_status reached mutation boundary");
