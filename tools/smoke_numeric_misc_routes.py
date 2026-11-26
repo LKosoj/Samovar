@@ -61,12 +61,13 @@ for token in ["parse_control_vless(", 'get_request_param(request, "vless")']:
     if token in program:
         errors.append(f"web_program still reads vless: {token}")
 require_ordered_tokens(
-    "profile owner applies program metadata after race checks",
+    "profile owner saves NVS then applies program metadata after race checks",
     process + commit,
     [
         "PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE",
         "program_update_session_active()",
         "commit_profile_operation();",
+        "save_profile_nvs(",
         "runtime_state_lock(pdMS_TO_TICKS(500))",
         "program_commit(active_profile_operation.program);",
         "SessionDescription = escapedDescription;",

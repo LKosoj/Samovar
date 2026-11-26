@@ -25,7 +25,7 @@ tools/smoke_data_log_ownership.py) и проверяется require_ordered_tok
 import sys
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens
+from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -52,6 +52,9 @@ if body:
             'request->send(400, "text/plain", "Log file not found: " + fn);',
             "AsyncWebServerResponse *response = request->beginResponse(SPIFFS,",
             "log_file_unlock(true);",
+            "if (response == nullptr) {",
+            'request->send(404, "text/plain", "Log file not found: " + fn);',
+            "request->send(response);",
         ],
         errors,
     )
@@ -64,6 +67,50 @@ if body:
             "get_data_log: пропала честная оговорка про асинхронную отдачу файла после "
             "beginResponse() - лок защищает только момент открытия, не всю передачу"
         )
+
+try:
+    static_body = extract_function_body(source, "static void send_cached_static_file(")
+except ValueError as exc:
+    errors.append(f"WebServer.ino: {exc}")
+    static_body = ""
+
+if static_body:
+    require_ordered_tokens(
+        "send_cached_static_file: null-response guard before addHeader",
+        static_body,
+        [
+            "AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path",
+            "if (response == nullptr) {",
+            'request->send(404, "text/plain", String("Missing ") + path);',
+            'response->addHeader("Cache-Control", cacheControl);',
+            "request->send(response);",
+        ],
+        errors,
+    )
+
+editor_source = (ROOT / "SPIFFSEditor.h").read_text(encoding="utf-8")
+try:
+    editor_body, _ = extract_braced_block_after(editor_source, "request->send(304);")
+except ValueError as exc:
+    errors.append(f"SPIFFSEditor.h: {exc}")
+    editor_body = ""
+
+if editor_body:
+    require_ordered_tokens(
+        "SPIFFSEditor::handleRequest: null-response guards for edit.htm.gz and edit.htm",
+        editor_body,
+        [
+            'request->beginResponse(SPIFFS, "/edit.htm.gz", "text/html");',
+            "if (response == nullptr) {",
+            'request->send(404, "text/plain", "Not Found");',
+            'response->addHeader("Content-Encoding", "gzip");',
+            'request->beginResponse(SPIFFS, "/edit.htm", "text/html");',
+            "if (response == nullptr) {",
+            'request->send(404, "text/plain", "Not Found");',
+            'response->addHeader("Cache-Control", "max-age=5000");',
+        ],
+        errors,
+    )
 
 if errors:
     print("log download lock smoke failed:")

@@ -99,6 +99,28 @@ int main() {
   check(stopCalls == 2 && !i2cStepperWebLeaseActive[3], "successful finish must clear its lease");
   i2c_stepper_web_lease_touch(11);
   check(!i2cStepperWebLeaseActive[0], "invalid address must not lease another slot");
+
+  // Preemption case: async_tcp refreshes leaseMs to a timestamp slightly ahead of now.
+  i2cSteppers[1].status.status = I2CSTEPPER_V3_STATUS_CALIBRATION;
+  fakeMillis = 5000;
+  i2c_stepper_web_lease_begin(2);
+  i2cStepperWebLeaseMs[1] = 5005;  // future timestamp relative to now
+  tick_i2c_stepper_web_lease();
+  check(stopCalls == 2 && i2cStepperWebLeaseActive[1],
+        "preemption with future leaseMs > now must not spuriously expire lease");
+  i2c_stepper_web_lease_clear(2);
+
+  // 32-bit millis() wraparound case.
+  fakeMillis = 0xFFFFFF00UL;
+  i2c_stepper_web_lease_begin(2);
+  fakeMillis = 0x00001670UL;  // elapsed = 0x1770 = 6000 ms (exact deadline)
+  tick_i2c_stepper_web_lease();
+  check(stopCalls == 2 && i2cStepperWebLeaseActive[1],
+        "wraparound at exact 6000 ms must not expire lease");
+  fakeMillis = 0x00001671UL;  // elapsed = 6001 ms
+  tick_i2c_stepper_web_lease();
+  check(stopCalls == 3 && !i2cStepperWebLeaseActive[1],
+        "wraparound past 6000 ms must expire and stop leased device");
   return failures ? 1 : 0;
 }
 '''

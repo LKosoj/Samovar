@@ -280,7 +280,7 @@ enum ActuatorCommandResult : uint8_t {
 };
 ActuatorCommandResult SetSpeed(float) { return ACTUATOR_COMMAND_APPLIED; }
 
-enum SamovarCommands { SAMOVAR_NONE, SAMOVAR_POWER };
+enum SamovarCommands { SAMOVAR_NONE, SAMOVAR_POWER, SAMOVAR_POWER_OFF };
 bool queue_samovar_command(SamovarCommands) { return true; }
 void request_emergency_stop(const String&) {}
 

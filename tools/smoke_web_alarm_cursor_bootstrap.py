@@ -44,7 +44,15 @@ function freshEnv() {
   const storage = {};
   const rootClasses = new Set();
   function makeElement() {
-    return { style: {}, innerHTML: "", scrollTop: 0, scrollHeight: 0 };
+    return {
+      style: {}, innerHTML: "", scrollTop: 0, scrollHeight: 0, open: false,
+      querySelector: function () { return { disabled: false }; },
+      showModal: function () { this.open = true; },
+      close: function () { this.open = false; },
+      setAttribute: function () {},
+      getAttribute: function () { return null; },
+      removeAttribute: function () {},
+    };
   }
   // Пред-созданы как в реальном DOM: реальные .htm уже содержат #messagesBox/#messages
   // до загрузки app.js, поэтому byId() их только находит, а не лениво создаёт.
@@ -67,7 +75,10 @@ function freshEnv() {
   };
 
   const env = {
-    window: {},
+    window: {
+      addEventListener: function () {},
+      matchMedia: function () { return { matches: false }; },
+    },
     document: {
       getElementById: function (id) {
         if (!elements[id]) elements[id] = makeElement();
@@ -80,9 +91,12 @@ function freshEnv() {
           contains: function (name) { return rootClasses.has(name); },
         },
       },
-      body: { inert: false },
+      body: { inert: false, getAttribute: function () { return null; } },
+      querySelector: function () { return null; },
+      querySelectorAll: function () { return []; },
       activeElement: null,
       addEventListener: function () {},
+      removeEventListener: function () {},
     },
     localStorage: {
       getItem: function (key) {
@@ -406,6 +420,114 @@ async function scenarioConnectionLossSoundsSiren() {
     "restored connection must re-enable the page");
 }
 
+async function scenarioMessagesDomStableOnUnchangedPoll() {
+  const fetchImpl = makeFetch([
+    { heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 },
+    { events: [{ messageSequence: 1, Msg: "Первое сообщение", msglvl: 2 }],
+      heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 1 },
+    { heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 1 },
+  ]);
+  const { app, elements } = loadApp(fetchImpl);
+  let innerHtmlWrites = 0;
+  let scrollTopWrites = 0;
+  let rawHtml = elements.messages.innerHTML;
+  let rawScrollTop = elements.messagesBox.scrollTop;
+  Object.defineProperty(elements.messages, "innerHTML", {
+    get: function () { return rawHtml; },
+    set: function (value) { innerHtmlWrites += 1; rawHtml = value; },
+    configurable: true,
+  });
+  Object.defineProperty(elements.messagesBox, "scrollTop", {
+    get: function () { return rawScrollTop; },
+    set: function (value) { scrollTopWrites += 1; rawScrollTop = value; },
+    configurable: true,
+  });
+  await app.pollAjax(noopRender);
+  await app.pollAjax(noopRender);
+  const writesAfterEvent = innerHtmlWrites;
+  const scrollAfterEvent = scrollTopWrites;
+  check(writesAfterEvent > 0, "new message must render into #messages");
+  await app.pollAjax(noopRender);
+  check(innerHtmlWrites === writesAfterEvent,
+    "unchanged poll must not rebuild #messages innerHTML (before=" + writesAfterEvent + ", after=" + innerHtmlWrites + ")");
+  check(scrollTopWrites === scrollAfterEvent,
+    "unchanged poll must not reset #messagesBox scrollTop (before=" + scrollAfterEvent + ", after=" + scrollTopWrites + ")");
+}
+
+async function scenarioMessagesCappedAtLimit() {
+  const { app, elements } = loadApp(makeFetch([
+    { heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 },
+  ]));
+  for (let i = 1; i <= 210; i++) {
+    app.notify("msg-" + i + "-end", 2);
+  }
+  check(elements.messages.innerHTML.indexOf("msg-1-end") === -1 &&
+        elements.messages.innerHTML.indexOf("msg-10-end") === -1,
+    "oldest messages beyond MESSAGE_LIMIT=200 must be dropped");
+  check(elements.messages.innerHTML.indexOf("msg-11-end") !== -1 &&
+        elements.messages.innerHTML.indexOf("msg-210-end") !== -1,
+    "latest 200 messages must be retained");
+}
+
+async function scenarioLocalStorageThrowSafety() {
+  const fresh = freshEnv();
+  fresh.env.fetch = makeFetch([]);
+  fresh.env.document.documentElement.setAttribute = function () {};
+  fresh.env.document.documentElement.removeAttribute = function () {};
+  fresh.env.document.documentElement.getAttribute = function () { return "light"; };
+  fresh.env.localStorage = {
+    getItem: function () { throw new Error("SecurityError"); },
+    setItem: function () { throw new Error("QuotaExceededError"); },
+  };
+  const context = vm.createContext(fresh.env);
+  vm.runInContext(appSource, context, { filename: "app.js" });
+  const app = context.window.SamovarApp;
+  let threw = false;
+  try {
+    app.initTheme({ implicitSystemTheme: false });
+    app.toggleTheme();
+    app.addMessage("storage throw safe", 2);
+    app.clearHistory();
+  } catch (err) {
+    threw = true;
+  }
+  check(!threw, "initTheme/toggleTheme/saveHistory/clearHistory must not throw when localStorage throws");
+}
+
+async function scenarioStartPollLoopRecoversFromThrow() {
+  const fresh = freshEnv();
+  const timers = [];
+  let stopped = false;
+  fresh.env.fetch = makeFetch([]);
+  fresh.env.setTimeout = function (fn, ms) {
+    if (stopped) return 0;
+    const id = setTimeout(fn, ms);
+    timers.push(id);
+    return id;
+  };
+  const context = vm.createContext(fresh.env);
+  vm.runInContext(appSource, context, { filename: "app.js" });
+  const app = context.window.SamovarApp;
+  let calls = 0;
+  let secondRun;
+  const done = new Promise(function (resolve) { secondRun = resolve; });
+  app.startPollLoop(async function () {
+    calls += 1;
+    if (calls === 1) throw new Error("transient poll error");
+    if (calls === 2) secondRun();
+  }, 15);
+  try {
+    await Promise.race([
+      done,
+      new Promise(function (_, reject) { setTimeout(function () { reject(new Error("pollLoop stalled")); }, 500); }),
+    ]);
+  } finally {
+    stopped = true;
+    timers.forEach(function (id) { clearTimeout(id); });
+  }
+  check(calls >= 2, "startPollLoop must reschedule after callback throws");
+}
+
 async function main() {
   await scenarioBootstrapSkipsBacklogText();
   await scenarioBootstrapDoesNotSoundStaleAlarm();
@@ -419,12 +541,16 @@ async function main() {
   await scenarioSiteEventTagIsHidden();
   await scenarioEspRebootDoesNotWarnSequenceGap();
   await scenarioConnectionLossSoundsSiren();
+  await scenarioMessagesDomStableOnUnchangedPoll();
+  await scenarioMessagesCappedAtLimit();
+  await scenarioLocalStorageThrowSafety();
+  await scenarioStartPollLoopRecoversFromThrow();
 
   if (failures.length) {
     for (const message of failures) console.error("FAIL: " + message);
     process.exit(1);
   }
-  console.log("web alarm cursor bootstrap smoke passed (12 scenarios)");
+  console.log("web alarm cursor bootstrap smoke passed (16 scenarios)");
 }
 
 main().catch(function (err) {

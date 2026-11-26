@@ -130,6 +130,21 @@ static String format_float(float v, int d) {
 static bool log_file_lock(TickType_t timeout = pdMS_TO_TICKS(50)) { (void)timeout; return true; }
 static void log_file_unlock(bool locked) { (void)locked; }
 
+static int runtimeLockBalance = 0;
+static int runtimeLockCalls = 0;
+static int runtimeUnlockCalls = 0;
+static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
+  (void)timeout;
+  runtimeLockCalls++;
+  runtimeLockBalance++;
+  return true;
+}
+static void runtime_state_unlock(bool locked) {
+  if (!locked) return;
+  runtimeUnlockCalls++;
+  runtimeLockBalance--;
+}
+
 static void vTaskDelay(int ticks) { (void)ticks; }
 
 struct SerialStub {
@@ -286,6 +301,8 @@ int main(int argc, char** argv) {
     std::cerr << "unknown scenario: " << scenario << "\n";
     return 2;
   }
+  check(runtimeLockCalls > 0 && runtimeLockCalls == runtimeUnlockCalls && runtimeLockBalance == 0,
+        "runtime_state_lock/unlock must be balanced across append_data() calls");
   if (failures != 0) return 1;
   std::cout << "scenario " << scenario << " passed\n";
   return 0;

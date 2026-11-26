@@ -331,24 +331,39 @@ QueuedRequester.prototype = {
         p += encodeURIComponent(key) + "=" + encodeURIComponent(req.params[key]);
       }
     }
-    this.xmlhttp = new XMLHttpRequest();
-    this.xmlhttp.onreadystatechange = function () {
-      if (that.xmlhttp.readyState != 4) return;
+    var xhr = new XMLHttpRequest();
+    this.xmlhttp = xhr;
+    xhr.timeout = 15000;
+    var settled = false;
+    function finish() {
+      if (settled) return;
+      settled = true;
       ge("loader").style.display = "none";
-      var callbackResult = req.callback(that.xmlhttp.status,
-        req.responseType ? that.xmlhttp.response : that.xmlhttp.responseText);
-      Promise.resolve(callbackResult).then(function () {
+      var callbackResult;
+      try {
+        callbackResult = req.callback(xhr.status,
+          req.responseType ? xhr.response : xhr.responseText);
+      } catch (err) {
+        callbackResult = Promise.reject(err);
+      }
+      Promise.resolve(callbackResult).catch(function () {}).finally(function () {
         if (that.queue.length === 0) that.running = false;
         if (that.running) that._request(that.queue.shift());
       });
+    }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState != 4) return;
+      finish();
     };
+    xhr.ontimeout = finish;
+    xhr.onerror = finish;
     if (req.method === "GET") {
-      this.xmlhttp.open(req.method, req.url + p, true);
-      if (req.responseType) this.xmlhttp.responseType = req.responseType;
-      this.xmlhttp.send();
+      xhr.open(req.method, req.url + p, true);
+      if (req.responseType) xhr.responseType = req.responseType;
+      xhr.send();
     } else {
-      this.xmlhttp.open(req.method, req.url, true);
-      this.xmlhttp.send(p);
+      xhr.open(req.method, req.url, true);
+      xhr.send(p);
     }
   },
   add: function (method, url, params, callback, responseType) {

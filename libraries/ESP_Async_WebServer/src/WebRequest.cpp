@@ -200,13 +200,12 @@ void AsyncWebServerRequest::_onData(void *buf, size_t len) {
         if (_parsedLength == 0) {
           if (_contentType.startsWith(T_app_xform_urlencoded)) {
             _isPlainPost = true;
-          } else if (_contentType == T_text_plain && isParamChar(((char *)buf)[0])) {
+          } else if (_contentType == T_text_plain && len > 0 && isParamChar(((char *)buf)[0])) {
             size_t i = 0;
-            char ch;
-            do {
-              ch = ((char *)buf)[i];
-            } while (i++ < len && isParamChar(ch));
-            if (i < len && ((char *)buf)[i - 1] == '=') {
+            while (i < len && isParamChar(((char *)buf)[i])) {
+              ++i;
+            }
+            if (i < len && ((char *)buf)[i] == '=') {
               _isPlainPost = true;
             }
           }
@@ -241,7 +240,12 @@ void AsyncWebServerRequest::_onPoll() {
   std::shared_ptr<AsyncWebServerRequest> self = _this;  // Ensure we stay in scope over the function
   // os_printf("p\n");
   if (_response && _client && _client->canSend()) {
-    _response->_ack(this, 0, 0);
+    if (!_response->_finished()) {
+      _response->_ack(this, 0, 0);
+    }
+    if (_response->_finished()) {
+      _client->close();
+    }
   }
 }
 
@@ -1261,11 +1265,14 @@ AsyncWebServerResponse *AsyncWebServerRequest::beginResponse_P(int code, const S
 void AsyncWebServerRequest::send(AsyncWebServerResponse *response) {
   // request is already sent on the wire ?
   if (_sent) {
+    if (response != _response) {
+      delete response;
+    }
     return;
   }
 
   // if we already had a response, delete it and replace it with the new one
-  if (_response) {
+  if (_response && _response != response) {
     delete _response;
   }
   _response = response;

@@ -392,8 +392,12 @@ size_t AsyncAbstractResponse::write_send_buffs(AsyncWebServerRequest *request, s
     if (_writtenHeadersLength < _assembled_headers.length()) {
 // we were not able to fit all headers in current buff, send this part here and return later for the rest
 #if ASYNCWEBSERVER_USE_CHUNK_INFLIGHT
-      _in_flight += pcb_written;
-      --_in_flight_credit;  // take a credit
+      if (pcb_written > 0) {
+        _in_flight += pcb_written;
+        if (_in_flight_credit > 0) {
+          --_in_flight_credit;  // take a credit
+        }
+      }
 #endif
       if (!request->client()->send()) {
         // something is wrong, what should we do here?
@@ -499,8 +503,12 @@ size_t AsyncAbstractResponse::write_send_buffs(AsyncWebServerRequest *request, s
     request->client()->send();
     _writtenLength += payloadlen;
 #if ASYNCWEBSERVER_USE_CHUNK_INFLIGHT
-    _in_flight += payloadlen;
-    --_in_flight_credit;  // take a credit
+    if (payloadlen > 0) {
+      _in_flight += payloadlen;
+      if (_in_flight_credit > 0) {
+        --_in_flight_credit;  // take a credit
+      }
+    }
 #endif
     if (_send_buffer_len == 0) {
       // buffer empty, we can release mem, otherwise need to keep it till next run (should not happen under normal conditions)

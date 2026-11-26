@@ -40,6 +40,11 @@ AsyncWiFiManagerParameter::AsyncWiFiManagerParameter(const char *id,
   init(id, placeholder, defaultValue, length, custom);
 }
 
+AsyncWiFiManagerParameter::~AsyncWiFiManagerParameter()
+{
+  delete[] _value;
+}
+
 void AsyncWiFiManagerParameter::init(const char *id,
                                      const char *placeholder,
                                      const char *defaultValue,
@@ -51,7 +56,7 @@ void AsyncWiFiManagerParameter::init(const char *id,
   _length = length;
   _value = new char[length + 1];
 
-  for (unsigned int i = 0; i < length; i++)
+  for (unsigned int i = 0; i <= length; i++)
   {
     _value[i] = 0;
   }
@@ -94,9 +99,20 @@ AsyncWiFiManager::AsyncWiFiManager(AsyncWebServer *server,
 {
 #endif
   wifiSSIDs = NULL;
+  wifiSSIDCount = 0;
   wifiSSIDscan = true;
   _modeless = false;
   shouldscan = true;
+}
+
+AsyncWiFiManager::~AsyncWiFiManager()
+{
+#if !defined(ESP8266)
+  std::lock_guard<std::mutex> lock(_wifiSSIDsMutex);
+#endif
+  delete[] wifiSSIDs;
+  wifiSSIDs = NULL;
+  wifiSSIDCount = 0;
 }
 
 void AsyncWiFiManager::addParameter(AsyncWiFiManagerParameter *p)
@@ -111,6 +127,7 @@ void AsyncWiFiManager::setupConfigPortal()
 {
   // dnsServer.reset(new DNSServer());
   // server.reset(new ESP8266WebServer(80));
+  server->end();
   server->reset();
 
   DEBUG_WM(F(""));
@@ -292,9 +309,12 @@ boolean AsyncWiFiManager::autoConnect(char const *apName,
 String AsyncWiFiManager::networkListAsString()
 {
   String pager;
-   if (wifiSSIDs == NULL || wifiSSIDCount == 0) {
-     return pager;
-   }
+#if !defined(ESP8266)
+  std::lock_guard<std::mutex> lock(_wifiSSIDsMutex);
+#endif
+  if (wifiSSIDs == NULL || wifiSSIDCount == 0) {
+    return pager;
+  }
   // display networks in page
   for (int i = 0; i < wifiSSIDCount; i++)
   {
@@ -382,37 +402,27 @@ void AsyncWiFiManager::copySSIDInfo(wifi_ssid_count_t n)
 
   if (n > 0)
   {
-    // WE SHOULD MOVE THIS IN PLACE ATOMICALLY
-    if (wifiSSIDs)
-    {
-      delete[] wifiSSIDs;
-    }
-    wifiSSIDs = new WiFiResult[n];
-    wifiSSIDCount = n;
+    WiFiResult *newSSIDs = new WiFiResult[n];
 
-    if (n > 0)
-    {
-      shouldscan = false;
-    }
     for (wifi_ssid_count_t i = 0; i < n; i++)
     {
-      wifiSSIDs[i].duplicate = false;
+      newSSIDs[i].duplicate = false;
 
 #if defined(ESP8266)
       WiFi.getNetworkInfo(i,
-                          wifiSSIDs[i].SSID,
-                          wifiSSIDs[i].encryptionType,
-                          wifiSSIDs[i].RSSI,
-                          wifiSSIDs[i].BSSID,
-                          wifiSSIDs[i].channel,
-                          wifiSSIDs[i].isHidden);
+                          newSSIDs[i].SSID,
+                          newSSIDs[i].encryptionType,
+                          newSSIDs[i].RSSI,
+                          newSSIDs[i].BSSID,
+                          newSSIDs[i].channel,
+                          newSSIDs[i].isHidden);
 #else
       WiFi.getNetworkInfo(i,
-                          wifiSSIDs[i].SSID,
-                          wifiSSIDs[i].encryptionType,
-                          wifiSSIDs[i].RSSI,
-                          wifiSSIDs[i].BSSID,
-                          wifiSSIDs[i].channel);
+                          newSSIDs[i].SSID,
+                          newSSIDs[i].encryptionType,
+                          newSSIDs[i].RSSI,
+                          newSSIDs[i].BSSID,
+                          newSSIDs[i].channel);
 #endif
     }
 
@@ -423,9 +433,9 @@ void AsyncWiFiManager::copySSIDInfo(wifi_ssid_count_t n)
     {
       for (int j = i + 1; j < n; j++)
       {
-        if (wifiSSIDs[j].RSSI > wifiSSIDs[i].RSSI)
+        if (newSSIDs[j].RSSI > newSSIDs[i].RSSI)
         {
-          std::swap(wifiSSIDs[i], wifiSSIDs[j]);
+          std::swap(newSSIDs[i], newSSIDs[j]);
         }
       }
     }
@@ -436,21 +446,33 @@ void AsyncWiFiManager::copySSIDInfo(wifi_ssid_count_t n)
       String cssid;
       for (int i = 0; i < n; i++)
       {
-        if (wifiSSIDs[i].duplicate == true)
+        if (newSSIDs[i].duplicate == true)
         {
           continue;
         }
-        cssid = wifiSSIDs[i].SSID;
+        cssid = newSSIDs[i].SSID;
         for (int j = i + 1; j < n; j++)
         {
-          if (cssid == wifiSSIDs[j].SSID)
+          if (cssid == newSSIDs[j].SSID)
           {
-            DEBUG_WM("DUP AP: " + wifiSSIDs[j].SSID);
-            wifiSSIDs[j].duplicate = true; // set dup aps to NULL
+            DEBUG_WM("DUP AP: " + newSSIDs[j].SSID);
+            newSSIDs[j].duplicate = true; // set dup aps to NULL
           }
         }
       }
     }
+
+    WiFiResult *oldSSIDs = NULL;
+    {
+#if !defined(ESP8266)
+      std::lock_guard<std::mutex> lock(_wifiSSIDsMutex);
+#endif
+      oldSSIDs = wifiSSIDs;
+      wifiSSIDs = newSSIDs;
+      wifiSSIDCount = n;
+    }
+    delete[] oldSSIDs;
+    shouldscan = false;
   }
 }
 
@@ -683,8 +705,10 @@ boolean AsyncWiFiManager::startConfigPortal(char const *apName, char const *apPa
     yield();
   }
 
-  server->reset();
   dnsServer->stop();
+  server->end();
+  delay(100);
+  server->reset();
 
   return WiFi.status() == WL_CONNECTED;
 }
@@ -949,7 +973,8 @@ void AsyncWiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan)
     wifiSSIDscan = false;
 
     DEBUG_WM(F("Scan done"));
-    if (wifiSSIDCount == 0)
+    String pager = networkListAsString();
+    if (pager.length() == 0)
     {
       DEBUG_WM(F("No networks found"));
       page += F("No networks found. Refresh to scan again");
@@ -957,7 +982,6 @@ void AsyncWiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan)
     else
     {
       // display networks in page
-      String pager = networkListAsString();
       page += pager;
       page += "<br/>";
     }

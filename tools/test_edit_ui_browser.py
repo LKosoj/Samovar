@@ -412,6 +412,70 @@ BROWSER_TEST = r'''async page => {
   await page.evaluate(() => window.samovarAce.loadUrl("/cleanup.lua", true));
   await page.waitForFunction(() => document.getElementById("editor-filename").value === "/cleanup.lua");
 
+  // QueuedRequester: исключение в callback и сетевой сбой/таймаут не должны клинить очередь.
+  const queueRecovery = await page.evaluate(() => new Promise(resolve => {
+    const seen = [];
+    requests.add("GET", "/edit", { edit: "/throw-sync.lua" }, function () {
+      seen.push("throw-sync");
+      throw new Error("sync callback error");
+    });
+    requests.add("GET", "/edit", { edit: "/reject-async.lua" }, function () {
+      seen.push("reject-async");
+      return Promise.reject(new Error("async callback error"));
+    });
+    requests.add("GET", "/edit", { edit: "/after-throw.lua" }, function (status, body) {
+      seen.push("after-throw:" + status + ":" + body);
+      setTimeout(() => resolve({
+        seen: seen,
+        running: requests.running,
+        loader: ge("loader").style.display
+      }), 0);
+    });
+  }));
+  if (queueRecovery.seen.length !== 3 ||
+      queueRecovery.seen[2] !== "after-throw:200:contents-of-/after-throw.lua" ||
+      queueRecovery.running !== false || queueRecovery.loader !== "none") {
+    throw new Error("QueuedRequester did not recover from callback throw/rejection: " + JSON.stringify(queueRecovery));
+  }
+  const timeoutRecovery = await page.evaluate(() => new Promise(resolve => {
+    const OrigXhr = window.XMLHttpRequest;
+    let first = true;
+    window.XMLHttpRequest = function () {
+      const xhr = new OrigXhr();
+      if (first) {
+        first = false;
+        const origSend = xhr.send.bind(xhr);
+        xhr.send = function () {
+          setTimeout(() => {
+            if (typeof xhr.ontimeout === "function") xhr.ontimeout();
+          }, 10);
+        };
+        xhr._origSend = origSend;
+      }
+      return xhr;
+    };
+    const seen = [];
+    requests.add("GET", "/edit", { edit: "/timeout.lua" }, function (status) {
+      seen.push("timeout:" + status);
+    });
+    requests.add("GET", "/edit", { edit: "/after-timeout.lua" }, function (status, body) {
+      seen.push("after-timeout:" + status + ":" + body);
+      window.XMLHttpRequest = OrigXhr;
+      setTimeout(() => resolve({
+        seen: seen,
+        running: requests.running,
+        loader: ge("loader").style.display
+      }), 0);
+    });
+  }));
+  if (timeoutRecovery.seen.length !== 2 ||
+      timeoutRecovery.seen[0] !== "timeout:0" ||
+      timeoutRecovery.seen[1] !== "after-timeout:200:contents-of-/after-timeout.lua" ||
+      timeoutRecovery.running !== false || timeoutRecovery.loader !== "none") {
+    throw new Error("QueuedRequester did not recover from XHR timeout: " + JSON.stringify(timeoutRecovery));
+  }
+  passed.push("QueuedRequester throw and timeout recovery");
+
   if (errors.length > 0) throw new Error(errors.join("\n"));
   return { passed: passed };
 }'''

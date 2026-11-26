@@ -554,6 +554,14 @@ static void _tcp_dns_found(const char *name, ip_addr_t *ipaddr, void *arg) {
 #include "lwip/priv/tcpip_priv.h"
 
 typedef struct {
+  ip_addr_t remote_ip;
+  ip_addr_t local_ip;
+  uint16_t remote_port;
+  uint16_t local_port;
+  bool valid;
+} tcp_endpoints_t;
+
+typedef struct {
   struct tcpip_api_call_data call;
   tcp_pcb **pcb;
   int8_t err;
@@ -566,15 +574,37 @@ typedef struct {
     } write;
     size_t received;
     struct {
+      AsyncClient *client;
       ip_addr_t *addr;
       uint16_t port;
+      uint8_t ip_type;
       tcp_connected_fn cb;
     } connect;
     struct {
+      const char *host;
+      ip_addr_t *addr;
+      dns_found_callback cb;
+      void *arg;
+    } dns;
+    struct {
       ip_addr_t *addr;
       uint16_t port;
-    } bind;
-    uint8_t backlog;
+      uint8_t ip_type;
+      uint8_t backlog;
+      AsyncServer *server;
+    } server_begin;
+    struct {
+      bool enable;
+      bool disabled;
+    } nodelay;
+    struct {
+      uint32_t ms;
+      uint8_t cnt;
+    } keepalive;
+    uint8_t state;
+    size_t space;
+    uint16_t mss;
+    tcp_endpoints_t endpoints;
   };
 } tcp_api_call_t;
 
@@ -697,7 +727,7 @@ static err_t _tcp_abort_api(struct tcpip_api_call_data *api_call_msg) {
 }
 
 static esp_err_t _tcp_abort(tcp_pcb **pcb, AsyncClient *client) {
-  if (!pcb || !*pcb) {
+  if (!pcb) {
     return ERR_CONN;
   }
   tcp_api_call_t msg;
@@ -709,65 +739,318 @@ static esp_err_t _tcp_abort(tcp_pcb **pcb, AsyncClient *client) {
 
 static err_t _tcp_connect_api(struct tcpip_api_call_data *api_call_msg) {
   tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
-  msg->err = tcp_connect(*msg->pcb, msg->connect.addr, msg->connect.port, msg->connect.cb);
+  if (*msg->pcb != nullptr) {
+    msg->err = ERR_ALREADY;
+    return msg->err;
+  }
+  tcp_pcb *pcb = tcp_new_ip_type(msg->connect.ip_type);
+  if (!pcb) {
+    msg->err = ERR_MEM;
+    return msg->err;
+  }
+  _bind_tcp_callbacks(pcb, msg->connect.client);
+  *msg->pcb = pcb;
+  msg->err = tcp_connect(pcb, msg->connect.addr, msg->connect.port, msg->connect.cb);
+  if (msg->err != ERR_OK) {
+    _reset_tcp_callbacks(pcb, msg->connect.client);
+    tcp_abort(pcb);
+    *msg->pcb = nullptr;
+  }
   return msg->err;
 }
 
-static esp_err_t _tcp_connect(tcp_pcb *pcb, ip_addr_t *addr, uint16_t port, tcp_connected_fn cb) {
-  if (!pcb) {
-    return ESP_FAIL;
+static esp_err_t _tcp_connect(tcp_pcb **pcb, AsyncClient *client, uint8_t ip_type, ip_addr_t *addr, uint16_t port, tcp_connected_fn cb) {
+  if (!pcb || !client || !addr) {
+    return ERR_ARG;
   }
   tcp_api_call_t msg;
-  msg.pcb = &pcb;  // cannot be invalidated by LwIP at this point
+  msg.pcb = pcb;
+  msg.connect.client = client;
   msg.connect.addr = addr;
   msg.connect.port = port;
+  msg.connect.ip_type = ip_type;
   msg.connect.cb = cb;
   tcpip_api_call(_tcp_connect_api, (struct tcpip_api_call_data *)&msg);
   return msg.err;
 }
 
-static err_t _tcp_bind_api(struct tcpip_api_call_data *api_call_msg) {
+static err_t _dns_gethostbyname_api(struct tcpip_api_call_data *api_call_msg) {
   tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
-  tcp_pcb *pcb = *msg->pcb;
-  msg->err = tcp_bind(pcb, msg->bind.addr, msg->bind.port);
-  if (msg->err != ERR_OK) {
-    // Close the pcb on behalf of the server without an extra round-trip through the LwIP lock
-    if (tcp_close(pcb) != ERR_OK) {
-      tcp_abort(pcb);
-    }
-    *msg->pcb = nullptr;  // PCB is now owned by LwIP
-  }
+  msg->err = dns_gethostbyname(msg->dns.host, msg->dns.addr, msg->dns.cb, msg->dns.arg);
   return msg->err;
 }
 
-static esp_err_t _tcp_bind(tcp_pcb **pcb, ip_addr_t *addr, uint16_t port) {
-  if (!pcb || !*pcb) {
-    return ESP_FAIL;
-  }
+static err_t _dns_gethostbyname(const char *host, ip_addr_t *addr, dns_found_callback cb, void *arg) {
   tcp_api_call_t msg;
-  msg.pcb = pcb;
-  msg.bind.addr = addr;
-  msg.bind.port = port;
-  tcpip_api_call(_tcp_bind_api, (struct tcpip_api_call_data *)&msg);
+  msg.pcb = nullptr;
+  msg.dns.host = host;
+  msg.dns.addr = addr;
+  msg.dns.cb = cb;
+  msg.dns.arg = arg;
+  tcpip_api_call(_dns_gethostbyname_api, (struct tcpip_api_call_data *)&msg);
   return msg.err;
 }
 
-static err_t _tcp_listen_api(struct tcpip_api_call_data *api_call_msg) {
+static err_t _tcp_server_begin_api(struct tcpip_api_call_data *api_call_msg) {
   tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
-  msg->err = 0;
-  *msg->pcb = tcp_listen_with_backlog(*msg->pcb, msg->backlog);
+  if (*msg->pcb != nullptr) {
+    msg->err = ERR_ALREADY;
+    return msg->err;
+  }
+  tcp_pcb *pcb = tcp_new_ip_type(msg->server_begin.ip_type);
+  if (!pcb) {
+    msg->err = ERR_MEM;
+    return msg->err;
+  }
+  msg->err = tcp_bind(pcb, msg->server_begin.addr, msg->server_begin.port);
+  if (msg->err != ERR_OK) {
+    if (tcp_close(pcb) != ERR_OK) {
+      tcp_abort(pcb);
+    }
+    *msg->pcb = nullptr;
+    return msg->err;
+  }
+  tcp_pcb *listen_pcb = tcp_listen_with_backlog(pcb, msg->server_begin.backlog);
+  if (!listen_pcb) {
+    if (tcp_close(pcb) != ERR_OK) {
+      tcp_abort(pcb);
+    }
+    *msg->pcb = nullptr;
+    msg->err = ERR_MEM;
+    return msg->err;
+  }
+  tcp_arg(listen_pcb, (void *)msg->server_begin.server);
+  tcp_accept(listen_pcb, &AsyncTCP_detail::tcp_accept);
+  *msg->pcb = listen_pcb;
+  msg->err = ERR_OK;
   return msg->err;
 }
 
-static tcp_pcb *_tcp_listen_with_backlog(tcp_pcb *pcb, uint8_t backlog) {
-  if (!pcb) {
-    return NULL;
+static esp_err_t _tcp_server_begin(tcp_pcb **pcb, uint8_t ip_type, ip_addr_t *addr, uint16_t port, uint8_t backlog, AsyncServer *server) {
+  if (!pcb || !addr || !server) {
+    return ERR_ARG;
   }
   tcp_api_call_t msg;
-  msg.pcb = &pcb;
-  msg.backlog = backlog ? backlog : 0xFF;
-  tcpip_api_call(_tcp_listen_api, (struct tcpip_api_call_data *)&msg);
-  return pcb;
+  msg.pcb = pcb;
+  msg.server_begin.addr = addr;
+  msg.server_begin.port = port;
+  msg.server_begin.ip_type = ip_type;
+  msg.server_begin.backlog = backlog ? backlog : 0xFF;
+  msg.server_begin.server = server;
+  tcpip_api_call(_tcp_server_begin_api, (struct tcpip_api_call_data *)&msg);
+  return msg.err;
+}
+
+static err_t _tcp_server_end_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->err = ERR_OK;
+  if (*msg->pcb) {
+    tcp_pcb *pcb = *msg->pcb;
+    tcp_arg(pcb, NULL);
+    tcp_accept(pcb, NULL);
+    if (tcp_close(pcb) != ERR_OK) {
+      tcp_abort(pcb);
+    }
+    *msg->pcb = nullptr;
+  }
+  return msg->err;
+}
+
+static esp_err_t _tcp_server_end(tcp_pcb **pcb) {
+  if (!pcb || !*pcb) {
+    return ERR_OK;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = pcb;
+  tcpip_api_call(_tcp_server_end_api, (struct tcpip_api_call_data *)&msg);
+  return msg.err;
+}
+
+static void _apply_nodelay_lwip(tcp_pcb *pcb, bool nodelay) {
+  if (!pcb) {
+    return;
+  }
+  if (nodelay) {
+    tcp_nagle_disable(pcb);
+  } else {
+    tcp_nagle_enable(pcb);
+  }
+}
+
+static err_t _tcp_set_nodelay_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->err = ERR_CONN;
+  if (*msg->pcb) {
+    _apply_nodelay_lwip(*msg->pcb, msg->nodelay.enable);
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static esp_err_t _tcp_set_nodelay(tcp_pcb **pcb, bool nodelay) {
+  if (!pcb || !*pcb) {
+    return ERR_CONN;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = pcb;
+  msg.nodelay.enable = nodelay;
+  msg.nodelay.disabled = false;
+  tcpip_api_call(_tcp_set_nodelay_api, (struct tcpip_api_call_data *)&msg);
+  return msg.err;
+}
+
+static err_t _tcp_get_nodelay_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->nodelay.disabled = false;
+  msg->err = ERR_CONN;
+  if (*msg->pcb) {
+    msg->nodelay.disabled = tcp_nagle_disabled(*msg->pcb);
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static bool _tcp_get_nodelay(tcp_pcb **pcb) {
+  if (!pcb || !*pcb) {
+    return false;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = pcb;
+  msg.nodelay.enable = false;
+  msg.nodelay.disabled = false;
+  tcpip_api_call(_tcp_get_nodelay_api, (struct tcpip_api_call_data *)&msg);
+  return msg.nodelay.disabled;
+}
+
+static err_t _tcp_set_keepalive_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->err = ERR_CONN;
+  if (*msg->pcb) {
+    tcp_pcb *pcb = *msg->pcb;
+    if (msg->keepalive.ms != 0) {
+      pcb->so_options |= SOF_KEEPALIVE;
+      pcb->keep_idle = msg->keepalive.ms;
+      pcb->keep_intvl = msg->keepalive.ms;
+      pcb->keep_cnt = msg->keepalive.cnt;
+    } else {
+      pcb->so_options &= ~SOF_KEEPALIVE;
+    }
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static esp_err_t _tcp_set_keepalive(tcp_pcb **pcb, uint32_t ms, uint8_t cnt) {
+  if (!pcb || !*pcb) {
+    return ERR_CONN;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = pcb;
+  msg.keepalive.ms = ms;
+  msg.keepalive.cnt = cnt;
+  tcpip_api_call(_tcp_set_keepalive_api, (struct tcpip_api_call_data *)&msg);
+  return msg.err;
+}
+
+static err_t _tcp_get_state_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->state = CLOSED;
+  msg->err = ERR_CONN;
+  if (*msg->pcb) {
+    msg->state = (*msg->pcb)->state;
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static uint8_t _tcp_get_state(tcp_pcb *const *pcb) {
+  if (!pcb || !*pcb) {
+    return CLOSED;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = const_cast<tcp_pcb **>(pcb);
+  msg.state = CLOSED;
+  tcpip_api_call(_tcp_get_state_api, (struct tcpip_api_call_data *)&msg);
+  return msg.state;
+}
+
+static err_t _tcp_space_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->space = 0;
+  msg->err = ERR_CONN;
+  if (*msg->pcb && (*msg->pcb)->state == ESTABLISHED) {
+    msg->space = tcp_sndbuf(*msg->pcb);
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static size_t _tcp_space(tcp_pcb *const *pcb) {
+  if (!pcb || !*pcb) {
+    return 0;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = const_cast<tcp_pcb **>(pcb);
+  msg.space = 0;
+  tcpip_api_call(_tcp_space_api, (struct tcpip_api_call_data *)&msg);
+  return msg.space;
+}
+
+static err_t _tcp_mss_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  msg->mss = 0;
+  msg->err = ERR_CONN;
+  if (*msg->pcb) {
+    msg->mss = tcp_mss(*msg->pcb);
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static uint16_t _tcp_mss(tcp_pcb *const *pcb) {
+  if (!pcb || !*pcb) {
+    return 0;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = const_cast<tcp_pcb **>(pcb);
+  msg.mss = 0;
+  tcpip_api_call(_tcp_mss_api, (struct tcpip_api_call_data *)&msg);
+  return msg.mss;
+}
+
+static err_t _tcp_get_endpoints_api(struct tcpip_api_call_data *api_call_msg) {
+  tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
+  memset(&msg->endpoints, 0, sizeof(msg->endpoints));
+  msg->err = ERR_CONN;
+  if (*msg->pcb) {
+    tcp_pcb *pcb = *msg->pcb;
+    msg->endpoints.remote_ip = pcb->remote_ip;
+    msg->endpoints.local_ip = pcb->local_ip;
+    msg->endpoints.remote_port = pcb->remote_port;
+    msg->endpoints.local_port = pcb->local_port;
+    msg->endpoints.valid = true;
+    msg->err = ERR_OK;
+  }
+  return msg->err;
+}
+
+static bool _tcp_get_endpoints(tcp_pcb *const *pcb, tcp_endpoints_t *out) {
+  if (!out) {
+    return false;
+  }
+  memset(out, 0, sizeof(*out));
+  if (!pcb || !*pcb) {
+    return false;
+  }
+  tcp_api_call_t msg;
+  msg.pcb = const_cast<tcp_pcb **>(pcb);
+  memset(&msg.endpoints, 0, sizeof(msg.endpoints));
+  tcpip_api_call(_tcp_get_endpoints_api, (struct tcpip_api_call_data *)&msg);
+  if (!msg.endpoints.valid) {
+    return false;
+  }
+  *out = msg.endpoints;
+  return true;
 }
 
 /*
@@ -867,7 +1150,7 @@ void AsyncClient::onPoll(AcConnectHandler cb, void *arg) {
 
 bool AsyncClient::connect(ip_addr_t addr, uint16_t port) {
   if (_pcb) {
-    async_tcp_log_d("already connected, state %d", _pcb->state);
+    async_tcp_log_d("already connected");
     return false;
   }
   if (!_start_async_task()) {
@@ -879,23 +1162,17 @@ bool AsyncClient::connect(ip_addr_t addr, uint16_t port) {
     return false;
   }
 
-  tcp_pcb *pcb;
-  {
-    tcp_core_guard tcg;
 #if LWIP_IPV4 && LWIP_IPV6
-    pcb = tcp_new_ip_type(addr.type);
+  const uint8_t ip_type = addr.type;
 #else
-    pcb = tcp_new_ip_type(IPADDR_TYPE_V4);
+  const uint8_t ip_type = IPADDR_TYPE_V4;
 #endif
-    if (!pcb) {
-      async_tcp_log_e("pcb == NULL");
-      return false;
-    }
-    _bind_tcp_callbacks(pcb, this);
+  esp_err_t err = _tcp_connect(&_pcb, this, ip_type, &addr, port, (tcp_connected_fn)&_tcp_connected);
+  if (err != ERR_OK) {
+    async_tcp_log_e("connect failed: %d", err);
+    return false;
   }
-
-  esp_err_t err = _tcp_connect(pcb, &addr, port, (tcp_connected_fn)&_tcp_connected);
-  return err == ESP_OK;
+  return true;
 }
 
 #ifdef ARDUINO
@@ -939,10 +1216,8 @@ bool AsyncClient::connect(const char *host, uint16_t port) {
   }
 
   err_t err;
-  {
-    tcp_core_guard tcg;
-    err = dns_gethostbyname(host, &addr, (dns_found_callback)&_tcp_dns_found, this);
-  }
+  _connect_port = port;
+  err = _dns_gethostbyname(host, &addr, (dns_found_callback)&_tcp_dns_found, this);
 
   if (err == ERR_OK) {
 #if ESP_IDF_VERSION_MAJOR < 5
@@ -958,7 +1233,6 @@ bool AsyncClient::connect(const char *host, uint16_t port) {
     return connect(addr, port);
 #endif
   } else if (err == ERR_INPROGRESS) {
-    _connect_port = port;
     return true;
   }
   async_tcp_log_d("error: %d", err);
@@ -985,10 +1259,7 @@ int8_t AsyncClient::abort() {
 }
 
 size_t AsyncClient::space() const {
-  if ((_pcb != NULL) && (_pcb->state == ESTABLISHED)) {
-    return tcp_sndbuf(_pcb);
-  }
-  return 0;
+  return _tcp_space(&_pcb);
 }
 
 size_t AsyncClient::add(const char *data, size_t size, uint8_t apiflags) {
@@ -1202,13 +1473,8 @@ void AsyncClient::_dns_found(ip_addr_t *ipaddr) {
  * */
 
 bool AsyncClient::free() {
-  if (!_pcb) {
-    return true;
-  }
-  if (_pcb->state == CLOSED || _pcb->state > ESTABLISHED) {
-    return true;
-  }
-  return false;
+  uint8_t s = state();
+  return s == CLOSED || s > ESTABLISHED;
 }
 
 size_t AsyncClient::write(const char *data, size_t size, uint8_t apiflags) {
@@ -1239,54 +1505,44 @@ void AsyncClient::setNoDelay(bool nodelay) const {
   if (!_pcb) {
     return;
   }
-  if (nodelay) {
-    tcp_nagle_disable(_pcb);
-  } else {
-    tcp_nagle_enable(_pcb);
-  }
+  _tcp_set_nodelay(const_cast<tcp_pcb **>(&_pcb), nodelay);
 }
 
 bool AsyncClient::getNoDelay() {
   if (!_pcb) {
     return false;
   }
-  return tcp_nagle_disabled(_pcb);
+  return _tcp_get_nodelay(&_pcb);
 }
 
 void AsyncClient::setKeepAlive(uint32_t ms, uint8_t cnt) {
-  if (ms != 0) {
-    _pcb->so_options |= SOF_KEEPALIVE;  // Turn on TCP Keepalive for the given pcb
-    // Set the time between keepalive messages in milli-seconds
-    _pcb->keep_idle = ms;
-    _pcb->keep_intvl = ms;
-    _pcb->keep_cnt = cnt;  // The number of unanswered probes required to force closure of the socket
-  } else {
-    _pcb->so_options &= ~SOF_KEEPALIVE;  // Turn off TCP Keepalive for the given pcb
+  if (!_pcb) {
+    return;
   }
+  _tcp_set_keepalive(&_pcb, ms, cnt);
 }
 
 uint16_t AsyncClient::getMss() const {
-  if (!_pcb) {
-    return 0;
-  }
-  return tcp_mss(_pcb);
+  return _tcp_mss(&_pcb);
 }
 
 uint32_t AsyncClient::getRemoteAddress() const {
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return 0;
   }
 #if LWIP_IPV4 && LWIP_IPV6
-  return _pcb->remote_ip.u_addr.ip4.addr;
+  return ep.remote_ip.u_addr.ip4.addr;
 #else
-  return _pcb->remote_ip.addr;
+  return ep.remote_ip.addr;
 #endif
 }
 
 #if LWIP_IPV6
 ip6_addr_t AsyncClient::getRemoteAddress6() const {
-  if (_pcb && _pcb->remote_ip.type == IPADDR_TYPE_V6) {
-    return _pcb->remote_ip.u_addr.ip6;
+  tcp_endpoints_t ep;
+  if (_tcp_get_endpoints(&_pcb, &ep) && ep.remote_ip.type == IPADDR_TYPE_V6) {
+    return ep.remote_ip.u_addr.ip6;
   } else {
     ip6_addr_t nulladdr;
     ip6_addr_set_zero(&nulladdr);
@@ -1295,8 +1551,9 @@ ip6_addr_t AsyncClient::getRemoteAddress6() const {
 }
 
 ip6_addr_t AsyncClient::getLocalAddress6() const {
-  if (_pcb && _pcb->local_ip.type == IPADDR_TYPE_V6) {
-    return _pcb->local_ip.u_addr.ip6;
+  tcp_endpoints_t ep;
+  if (_tcp_get_endpoints(&_pcb, &ep) && ep.local_ip.type == IPADDR_TYPE_V6) {
+    return ep.local_ip.u_addr.ip6;
   } else {
     ip6_addr_t nulladdr;
     ip6_addr_set_zero(&nulladdr);
@@ -1314,20 +1571,22 @@ IPv6Address AsyncClient::localIP6() const {
 }
 #else
 IPAddress AsyncClient::remoteIP6() const {
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return IPAddress(IPType::IPv6);
   }
   IPAddress ip;
-  ip.from_ip_addr_t(&(_pcb->remote_ip));
+  ip.from_ip_addr_t(&ep.remote_ip);
   return ip;
 }
 
 IPAddress AsyncClient::localIP6() const {
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return IPAddress(IPType::IPv6);
   }
   IPAddress ip;
-  ip.from_ip_addr_t(&(_pcb->local_ip));
+  ip.from_ip_addr_t(&ep.local_ip);
   return ip;
 }
 #endif
@@ -1335,38 +1594,42 @@ IPAddress AsyncClient::localIP6() const {
 #endif
 
 uint16_t AsyncClient::getRemotePort() const {
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return 0;
   }
-  return _pcb->remote_port;
+  return ep.remote_port;
 }
 
 uint32_t AsyncClient::getLocalAddress() const {
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return 0;
   }
 #if LWIP_IPV4 && LWIP_IPV6
-  return _pcb->local_ip.u_addr.ip4.addr;
+  return ep.local_ip.u_addr.ip4.addr;
 #else
-  return _pcb->local_ip.addr;
+  return ep.local_ip.addr;
 #endif
 }
 
 uint16_t AsyncClient::getLocalPort() const {
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return 0;
   }
-  return _pcb->local_port;
+  return ep.local_port;
 }
 
 ip4_addr_t AsyncClient::getRemoteAddress4() const {
+  tcp_endpoints_t ep;
 #if LWIP_IPV4 && LWIP_IPV6
-  if (_pcb && _pcb->remote_ip.type == IPADDR_TYPE_V4) {
-    return _pcb->remote_ip.u_addr.ip4;
+  if (_tcp_get_endpoints(&_pcb, &ep) && ep.remote_ip.type == IPADDR_TYPE_V4) {
+    return ep.remote_ip.u_addr.ip4;
   }
 #else
-  if (_pcb) {
-    return _pcb->remote_ip;
+  if (_tcp_get_endpoints(&_pcb, &ep)) {
+    return ep.remote_ip;
   }
 #endif
   else {
@@ -1377,13 +1640,14 @@ ip4_addr_t AsyncClient::getRemoteAddress4() const {
 }
 
 ip4_addr_t AsyncClient::getLocalAddress4() const {
+  tcp_endpoints_t ep;
 #if LWIP_IPV4 && LWIP_IPV6
-  if (_pcb && _pcb->local_ip.type == IPADDR_TYPE_V4) {
-    return _pcb->local_ip.u_addr.ip4;
+  if (_tcp_get_endpoints(&_pcb, &ep) && ep.local_ip.type == IPADDR_TYPE_V4) {
+    return ep.local_ip.u_addr.ip4;
   }
 #else
-  if (_pcb) {
-    return _pcb->local_ip;
+  if (_tcp_get_endpoints(&_pcb, &ep)) {
+    return ep.local_ip;
   }
 #endif
   else {
@@ -1398,11 +1662,12 @@ IPAddress AsyncClient::remoteIP() const {
 #if ESP_IDF_VERSION_MAJOR < 5
   return IPAddress(getRemoteAddress());
 #else
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return IPAddress();
   }
   IPAddress ip;
-  ip.from_ip_addr_t(&(_pcb->remote_ip));
+  ip.from_ip_addr_t(&ep.remote_ip);
   return ip;
 #endif
 }
@@ -1411,56 +1676,43 @@ IPAddress AsyncClient::localIP() const {
 #if ESP_IDF_VERSION_MAJOR < 5
   return IPAddress(getLocalAddress());
 #else
-  if (!_pcb) {
+  tcp_endpoints_t ep;
+  if (!_tcp_get_endpoints(&_pcb, &ep)) {
     return IPAddress();
   }
   IPAddress ip;
-  ip.from_ip_addr_t(&(_pcb->local_ip));
+  ip.from_ip_addr_t(&ep.local_ip);
   return ip;
 #endif
 }
 #endif
 
 uint8_t AsyncClient::state() const {
-  if (!_pcb) {
-    return 0;
-  }
-  return _pcb->state;
+  return _tcp_get_state(&_pcb);
 }
 
 bool AsyncClient::connected() const {
-  if (!_pcb) {
-    return false;
-  }
-  return _pcb->state == ESTABLISHED;
+  return state() == ESTABLISHED;
 }
 
 bool AsyncClient::connecting() const {
-  if (!_pcb) {
-    return false;
-  }
-  return _pcb->state > CLOSED && _pcb->state < ESTABLISHED;
+  uint8_t s = state();
+  return s > CLOSED && s < ESTABLISHED;
 }
 
 bool AsyncClient::disconnecting() const {
-  if (!_pcb) {
-    return false;
-  }
-  return _pcb->state > ESTABLISHED && _pcb->state < TIME_WAIT;
+  uint8_t s = state();
+  return s > ESTABLISHED && s < TIME_WAIT;
 }
 
 bool AsyncClient::disconnected() const {
-  if (!_pcb) {
-    return true;
-  }
-  return _pcb->state == CLOSED || _pcb->state == TIME_WAIT;
+  uint8_t s = state();
+  return s == CLOSED || s == TIME_WAIT;
 }
 
 bool AsyncClient::freeable() const {
-  if (!_pcb) {
-    return true;
-  }
-  return _pcb->state == CLOSED || _pcb->state > ESTABLISHED;
+  uint8_t s = state();
+  return s == CLOSED || s > ESTABLISHED;
 }
 
 bool AsyncClient::canSend() const {
@@ -1565,48 +1817,23 @@ void AsyncServer::begin() {
     async_tcp_log_e("failed to start task");
     return;
   }
-  int8_t err;
-  {
-    tcp_core_guard tcg;
+
 #if LWIP_IPV4 && LWIP_IPV6
-    _pcb = tcp_new_ip_type(_addr.type);
+  const uint8_t ip_type = _addr.type;
 #else
-    _pcb = tcp_new_ip_type(IPADDR_TYPE_ANY);
+  const uint8_t ip_type = IPADDR_TYPE_ANY;
 #endif
-  }
-  if (!_pcb) {
-    async_tcp_log_e("_pcb == NULL");
-    return;
-  }
-
-  err = _tcp_bind(&_pcb, &_addr, _port);
-
-  if (err != ERR_OK) {
-    // pcb was closed by _tcp_bind
-    async_tcp_log_e("bind error: %d", err);
-    return;
-  }
-
   static uint8_t backlog = 5;
-  _pcb = _tcp_listen_with_backlog(_pcb, backlog);
-  if (!_pcb) {
-    async_tcp_log_e("listen_pcb == NULL");
+  esp_err_t err = _tcp_server_begin(&_pcb, ip_type, &_addr, _port, backlog, this);
+  if (err != ERR_OK) {
+    async_tcp_log_e("server begin error: %d", err);
     return;
   }
-  tcp_core_guard tcg;
-  tcp_arg(_pcb, (void *)this);
-  tcp_accept(_pcb, &AsyncTCP_detail::tcp_accept);
 }
 
 void AsyncServer::end() {
   if (_pcb) {
-    tcp_core_guard tcg;
-    tcp_arg(_pcb, NULL);
-    tcp_accept(_pcb, NULL);
-    if (tcp_close(_pcb) != ERR_OK) {
-      tcp_abort(_pcb);
-    }
-    _pcb = NULL;
+    _tcp_server_end(&_pcb);
   }
 }
 
@@ -1620,7 +1847,7 @@ int8_t AsyncTCP_detail::tcp_accept(void *arg, tcp_pcb *pcb, int8_t err) {
   if (server->_connect_cb) {
     AsyncClient *c = new (std::nothrow) AsyncClient(pcb);
     if (c && c->pcb()) {
-      c->setNoDelay(server->_noDelay);
+      _apply_nodelay_lwip(pcb, server->_noDelay);
 
       lwip_tcp_event_packet_t *e = new (std::nothrow) lwip_tcp_event_packet_t{LWIP_TCP_ACCEPT, c};
       if (e) {
@@ -1653,7 +1880,7 @@ int8_t AsyncTCP_detail::tcp_accept(void *arg, tcp_pcb *pcb, int8_t err) {
     async_tcp_log_e("_accept failed: no onConnect callback");
   }
   tcp_abort(pcb);
-  return ERR_OK;
+  return ERR_ABRT;
 }
 
 int8_t AsyncServer::_accepted(AsyncClient *client) {
@@ -1672,8 +1899,5 @@ bool AsyncServer::getNoDelay() const {
 }
 
 uint8_t AsyncServer::status() const {
-  if (!_pcb) {
-    return 0;
-  }
-  return _pcb->state;
+  return _tcp_get_state(&_pcb);
 }

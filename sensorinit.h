@@ -669,7 +669,7 @@ void reset_process_state(void) {
   d_s_temp_finish = 0;
   wetting_autostart = false;
 #ifdef COLUMN_WETTING
-  wetting_failed = false;  // [L-36fix] сброс флага при стопе — новый запуск может смачивать заново
+  column_wetting_reset();  // [L-36fix] сброс состояния и флага при стопе — новый запуск может смачивать заново
 #endif
 
   current_power_volt = 0.0;
@@ -751,6 +751,7 @@ void reset_process_state(void) {
 #endif
 
 #ifdef USE_LUA
+  lua_sequence_stage_reset();
   if (!set_lua_status_value("")) SendMsg(TR(SENS_LUA_STATUS_RESET_FAILED, "Не удалось сбросить Lua_status: runtime lock занят."), WARNING_MSG);
 #endif
 }

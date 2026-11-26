@@ -237,7 +237,7 @@ static UiBootstrapSnapshot make_snapshot(SAMOVAR_MODE mode, const char* program,
   snapshot.setup.NbkDP = mode == SAMOVAR_NBK_MODE ? 1.25f : 0.5f;
   snapshot.setup.ColDiam = mode == SAMOVAR_NBK_MODE ? 3.0f : 1.5f;
   snapshot.setup.ColHeight = 1.7f; snapshot.setup.PackDens = 80; snapshot.setup.HeaterResistant = 12.3f;
-  snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = 123;
+  snapshot.setup.MainsVoltage = 220.0f; snapshot.setup.StepperStepMl = mode == SAMOVAR_NBK_MODE ? 456 : 123;
   snapshot.setup.CheesePhSlope = 2.5f; snapshot.setup.CheesePhOffset = -1.0f;
   snapshot.setup.TimeZone = mode == SAMOVAR_NBK_MODE ? 3 : 5;
   snapshot.setup.HideProcessScheme = i2c;
@@ -322,6 +322,8 @@ def check_writer_behavior(writer_scope: str) -> None:
             "адрес ADS1115 потерян в bootstrap")
     require(rect["timeZone"] == 5 and nbk["timeZone"] == 3,
             "timeZone не сохранил два разных значения SetupEEPROM")
+    require(rect["stepperStepsPerMl"] == 123 and nbk["stepperStepsPerMl"] == 456,
+            "stepperStepsPerMl должен отдавать шаги/мл без умножения на 100")
     require(rect["cheeseCoolingScheme"] == "unavailable" and
             nbk["cheeseCoolingScheme"] == "unavailable",
             "сборка без охлаждения должна отдавать unavailable")

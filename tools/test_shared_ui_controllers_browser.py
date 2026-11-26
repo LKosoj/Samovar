@@ -368,9 +368,7 @@ BROWSER_TEST = r'''async page => {
 
   async function faultPage(label, file, getDenied, setDenied, system, clickToggle) {
     const current = await page.context().newPage();
-    track(current, label, file === 'index.htm' && getDenied
-      ? ['theme get denied']
-      : (file === 'index.htm' && setDenied ? ['theme set denied'] : []));
+    track(current, label, []);
     await current.addInitScript(config => {
       window.Audio = function () {
         this.play = function () { return Promise.resolve(); };
@@ -392,11 +390,7 @@ BROWSER_TEST = r'''async page => {
     await current.goto(baseUrl + '/app.js', { waitUntil: 'load' });
     await current.evaluate(() => localStorage.clear());
     await current.goto(baseUrl + '/' + file, { waitUntil: 'load' });
-    if (file === 'chart.htm') {
-      await current.waitForFunction(() => document.getElementById('SteamTemp').textContent !== '');
-    } else if (!getDenied) {
-      await current.waitForFunction(() => document.getElementById('SteamTemp').textContent !== '');
-    }
+    await current.waitForFunction(() => document.getElementById('SteamTemp').textContent !== '');
     const before = await current.evaluate(() => ({
       attribute: document.documentElement.getAttribute('data-theme'),
       glyph: document.getElementById('themeToggle').textContent,
@@ -465,13 +459,13 @@ BROWSER_TEST = r'''async page => {
   const modeGetFault = await faultPage(
     'fault/mode-get', 'index.htm', true, false, 'dark', false
   );
-  expect(modeGetFault.before.attribute === null,
-    'mode get-denied must fail loud without implicit substitution: ' + JSON.stringify(modeGetFault));
+  expect(modeGetFault.before.attribute === 'dark',
+    'mode get-denied must fall back to system theme without crashing: ' + JSON.stringify(modeGetFault));
   const modeSetFault = await faultPage(
     'fault/mode-set', 'index.htm', false, true, 'light', true
   );
-  expect(modeSetFault.before.attribute === 'light' && modeSetFault.after.attribute === 'light',
-    'mode set-denied changed DOM theme: ' + JSON.stringify(modeSetFault));
+  expect(modeSetFault.before.attribute === 'light' && modeSetFault.after.attribute === 'dark',
+    'mode set-denied must still apply DOM theme: ' + JSON.stringify(modeSetFault));
 
   async function openHarness(label) {
     const current = await page.context().newPage();

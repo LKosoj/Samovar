@@ -199,14 +199,21 @@ if webserver_ino:
     try:
         data_csv_body = extract_route_handler_body(webserver_ino, "/data.csv")
         require_ordered_tokens(
-            "/data.csv 503 only when flush cannot be queued (BUSY), still serves on QUEUED",
+            "/data.csv 503 on busy flush or lock, locks around beginResponse, checks null response, serves on QUEUED",
             data_csv_body,
             [
                 "const uint8_t flushState = schedule_log_flush_if_needed();",
                 "flushState == LOG_FLUSH_BUSY",
                 'request->send(503, "text/plain", "BUSY")',
+                "log_file_lock(0)",
+                'request->send(503, "text/plain", "BUSY")',
+                'if (!SPIFFS.exists("/data.csv")) {',
+                "log_file_unlock(true);",
                 'request->beginResponse(SPIFFS, "/data.csv"',
-                'if (response && flushState == LOG_FLUSH_QUEUED) response->addHeader("X-Log-Flush", "queued");',
+                "log_file_unlock(true);",
+                "response == nullptr",
+                "404",
+                "X-Log-Flush",
                 "request->send(response);",
             ],
             errors,

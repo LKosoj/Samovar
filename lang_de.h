@@ -545,7 +545,6 @@
 #define LANG_CHEESE_I2C_DOSING_ABORTED "Dosieren per I2C-Pumpe abgebrochen"
 #define LANG_CHEESE_PH_INVALID_10S "pH 10 Sekunden unzuverlässig"
 #define LANG_CHEESE_PH_CONFIRMED "pH bestätigt"
-#define LANG_CHEESE_FINISH_OUTPUTS_NOT_OFF "Fehler beim Käsereiende: Ausgänge nicht ausgeschaltet"
 #define LANG_CHEESE_STOPPED_ERROR "Käserei wegen Fehler gestoppt"
 #define LANG_CHEESE_DONE "Käserei beendet"
 #define LANG_CHEESE_PROGRAM_DONE "Käsereiprogramm beendet"

@@ -60,7 +60,7 @@ static String operator+(const char* lhs, const String& rhs) {
 }
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
-enum SamovarCommands { SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET };
+enum SamovarCommands { SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_POWER_OFF, SAMOVAR_RESET };
 
 #define MAX_STEAM_TEMP 98.8
 #define MAX_WATER_TEMP 75
@@ -143,7 +143,7 @@ static void reset_fixture() {
 }
 
 // Штатный путь не сломан: очередь принимает команду -> аварийный останов не
-// вызывается, в очередь поставлена именно SAMOVAR_POWER.
+// вызывается, в очередь поставлена именно SAMOVAR_POWER_OFF.
 static void test_tank_limit_queue_success_no_emergency_stop() {
   reset_fixture();
   PowerOn = true;
@@ -151,7 +151,7 @@ static void test_tank_limit_queue_success_no_emergency_stop() {
   queueResult = true;
   check_alarm_temp_limit_block();
   check(queueCalls == 1, "штатное завершение по лимиту куба не поставило команду в очередь ровно один раз");
-  check(lastQueuedCommand == SAMOVAR_POWER, "в очередь по лимиту куба должна была уйти команда SAMOVAR_POWER");
+  check(lastQueuedCommand == SAMOVAR_POWER_OFF, "в очередь по лимиту куба должна была уйти команда SAMOVAR_POWER_OFF");
   check(emergencyStopCalls == 0, "штатное завершение по лимиту куба не должно вызывать аварийный останов");
   // Программа завершается сама, без участия человека, поэтому пользователь
   // обязан быть уведомлён: иначе ректификация просто молча прекратится, и
@@ -169,22 +169,45 @@ static void test_tank_limit_queue_failure_triggers_emergency_stop() {
   queueResult = false;
   check_alarm_temp_limit_block();
   check(queueCalls == 1, "попытка штатной остановки по лимиту куба должна была произойти");
+  check(lastQueuedCommand == SAMOVAR_POWER_OFF, "при отказе очереди попытка должна быть именно с SAMOVAR_POWER_OFF");
   check(emergencyStopCalls == 1,
         "РЕГРЕСС: отказ очереди команд при лимите температуры куба должен приводить к аварийному отключению нагрева");
 }
 
-// Ключевой кейс на недостижимость else: лимит куба и перегрев пара
-// одновременно, очередь отказывает -> перегрев пара не должен остаться без
-// реакции только из-за того, что внешнее условие поймала ветка куба.
-static void test_tank_and_steam_limit_simultaneously_queue_failure_still_stops() {
+// Ключевой кейс: лимит куба и перегрев пара/воды/ТСА одновременно, даже при
+// здоровой очереди (queueResult = true) -> аварийный останов обязан сработать
+// напрямую без постановки штатной команды в очередь.
+static void test_tank_and_steam_limit_simultaneously_triggers_emergency_stop() {
   reset_fixture();
   PowerOn = true;
   TankSensor.avgTemp = 96.0f;    // >= DistTemp
   SteamSensor.avgTemp = 99.0f;   // >= MAX_STEAM_TEMP
-  queueResult = false;
+  queueResult = true;
   check_alarm_temp_limit_block();
-  check(emergencyStopCalls == 1,
-        "РЕГРЕСС: одновременный перегрев пара при лимите куба и отказе очереди должен приводить к аварийному отключению");
+  check(emergencyStopCalls == 1 && queueCalls == 0,
+        "РЕГРЕСС: одновременный перегрев пара при лимите куба должен сразу звать аварийный останов без очереди");
+}
+
+static void test_tank_and_water_limit_simultaneously_triggers_emergency_stop() {
+  reset_fixture();
+  PowerOn = true;
+  TankSensor.avgTemp = 96.0f;    // >= DistTemp
+  WaterSensor.avgTemp = 76.0f;   // >= MAX_WATER_TEMP
+  queueResult = true;
+  check_alarm_temp_limit_block();
+  check(emergencyStopCalls == 1 && queueCalls == 0,
+        "РЕГРЕСС: одновременный перегрев воды при лимите куба должен сразу звать аварийный останов без очереди");
+}
+
+static void test_tank_and_acp_limit_simultaneously_triggers_emergency_stop() {
+  reset_fixture();
+  PowerOn = true;
+  TankSensor.avgTemp = 96.0f;    // >= DistTemp
+  ACPSensor.avgTemp = 76.0f;     // >= MAX_ACP_TEMP
+  queueResult = true;
+  check_alarm_temp_limit_block();
+  check(emergencyStopCalls == 1 && queueCalls == 0,
+        "РЕГРЕСС: одновременный перегрев ТСА при лимите куба должен сразу звать аварийный останов без очереди");
 }
 
 // Существующее поведение else не сломано: перегрев пара без лимита куба
@@ -214,7 +237,9 @@ static void test_power_off_guard_blocks_everything() {
 int main() {
   test_tank_limit_queue_success_no_emergency_stop();
   test_tank_limit_queue_failure_triggers_emergency_stop();
-  test_tank_and_steam_limit_simultaneously_queue_failure_still_stops();
+  test_tank_and_steam_limit_simultaneously_triggers_emergency_stop();
+  test_tank_and_water_limit_simultaneously_triggers_emergency_stop();
+  test_tank_and_acp_limit_simultaneously_triggers_emergency_stop();
   test_steam_limit_alone_triggers_emergency_stop();
   test_power_off_guard_blocks_everything();
   if (failures != 0) return 1;

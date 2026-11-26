@@ -669,50 +669,52 @@
         const ctrl = new AbortController();
         const timer = setTimeout(function () { ctrl.abort(); }, LOAD_TIMEOUT_MS);
         let resp;
+        let text;
+        let retryDelayMs = 0;
         try {
-          resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
-        } catch (err) {
+          try {
+            resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+          } catch (err) {
+            if (!isCurrentLoad()) return false;
+            const timedOut = err && err.name === 'AbortError';
+            this.setStatus(
+              'Ошибка загрузки графика: ' + (timedOut ? 'превышено время ожидания.' : err),
+              true, retry
+            );
+            return false;
+          }
           if (!isCurrentLoad()) return false;
-          const timedOut = err && err.name === 'AbortError';
-          this.setStatus(
-            'Ошибка загрузки графика: ' + (timedOut ? 'превышено время ожидания.' : err),
-            true, retry
-          );
-          return false;
+          if (resp.status === 503 && busyAttempt < BUSY_RETRY_LIMIT) {
+            busyAttempt += 1;
+            retryDelayMs = BUSY_RETRY_DELAY_MS;
+          } else if (resp.ok && !flushRetried && resp.headers.get('X-Log-Flush') === 'queued') {
+            flushRetried = true;
+            ctrl.abort();
+            retryDelayMs = FLUSH_RETRY_DELAY_MS;
+          } else if (!resp.ok) {
+            this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true, retry);
+            return false;
+          } else {
+            try {
+              text = await resp.text();
+            } catch (err) {
+              if (!isCurrentLoad()) return false;
+              this.setStatus('Ошибка загрузки графика: ' + err, true, retry);
+              return false;
+            }
+          }
         } finally {
           clearTimeout(timer);
         }
+        if (retryDelayMs > 0) {
+          await new Promise(function (resolve) {
+            setTimeout(resolve, retryDelayMs);
+          });
+          if (!isCurrentLoad()) return false;
+          continue;
+        }
         if (!isCurrentLoad()) return false;
-        if (resp.status === 503 && busyAttempt < BUSY_RETRY_LIMIT) {
-          busyAttempt += 1;
-          await new Promise(function (resolve) {
-            setTimeout(resolve, BUSY_RETRY_DELAY_MS);
-          });
-          if (!isCurrentLoad()) return false;
-          continue;
-        }
-        if (resp.ok && !flushRetried && resp.headers.get('X-Log-Flush') === 'queued') {
-          flushRetried = true;
-          ctrl.abort();
-          await new Promise(function (resolve) {
-            setTimeout(resolve, FLUSH_RETRY_DELAY_MS);
-          });
-          if (!isCurrentLoad()) return false;
-          continue;
-        }
-        if (!resp.ok) {
-          this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true, retry);
-          return false;
-        }
-        try {
-          const text = await resp.text();
-          if (!isCurrentLoad()) return false;
-          this.setData(parseCsv(text));
-        } catch (err) {
-          if (!isCurrentLoad()) return false;
-          this.setStatus('Ошибка загрузки графика: ' + err, true, retry);
-          return false;
-        }
+        this.setData(parseCsv(text));
         this.setStatus(
           (this.rows.length ? 'Загружено точек: ' + this.rows.length + '. ' : 'Нет данных графика. ') +
           'Ползунки под графиком задают участок, двойной щелчок по полосе — весь график, легенда — вкл/выкл, наведение — значения.',

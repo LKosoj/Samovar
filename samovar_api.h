@@ -246,6 +246,7 @@ inline bool sensor_temp_at_least(const DSSensor& sensor, float temp);
 inline bool rectification_ds_sensors_assigned();
 inline void notify_rectification_sensors_unassigned();
 #ifdef COLUMN_WETTING
+extern bool wetting_failed;
 bool column_wetting();
 #endif
 

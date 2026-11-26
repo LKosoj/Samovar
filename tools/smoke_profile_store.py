@@ -1702,6 +1702,8 @@ nvs_harness += (
           assert(persistResult == PERSIST_OK);
           assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
           assert(!loaded.HideProcessScheme);
+          assert(loaded.NbkProgramLength == 4);
+          assert(loaded.NbkProgramSPower == SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT);
           assert(fake.writes == 1 && encode_blob(loaded) == fake.blob);
 
           reset_fake();
@@ -1712,6 +1714,8 @@ nvs_harness += (
           assert(persistResult == PERSIST_OK);
           assert(loaded.CheesePhOffset == legacy.CheesePhOffset);
           assert(!loaded.HideProcessScheme);
+          assert(loaded.NbkProgramLength == 4);
+          assert(loaded.NbkProgramSPower == SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT);
           assert(fake.writes == 1 && encode_blob(loaded) == fake.blob);
 
           reset_fake();
@@ -1738,6 +1742,8 @@ nvs_harness += (
           assert(persistResult == PERSIST_OK);
           assert(loaded.Kp == legacy.Kp && loaded.NbkTn == legacy.NbkTn);
           assert(!loaded.HideProcessScheme);
+          assert(loaded.NbkProgramLength == 4);
+          assert(loaded.NbkProgramSPower == SAMOVAR_NBK_PROGRAM_S_POWER_DEFAULT);
           const std::vector<uint8_t> v9FromFirstV7 = fake.blob;
 
           reset_fake();

@@ -1080,10 +1080,12 @@ void cheese_stage_tick() {
 }
 
 void cheese_finish() {
+  const bool firstAttempt = !cheeseFinishPending;
   cheeseFinishPending = true;
-  if (!cheese_apply_safe_outputs(true)) {
-    SendMsg(TR(CHEESE_FINISH_OUTPUTS_NOT_OFF, "Ошибка завершения сыроварения: выходы не выключены"), ALARM_MSG);
-    return;
+  if (firstAttempt) {
+    if (!cheese_apply_safe_outputs(true)) {
+      cheesePairErrorPending = true;
+    }
   }
   if (!cheese_finish_lua_exit()) return;
   runtime_pair_close_mode(SAMOVAR_CHEESE_MODE,

@@ -1,6 +1,33 @@
 #include "asyncHTTPrequest.h"
 #include <new>
 
+namespace {
+struct ThreadLockGuard {
+#ifdef ESP32
+    SemaphoreHandle_t threadLock;
+    explicit ThreadLockGuard(SemaphoreHandle_t lock) : threadLock(lock) {
+        if (threadLock) {
+            _seize;
+        }
+    }
+    ~ThreadLockGuard() {
+        if (threadLock) {
+            _release;
+        }
+    }
+#else
+    ThreadLockGuard() {
+        _seize;
+    }
+    ~ThreadLockGuard() {
+        _release;
+    }
+#endif
+    ThreadLockGuard(const ThreadLockGuard&) = delete;
+    ThreadLockGuard& operator=(const ThreadLockGuard&) = delete;
+};
+}  // namespace
+
 //**************************************************************************************************************
 asyncHTTPrequest::asyncHTTPrequest()
     : _readyState(readyStateUnsent)
@@ -67,6 +94,11 @@ bool    asyncHTTPrequest::debug(){
 //**************************************************************************************************************
 bool	asyncHTTPrequest::open(const char* method, const char* URL){
     DEBUG_HTTP("open(%s, %.32s)\r\n", method, URL);
+#ifdef ESP32
+    ThreadLockGuard lockGuard(threadLock);
+#else
+    ThreadLockGuard lockGuard;
+#endif
     if(_readyState != readyStateUnsent && _readyState != readyStateDone) {return false;}
     _requestStartTime = millis();
     delete _URL;
@@ -248,7 +280,7 @@ String	asyncHTTPrequest::responseText(){
     if(localString.length() < avail) {
         DEBUG_HTTP("!responseText() no buffer\r\n")
         _HTTPcode = HTTPCODE_TOO_LESS_RAM;
-        _client->abort();
+        if(_client) _client->abort();
         _release;
         return String();
     }
@@ -403,6 +435,11 @@ bool  asyncHTTPrequest::_parseURL(const char* url){
 //**************************************************************************************************************
 bool  asyncHTTPrequest::_connect(){
     DEBUG_HTTP("_connect()\r\n");
+#ifdef ESP32
+    ThreadLockGuard lockGuard(threadLock);
+#else
+    ThreadLockGuard lockGuard;
+#endif
 	    // ++++ ДОБАВЬТЕ ЭТОТ БЛОК ++++
     DEBUG_HTTP("  > Creating new AsyncClient instance.\r\n");
     // +++++++++++++++++++++++++++++
@@ -550,9 +587,9 @@ void  asyncHTTPrequest::_processChunks(){
         _contentLength += chunkLength;
         if(chunkLength == 0){
             char* connectionHdr = respHeaderValue("connection");
-            if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("disconnect")) == 0)){
+            if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
                 DEBUG_HTTP("*all chunks received - closing TCP\r\n");
-                _client->close();
+                if(_client) _client->close();
             }
             else {
                 DEBUG_HTTP("*all chunks received - no disconnect\r\n"); 
@@ -705,9 +742,9 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
 
     if( ! _chunked && (_response->available() + _contentRead) >= _contentLength){
         char* connectionHdr = respHeaderValue("connection");
-        if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("disconnect")) == 0)){
+        if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
             DEBUG_HTTP("*all data received - closing TCP\r\n");
-            _client->close();
+            if(_client) _client->close();
         }
         else {
             DEBUG_HTTP("*all data received - no disconnect\r\n");

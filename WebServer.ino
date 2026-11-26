@@ -1060,6 +1060,10 @@ static void send_cached_static_file(
     return;
   }
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, emptyString, false, nullptr);
+  if (response == nullptr) {
+    request->send(404, "text/plain", String("Missing ") + path);
+    return;
+  }
   response->addHeader("Cache-Control", cacheControl);
   request->send(response);
 }
@@ -1256,7 +1260,12 @@ void WebServerInit(void) {
       request->send(503, "text/plain", "BUSY");
       return;
     }
+    if (!log_file_lock(0)) {
+      request->send(503, "text/plain", "BUSY");
+      return;
+    }
     if (!SPIFFS.exists("/data.csv")) {
+      log_file_unlock(true);
 #ifdef WRITE_PROGNUM_IN_LOG
       request->send(200, "text/csv; charset=utf-8", "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\r\n");
 #else
@@ -1265,7 +1274,12 @@ void WebServerInit(void) {
       return;
     }
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", "text/csv; charset=utf-8");
-    if (response && flushState == LOG_FLUSH_QUEUED) response->addHeader("X-Log-Flush", "queued");
+    log_file_unlock(true);
+    if (response == nullptr) {
+      request->send(404, "text/plain", "Log file not found: /data.csv");
+      return;
+    }
+    if (flushState == LOG_FLUSH_QUEUED) response->addHeader("X-Log-Flush", "queued");
     request->send(response);
   });
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -1612,7 +1626,7 @@ static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snaps
       !ui_bootstrap_write_float(out, first, "mainsVoltage", snapshot.setup.MainsVoltage, 2) ||
       !ui_bootstrap_write_long(out, first, "timeZone", snapshot.setup.TimeZone) ||
       !ui_bootstrap_write_long(out, first, "stepperMaxSpeed", STEPPER_MAX_SPEED) ||
-      !ui_bootstrap_write_long(out, first, "stepperStepsPerMl", snapshot.setup.StepperStepMl * 100L) ||
+      !ui_bootstrap_write_long(out, first, "stepperStepsPerMl", snapshot.setup.StepperStepMl) ||
       !ui_bootstrap_write_bool(out, first, "calibrationRunning", snapshot.calibrationRunning) ||
       !ui_bootstrap_write_bool(out, first, "processRunning", snapshot.processRunning) ||
       !ui_bootstrap_write_string(out, first, "calibrationPump",
@@ -3197,6 +3211,10 @@ void get_data_log(AsyncWebServerRequest *request, String fn) {
   // показаний на секунды. Это осознанный размен.
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/" + fn, String(), true);
   log_file_unlock(true);
+  if (response == nullptr) {
+    request->send(404, "text/plain", "Log file not found: " + fn);
+    return;
+  }
   response->addHeader(F("Content-Type"), F("application/octet-stream"));
   response->addHeader(F("Content-Description"), F("File Transfer"));
   response->addHeader(F("Content-Disposition"), "attachment; filename=\"" + fn + "\"");

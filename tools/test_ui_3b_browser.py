@@ -79,11 +79,11 @@ BROWSER_TEST = r'''async page => {
     plan = {...nextPlan, path};
     await page.goto(baseUrl + path, {waitUntil:'load'});
     await page.waitForFunction(() => document.getElementById('WProgram'));
-    expect(requests.filter(value => value === 'bootstrap').length === bootstrapBefore + 1,
-      path + ' did not issue exactly one bootstrap request');
     if (nextPlan.kind === 'status') {
-      await page.waitForFunction(() => document.getElementById('request_error').style.display !== 'none');
-      expect(await page.evaluate(() => document.body.inert), path + ' did not lock after bootstrap failure');
+      await page.waitForFunction(() => document.getElementById('request_error') && document.getElementById('request_error').style.display !== 'none');
+      expect(requests.filter(value => value === 'bootstrap').length === bootstrapBefore + 3,
+        path + ' did not issue bounded 3 bootstrap attempts on 503');
+      expect(!(await page.evaluate(() => document.body.inert)), path + ' kept body inert after bootstrap failure');
       expect(requests.slice(before).indexOf('ajax') === -1, path + ' started ajax after bootstrap failure');
       const errors = await page.evaluate(async () => {
         window.confirm = () => true;
@@ -106,6 +106,8 @@ BROWSER_TEST = r'''async page => {
       return;
     }
     await page.waitForFunction(() => document.body.inert === false && document.getElementById('Descr').value !== '');
+    expect(requests.filter(value => value === 'bootstrap').length === bootstrapBefore + 1,
+      path + ' did not issue exactly one bootstrap request');
     const current = requests.slice(before);
     expect(current[0] === 'bootstrap' && current.indexOf('ajax') !== -1,
       path + ' did not start telemetry after bootstrap');

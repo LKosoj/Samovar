@@ -840,13 +840,28 @@ inline LuaSequenceStageResult lua_sequence_stage_tick(
 
   const ActuatorCommandResult stopResult = request_beer_lua_stop(luaSequenceStage.ticket);
   if (stopResult == ACTUATOR_COMMAND_PENDING) return LUA_SEQUENCE_STAGE_ACTIVE;
-  if (stopResult != ACTUATOR_COMMAND_APPLIED ||
-      !beer_lua_job_idle(luaSequenceStage.ticket)) return LUA_SEQUENCE_STAGE_ACTIVE;
+  if (stopResult != ACTUATOR_COMMAND_APPLIED) {
+    nextProgram = PROGRAM_END;
+    luaSequenceStage = {};
+    return LUA_SEQUENCE_STAGE_FAILED;
+  }
+  if (!beer_lua_job_idle(luaSequenceStage.ticket)) return LUA_SEQUENCE_STAGE_ACTIVE;
 
   const LuaSequenceStageResult result = luaSequenceStage.exitResult;
   nextProgram = luaSequenceStage.nextProgram;
   luaSequenceStage = {};
   return result;
+}
+
+inline void lua_sequence_stage_reset() {
+  if (luaSequenceStage.active) {
+    const ActuatorCommandResult stopResult =
+        request_beer_lua_stop(luaSequenceStage.ticket);
+    if (stopResult == ACTUATOR_COMMAND_PENDING) {
+      SetScriptOff = true;
+    }
+  }
+  luaSequenceStage = {};
 }
 
 static bool lua_copy_current_program(WProgram& currentProgram) {

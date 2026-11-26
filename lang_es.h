@@ -545,7 +545,6 @@
 #define LANG_CHEESE_I2C_DOSING_ABORTED "Dosificación con bomba I2C interrumpida"
 #define LANG_CHEESE_PH_INVALID_10S "pH no fiable durante 10 segundos"
 #define LANG_CHEESE_PH_CONFIRMED "pH confirmado"
-#define LANG_CHEESE_FINISH_OUTPUTS_NOT_OFF "Error al terminar la elaboración de queso: salidas sin apagar"
 #define LANG_CHEESE_STOPPED_ERROR "Elaboración de queso detenida por error"
 #define LANG_CHEESE_DONE "Elaboración de queso terminada"
 #define LANG_CHEESE_PROGRAM_DONE "Programa de elaboración de queso terminado"

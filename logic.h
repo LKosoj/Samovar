@@ -1464,33 +1464,29 @@ bool check_boiling() {
 
 #ifdef COLUMN_WETTING
 // [L-36fix] File-scope флаг неудачного смачивания: виден из sensorinit.h (включается после logic.h).
-// reset_sensor_counter() сбрасывает его при стопе процесса, обеспечивая корректный
-// новый запуск смачивания. В рамках одного прогона после таймаута удерживает false.
+// reset_process_state() сбрасывает его и состояние смачивания при стопе процесса, обеспечивая
+// корректный новый запуск смачивания. В рамках одного прогона после таймаута удерживает false.
 bool wetting_failed = false;
+
+struct ColumnWettingState {
+  unsigned long wetting_start_time = 0;
+  unsigned long last_voltage_decrease_time = 0;
+  bool wetting_started = false;
+  bool voltage_decrease_started = false;
+  float initial_voltage = 0;
+  unsigned long total_wetting_time = 0;
+  unsigned long min_voltage_time = 0;
+};
+
+static ColumnWettingState columnWettingState{};
+
+inline void column_wetting_reset() {
+  columnWettingState = {};
+  wetting_failed = false;
+}
 
 // Функция для смачивания насадки колонны
 bool column_wetting() {
-  // Статические переменные для сохранения состояния между вызовами
-  static unsigned long wetting_start_time = 0;
-  static unsigned long last_voltage_decrease_time = 0;
-  static bool wetting_started = false;
-  static bool voltage_decrease_started = false;
-  static float initial_voltage = 0;
-  static unsigned long total_wetting_time = 0;
-  static unsigned long min_voltage_time = 0;
-
-  // Функция сброса всех статических переменных
-  auto reset_wetting_state = []() {
-    wetting_start_time = 0;
-    last_voltage_decrease_time = 0;
-    wetting_started = false;
-    voltage_decrease_started = false;
-    initial_voltage = 0;
-    total_wetting_time = 0;
-    min_voltage_time = 0;
-    wetting_failed = false;  // [L-36] сброс флага неудачи
-  };
-
   // Проверяем, что датчик уровня флегмы установлен
   #ifdef USE_HEAD_LEVEL_SENSOR
   if (SamSetup.UseHLS) {
@@ -1499,25 +1495,25 @@ bool column_wetting() {
       return false;
     }
     // Инициализация процесса смачивания
-    if (!wetting_started) {
+    if (!columnWettingState.wetting_started) {
       SendMsg((TR(LOGIC_WETTING_START, "Начало смачивания насадки колонны. Следите за уровнем флегмы!")), WARNING_MSG);
       
-      wetting_start_time = millis();
-      last_voltage_decrease_time = 0;
-      total_wetting_time = millis();
-      min_voltage_time = 0;
-      wetting_started = true;
-      voltage_decrease_started = false;
+      columnWettingState.wetting_start_time = millis();
+      columnWettingState.last_voltage_decrease_time = 0;
+      columnWettingState.total_wetting_time = millis();
+      columnWettingState.min_voltage_time = 0;
+      columnWettingState.wetting_started = true;
+      columnWettingState.voltage_decrease_started = false;
       if (target_power_volt > 40) {
-        initial_voltage = target_power_volt;
+        columnWettingState.initial_voltage = target_power_volt;
       } else {
 #ifdef SAMOVAR_USE_SEM_AVR
 #ifndef WETTING_POWER
 #define WETTING_POWER 2200 //мощность (для SEM_AVR) регулятора при смачивании насадки
 #endif
-        initial_voltage = WETTING_POWER;
+        columnWettingState.initial_voltage = WETTING_POWER;
 #else
-        initial_voltage = 220;
+        columnWettingState.initial_voltage = 220;
 #endif
       }
     }
@@ -1527,7 +1523,7 @@ bool column_wetting() {
     // Интервал снижения напряжения - 50 секунд
     unsigned long voltage_decrease_interval = 50 * 1000;
     // Минимальное допустимое напряжение (80% от начального)
-    float min_voltage = initial_voltage * 0.8;
+    float min_voltage = columnWettingState.initial_voltage * 0.8;
     // Максимальное общее время процесса смачивания - 20 минут (1200 секунд)
     unsigned long max_total_time = 1200 * 1000;
     // Время ожидания на минимальном напряжении перед автоматическим завершением - 3 минуты
@@ -1540,15 +1536,15 @@ bool column_wetting() {
       SendMsg((TR(LOGIC_WETTING_OK, "Насадка колонны успешно смочена!")), NOTIFY_MSG);
       // Возвращаем базовую мощность до сброса состояния, чтобы alarm.h считал
       // apply_program_power_row от исходной уставки, а не от сниженных 80%.
-      if (voltage_decrease_started && initial_voltage >= POWER_WORK_MODE_THRESHOLD) {
-        if (set_current_power(initial_voltage) != ACTUATOR_COMMAND_FAILED) {
+      if (columnWettingState.voltage_decrease_started && columnWettingState.initial_voltage >= POWER_WORK_MODE_THRESHOLD) {
+        if (set_current_power(columnWettingState.initial_voltage) != ACTUATOR_COMMAND_FAILED) {
           // Регулятор применяет уставку асинхронно (задача-воркер), а apply_program_power_row()
           // в alarm.h считает дельту от target_power_volt уже в этом такте — поэтому базу
           // возвращаем сразу, не дожидаясь воркера.
-          target_power_volt = initial_voltage;
+          target_power_volt = columnWettingState.initial_voltage;
         }
       }
-      reset_wetting_state();
+      column_wetting_reset();
       return true;
     }
     
@@ -1556,24 +1552,24 @@ bool column_wetting() {
     // [L-36] Возвращаем false (не успех!) — оператор должен видеть, что смачивание
     // не завершено. Вызывающий код при false НЕ переходит к стабилизации и НЕ
     // автостартует головы. wetting_failed удерживает false до ручного сброса процесса.
-    if (millis() - total_wetting_time >= max_total_time) {
+    if (millis() - columnWettingState.total_wetting_time >= max_total_time) {
       SendMsg((TR(LOGIC_WETTING_TIMEOUT, "Превышено максимальное время смачивания. Смачивание не удалось — остановите процесс вручную.")), ALARM_MSG);
-      reset_wetting_state();
+      column_wetting_reset();
       wetting_failed = true;  // устанавливаем ПОСЛЕ reset (reset очищает флаг)
       return false;
     }
     
     // Проверяем превышение максимального времени до начала снижения напряжения
-    if (millis() - wetting_start_time >= max_wetting_time) {
+    if (millis() - columnWettingState.wetting_start_time >= max_wetting_time) {
       // Если время вышло и мы еще не начали снижать напряжение
-      if (!voltage_decrease_started) {
+      if (!columnWettingState.voltage_decrease_started) {
         SendMsg((TR(LOGIC_WETTING_VOLT_RAMP_START, "Начинаем постепенное снижение напряжения")), WARNING_MSG);
-        voltage_decrease_started = true;
-        last_voltage_decrease_time = millis();
+        columnWettingState.voltage_decrease_started = true;
+        columnWettingState.last_voltage_decrease_time = millis();
       }
       
       // Проверяем, нужно ли снизить напряжение
-      if (voltage_decrease_started && (millis() - last_voltage_decrease_time >= voltage_decrease_interval)) {
+      if (columnWettingState.voltage_decrease_started && (millis() - columnWettingState.last_voltage_decrease_time >= voltage_decrease_interval)) {
         // Снижаем напряжение на 2% от текущего
         float new_voltage = target_power_volt * 0.98;
         
@@ -1581,19 +1577,19 @@ bool column_wetting() {
         if (new_voltage >= min_voltage) {
           set_current_power(new_voltage);
           SendMsg((TR(LOGIC_WETTING_VOLT_TO, "Снижение напряжения до ") + String(new_voltage)), WARNING_MSG);
-          last_voltage_decrease_time = millis();
+          columnWettingState.last_voltage_decrease_time = millis();
         } else {
           // Если достигли минимального напряжения
-          if (min_voltage_time == 0) {
-            min_voltage_time = millis();
+          if (columnWettingState.min_voltage_time == 0) {
+            columnWettingState.min_voltage_time = millis();
             SendMsg((TR(LOGIC_WETTING_MIN_VOLT, "Достигнуто минимальное напряжение: ") + String(min_voltage) + TR(LOGIC_WETTING_WAIT_SENSOR, ". Ожидаем срабатывания датчика.")), WARNING_MSG);
           }
           
           // 3. Ждем определенное время на минимальном напряжении и завершаем процесс
           // [L-36] Аналогично: возвращаем false — смачивание не было успешным.
-          if (millis() - min_voltage_time >= min_voltage_wait_time) {
+          if (millis() - columnWettingState.min_voltage_time >= min_voltage_wait_time) {
             SendMsg((TR(LOGIC_WETTING_MIN_VOLT_TIMEOUT, "Превышено время ожидания на минимальном напряжении. Смачивание не удалось — остановите процесс вручную.")), ALARM_MSG);
-            reset_wetting_state();
+            column_wetting_reset();
             wetting_failed = true;  // устанавливаем ПОСЛЕ reset (reset очищает флаг)
             return false;
           }
@@ -1608,7 +1604,7 @@ bool column_wetting() {
 
   // Если датчик не установлен
   SendMsg((TR(LOGIC_WETTING_NO_SENSOR, "Датчик уровня флегмы не установлен, смачивание насадки невозможно")), WARNING_MSG);
-  reset_wetting_state();
+  column_wetting_reset();
   return true;  // Немедленно завершаем
 }
 #endif

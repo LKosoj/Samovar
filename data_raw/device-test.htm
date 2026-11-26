@@ -24,8 +24,10 @@
   async function pollDeviceTest() {
     if (testPollBusy) return;
     testPollBusy = true;
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 4000);
     try {
-      var response = await fetch('/device-test', {cache: 'no-store'});
+      var response = await fetch('/device-test', {cache: 'no-store', signal: ctrl.signal});
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var data = await response.json();
       testStatusKnown = true;
@@ -45,6 +47,7 @@
       testError = 'Ошибка проверки: ' + error.message;
       document.getElementById('testStatus').textContent = testError;
     } finally {
+      clearTimeout(timer);
       testPollBusy = false;
     }
   }
@@ -54,9 +57,11 @@
     testRequestBusy = true;
     testError = '';
     setTestButtons(true, {});
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
     try {
       var response = await fetch('/device-test', {
-        method: 'POST', body: new URLSearchParams({device: device})
+        method: 'POST', body: new URLSearchParams({device: device}), signal: ctrl.signal
       });
       if (!response.ok) {
         var reason = await response.text();
@@ -68,6 +73,7 @@
       testError = 'Ошибка проверки: ' + error.message;
       document.getElementById('testStatus').textContent = testError;
     } finally {
+      clearTimeout(timer);
       testRequestBusy = false;
     }
   }

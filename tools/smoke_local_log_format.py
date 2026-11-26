@@ -78,6 +78,24 @@ static constexpr uint8_t DS_LOGGED_SENSOR_COUNT = 4;
 static float bme_pressure = 0.0f;
 static uint8_t ProgramNum = 0;
 struct Sensor { float avgTemp = 0.0f; } SteamSensor, PipeSensor, WaterSensor, TankSensor;
+using TickType_t = int;
+#define pdMS_TO_TICKS(x) (x)
+static bool runtimeLockAvailable = true;
+static int runtimeLockBalance = 0;
+static int runtimeLockCalls = 0;
+static int runtimeUnlockCalls = 0;
+static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
+  (void)timeout;
+  runtimeLockCalls++;
+  if (!runtimeLockAvailable) return false;
+  runtimeLockBalance++;
+  return true;
+}
+static void runtime_state_unlock(bool locked) {
+  if (!locked) return;
+  runtimeUnlockCalls++;
+  runtimeLockBalance--;
+}
 
 @FORMAT@
 @BUILD@
@@ -143,7 +161,21 @@ static void test_file_header() {
   check(header.value() == "Date,Steam,Pipe,Water,Tank", "file header must contain Date and four named sensors");
   check(fields(header).size() == 5, "file header must contain exactly five columns");
 }
-int main() { test_local_format(); test_server_format(); test_file_header(); return 0; }
+static void test_crt_lock_balance() {
+  check(runtimeLockCalls > 0 && runtimeLockCalls == runtimeUnlockCalls && runtimeLockBalance == 0,
+        "format_log_base_fields must acquire and release runtime_state_lock symmetrically");
+  const int callsBefore = runtimeLockCalls;
+  const int unlocksBefore = runtimeUnlockCalls;
+  runtimeLockAvailable = false;
+  const float values[] = {10.0f, 20.0f, 30.0f, 40.0f};
+  auto busy = fields(format_log_base_fields(values, 1000.0f, 0, true));
+  runtimeLockAvailable = true;
+  check(busy.size() == 5 && busy[0].empty(),
+        "when runtime_state_lock is busy, format_log_base_fields must not read Crt unlocked");
+  check(runtimeLockCalls == callsBefore + 1 && runtimeUnlockCalls == unlocksBefore && runtimeLockBalance == 0,
+        "busy runtime_state_lock must not call runtime_state_unlock");
+}
+int main() { test_local_format(); test_server_format(); test_file_header(); test_crt_lock_balance(); return 0; }
 '''
 
 

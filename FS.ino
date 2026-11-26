@@ -578,7 +578,10 @@ static void enforce_data_log_free_space_budget() {
 // параметров туда не попал бы - там она ещё не объявлена.
 static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum, bool fileLog) {
   String str;
-  str = Crt;
+  if (runtime_state_lock(pdMS_TO_TICKS(50))) {
+    str = Crt;
+    runtime_state_unlock(true);
+  }
   for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
     str += ",";
     String temperature = format_float(sensorTemp[i], fileLog ? 2 : 3);

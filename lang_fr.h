@@ -545,7 +545,6 @@
 #define LANG_CHEESE_I2C_DOSING_ABORTED "Dosage par la pompe I2C interrompu"
 #define LANG_CHEESE_PH_INVALID_10S "pH invalide pendant 10 secondes"
 #define LANG_CHEESE_PH_CONFIRMED "pH confirmé"
-#define LANG_CHEESE_FINISH_OUTPUTS_NOT_OFF "Erreur de fin de fabrication : sorties non coupées"
 #define LANG_CHEESE_STOPPED_ERROR "Fabrication du fromage arrêtée à cause d’une erreur"
 #define LANG_CHEESE_DONE "Fabrication du fromage terminée"
 #define LANG_CHEESE_PROGRAM_DONE "Programme de fromagerie terminé"

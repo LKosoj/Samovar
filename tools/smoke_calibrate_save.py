@@ -104,6 +104,9 @@ async function makeEnv(vars, fetchImpl) {
     String: String,
     setInterval: function () { return 1; },
     clearInterval: function () {},
+    setTimeout: setTimeout,
+    clearTimeout: clearTimeout,
+    AbortController: AbortController,
     addEventListener: function () {},
     document: {
       getElementById: function (id) { return elements[id] || null; },

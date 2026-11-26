@@ -15,6 +15,7 @@ let selectedAddress = Number(new URLSearchParams(location.search).get('address')
 let devices = [];
 let selected = null;
 let refreshTimer = 0;
+let refreshInFlight = false;
 let commandInFlight = false;
 let speedFieldLoaded = false;
 let refreshErrorShown = false;
@@ -102,9 +103,12 @@ function render() {
 }
 
 async function refresh() {
-  if (!selectedAddress) return;
+  if (!selectedAddress || refreshInFlight) return;
+  refreshInFlight = true;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
   try {
-    const response = await fetch(selectedUrl(), {cache: 'no-store'});
+    const response = await fetch(selectedUrl(), {cache: 'no-store', signal: ctrl.signal});
     if (!response.ok) throw new Error(await SamovarApp.responseErrorText(
       response, 'I2CStepper недоступен'
     ));
@@ -124,6 +128,9 @@ async function refresh() {
     render();
     refreshErrorShown = true;
     SamovarApp.showRequestError(String(error));
+  } finally {
+    clearTimeout(timer);
+    refreshInFlight = false;
   }
 }
 
@@ -150,11 +157,18 @@ async function command(command, values) {
   try {
     const params = new URLSearchParams({address: String(selectedAddress), cmd: command});
     Object.entries(values || {}).forEach(([key, value]) => params.set(key, value));
-    const response = await fetch('/i2cstepper?' + params, {cache: 'no-store'});
-    if (!response.ok) throw new Error(await SamovarApp.responseErrorText(
-      response, 'Команда не принята'
-    ));
-    const acceptance = await SamovarApp.readOperationAcceptance(response);
+    let acceptance;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const response = await fetch('/i2cstepper?' + params, {cache: 'no-store', signal: ctrl.signal});
+      if (!response.ok) throw new Error(await SamovarApp.responseErrorText(
+        response, 'Команда не принята'
+      ));
+      acceptance = await SamovarApp.readOperationAcceptance(response);
+    } finally {
+      clearTimeout(timer);
+    }
     await SamovarApp.waitForOperation(acceptance.operationId);
     await refresh();
     if (!refreshErrorShown) SamovarApp.clearRequestError();
@@ -174,10 +188,16 @@ function toggleRelay(relay) {
 // Ручной «Стоп»/«Запустить» отбирает мешалку у программы режима до смены строки; это возврат.
 async function resumeProgram() {
   try {
-    const response = await fetch(selectedUrl('resume'), {cache: 'no-store'});
-    if (!response.ok) throw new Error(await SamovarApp.responseErrorText(
-      response, 'Команда не принята'
-    ));
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const response = await fetch(selectedUrl('resume'), {cache: 'no-store', signal: ctrl.signal});
+      if (!response.ok) throw new Error(await SamovarApp.responseErrorText(
+        response, 'Команда не принята'
+      ));
+    } finally {
+      clearTimeout(timer);
+    }
     await refresh();
   } catch (error) {
     SamovarApp.showRequestError(String(error));

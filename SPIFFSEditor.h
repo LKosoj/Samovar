@@ -278,11 +278,19 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       } else {
       if(request->header("Accept-Encoding").indexOf("gzip") != -1 && SPIFFS.exists("/edit.htm.gz")) {  
         AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/edit.htm.gz", "text/html");
+        if (response == nullptr) {
+          request->send(404, "text/plain", "Not Found");
+          return;
+        }
         response->addHeader("Content-Encoding", "gzip");
         response->addHeader("Cache-Control", "max-age=5000");
         request->send(response);
       } else {
         AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/edit.htm", "text/html");
+        if (response == nullptr) {
+          request->send(404, "text/plain", "Not Found");
+          return;
+        }
         response->addHeader("Cache-Control", "max-age=5000");
         request->send(response);
       }
@@ -350,6 +358,8 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
         return;
       }
       request->send(200, "", "UPLOADED: " + p);
+    } else {
+      request->send(400, "text/plain", "BAD REQUEST");
     }
   } else if (request->method() == HTTP_PUT) {
     if (!log_file_lock(0)) {

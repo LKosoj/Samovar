@@ -14,16 +14,24 @@ let externalStepsPerMl = 0;
 let calibrationRunning = false;
 let calibrationInFlight = false;
 let externalLeaseTimer = 0;
+let leaseInFlight = false;
 
 function externalCalibration() {
   return externalAddress !== 0;
 }
 
 function touchExternalLease() {
-  if (!externalCalibration() || !calibrationRunning) return;
+  if (!externalCalibration() || !calibrationRunning || leaseInFlight) return;
+  leaseInFlight = true;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
   fetch('/i2cstepper?address=' + externalAddress + '&cmd=lease', {
-    cache: 'no-store'
-  }).catch(() => {});
+    cache: 'no-store',
+    signal: ctrl.signal
+  }).catch(() => {}).finally(() => {
+    clearTimeout(timer);
+    leaseInFlight = false;
+  });
 }
 
 function updateExternalLease() {
@@ -45,15 +53,23 @@ function updateCalibrationButton() {
 }
 
 async function readExternalCalibration() {
-  const response = await fetch('/i2cstepper?address=' + externalAddress, {
-    cache: 'no-store'
-  });
-  if (!response.ok) {
-    throw new Error(await SamovarApp.responseErrorText(
-      response, 'Не удалось перечитать внешний насос'
-    ));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  let payload;
+  try {
+    const response = await fetch('/i2cstepper?address=' + externalAddress, {
+      cache: 'no-store',
+      signal: ctrl.signal
+    });
+    if (!response.ok) {
+      throw new Error(await SamovarApp.responseErrorText(
+        response, 'Не удалось перечитать внешний насос'
+      ));
+    }
+    payload = await response.json();
+  } finally {
+    clearTimeout(timer);
   }
-  const payload = await response.json();
   const device = payload.selected;
   if (!device || !device.present || (device.address & 1) || !device.config ||
       !Number.isInteger(Number(device.config.stepsPerMl)) ||
@@ -83,14 +99,23 @@ async function calibrate() {
   calibrationInFlight = true;
   updateCalibrationButton();
   try {
-    const response = await fetch('/calibrate?' + params.toString());
-    if (!response.ok) {
-      SamovarApp.showRequestError(await SamovarApp.responseErrorText(
-        response, 'Калибровка не принята'
-      ));
-      return false;
+    let acceptance;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const response = await fetch('/calibrate?' + params.toString(), {
+        signal: ctrl.signal
+      });
+      if (!response.ok) {
+        SamovarApp.showRequestError(await SamovarApp.responseErrorText(
+          response, 'Калибровка не принята'
+        ));
+        return false;
+      }
+      acceptance = await SamovarApp.readOperationAcceptance(response);
+    } finally {
+      clearTimeout(timer);
     }
-    const acceptance = await SamovarApp.readOperationAcceptance(response);
     await SamovarApp.waitForOperation(acceptance.operationId);
     calibrationRunning = !wasRunning;
     updateExternalLease();
@@ -98,10 +123,19 @@ async function calibrate() {
       if (externalCalibration()) {
         await readExternalCalibration();
       } else {
-        const confirmed = await fetch('/ajax?messageCursor=0', {cache: 'no-store'});
-        const payload = await confirmed.json();
-        localStepsPerMl = Number(payload.StepperStepMl);
-        document.getElementById('stepperstepml').value = String(localStepsPerMl * 100);
+        const ajaxCtrl = new AbortController();
+        const ajaxTimer = setTimeout(() => ajaxCtrl.abort(), 4000);
+        try {
+          const confirmed = await fetch('/ajax?messageCursor=0', {
+            cache: 'no-store',
+            signal: ajaxCtrl.signal
+          });
+          const payload = await confirmed.json();
+          localStepsPerMl = Number(payload.StepperStepMl);
+          document.getElementById('stepperstepml').value = String(localStepsPerMl * 100);
+        } finally {
+          clearTimeout(ajaxTimer);
+        }
       }
     }
     SamovarApp.clearRequestError();
@@ -127,16 +161,25 @@ async function saveCalibration(event) {
   calibrationInFlight = true;
   updateCalibrationButton();
   try {
-    const response = await fetch('/save', {
-      method: 'POST', body: new URLSearchParams({StepperStepMl: String(steps.number / 100)})
-    });
-    if (!response.ok) {
-      SamovarApp.showRequestError(await SamovarApp.responseErrorText(
-        response, 'Настройки не сохранены'
-      ));
-      return false;
+    let acceptance;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const response = await fetch('/save', {
+        method: 'POST',
+        body: new URLSearchParams({StepperStepMl: String(steps.number / 100)}),
+        signal: ctrl.signal
+      });
+      if (!response.ok) {
+        SamovarApp.showRequestError(await SamovarApp.responseErrorText(
+          response, 'Настройки не сохранены'
+        ));
+        return false;
+      }
+      acceptance = await SamovarApp.readOperationAcceptance(response);
+    } finally {
+      clearTimeout(timer);
     }
-    const acceptance = await SamovarApp.readOperationAcceptance(response);
     await SamovarApp.waitForOperation(acceptance.operationId);
     localStepsPerMl = steps.number / 100;
     SamovarApp.clearRequestError();

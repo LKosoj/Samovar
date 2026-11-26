@@ -545,7 +545,6 @@
 #define LANG_CHEESE_I2C_DOSING_ABORTED "Dosing by I2C pump aborted"
 #define LANG_CHEESE_PH_INVALID_10S "pH invalid for 10 seconds"
 #define LANG_CHEESE_PH_CONFIRMED "pH confirmed"
-#define LANG_CHEESE_FINISH_OUTPUTS_NOT_OFF "Cheesemaking finish error: outputs not switched off"
 #define LANG_CHEESE_STOPPED_ERROR "Cheesemaking stopped due to error"
 #define LANG_CHEESE_DONE "Cheesemaking finished"
 #define LANG_CHEESE_PROGRAM_DONE "Cheesemaking program finished"

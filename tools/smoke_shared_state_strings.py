@@ -210,9 +210,10 @@ if samovar_text:
             raise ValueError(f"function not found: {signature}")
         commit_body = extract_function_body(samovar_text[offset:], signature)
         require_ordered_tokens(
-            "owner commit locks metadata before program/description publication",
+            "owner commit saves NVS before locking metadata for program/description publication",
             commit_body,
             [
+                "save_profile_nvs(",
                 "runtime_state_lock(pdMS_TO_TICKS(500))",
                 "program_commit(active_profile_operation.program);",
                 "SessionDescription = escapedDescription;",

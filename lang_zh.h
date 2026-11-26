@@ -545,7 +545,6 @@
 #define LANG_CHEESE_I2C_DOSING_ABORTED "I2C 泵加料已中止"
 #define LANG_CHEESE_PH_INVALID_10S "pH 无效已持续 10 s"
 #define LANG_CHEESE_PH_CONFIRMED "pH 已确认"
-#define LANG_CHEESE_FINISH_OUTPUTS_NOT_OFF "奶酪制作结束错误: 输出未关闭"
 #define LANG_CHEESE_STOPPED_ERROR "奶酪制作因错误而停止"
 #define LANG_CHEESE_DONE "奶酪制作已结束"
 #define LANG_CHEESE_PROGRAM_DONE "奶酪制作程序已结束"

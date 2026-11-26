@@ -114,7 +114,7 @@ HEADER = I18N_INCLUDE + r'''
 #define NBK_END_STEAM_RISE 5.0f
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
-enum SamovarCommands { SAMOVAR_NONE, SAMOVAR_POWER };
+enum SamovarCommands { SAMOVAR_NONE, SAMOVAR_POWER, SAMOVAR_POWER_OFF };
 
 static int failures = 0;
 static void check(bool condition, const char* message) {
@@ -165,8 +165,10 @@ uint32_t millis() { return fakeMillis; }
 
 static bool queueShouldSucceed = true;
 static int queueCalls = 0;
-bool queue_samovar_command(SamovarCommands) {
+static SamovarCommands lastQueuedCommand = SAMOVAR_NONE;
+bool queue_samovar_command(SamovarCommands cmd) {
   queueCalls++;
+  lastQueuedCommand = cmd;
   return queueShouldSucceed;
 }
 
@@ -191,6 +193,7 @@ static void reset_fixture() {
   nbk_steam_rise_start = 0;
   queueShouldSucceed = true;
   queueCalls = 0;
+  lastQueuedCommand = SAMOVAR_NONE;
   emergencyCalls = 0;
   sendMsgCalls = 0;
   lastMsg = String("");
@@ -237,7 +240,8 @@ int main() {
   fakeMillis = 2000 + dwellMs + 1;
   check(tick('W'), "D: истечение 2*Ин дольше порога обязано завершить программу");
   check(sendMsgCalls == 1, "D: обязано уйти ровно одно сообщение");
-  check(queueCalls == 1, "D: обязана уйти ровно одна команда SAMOVAR_POWER в очередь");
+  check(queueCalls == 1 && lastQueuedCommand == SAMOVAR_POWER_OFF,
+        "D: обязана уйти ровно одна команда SAMOVAR_POWER_OFF в очередь");
   check(emergencyCalls == 0, "D: аварийный останов не должен вызываться при успешной постановке в очередь");
   check(lastMsg.contains("Тп выросла"), "D: сообщение обязано упоминать рост Тп");
 

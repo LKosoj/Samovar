@@ -182,17 +182,46 @@ static void test_zero_steps_unchanged() {
         "REGRESS: WthdrwTime при wp == 0 должен совпадать с длительностью строки");
 }
 
-// (3) 'P'-ветка с просроченной паузой (t_min в прошлом) -> WthdrwTime не отрицательное,
-// WthdrwlProgress не выше 100.
+// (3) 'P'-ветка с просроченной паузой (t_min в прошлом) -> WthdrwTime == 0.0f,
+// WthdrwlProgress == 100 (без беззнакового underflow).
 static void test_overdue_pause_clamped() {
   reset_fixture();
-  program[0].Time = 60;  // минут
+  program[0].Time = 60;  // часов
   // millis() далеко впереди t_min - пауза просрочена на несколько часов.
   t_min = 0;
   mockMillis = (unsigned long)10 * 60 * 60 * 1000;  // +10 часов
   tick_update_withdrawal_progress('P');
-  check(WthdrwTime >= 0.0f, "REGRESS: WthdrwTime ушёл в минус в просроченной паузе ('P')");
-  check(WthdrwlProgress <= 100, "WthdrwlProgress вышел за 100% в просроченной паузе ('P')");
+  check(WthdrwTime == 0.0f, "REGRESS: WthdrwTime должен быть 0.0f в просроченной паузе ('P')");
+  check(WthdrwlProgress == 100, "REGRESS: WthdrwlProgress должен быть 100% в просроченной паузе ('P')");
+
+  // Середина паузы: 1 час, осталась половина (0.5 ч -> 50%).
+  reset_fixture();
+  program[0].Time = 1.0f;
+  mockMillis = 1800000UL;
+  t_min = 3600000UL;
+  tick_update_withdrawal_progress('P');
+  check(WthdrwTime > 0.49f && WthdrwTime < 0.51f,
+        "середина паузы ('P') должна давать остаток ~0.5 ч");
+  check(WthdrwlProgress == 50,
+        "середина паузы ('P') должна давать прогресс 50%");
+
+  // Переполнение 32-битного millis() в просроченной паузе (t_min до wraparound, now после).
+  reset_fixture();
+  program[0].Time = 1.0f;
+  t_min = 0xFFFFFF00UL;
+  mockMillis = 0x00000100UL;
+  tick_update_withdrawal_progress('P');
+  check(WthdrwTime == 0.0f && WthdrwlProgress == 100,
+        "REGRESS: просроченная пауза через wraparound millis() должна давать 0.0f / 100%");
+
+  // Переполнение 32-битного millis() в активной паузе (now до wraparound, t_min после).
+  reset_fixture();
+  program[0].Time = 1.0f;
+  mockMillis = 0xFFFF0000UL;
+  t_min = mockMillis + 1800000UL;
+  tick_update_withdrawal_progress('P');
+  check(WthdrwTime > 0.49f && WthdrwTime < 0.51f && WthdrwlProgress == 50,
+        "REGRESS: активная пауза через wraparound millis() должна давать ~0.5 ч / 50%");
 }
 
 // (4) [Пиво 02.09 C3] BEER-ветка: прогресс строки должен считаться по активному

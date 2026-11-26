@@ -31,8 +31,9 @@ ALL_PAGES = (*MODE_PAGES, "chart.htm")
 FROZEN_HASHES = {
     # T06: подтверждение ухода и результат сохранения; палитра/gzip сохранены.
     # 21.09.2026: русский текст для ответов BAD NAME / WRITE FAILED / DELETE FAILED.
-    "edit.htm": "3789c93027826ea58224ab33becde8a4f399cce58a51bca5c33d34e8a2403a37",
-    "edit.htm.gz": "453f57d44a58cce0cc4eeaecaebe159c08bc3634808442f9ae69e360e602a373",
+    # QueuedRequester: таймаут/ошибка XHR и защита от исключения в callback.
+    "edit.htm": "cabe5ffca44f172ccaf042a6707c64920fa0148bd78978f5b17fe7b6f8db7cd7",
+    "edit.htm.gz": "c69908c87190b0e79cb6a08e9c135c979b26067ad6aca3f4315ce07461d15824",
 }
 
 

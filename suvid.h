@@ -250,6 +250,10 @@ inline void suvid_tick() {
     suvidHeaterApplied = -1;
     return;
   }
+  if (!PowerOn) {
+    suvidHeaterApplied = -1;
+    return;
+  }
   const bool desired = suvidHeaterOn;
   if (suvidHeaterApplied == (int8_t)desired) return;
   suvidHeaterApplied = (int8_t)desired;

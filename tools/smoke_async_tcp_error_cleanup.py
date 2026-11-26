@@ -25,11 +25,12 @@ def parts() -> dict[str, str]:
         "void AsyncTCP_detail::handle_async_event(lwip_tcp_event_packet_t *e)",
         "static void _free_event(lwip_tcp_event_packet_t *evpkt)",
         "static void _reset_tcp_callbacks(tcp_pcb *pcb, AsyncClient *client)",
+        "static void _apply_nodelay_lwip(tcp_pcb *pcb, bool nodelay)",
         REMOVE_EVENTS,
     )
     methods = {signature: extract_function_body(source, signature) for signature in signatures}
     for signature, boundary in (
-        ("bool AsyncClient::connect(ip_addr_t addr, uint16_t port)", "  tcp_pcb *pcb;"),
+        ("bool AsyncClient::connect(ip_addr_t addr, uint16_t port)", "#if LWIP_IPV4 && LWIP_IPV6"),
         ("bool AsyncClient::connect(const char *host, uint16_t port)", "  err_t err;"),
     ):
         # Only the actual admission path; no fake DNS/network implementation.
@@ -73,6 +74,8 @@ static void tcp_sent(tcp_pcb *, void *) {}
 static void tcp_recv(tcp_pcb *, void *) {}
 static void tcp_err(tcp_pcb *p, void (*fn)(void *, int8_t)) { p->error = fn; }
 static void tcp_poll(tcp_pcb *, void *, int) {}
+static void tcp_nagle_disable(tcp_pcb *) {}
+static void tcp_nagle_enable(tcp_pcb *) {}
 class AsyncClient;
 static void _bind_tcp_callbacks(tcp_pcb *p, AsyncClient *c);
 static void tcp_abort(tcp_pcb *p) { ++abort_count; if (p->error) { ++unexpected_error_callback; p->error(p->arg, -99); } }
@@ -159,6 +162,7 @@ def harness(methods: dict[str, str]) -> str:
         "handle": methods["void AsyncTCP_detail::handle_async_event(lwip_tcp_event_packet_t *e)"],
         "free_event": methods["static void _free_event(lwip_tcp_event_packet_t *evpkt)"],
         "reset": methods["static void _reset_tcp_callbacks(tcp_pcb *pcb, AsyncClient *client)"],
+        "apply_nodelay": methods["static void _apply_nodelay_lwip(tcp_pcb *pcb, bool nodelay)"],
         "remove_events": methods[REMOVE_EVENTS],
     }
     definitions = (
@@ -166,7 +170,7 @@ def harness(methods: dict[str, str]) -> str:
         + "\n"
         + "class AsyncTCP_detail { public: static void tcp_error(void *, int8_t); static int8_t tcp_accept(void *, tcp_pcb *, int8_t); static void handle_async_event(lwip_tcp_event_packet_t *); };\n"
         + "static void _bind_tcp_callbacks(tcp_pcb *p, AsyncClient *c){tcp_arg(p,c);tcp_err(p,&AsyncTCP_detail::tcp_error);}\n"
-        + "static void _free_event(lwip_tcp_event_packet_t *); static void _reset_tcp_callbacks(tcp_pcb *, AsyncClient *);\n"
+        + "static void _free_event(lwip_tcp_event_packet_t *); static void _reset_tcp_callbacks(tcp_pcb *, AsyncClient *); static void _apply_nodelay_lwip(tcp_pcb *, bool);\n"
         + "class EventQueue { lwip_tcp_event_packet_t *head=nullptr,*tail=nullptr; public: "
           "void push_back(lwip_tcp_event_packet_t *e){e->next=nullptr;if(tail)tail->next=e;else head=e;tail=e;} "
           "void push_front(lwip_tcp_event_packet_t *e){e->next=head;head=e;if(!tail)tail=e;} "
@@ -201,6 +205,8 @@ def harness(methods: dict[str, str]) -> str:
         + body["free_event"]
         + "}\nstatic void _reset_tcp_callbacks(tcp_pcb *pcb,AsyncClient *client){"
         + body["reset"]
+        + "}\nstatic void _apply_nodelay_lwip(tcp_pcb *pcb,bool nodelay){"
+        + body["apply_nodelay"]
         + "}\n"
     )
     for signature, body in methods.items():

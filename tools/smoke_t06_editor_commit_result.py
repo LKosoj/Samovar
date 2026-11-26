@@ -72,11 +72,12 @@ struct Param {
 };
 struct AsyncWebServerRequest {
   Param param;
+  bool hasDataParam = true;
   std::map<std::string, String> attrs;
   int status = 0;
   String body;
   explicit AsyncWebServerRequest(const char* path) : param{String(path)} {}
-  bool hasParam(const char*, bool, bool) { return true; }
+  bool hasParam(const char*, bool, bool) { return hasDataParam; }
   Param* getParam(const char*, bool, bool) { return &param; }
   String getAttribute(const char* name) { return attrs[name]; }
   void setAttribute(const char* name, const char* value) { attrs[name] = String(value); }
@@ -155,6 +156,12 @@ int main() {
   post(&textFile);
   check(textFile.status == 200 && !pending_lua_reload_flag,
         "non-Lua file must not depend on reload queue");
+  reset();
+  AsyncWebServerRequest missingData("");
+  missingData.hasDataParam = false;
+  post(&missingData);
+  check(missingData.status == 400 && !fileLocked,
+        "POST without data param must return 400 without holding file lock");
   puts("T06 upload and POST outcomes passed");
 }
 '''

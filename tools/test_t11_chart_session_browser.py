@@ -264,8 +264,8 @@ def main() -> int:
             return 1
         page.write_text(source, encoding="utf-8")
         body_error_mutant = source.replace(
-            "if (!isCurrentLoad()) return false;\n          this.setStatus('Ошибка загрузки графика: ' + err, true, retry);",
-            "if (false) return false;\n          this.setStatus('Ошибка загрузки графика: ' + err, true, retry);",
+            "if (!isCurrentLoad()) return false;\n              this.setStatus('Ошибка загрузки графика: ' + err, true, retry);",
+            "if (false) return false;\n              this.setStatus('Ошибка загрузки графика: ' + err, true, retry);",
             1,
         )
         if body_error_mutant == source:

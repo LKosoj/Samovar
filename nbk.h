@@ -1691,7 +1691,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
       if (nbk_end_steam_start_time == 0) nbk_end_steam_start_time = millis();
       if (millis() - nbk_end_steam_start_time >= 60000) {
         SendMsg(TR(NBK_STEAM_98_WASH_OUT, "Температура пара выше 98°C в течение 60 секунд. Кончилась брага. Программа НБК завершена."), NOTIFY_MSG);
-        if (!queue_samovar_command(SAMOVAR_POWER)) {
+        if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
           request_emergency_stop(TR(NBK_EMERGENCY_WASH_OUT, "Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)"));
         }
         return true; //возвращаем аварию
@@ -1718,7 +1718,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
           msg += String(nbk_steam_min, 1);
           msg += TR(NBK_C_WASH_ENDING, " °C — брага заканчивается. Программа НБК завершена.");
           SendMsg(msg, NOTIFY_MSG);
-          if (!queue_samovar_command(SAMOVAR_POWER)) {
+          if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
             request_emergency_stop(TR(NBK_EMERGENCY_TP_RISE, "Аварийное отключение! Не удалось штатно завершить программу НБК (рост Тп пара)"));
           }
           return true; //возвращаем аварию
@@ -1738,7 +1738,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
     if (nbk_dry_steam_start_time == 0) nbk_dry_steam_start_time = millis();
     if (millis() - nbk_dry_steam_start_time > 60000) {
       SendMsg(TR(NBK_STEAM_OVER_LIMIT_MANUAL, "Т пара выше предела 60 секунд на Ручной настройке. Возможен сухой ход парогенератора. Программа НБК завершена."), NOTIFY_MSG);
-      if (!queue_samovar_command(SAMOVAR_POWER)) {
+      if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
         request_emergency_stop(TR(NBK_EMERGENCY_STEAM_OVERHEAT_MANUAL, "Аварийное отключение! Не удалось штатно завершить программу НБК (перегрев пара на Ручной настройке)"));
       }
       return true;
@@ -2051,7 +2051,7 @@ void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool gra
           ALARM_MSG);
     }
     if (graceful) {
-      if (!queue_samovar_command(SAMOVAR_POWER)) {
+      if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
         request_emergency_stop(TR(NBK_EMERGENCY_FLOODING, "Аварийное отключение! Не удалось штатно завершить программу НБК (захлёб)"));
       }
     } else {

@@ -200,6 +200,16 @@ void distiller_proc() {
   }
   distBoilStartedPrev = boil_started;
 
+  if (TankSensor.avgTemp >= SamSetup.DistTemp) {
+    distiller_finish();
+    return;
+  }
+
+  if (dist_plateau_finish_due()) {
+    distiller_finish();
+    return;
+  }
+
 #ifdef USE_LUA
   if (program_type_at(ProgramNum) == 'L') {
     uint8_t nextProgram = PROGRAM_END;
@@ -220,24 +230,17 @@ void distiller_proc() {
   // Обновляем прогноз времени
   updateTimePredictor();
 
-  if (TankSensor.avgTemp >= SamSetup.DistTemp) {
-    distiller_finish();
-    return;
-  }
-
   //Обрабатываем программу дистилляции (только если есть программы для выполнения)
   if (ProgramNum < ProgramLen && !program_type_empty(program[ProgramNum].WType) &&
       program_threshold_row_done(program[ProgramNum])) {
     run_dist_program(ProgramNum + 1);
   }
-
-
-  if (dist_plateau_finish_due()) {
-    distiller_finish();
-  }
 }
 
 void distiller_finish() {
+#ifdef USE_LUA
+  lua_sequence_stage_reset();
+#endif
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
   String timeMsg = TR(DIST_FINISHED, "Дистилляция завершена.");

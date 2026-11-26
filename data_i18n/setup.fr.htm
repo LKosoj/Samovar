@@ -161,9 +161,18 @@
         var deadline = Date.now() + 10000;
         var url = '/sensor-temperatures?refresh=1';
         while (true) {
-          var response = await fetch(url, {cache: 'no-store'});
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          var data = await response.json();
+          var remaining = deadline - Date.now();
+          if (remaining <= 0) throw new Error('L’appareil n’a pas répondu à temps');
+          var ctrl = new AbortController();
+          var timer = setTimeout(function() { ctrl.abort(); }, Math.min(4000, remaining));
+          var data;
+          try {
+            var response = await fetch(url, {cache: 'no-store', signal: ctrl.signal});
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            data = await response.json();
+          } finally {
+            clearTimeout(timer);
+          }
           if (!data.pending) break;
           if (Date.now() >= deadline) throw new Error('L’appareil n’a pas répondu à temps');
           await new Promise(function(resolve) { setTimeout(resolve, 300); });
@@ -292,12 +301,19 @@
       form.dataset.submitting = 'true';
       button.disabled = true;
       try {
-        const response = await fetch('/save', { method: 'POST', body: new FormData(form) });
-        if (!response.ok) {
-          await showSetupSaveError(form, response);
-          return false;
+        let accepted;
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+        try {
+          const response = await fetch('/save', { method: 'POST', body: new FormData(form), signal: ctrl.signal });
+          if (!response.ok) {
+            await showSetupSaveError(form, response);
+            return false;
+          }
+          accepted = await SamovarApp.readOperationAcceptance(response);
+        } finally {
+          clearTimeout(timer);
         }
-        const accepted = await SamovarApp.readOperationAcceptance(response);
         await SamovarApp.waitForOperation(accepted.operationId);
         if (form.dataset.editRevision !== submittedRevision) {
           SamovarApp.showRequestError('Paramètres enregistrés, mais les nouvelles modifications du formulaire ne le sont pas encore.');
@@ -404,8 +420,10 @@
 
     async function refreshSetupI2c() {
       if (!setupI2cAddress) return;
+      const ctrl = new AbortController();
+      const timer = setTimeout(function () { ctrl.abort(); }, 4000);
       try {
-        const response = await fetch(setupI2cUrl(), {cache: 'no-store'});
+        const response = await fetch(setupI2cUrl(), {cache: 'no-store', signal: ctrl.signal});
         if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'I2CStepper indisponible'));
         const payload = await response.json();
         setupI2cDevices = Array.isArray(payload.devices) ? payload.devices : [];
@@ -416,9 +434,12 @@
         return true;
       } catch (error) {
         setupI2cSelected = null;
+        setupI2cScanning = false;
         renderSetupI2c();
         SamovarApp.showRequestError(String(error));
         return false;
+      } finally {
+        clearTimeout(timer);
       }
     }
 
@@ -433,9 +454,16 @@
       const expectedAddress = hadSelectedDevice ? Number(setupI2cSelected.config.address) : 0;
       button.disabled = true;
       try {
-        const response = await fetch(setupI2cUrl('scan'), {cache: 'no-store'});
-        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'La recherche de l’I2CStepper n’est pas lancée'));
-        const accepted = await SamovarApp.readOperationAcceptance(response);
+        let accepted;
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+        try {
+          const response = await fetch(setupI2cUrl('scan'), {cache: 'no-store', signal: ctrl.signal});
+          if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'La recherche de l’I2CStepper n’est pas lancée'));
+          accepted = await SamovarApp.readOperationAcceptance(response);
+        } finally {
+          clearTimeout(timer);
+        }
         await SamovarApp.waitForOperation(accepted.operationId);
         const deadline = Date.now() + 5000;
         do {
@@ -454,6 +482,8 @@
         }
         return true;
       } catch (error) {
+        setupI2cScanning = false;
+        renderSetupI2c();
         SamovarApp.showRequestError(String(error));
         return false;
       } finally {
@@ -480,9 +510,16 @@
       const button = setupI2cValue('save');
       button.disabled = true;
       try {
-        const response = await fetch('/i2cstepper?' + params, {cache: 'no-store'});
-        if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'Paramètres du Nano non acceptés'));
-        const accepted = await SamovarApp.readOperationAcceptance(response);
+        let accepted;
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+        try {
+          const response = await fetch('/i2cstepper?' + params, {cache: 'no-store', signal: ctrl.signal});
+          if (!response.ok) throw new Error(await SamovarApp.responseErrorText(response, 'Paramètres du Nano non acceptés'));
+          accepted = await SamovarApp.readOperationAcceptance(response);
+        } finally {
+          clearTimeout(timer);
+        }
         await SamovarApp.waitForOperation(accepted.operationId);
         await refreshSetupI2c();
         SamovarApp.showRequestError(addressChanged

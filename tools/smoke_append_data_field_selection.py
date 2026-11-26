@@ -108,6 +108,21 @@ static String format_float(float v, int d) {
 static bool log_file_lock(TickType_t timeout = pdMS_TO_TICKS(50)) { (void)timeout; return true; }
 static void log_file_unlock(bool locked) { (void)locked; }
 
+static int runtimeLockBalance = 0;
+static int runtimeLockCalls = 0;
+static int runtimeUnlockCalls = 0;
+static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
+  (void)timeout;
+  runtimeLockCalls++;
+  runtimeLockBalance++;
+  return true;
+}
+static void runtime_state_unlock(bool locked) {
+  if (!locked) return;
+  runtimeUnlockCalls++;
+  runtimeLockBalance--;
+}
+
 struct SerialStub {
   void println(const char* text) { (void)text; }
 };
@@ -224,6 +239,8 @@ int main() {
   test_pipe_only_change_orders_columns_and_updates_only_pipe();
   test_water_and_pressure_together_water_wins();
   test_non_temperature_changes_do_not_write();
+  check(runtimeLockCalls > 0 && runtimeLockCalls == runtimeUnlockCalls && runtimeLockBalance == 0,
+        "runtime_state_lock/unlock must be balanced across append_data() calls");
   if (failures != 0) return 1;
   std::cout << "append_data field-selection behaviour checks passed\n";
   return 0;

@@ -31,6 +31,9 @@
 #include <DNSServer.h>
 #endif
 #include <memory>
+#if !defined(ESP8266)
+#include <mutex>
+#endif
 
 // fix crash on ESP32 (see https://github.com/alanswx/ESPAsyncWiFiManager/issues/44)
 #if defined(ESP8266)
@@ -76,6 +79,9 @@ public:
                             const char *defaultValue,
                             unsigned int length,
                             const char *custom);
+  ~AsyncWiFiManagerParameter();
+  AsyncWiFiManagerParameter(const AsyncWiFiManagerParameter &) = delete;
+  AsyncWiFiManagerParameter &operator=(const AsyncWiFiManagerParameter &) = delete;
 
   const char *getID();
   const char *getValue();
@@ -123,6 +129,9 @@ public:
 #else
   AsyncWiFiManager(AsyncWebServer *server, DNSServer *dns);
 #endif
+  ~AsyncWiFiManager();
+  AsyncWiFiManager(const AsyncWiFiManager &) = delete;
+  AsyncWiFiManager &operator=(const AsyncWiFiManager &) = delete;
 
   void scan(boolean async = false);
   String scanModal();
@@ -282,6 +291,9 @@ private:
   WiFiResult *wifiSSIDs;
   wifi_ssid_count_t wifiSSIDCount;
   boolean wifiSSIDscan;
+#if !defined(ESP8266)
+  std::mutex _wifiSSIDsMutex;
+#endif
 
   boolean _tryConnectDuringConfigPortal = true;
 

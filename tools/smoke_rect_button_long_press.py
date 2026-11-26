@@ -144,6 +144,7 @@ int16_t SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
 int setPowerCalls = 0;
 int menuStartCalls = 0;
 int pauseCalls = 0;
+int resumeCalls = 0;
 int calibrateCalls = 0;
 int menuFocusCalls = 0;
 bool lastPauseArg = false;
@@ -164,6 +165,12 @@ void pause_withdrawal(bool paused) {
   pauseCalls++;
   lastPauseArg = paused;
   PauseOn = paused;
+}
+
+void resume_from_pause() {
+  resumeCalls++;
+  program_Wait = false;
+  PauseOn = false;
 }
 
 void menu_calibrate() {
@@ -197,6 +204,7 @@ void reset_fixture() {
   setPowerCalls = 0;
   menuStartCalls = 0;
   pauseCalls = 0;
+  resumeCalls = 0;
   calibrateCalls = 0;
   menuFocusCalls = 0;
   lastPauseArg = false;
@@ -252,6 +260,20 @@ int main() {
   startval = SAMOVAR_STARTVAL_CALIBRATION;
   handle_rect_button(true, false);
   check(menuStartCalls == 0 && calibrateCalls == 0, "удержание не должно вмешиваться в калибровку");
+
+  reset_fixture();
+  startval = SAMOVAR_STARTVAL_CALIBRATION;
+  handle_rect_button(false, true);
+  check(pauseCalls == 0 && calibrateCalls == 1 && menuFocusCalls == 1 &&
+        startval == SAMOVAR_STARTVAL_IDLE,
+        "короткий клик в калибровке должен выйти из калибровки без вызова pause_withdrawal");
+
+  reset_fixture();
+  program_Wait = true;
+  PauseOn = false;
+  handle_rect_button(false, true);
+  check(resumeCalls == 1 && pauseCalls == 0 && !program_Wait,
+        "короткий клик при автопаузе (program_Wait) должен вызывать resume_from_pause()");
 
   if (failures) return 1;
   std::cout << "rectification main-button long-press checks passed\n";

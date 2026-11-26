@@ -505,22 +505,10 @@ static OperationError commit_profile_operation() {
     escapedDescription.replace("%", "&#37;");
   }
 
-  bool runtimeLocked = false;
-  if (hasMetadata) {
-    runtimeLocked = runtime_state_lock(pdMS_TO_TICKS(500));
-    if (!runtimeLocked) {
-      SendMsg(TR(MAIN_PROFILE_OP_CANCELLED_BUSY, "Операция профиля отменена: runtime state занят."), WARNING_MSG);
-      return OPERATION_ERROR_RUNTIME_BUSY;
-    }
-  }
-
   bool persistFailed = false;
-  // Текст отказа NVS отправляется ТОЛЬКО после runtime_state_unlock: SendMsg идёт
-  // в append_runtime_event(), а тот берёт тот же xRuntimeStateSemaphore - обычный,
-  // не рекурсивный мьютекс. Под своим же замком вызов честно ждал таймаут 500 мс и
-  // возвращал RUNTIME_EVENT_PUBLISH_LOCK_BUSY, то есть аварийное сообщение о
-  // расхождении ОЗУ и NVS не доходило ни до консоли, ни до интерфейса - ровно
-  // тогда, когда оно нужнее всего.
+  // Текст отказа NVS отправляется без удержания runtime_state_lock: save_profile_nvs()
+  // выполняется до захвата xRuntimeStateSemaphore, а SendMsg() идёт в
+  // append_runtime_event(), который берёт тот же не рекурсивный мьютекс.
   String persistFailureMessage;
   SetupEEPROM nbkProgramProfile{};
   if (persistNbkProgram) {
@@ -539,7 +527,6 @@ static OperationError commit_profile_operation() {
   if (persistNbkProgram && !hasSettings) {
     const PersistResult persistResult = save_profile_nvs(nbkProgramProfile);
     if (persistResult != PERSIST_OK) {
-      runtime_state_unlock(runtimeLocked);
       String message = TR(MAIN_NBK_PROG_NOT_SAVED, "Программа НБК не сохранена: ");
       message += persist_result_code(persistResult);
       SendMsg(message, ALARM_MSG);
@@ -565,11 +552,21 @@ static OperationError commit_profile_operation() {
       // modeChange: применение режима в RAM обязано дойти до конца всегда - см.
       // switch_samovar_mode/force_complete_mode_switch_failed.
       if (!modeChange) {
-        runtime_state_unlock(runtimeLocked);
         SendMsg(persistFailureMessage, ALARM_MSG);
         return OPERATION_ERROR_PROFILE_PERSIST_FAILED;
       }
       persistFailed = true;
+    }
+  }
+
+  bool runtimeLocked = false;
+  if (hasMetadata) {
+    runtimeLocked = runtime_state_lock(pdMS_TO_TICKS(500));
+    if (!runtimeLocked) {
+      SendMsg(TR(MAIN_PROFILE_OP_CANCELLED_BUSY, "Операция профиля отменена: runtime state занят."), WARNING_MSG);
+      if (!hasSettings && !persistNbkProgram && !modeChange) {
+        return OPERATION_ERROR_RUNTIME_BUSY;
+      }
     }
   }
 
@@ -605,14 +602,15 @@ static OperationError commit_profile_operation() {
         break;
     }
   }
-  if ((active_profile_operation.flags &
+  if (runtimeLocked &&
+      (active_profile_operation.flags &
        PROFILE_OPERATION_METADATA_DESCRIPTION) != 0) {
     SessionDescription = escapedDescription;
   }
+  runtime_state_unlock(runtimeLocked);
   if (hasSettings) {
     apply_setup_sensor_fields(active_profile_operation.sensorResetMask);
   }
-  runtime_state_unlock(runtimeLocked);
   if (persistFailureMessage.length() > 0) SendMsg(persistFailureMessage, ALARM_MSG);
 
   // Вынесено из-под runtime_state_lock: samovar_reset() берёт I2C (reset_focus(),
@@ -623,6 +621,7 @@ static OperationError commit_profile_operation() {
   if (modeChange) samovar_reset();
   if (hasSettings) apply_config_runtime();
 #ifdef USE_LUA
+  if (modeChange) lua_sequence_stage_reset();
   if (modeChange) {
     // [WP10 п.31] lua_type_script - String, которую задача do_lua_script() читает
     // без своей копии (lua.h, WriteConsoleLog внутри lua_state_lock при периодическом
@@ -1164,7 +1163,7 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
     //считаем время для текущей строки программы
     if (tickerProgramType == 'P') {
       if (program[ProgramNum].Time > 0) {
-        WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
+        WthdrwTime = static_cast<int32_t>(t_min - millis()) / (float)1000 / 60 / 60;
         if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
         // [П34] Если пауза уже просрочена (t_min в прошлом), WthdrwTime уходит в минус,
         // а wp - выше 1: далее приводится к unsigned int (:821-822 ниже по коду) и
@@ -1342,10 +1341,11 @@ static void i2c_stepper_web_lease_clear(uint8_t address) {
 }
 
 static void tick_i2c_stepper_web_lease() {
-  const uint32_t now = millis();
   for (uint8_t index = 0; index < I2CSTEPPER_DEVICE_COUNT; index++) {
-    if (!i2cStepperWebLeaseActive[index] ||
-        now - i2cStepperWebLeaseMs[index] <= 6000UL) continue;
+    if (!i2cStepperWebLeaseActive[index]) continue;
+    const uint32_t leaseMs = i2cStepperWebLeaseMs[index];
+    const uint32_t now = millis();
+    if (static_cast<int32_t>(now - leaseMs) <= static_cast<int32_t>(6000UL)) continue;
     I2CStepperDevice& device = i2cSteppers[index];
     if (!device.present ||
         (device.status.status & I2CSTEPPER_V3_STATUS_CALIBRATION) == 0) {
@@ -3824,8 +3824,13 @@ static String build_mqtt_log_line() {
   const bool active = startval != SAMOVAR_STARTVAL_IDLE;
   String line;
   line.reserve(192);
+  String crtCopy;
+  if (runtime_state_lock(pdMS_TO_TICKS(50))) {
+    crtCopy = Crt;
+    runtime_state_unlock(true);
+  }
   line += "1,";
-  line += Crt;
+  line += crtCopy;
   line += ",";
   line += String((int)Samovar_Mode);
   line += ",";
@@ -4355,16 +4360,25 @@ void loop() {
           SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         menu_samovar_start();
       } else if (mainButtonClicked) {
-        //если выключен - включаем
-        if (!PowerOn) {
+        //Выход из режима калибровки - короткое нажатие на кнопку.
+        if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
+          startval = SAMOVAR_STARTVAL_IDLE;
+          menu_calibrate();
+          menu_switch_focus();
+        } else if (!PowerOn) {
+          //если выключен - включаем
           set_power(true);
         } else if (startval == SAMOVAR_STARTVAL_IDLE && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
           //если включен и программа отбора не работает - запускаем программу
           menu_samovar_start();
         } else if (startval != SAMOVAR_STARTVAL_IDLE && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
           //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
-          if (PauseOn) {
-            pause_withdrawal(false);
+          if (PauseOn || program_Wait) {
+            if (program_Wait) {
+              resume_from_pause();
+            } else {
+              pause_withdrawal(false);
+            }
           } else {
             pause_withdrawal(true);
             if (PauseOn && !program_Wait) {
@@ -4375,12 +4389,6 @@ void loop() {
         } else if (startval != SAMOVAR_STARTVAL_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
           //если выполняется программа, и программа - пауза, переходим к следующей программе
           menu_samovar_start();
-        }
-        //Выход из режима калибровки - короткое нажатие на кнопку.
-        if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
-          startval = SAMOVAR_STARTVAL_IDLE;
-          menu_calibrate();
-          menu_switch_focus();
         }
       }
     } else if (mainButtonHeld) {

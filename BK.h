@@ -356,6 +356,9 @@ void check_alarm_bk() {
 }
 
 void bk_finish() {
+#ifdef USE_LUA
+  lua_sequence_stage_reset();
+#endif
   runtime_pair_close_mode(
       SAMOVAR_BK_MODE,
       RUNTIME_PAIR_PROCESS_END,

@@ -92,8 +92,9 @@ if samovar:
             "MQTT 15-field payload",
             payload_body,
             [
+                "crtCopy = Crt;",
                 'line += "1,";',
-                "line += Crt;",
+                "line += crtCopy;",
                 "Samovar_Mode",
                 "SamovarStatusInt",
                 "ProgramNum + 1",
@@ -177,6 +178,24 @@ float ActualVolumePerHour = 0;
 ProgramType currentType = PROGRAM_TYPE_NONE;
 ProgramType current_program_type() {{ return currentType; }}
 void append_program_type(String& text, ProgramType type) {{ if (type) text += type; }}
+using TickType_t = int;
+#define pdMS_TO_TICKS(x) (x)
+static bool runtimeLockAvailable = true;
+static int runtimeLockBalance = 0;
+static int runtimeLockCalls = 0;
+static int runtimeUnlockCalls = 0;
+static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {{
+  (void)timeout;
+  runtimeLockCalls++;
+  if (!runtimeLockAvailable) return false;
+  runtimeLockBalance++;
+  return true;
+}}
+static void runtime_state_unlock(bool locked) {{
+  if (!locked) return;
+  runtimeUnlockCalls++;
+  runtimeLockBalance--;
+}}
 
 String build_mqtt_log_line() {{ {payload_body} }}
 bool mqtt_publish_due(uint32_t now, bool idle, uint32_t lastAttemptAt, uint32_t lastBlynkAt) {{ {schedule_body} }}
@@ -205,6 +224,16 @@ int main() {{
   expect(build_mqtt_log_line().value ==
       "1,456,0,0,0,,1.000,2.000,3.000,4.000,5.000,6.00,7.00,8,9.000",
       "idle MQTT payload must use step 0 and an empty step type");
+  expect(runtimeLockCalls == 2 && runtimeUnlockCalls == 2 && runtimeLockBalance == 0,
+      "build_mqtt_log_line must acquire and release runtime_state_lock symmetrically");
+  runtimeLockAvailable = false;
+  const std::string busyLine = build_mqtt_log_line().value;
+  runtimeLockAvailable = true;
+  expect(busyLine ==
+      "1,,0,0,0,,1.000,2.000,3.000,4.000,5.000,6.00,7.00,8,9.000",
+      "when runtime_state_lock is busy, build_mqtt_log_line must not read Crt unlocked");
+  expect(runtimeLockCalls == 3 && runtimeUnlockCalls == 2 && runtimeLockBalance == 0,
+      "busy runtime_state_lock must not call runtime_state_unlock");
 
   expect(!mqtt_publish_due(3999, false, 0, 0), "active payload sent before 4 seconds");
   expect(mqtt_publish_due(4000, false, 0, 0), "active payload not sent at 4 seconds");

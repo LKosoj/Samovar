@@ -21,6 +21,10 @@
 
   const HISTORY_KEY = 'samovarHistoryV2';
   const HISTORY_LIMIT = 500;
+  const MESSAGE_LIMIT = 200;
+  const BOOTSTRAP_TIMEOUT_MS = 8000;
+  const BOOTSTRAP_RETRY_LIMIT = 2;
+  const BOOTSTRAP_RETRY_DELAY_MS = 500;
   const COMMAND_TOKENS = {
     // Успех молчит: подтверждение показываем только там, где страница передала successMessage.
     OK: { ok: true, level: 2, text: '' },
@@ -88,6 +92,8 @@
   let runtimeBusyCounter = 0;
   let lastValidTelemetryAt = Date.now();
   let messages = [];
+  let messagesRevision = 0;
+  let renderedMessagesRevision = -1;
   let historyShown = false;
   // Картинки индикатора связи и сирена лежат рядом с app.js. На устройстве это корень,
   // но страницы могут открываться и из подпапки (тесты) - путь берём от самого скрипта.
@@ -118,6 +124,8 @@
   let pageLockBound = false;
   let bootstrapPending = false;
   let bootstrapStarted = false;
+  let bootstrapBlocked = false;
+  let bootstrapLoaded = false;
   let deviceScheduleInput = null;
   let deviceScheduleOnSave = null;
   let deviceScheduleMixerStepperAvailable = false;
@@ -626,15 +634,11 @@
     dynamicThemeTitle = themeOptions.dynamicThemeTitle === true;
     implicitSystemTheme = themeOptions.implicitSystemTheme === true;
 
-    let saved;
-    if (implicitSystemTheme) {
-      try {
-        saved = localStorage.getItem('theme');
-      } catch (err) {
-        saved = null;
-      }
-    } else {
+    let saved = null;
+    try {
       saved = localStorage.getItem('theme');
+    } catch (err) {
+      saved = null;
     }
     if (saved === 'dark' || saved === 'light') {
       applyTheme(saved, saved);
@@ -654,16 +658,9 @@
       ? systemTheme()
       : (attributeTheme === 'dark' ? 'dark' : 'light');
     const next = current === 'dark' ? 'light' : 'dark';
-    if (implicitSystemTheme) {
-      try {
-        localStorage.setItem('theme', next);
-      } catch (err) {
-        applyTheme(next, next);
-        return;
-      }
-    } else {
+    try {
       localStorage.setItem('theme', next);
-    }
+    } catch (err) {}
     applyTheme(next, next);
   }
 
@@ -806,13 +803,17 @@
 
   async function openLuaProgramModal(textInput, timeoutInput, onSave) {
     let files;
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, 8000);
     try {
-      const response = await fetch('/edit?list=/');
+      const response = await fetch('/edit?list=/', { signal: ctrl.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       files = await response.json();
     } catch (error) {
       notify('Не удалось получить список Lua-файлов: ' + error.message, 1);
       return false;
+    } finally {
+      clearTimeout(timer);
     }
     const luaFiles = files
       .filter(function (item) { return item && item.type === 'file' && /\.lua$/i.test(item.name); })
@@ -918,7 +919,7 @@
   }
 
   function assertOnline() {
-    if (bootstrapPending) throw new Error('Начальные данные ещё не загружены: действие заблокировано.');
+    if (bootstrapPending || bootstrapBlocked) throw new Error('Начальные данные ещё не загружены: действие заблокировано.');
     if (isOffline) throw new Error('Нет связи: действие заблокировано.');
   }
 
@@ -998,7 +999,11 @@
   function saveHistory(entry) {
     const saved = getHistory();
     saved.push(entry);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(saved.slice(-HISTORY_LIMIT)));
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(saved.slice(-HISTORY_LIMIT)));
+    } catch (err) {
+      console.log('History save error:', err);
+    }
   }
 
   function renderHistoryEntry(entry) {
@@ -1043,7 +1048,11 @@
   }
 
   function clearHistory() {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify([]));
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify([]));
+    } catch (err) {
+      console.log('History clear error:', err);
+    }
     historyShown = false;
     showHistory();
   }
@@ -1075,6 +1084,10 @@
     const entry = { time: time, msg: String(msg), cssClass: cssClass };
     if (storeMessageHistory) saveHistory(entry);
     messages.push(entry);
+    if (messages.length > MESSAGE_LIMIT) {
+      messages.splice(0, messages.length - MESSAGE_LIMIT);
+    }
+    messagesRevision++;
     showMessages();
   }
 
@@ -1099,6 +1112,7 @@
     if (index < 0 || index >= messages.length) return;
     if (!confirmMessageRemoval(messages[index])) return;
     messages.splice(index, 1);
+    messagesRevision++;
     if (onLastMessageRemoved) onLastMessageRemoved(messages.length);
     showMessages();
   }
@@ -1107,12 +1121,14 @@
     if (messages.length === 0) return;
     if (!confirmMessageRemoval(messages[messages.length - 1])) return;
     messages.pop();
+    messagesRevision++;
     if (onLastMessageRemoved) onLastMessageRemoved(messages.length);
     showMessages();
   }
 
   function clearMessages() {
     messages = [];
+    messagesRevision++;
     showMessages();
   }
 
@@ -1137,8 +1153,10 @@
     // Обычный message_0 (датчик ТСА, захлёб в ленте и т.п.) в тосте есть,
     // но не крутит alarm.mp3 - иначе открытие страницы с хвостом ошибки орёт сразу.
     alarmActive = heaterAlarmLatched || connectionAlarm;
-    if (box && list) {
+    if (box && list && renderedMessagesRevision !== messagesRevision) {
+      renderedMessagesRevision = messagesRevision;
       if (messages.length === 0) {
+        list.innerHTML = '';
         box.style.display = 'none';
       } else {
         list.innerHTML = messages.map(renderMessage).join('');
@@ -1392,7 +1410,6 @@
     const timer = setTimeout(function () { ctrl.abort(); }, timeout);
     try {
       const resp = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
       if (!resp.ok) {
         setConnectionError();
         return null;
@@ -1401,9 +1418,10 @@
       setConnectionOk();
       return data;
     } catch (err) {
-      clearTimeout(timer);
       setConnectionError();
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -1645,8 +1663,13 @@
 
   function startPollLoop(fn, intervalMs) {
     (async function pollLoop() {
-      await fn();
-      setTimeout(pollLoop, intervalMs || 2000);
+      try {
+        await fn();
+      } catch (err) {
+        reportUiError(err);
+      } finally {
+        setTimeout(pollLoop, intervalMs || 2000);
+      }
     })();
   }
 
@@ -1660,47 +1683,84 @@
     }
     bootstrapStarted = true;
     bootstrapPending = true;
+    bootstrapBlocked = true;
     document.body.inert = true;
-    let response;
     try {
-      response = await fetch('/ui-bootstrap', { cache: 'no-store' });
-    } catch (err) {
-      showRequestError('Ошибка сети при загрузке начальных данных.');
-      return false;
-    }
-    if (!response.ok) {
-      showRequestError('Начальные данные недоступны: HTTP ' + response.status + '.');
-      return false;
-    }
-    let data;
-    try {
-      data = await response.json();
-    } catch (err) {
-      showRequestError('Некорректный JSON начальных данных.');
-      return false;
-    }
-    if (!validateUiBootstrap(data)) {
-      showRequestError('Некорректные начальные данные.');
-      return false;
-    }
-    try {
-      applyBootstrap(data);
-      const scheme = byId('sec-scheme');
-      if (scheme) {
-        const schemeColumn = scheme.closest('.col-center');
-        const modeGrid = scheme.closest('.grid');
-        scheme.hidden = data.hideProcessScheme;
-        if (schemeColumn) schemeColumn.hidden = data.hideProcessScheme;
-        if (modeGrid) modeGrid.classList.toggle('grid-without-scheme', data.hideProcessScheme);
+      for (let attempt = 0; attempt <= BOOTSTRAP_RETRY_LIMIT; attempt++) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { ctrl.abort(); }, BOOTSTRAP_TIMEOUT_MS);
+        let data;
+        let retryable = false;
+        let failureMessage = '';
+        try {
+          const response = await fetch('/ui-bootstrap', { cache: 'no-store', signal: ctrl.signal });
+          if (!response.ok) {
+            if (response.status === 503 && attempt < BOOTSTRAP_RETRY_LIMIT) {
+              retryable = true;
+            } else {
+              failureMessage = 'Начальные данные недоступны: HTTP ' + response.status + '.';
+            }
+          } else {
+            try {
+              data = await response.json();
+            } catch (err) {
+              if (ctrl.signal.aborted || (err && err.name === 'AbortError')) {
+                if (attempt < BOOTSTRAP_RETRY_LIMIT) {
+                  retryable = true;
+                } else {
+                  failureMessage = 'Ошибка сети при загрузке начальных данных.';
+                }
+              } else {
+                failureMessage = 'Некорректный JSON начальных данных.';
+              }
+            }
+          }
+        } catch (err) {
+          if (attempt < BOOTSTRAP_RETRY_LIMIT) {
+            retryable = true;
+          } else {
+            failureMessage = 'Ошибка сети при загрузке начальных данных.';
+          }
+        } finally {
+          clearTimeout(timer);
+        }
+        if (retryable) {
+          await new Promise(function (resolve) { setTimeout(resolve, BOOTSTRAP_RETRY_DELAY_MS); });
+          continue;
+        }
+        if (failureMessage) {
+          showRequestError(failureMessage);
+          return false;
+        }
+        if (!validateUiBootstrap(data)) {
+          showRequestError('Некорректные начальные данные.');
+          return false;
+        }
+        try {
+          applyBootstrap(data);
+          const scheme = byId('sec-scheme');
+          if (scheme) {
+            const schemeColumn = scheme.closest('.col-center');
+            const modeGrid = scheme.closest('.grid');
+            scheme.hidden = data.hideProcessScheme;
+            if (schemeColumn) schemeColumn.hidden = data.hideProcessScheme;
+            if (modeGrid) modeGrid.classList.toggle('grid-without-scheme', data.hideProcessScheme);
+          }
+        } catch (err) {
+          showRequestError('Некорректные начальные данные: ' +
+            (err && err.message ? err.message : err));
+          return false;
+        }
+        bootstrapLoaded = true;
+        bootstrapBlocked = false;
+        return true;
       }
-    } catch (err) {
-      showRequestError('Некорректные начальные данные: ' +
-        (err && err.message ? err.message : err));
       return false;
+    } finally {
+      bootstrapPending = false;
+      document.body.inert = false;
+      if (!bootstrapLoaded) bootstrapStarted = false;
     }
-    bootstrapPending = false;
-    document.body.inert = false;
-    return true;
   }
 
   function startTelemetryPage(renderFn, options) {
@@ -1781,13 +1841,16 @@
   }
 
   async function sendCommandRequest(command, options) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, 8000);
     try {
       assertOnline();
       const commandBody = command.indexOf('=') === -1 ? command + '=1' : command;
       const resp = await fetch('/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: commandBody
+        body: commandBody,
+        signal: ctrl.signal
       });
       const body = plainBodyText(await resp.text());
       // Отказы приходят конвертом, где токен лежит в error; успех - по-прежнему текстом.
@@ -1836,6 +1899,8 @@
       showRequestError(errorText);
       addMessage(errorText, 0);
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -2115,8 +2180,15 @@
     programMutationPending = true;
     try {
       assertOnline();
-      const resp = await fetch('/program', { method: 'POST', body: body });
-      const result = await readProgramResponse(resp);
+      let result;
+      const ctrl = new AbortController();
+      const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+      try {
+        const resp = await fetch('/program', { method: 'POST', body: body, signal: ctrl.signal });
+        result = await readProgramResponse(resp);
+      } finally {
+        clearTimeout(timer);
+      }
       if (!result.ok) {
         showRequestError('/program: HTTP ' + result.httpStatus + ' — ' + (result.err || 'запрос не принят'));
         return result;
@@ -2150,8 +2222,15 @@
     programMutationPending = true;
     try {
       assertOnline();
-      const resp = await fetch('/program', { method: 'POST', body: body });
-      const result = await readProgramResponse(resp);
+      let result;
+      const ctrl = new AbortController();
+      const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+      try {
+        const resp = await fetch('/program', { method: 'POST', body: body, signal: ctrl.signal });
+        result = await readProgramResponse(resp);
+      } finally {
+        clearTimeout(timer);
+      }
       if (!result.ok) {
         const failText =
           'Очистка не принята (HTTP ' + result.httpStatus + '): ' +

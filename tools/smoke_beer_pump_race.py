@@ -198,6 +198,7 @@ static bool tuning = false;
 
 constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
 static int16_t startval = 5;
+static bool PowerOn = true;
 
 enum BeerLuaStagePhase { BEER_LUA_STAGE_IDLE = 0 };
 struct BeerLuaStageState { BeerLuaStagePhase phase; unsigned long ticket; unsigned char nextProgram; };
@@ -292,6 +293,7 @@ static void reset_fixture() {
   beerSkipConfirmProgramNum = 0xFF;
   begintime = 0;
   startval = 5;
+  PowerOn = true;
   stopProcessCalls = 0;
   sendMsgCalls = 0;
 }
@@ -887,7 +889,35 @@ static void test_unused_pump_hold_does_not_pause_relay_schedule() {
         "ручной стоп неиспользуемого шагового насоса остановил реле 1");
 }
 
+static void test_check_mixer_state_ignores_idle_or_powered_off() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  mixer_status = false;
+  mixerStepperPresent = true;
+  PowerOn = false;
+  startval = 5;
+  check_mixer_state();
+  check(stepperCalls == 0 && pumpPwmCalls == 0 && digitalWriteCalls == 0 && !mixer_status,
+        "check_mixer_state() запустила мешалку при PowerOn == false");
+
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  mixer_status = false;
+  mixerStepperPresent = true;
+  PowerOn = true;
+  startval = SAMOVAR_STARTVAL_IDLE;
+  check_mixer_state();
+  check(stepperCalls == 0 && pumpPwmCalls == 0 && digitalWriteCalls == 0 && !mixer_status,
+        "check_mixer_state() запустила мешалку при startval == SAMOVAR_STARTVAL_IDLE");
+
+  startval = 5;
+  check_mixer_state();
+  check(stepperCalls == 1 && mixer_status,
+        "check_mixer_state() не запустила мешалку в активном процессе");
+}
+
 int main() {
+  test_check_mixer_state_ignores_idle_or_powered_off();
   test_continuous_mixer_starts_once_per_row();
   test_hold_release_restarts_mixer_immediately();
   test_unused_pump_hold_does_not_pause_relay_schedule();
@@ -1238,6 +1268,25 @@ def main() -> int:
             "beer F pause outputs",
             pause_outputs,
             ["return beer_safe_lua_outputs() == ACTUATOR_COMMAND_APPLIED;"],
+            errors,
+        )
+        cool_done_branch, _ = extract_braced_block_after(
+            stage_body, "if (temp <= program[ProgramNum].Temp) {"
+        )
+        require_ordered_tokens(
+            "beer C completion returns immediately after advancing program",
+            cool_done_branch,
+            ["run_beer_program(ProgramNum + 1);", "return;"],
+            errors,
+        )
+        bottom_done_branch, _ = extract_braced_block_after(
+            stage_body,
+            "if (begintime > 0 && (currentType == 'B' || currentType == 'P' || currentType == 'F')",
+        )
+        require_ordered_tokens(
+            "beer B/P/F completion returns immediately after advancing program",
+            bottom_done_branch,
+            ["run_beer_program(ProgramNum + 1);", "return;"],
             errors,
         )
         if errors:

@@ -49,7 +49,7 @@ BROWSER_TEST = r'''async page => {
       packDensity:i ? 92 : 71, heaterResistance:i ? 20 : 10,
       mainsVoltage:i ? 220 : 230,
       stepperMaxSpeed:i ? 2400 : 1200,
-      stepperStepsPerMl:i ? 65400 : 32100,
+      stepperStepsPerMl:i ? 654 : 321,
       i2cSteppers:Array(10).fill({}),
       calibrationRunning:!!i, processRunning:false, calibrationPump:"local",
       cheesePhSlope:i ? -0.006543 : -0.00321,
@@ -132,7 +132,7 @@ BROWSER_TEST = r'''async page => {
 
     await openSuccess("calibrate.htm", i);
     const calibration = await page.evaluate(() => ({speed:document.getElementById("kstepperspd").value, steps:document.getElementById("stepperstepml").value, local:localStepsPerMl, external:externalAddress, externalSteps:externalStepsPerMl, running:calibrationRunning, save:document.getElementById("save").disabled, speedDisabled:document.getElementById("kstepperspd").disabled}));
-    expect(calibration.speed === String(i ? 2400 : 1200) && calibration.local === (i ? 65400 : 32100) && calibration.steps === String((i ? 65400 : 32100) * 100), "calibration numbers " + i);
+    expect(calibration.speed === String(i ? 2400 : 1200) && calibration.local === (i ? 654 : 321) && calibration.steps === String((i ? 654 : 321) * 100), "calibration numbers " + i);
     expect(calibration.running === !!i && calibration.external === 0 && calibration.externalSteps === 0 && calibration.save === !!i && calibration.speedDisabled === !!i, "local calibration state " + i);
 
     before = await openSuccess("calibrate_ph.htm", i);
@@ -200,6 +200,7 @@ BROWSER_TEST = r'''async page => {
 
 FAILURE_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const defaults = __BOOTSTRAP_FIXTURE__;
   const requests = [];
   function expect(value, message) { if (!value) throw new Error(message); }
   page.on("request", request => {
@@ -213,14 +214,32 @@ FAILURE_TEST = r'''async page => {
     await page.goto(baseUrl + "/" + pageName, {waitUntil:"load"});
     await page.waitForFunction(() => document.getElementById("request_error") && document.getElementById("request_error").style.display !== "none");
     const own = requests.slice(before);
-    expect(await page.locator("body").evaluate(node => node.inert), pageName + " failure unlocked");
+    expect(!(await page.locator("body").evaluate(node => node.inert)), pageName + " failure kept body inert");
     if (pageName === "program.htm") {
       expect(await page.locator("#programCalculator").isHidden(), "program failure revealed calculator");
       expect(await page.locator("#programUnavailable").isHidden(), "program failure revealed unavailable message");
     }
-    expect(own.filter(path => path === "/ui-bootstrap").length === 1, pageName + " bootstrap count");
+    expect(own.filter(path => path === "/ui-bootstrap").length === 3, pageName + " bootstrap count: " + own.length);
     expect(!own.some(path => path !== "/ui-bootstrap"), pageName + " work after failure: " + own);
   }
+  let transientAttempts = 0;
+  await page.unroute("**/ui-bootstrap");
+  await page.route("**/ui-bootstrap", route => {
+    transientAttempts += 1;
+    if (transientAttempts <= 2) {
+      return route.fulfill({status:503, contentType:"text/plain", body:"BUSY"});
+    }
+    return route.fulfill({status:200, contentType:"application/json", body:JSON.stringify({
+      ...defaults, mode:0, stepperMaxSpeed:1200, stepperStepsPerMl:321,
+      i2cSteppers:Array(10).fill({}), calibrationRunning:false, processRunning:false, calibrationPump:"local"
+    })});
+  });
+  const beforeTransient = requests.length;
+  await page.goto(baseUrl + "/calibrate.htm", {waitUntil:"load"});
+  await page.waitForFunction(() => document.getElementById("stepperstepml").value === "32100");
+  expect(!(await page.locator("body").evaluate(node => node.inert)), "transient 503 recovery left body inert");
+  expect(requests.slice(beforeTransient).filter(path => path === "/ui-bootstrap").length === 3,
+    "transient 503 recovery bootstrap count: " + transientAttempts);
   return "ok";
 }'''
 
@@ -286,7 +305,7 @@ def main() -> int:
         script = compact_js(script)
         failure_script = compact_js(FAILURE_TEST.replace(
             "__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_address[1]}")
-        ))
+        ).replace("__BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE)))
         try:
             config = temp / "playwright.json"
             config.write_text(json.dumps({"browser":{"browserName":"chromium","launchOptions":{"chromiumSandbox":False}}}), encoding="utf-8")

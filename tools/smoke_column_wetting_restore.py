@@ -48,10 +48,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import I18N_INCLUDE, extract_function_body
+from smoke_helpers import I18N_INCLUDE, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 
+COLUMN_WETTING_STATE_SIGNATURE = "struct ColumnWettingState {"
+COLUMN_WETTING_RESET_SIGNATURE = "inline void column_wetting_reset() {"
 COLUMN_WETTING_SIGNATURE = "bool column_wetting() {"
 APPLY_POWER_ROW_SIGNATURE = "inline void apply_program_power_row(float power) {"
 
@@ -127,8 +129,18 @@ static void apply_pending_regulator_request() { target_power_volt = last_regulat
 struct SetupEEPROM { bool UseHLS; };
 SetupEEPROM SamSetup;
 
-// file-scope флаг [L-36fix] - в logic.h объявлен рядом с column_wetting().
+// file-scope флаг [L-36fix] и состояние смачивания из logic.h.
 bool wetting_failed = false;
+
+struct ColumnWettingState {
+@COLUMN_WETTING_STATE_BODY@
+};
+
+static ColumnWettingState columnWettingState{};
+
+static inline void column_wetting_reset() {
+@COLUMN_WETTING_RESET_BODY@
+}
 
 static bool column_wetting() {
 @COLUMN_WETTING_BODY@
@@ -256,6 +268,32 @@ int main() {
   check_near(last_regulator_request, 210.0f, 0.01f,
              "apply_program_power_row(30) должен дать дельту от восстановленной базы: 180 + 30 = 210 (заявка регулятору)");
 
+  // Сценарий 4 (3.7): прерывание смачивания в середине снижения -> column_wetting_reset()
+  // обязан сбросить wetting_started/initial_voltage/таймеры, чтобы следующий запуск
+  // с другой базовой мощностью (240 вместо 170) стартовал с чистого листа.
+  target_power_volt = 170.0f;
+  last_regulator_request = 170.0f;
+  head_level_sensor_holded_result = false;
+  set_current_power_result = ACTUATOR_COMMAND_PENDING;
+  column_wetting();  // wetting_started = true, initial_voltage = 170
+  current_millis += 120000;
+  column_wetting();  // voltage_decrease_started = true
+  current_millis += 50000;
+  column_wetting();  // первый шаг снижения
+  apply_pending_regulator_request();
+  check(columnWettingState.wetting_started && columnWettingState.voltage_decrease_started,
+        "перед сбросом состояние смачивания должно быть активным");
+  column_wetting_reset();
+  check(!columnWettingState.wetting_started && !columnWettingState.voltage_decrease_started &&
+        columnWettingState.initial_voltage == 0.0f && !wetting_failed,
+        "РЕГРЕСС: column_wetting_reset() должен полностью сбрасывать состояние смачивания");
+  float poweredDown240 = 0;
+  float afterSuccess240 = run_wetting_to_success(240.0f, &poweredDown240);
+  check_near(poweredDown240, 192.0f, 0.5f,
+             "после сброса новый запуск с базой 240 должен снизиться до ~80% (192)");
+  check(afterSuccess240 == 240.0f,
+        "РЕГРЕСС: после сброса между запусками новый цикл должен восстановить новую базу 240, а не старую 170");
+
   if (failures != 0) return 1;
   std::cout << "column_wetting() power restoration checks passed\n";
   return 0;
@@ -265,17 +303,49 @@ int main() {
 
 def build_harness() -> str:
     logic_source = (ROOT / "logic.h").read_text(encoding="utf-8")
+    state_body = extract_function_body(logic_source, COLUMN_WETTING_STATE_SIGNATURE)
+    reset_body = extract_function_body(logic_source, COLUMN_WETTING_RESET_SIGNATURE)
     wetting_body = extract_function_body(logic_source, COLUMN_WETTING_SIGNATURE)
 
     power_regulator_source = (ROOT / "power_regulator.h").read_text(encoding="utf-8")
     power_row_body = extract_function_body(power_regulator_source, APPLY_POWER_ROW_SIGNATURE)
 
-    harness = HARNESS_TEMPLATE.replace("@COLUMN_WETTING_BODY@", wetting_body)
+    harness = HARNESS_TEMPLATE.replace("@COLUMN_WETTING_STATE_BODY@", state_body)
+    harness = harness.replace("@COLUMN_WETTING_RESET_BODY@", reset_body)
+    harness = harness.replace("@COLUMN_WETTING_BODY@", wetting_body)
     harness = harness.replace("@APPLY_POWER_ROW_BODY@", power_row_body)
     return harness
 
 
+def validate_alarm_and_reset_guards() -> list[str]:
+    errors: list[str] = []
+    alarm_source = (ROOT / "alarm.h").read_text(encoding="utf-8")
+    require_ordered_tokens(
+        "alarm.h HLS wetting ownership guard",
+        alarm_source,
+        [
+            "const bool wettingOwnsHls =",
+            "!wetting_failed",
+            "SamovarStatusInt == SAMOVAR_STATUS_RECT_ACCEL",
+            "SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP",
+            "if (!wettingOwnsHls && head_level_sensor_holded() && alarm_h_min == 0)",
+        ],
+        errors,
+    )
+    sensorinit_source = (ROOT / "sensorinit.h").read_text(encoding="utf-8")
+    reset_body = extract_function_body(sensorinit_source, "void reset_process_state(void)")
+    if "column_wetting_reset();" not in reset_body:
+        errors.append("sensorinit.h::reset_process_state() must call column_wetting_reset()")
+    return errors
+
+
 def main() -> int:
+    guard_errors = validate_alarm_and_reset_guards()
+    if guard_errors:
+        for error in guard_errors:
+            print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
     try:
         harness = build_harness()
     except ValueError as error:

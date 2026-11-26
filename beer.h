@@ -1072,6 +1072,7 @@ void beer_stage_tick() {
       if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
+      return;
     } else if (beer_stage_elapsed_ms(millis()) >= BEER_COOL_TIMEOUT_MS) {
       // [П13] Таймаут остывания: датчик куба может врать, охлаждающая вода
       // может быть перекрыта или недостаточна, либо program[].Temp недостижим
@@ -1155,6 +1156,7 @@ void beer_stage_tick() {
   if (begintime > 0 && (currentType == 'B' || currentType == 'P' || currentType == 'F') && (beer_stage_elapsed_ms(millis()) / 60000.0f >= program[ProgramNum].Time)) {
     //Запускаем следующую программу
     run_beer_program(ProgramNum + 1);
+    return;
   }
   
   //Обрабатываем мешалку и насос
@@ -1177,6 +1179,7 @@ inline bool beer_mixer_reverse_dir(int stepCount) {
  */
 void check_mixer_state() {
   if (heater_safety_latched()) return;
+  if (!PowerOn || startval == SAMOVAR_STARTVAL_IDLE) return;
   // Оператор вернул привод программе: цикл начинаем заново, чтобы он запустился сразу,
   // а не ждал следующей фазы (при постоянной работе следующей фазы нет вовсе).
   if ((BitIsSet(program[ProgramNum].capacity_num, 0) &&

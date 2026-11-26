@@ -227,6 +227,7 @@ static int applyConfigCalls = 0;
 static int sensorApplyCalls = 0;
 static int resetCalls = 0;
 static int luaLoadCalls = 0;
+static int luaSequenceStageResetCalls = 0;
 static int cleanupCalls = 0;
 static int logCloseCalls = 0;
 static int messageCalls = 0;
@@ -463,6 +464,7 @@ bool mode_control_queues_idle() { return modeQueuesIdleResult; }
 // компилятор вместо assert-а. Держится это только на кейсах ниже: без них
 // снятие `static` меняет ложный улов на молчаливую слепую зону, что хуже.
 bool request_lua_mode_stop() { return luaStopResult; }
+void lua_sequence_stage_reset() { luaSequenceStageResetCalls++; }
 bool samovar_command_queue_idle(TickType_t) { return commandQueueIdle; }
 bool discard_samovar_commands(TickType_t) { return commandDiscardResult; }
 bool discard_pending_mode_control_commands(bool& cancelled) {

@@ -15,19 +15,20 @@ HARNESS = I18N_INCLUDE + r'''
 #include <iostream>
 
 enum MESSAGE_TYPE { NOTIFY_MSG = 2 };
-enum SamovarCommands { SAMOVAR_POWER = 1 };
+enum SamovarCommands { SAMOVAR_POWER = 1, SAMOVAR_POWER_OFF = 17 };
 struct SensorProbe { float avgTemp; };
 static SensorProbe SteamSensor{0};
 static uint32_t fakeMillis = 0;
 static uint32_t nbk_end_steam_start_time = 0;
 static uint32_t nbk_dry_steam_start_time = 0;
 static int queueCalls = 0;
+static int lastQueuedCommand = 0;
 static int messageCalls = 0;
 static int emergencyCalls = 0;
 
 uint32_t millis() { return fakeMillis; }
 void SendMsg(const char*, MESSAGE_TYPE) { messageCalls++; }
-bool queue_samovar_command(SamovarCommands) { queueCalls++; return true; }
+bool queue_samovar_command(SamovarCommands cmd) { queueCalls++; lastQueuedCommand = cmd; return true; }
 void request_emergency_stop(const char*) { emergencyCalls++; }
 
 static bool check_steam() {
@@ -49,6 +50,7 @@ static void reset_fixture(uint32_t now) {
   nbk_end_steam_start_time = 0;
   nbk_dry_steam_start_time = 77;
   queueCalls = 0;
+  lastQueuedCommand = 0;
   messageCalls = 0;
   emergencyCalls = 0;
 }
@@ -69,8 +71,9 @@ int main() {
   fakeMillis = 129999;
   check(!check_steam(), "59999 мс недостаточно для завершения");
   fakeMillis = 130000;
-  check(check_steam() && queueCalls == 1 && messageCalls == 1 && emergencyCalls == 0,
-        "60 секунд непрерывного превышения должны штатно завершить НБК");
+  check(check_steam() && queueCalls == 1 && lastQueuedCommand == SAMOVAR_POWER_OFF &&
+        messageCalls == 1 && emergencyCalls == 0,
+        "60 секунд непрерывного превышения должны штатно завершить НБК через SAMOVAR_POWER_OFF");
 
   return failures == 0 ? 0 : 1;
 }

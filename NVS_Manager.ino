@@ -216,6 +216,7 @@ static bool decode_setup_payload_v7(
       !decode_setup_payload_v4only_fields<false, false>(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V7 ||
       !reader.finish()) return false;
+  set_profile_version_defaults(decoded, 7);
   candidate = decoded;
   return true;
 }
@@ -231,6 +232,7 @@ static bool decode_setup_payload_v6(
       !decode_setup_payload_v4only_fields<false, true>(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V6 ||
       !reader.finish()) return false;
+  set_profile_version_defaults(decoded, 6);
   candidate = decoded;
   return true;
 }

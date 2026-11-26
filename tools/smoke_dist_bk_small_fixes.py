@@ -338,6 +338,18 @@ if distiller_text:
             distiller_proc_body,
             ("program[ProgramNum].WType == 'T'",),
         )
+        require_ordered_tokens(
+            "distiller_proc checks DistTemp and plateau finish before Lua row handling",
+            distiller_proc_body,
+            [
+                "TankSensor.avgTemp >= SamSetup.DistTemp",
+                "distiller_finish();",
+                "dist_plateau_finish_due()",
+                "distiller_finish();",
+                "program_type_at(ProgramNum) == 'L'",
+            ],
+            errors,
+        )
 
     try:
         row_done_body = extract_function_body(

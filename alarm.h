@@ -251,7 +251,15 @@ void check_alarm() {
 #ifdef USE_HEAD_LEVEL_SENSOR
   if (SamSetup.UseHLS && PowerOn) {
     ProgramType currentType = current_program_type();
-    if (head_level_sensor_holded() && alarm_h_min == 0) {
+#ifdef COLUMN_WETTING
+    const bool wettingOwnsHls =
+        (!wetting_failed &&
+         SamovarStatusInt == SAMOVAR_STATUS_RECT_ACCEL &&
+         SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP);
+#else
+    const bool wettingOwnsHls = false;
+#endif
+    if (!wettingOwnsHls && head_level_sensor_holded() && alarm_h_min == 0) {
       if (currentType != 'C') {
         set_buzzer(true);
         SendMsg((TR(ALARM_FLOOD_SENSOR, "Сработал датчик захлёба!")), ALARM_MSG);
@@ -367,17 +375,21 @@ void check_alarm() {
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    String s = "";
-    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + TR(ALARM_OVERTEMP_STEAM, " Пара");
-    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
-      s = s + TR(ALARM_OVERTEMP_WATER, " Воды");
-    else if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
-      s = s + TR(ALARM_OVERTEMP_ACP, " ТСА");
-
-    if (TankSensor.avgTemp >= SamSetup.DistTemp) {
+    const bool steamOvertemp = SteamSensor.avgTemp >= MAX_STEAM_TEMP;
+    const bool waterOvertemp = WaterSensor.avgTemp >= MAX_WATER_TEMP;
+    const bool acpOvertemp = sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP);
+    if (steamOvertemp || waterOvertemp || acpOvertemp) {
+      String s = "";
+      if (steamOvertemp) s = s + TR(ALARM_OVERTEMP_STEAM, " Пара");
+      else if (waterOvertemp)
+        s = s + TR(ALARM_OVERTEMP_WATER, " Воды");
+      else if (acpOvertemp)
+        s = s + TR(ALARM_OVERTEMP_ACP, " ТСА");
+      request_emergency_stop(TR(ALARM_MAX_TEMP_EXCEEDED, "Аварийное отключение! Превышена максимальная температура") + s);
+    } else if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
       SendMsg((TR(ALARM_TANK_LIMIT_FINISHED, "Лимит максимальной температуры куба. Программа завершена.")), NOTIFY_MSG);
-      if (!queue_samovar_command(SAMOVAR_POWER)) {
+      if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
         //Штатное завершение не поставлено: очередь занята или не создалась при старте.
         //Ждать следующего цикла нельзя - условие TankSensor.avgTemp >= DistTemp удерживает
         //нас в этой ветке, else с аварийным стопом уже недостижим, и нагрев остался бы
@@ -385,8 +397,7 @@ void check_alarm() {
         //направление отказа.
         request_emergency_stop(TR(ALARM_TANK_LIMIT_FINISH_FAIL, "Аварийное отключение! Не удалось штатно завершить программу по температуре куба"));
       }
-    } else
-      request_emergency_stop(TR(ALARM_MAX_TEMP_EXCEEDED, "Аварийное отключение! Превышена максимальная температура") + s);
+    }
   }
 
   //Проверим, что вода подается

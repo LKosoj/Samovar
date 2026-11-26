@@ -81,7 +81,7 @@ if nbk_text:
                 "nbk_end_steam_start_time == 0",
                 "millis() - nbk_end_steam_start_time >= 60000",
                 "Температура пара выше 98°C в течение 60 секунд.",
-                "if (!queue_samovar_command(SAMOVAR_POWER)) {",
+                "if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {",
                 "request_emergency_stop(TR(NBK_EMERGENCY_WASH_OUT, \"Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)\"));",
             ],
             errors,
@@ -95,7 +95,7 @@ if nbk_text:
             "} else if (SteamSensor.avgTemp >= 100.0) {",
             "nbk_dry_steam_start_time == 0",
             "millis() - nbk_dry_steam_start_time > 60000",
-            "queue_samovar_command(SAMOVAR_POWER)",
+            "queue_samovar_command(SAMOVAR_POWER_OFF)",
         ],
         errors,
     )

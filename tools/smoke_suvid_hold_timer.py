@@ -332,6 +332,36 @@ static void test_tick_respects_mode_guard() {
         "REGRESSION T24.3: suvid_tick() must not call setHeaterPosition outside Suvid mode");
   Samovar_Mode = SAMOVAR_SUVID_MODE;
 }
+static void test_tick_warm_start_after_idle() {
+  // Warm start after idle: in-band (60.0C)
+  reset();
+  TankSensor.avgTemp = 60.0f;
+  fakeMillis = 1000; tick();  // suvidHeaterApplied = 0
+  PowerOn = false;
+  heaterCalls = 0;
+  fakeMillis = 2000; tick();
+  check(heaterCalls == 0,
+        "suvid_tick() must not call setHeaterPosition while PowerOn is false");
+  PowerOn = true;
+  lastHeater = true;
+  TankSensor.avgTemp = 60.0f;
+  fakeMillis = 3000; tick();
+  check(heaterCalls == 1 && !lastHeater,
+        "REGRESSION: warm start after idle (in-band 60.0C) must re-apply heater off");
+
+  // Warm start after idle: above-band (62.0C)
+  PowerOn = false;
+  heaterCalls = 0;
+  fakeMillis = 4000; tick();
+  check(heaterCalls == 0,
+        "suvid_tick() must not call setHeaterPosition while PowerOn is false (second idle)");
+  PowerOn = true;
+  lastHeater = true;
+  TankSensor.avgTemp = 62.0f;
+  fakeMillis = 5000; tick();
+  check(heaterCalls == 1 && !lastHeater,
+        "REGRESSION: warm start after idle (above-band 62.0C) must re-apply heater off");
+}
 int main() {
   test_symmetric_band(); test_hold_counts_only_band_time(); test_zero_hold_is_indefinite();
   test_no_deviation_warning_before_hold_starts(); test_deviation_warning_after_hold_starts();
@@ -344,6 +374,7 @@ int main() {
   test_hold_band_survives_temperature_ripple();
   test_tick_applies_heater_only_on_change();
   test_tick_respects_mode_guard();
+  test_tick_warm_start_after_idle();
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -462,6 +493,17 @@ def main():
             return 1
         if compile_and_run("mutant_deviation_wrap", mutant, False) == 0:
             print("FAIL: deviation wrap mutation survived Suvid S1 harness", file=sys.stderr)
+            return 1
+        mutant = code.replace(
+            "if (!PowerOn) {\n    suvidHeaterApplied = -1;",
+            "if (false) {\n    suvidHeaterApplied = -1;",
+            1,
+        )
+        if mutant == code:
+            print("FAIL: unable to build Suvid idle-reset mutation", file=sys.stderr)
+            return 1
+        if compile_and_run("mutant_tick_idle_reset", mutant, False) == 0:
+            print("FAIL: suvid_tick idle-reset mutation survived Suvid S1 harness", file=sys.stderr)
             return 1
         return 0
 
